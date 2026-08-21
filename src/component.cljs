@@ -1203,7 +1203,7 @@
 
 (defn ui-copy [settings]
   (or (flow-core-call "uiCopy" (:language settings))
-      {:capacity {:available "Available" :demand "Demand" :overload "Overload" :fragmented "No fitting slot" :remaining "Remaining"}
+      {:capacity {:available "Available" :events "Events" :demand "Demand" :overload "Overload" :fragmented "No fitting slot" :remaining "Remaining"}
        :legend {:urgent "Urgent" :event "Event" :task "Task"}
        :controls {:hideDone "Hide completed items" :showDone "Show completed items" :playback "Play back the day"
                   :collapse "Collapse Nautilus Flow" :expand "Expand Nautilus Flow"}
@@ -1214,6 +1214,7 @@
 (defn capacity-metrics [capacity settings]
   (or (flow-core-call "capacityMetrics" {:capacity capacity :language (:language settings)})
       [{:key "available" :label "Available" :value "0m" :tone "neutral"}
+       {:key "events" :label "Events" :value "0m" :tone "event"}
        {:key "demand" :label "Demand" :value "0m" :tone "neutral"}
        {:key "remaining" :label "Remaining" :value "0m" :tone "neutral"}]))
 
@@ -1385,7 +1386,7 @@
                                               :nowMinutes plan-from-time
                                               :fixedEvents fixed-events
                                               :pendingTasks (map #(dissoc % :progress) pending-tasks)})
-                             {:availableMinutes 0 :demandMinutes 0 :overloadMinutes 0 :slackMinutes 0 :unplacedMinutes 0 :overflowTasks []})
+                             {:availableMinutes 0 :fixedMinutes 0 :demandMinutes 0 :overloadMinutes 0 :slackMinutes 0 :unplacedMinutes 0 :overflowTasks []})
                 events-state [(fill-day text-events (:workday-start settings) (:workday-end settings) plan-from-time) done-events]]
             [:div {:class (str "nautilus-flow-container" (when @collapsed-state " nautilus-flow-collapsed"))
                    :ref container-ref

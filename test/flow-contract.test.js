@@ -77,6 +77,7 @@ test('Flow uses a flat Linear-style header with left-aligned metrics and legend'
   assert.doesNotMatch(component, /\[flow-legend-component/);
   assert.doesNotMatch(css, /filter:\s*drop-shadow\(0 4px 12px/);
   assert.doesNotMatch(css, /border:\s*1px dashed/);
+  assert.match(css, /\.nautilus-flow-metric--event/);
 });
 
 test('Flow suppresses breadcrumb and collapsed-path replicas before mounting the chart', () => {

@@ -45,10 +45,11 @@ test('English UI settings localize all extension-owned status labels', () => {
   assert.deepEqual(
     capacityMetrics({
       language: 'en',
-      capacity: { availableMinutes: 0, demandMinutes: 30, overloadMinutes: 30, slackMinutes: 0, unplacedMinutes: 30 },
+      capacity: { availableMinutes: 0, fixedMinutes: 90, demandMinutes: 30, overloadMinutes: 30, slackMinutes: 0, unplacedMinutes: 30 },
     }),
     [
       { key: 'available', label: 'Available', value: '0m', tone: 'neutral' },
+      { key: 'events', label: 'Events', value: '1h30m', tone: 'event' },
       { key: 'demand', label: 'Demand', value: '30m', tone: 'neutral' },
       { key: 'overload', label: 'Overload', value: '30m', tone: 'warning' },
     ],
@@ -209,7 +210,7 @@ test('reports fragmented free time when an atomic task cannot fit any continuous
   assert.equal(result.unplacedMinutes, 45);
   assert.equal(
     formatCapacitySummary(result),
-    '可安排 1h00m · 待办需求 45m · 空档不足 45m',
+    '可安排 1h00m · 事件 1h00m · 待办需求 45m · 空档不足 45m',
   );
 });
 
@@ -218,11 +219,11 @@ test('formats capacity values in the compact dashboard style', () => {
   assert.equal(formatDuration(0), '0m');
   assert.equal(
     formatCapacitySummary({ availableMinutes: 200, demandMinutes: 245, overloadMinutes: 45, slackMinutes: 0 }),
-    '可安排 3h20m · 待办需求 4h05m · 超载 45m',
+    '可安排 3h20m · 事件 0m · 待办需求 4h05m · 超载 45m',
   );
   assert.equal(
     formatCapacitySummary({ availableMinutes: 200, demandMinutes: 160, overloadMinutes: 0, slackMinutes: 40 }),
-    '可安排 3h20m · 待办需求 2h40m · 余量 40m',
+    '可安排 3h20m · 事件 0m · 待办需求 2h40m · 余量 40m',
   );
 });
 

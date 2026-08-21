@@ -6,7 +6,8 @@
 
 - Rebranded, isolated Nautilus Flow render/template/runtime identifiers.
 - Configurable chart start (05:00–08:00) and end (18:00–24:00) boundaries.
-- Capacity header showing available time, task demand, and overload/remaining slack.
+- Capacity header showing available time, remaining fixed-event occupancy, task
+  demand, and overload/remaining slack.
 - Dashed expandable list for tasks that do not fit before the selected end time.
 - Compact red/yellow/blue dot legend for urgent items, events, and tasks.
 - Per-instance collapse state, playback state, and clock state for multiple renders.

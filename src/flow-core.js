@@ -326,6 +326,7 @@ const UI_COPY = {
   en: {
     capacity: {
       available: 'Available',
+      events: 'Events',
       demand: 'Demand',
       overload: 'Overload',
       fragmented: 'No fitting slot',
@@ -354,6 +355,7 @@ const UI_COPY = {
   zh: {
     capacity: {
       available: '可安排',
+      events: '事件',
       demand: '待办需求',
       overload: '超载',
       fragmented: '空档不足',
@@ -390,6 +392,9 @@ function capacityMetrics({ capacity = {}, language = 'zh' } = {}) {
   const available = {
     key: 'available', label: copy.available, value: formatDuration(capacity.availableMinutes), tone: 'neutral',
   };
+  const events = {
+    key: 'events', label: copy.events, value: formatDuration(capacity.fixedMinutes), tone: 'event',
+  };
   const demand = {
     key: 'demand', label: copy.demand, value: formatDuration(capacity.demandMinutes), tone: 'neutral',
   };
@@ -401,19 +406,20 @@ function capacityMetrics({ capacity = {}, language = 'zh' } = {}) {
   } else {
     status = { key: 'remaining', label: copy.remaining, value: formatDuration(capacity.slackMinutes), tone: 'neutral' };
   }
-  return [available, demand, status];
+  return [available, events, demand, status];
 }
 
 function formatCapacitySummary(capacity) {
   const available = formatDuration(capacity.availableMinutes);
+  const events = formatDuration(capacity.fixedMinutes);
   const demand = formatDuration(capacity.demandMinutes);
   if (capacity.overloadMinutes > 0) {
-    return `可安排 ${available} · 待办需求 ${demand} · 超载 ${formatDuration(capacity.overloadMinutes)}`;
+    return `可安排 ${available} · 事件 ${events} · 待办需求 ${demand} · 超载 ${formatDuration(capacity.overloadMinutes)}`;
   }
   if (capacity.unplacedMinutes > 0) {
-    return `可安排 ${available} · 待办需求 ${demand} · 空档不足 ${formatDuration(capacity.unplacedMinutes)}`;
+    return `可安排 ${available} · 事件 ${events} · 待办需求 ${demand} · 空档不足 ${formatDuration(capacity.unplacedMinutes)}`;
   }
-  return `可安排 ${available} · 待办需求 ${demand} · 余量 ${formatDuration(capacity.slackMinutes)}`;
+  return `可安排 ${available} · 事件 ${events} · 待办需求 ${demand} · 余量 ${formatDuration(capacity.slackMinutes)}`;
 }
 
 function characterWidth(character) {

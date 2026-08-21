@@ -8,6 +8,7 @@
   --nautilus-flow-line: rgba(25, 25, 25, 0.09);
   --nautilus-flow-hover: rgba(25, 25, 25, 0.05);
   --nautilus-flow-warning: #c96c00;
+  --nautilus-flow-event: #c58a00;
 }
 
 .bp3-dark,
@@ -18,6 +19,7 @@
   --nautilus-flow-line: rgba(255, 255, 255, 0.1);
   --nautilus-flow-hover: rgba(255, 255, 255, 0.08);
   --nautilus-flow-warning: #f4b75d;
+  --nautilus-flow-event: #f2c14e;
 }
 
 .nautilus-flow-container {
@@ -123,6 +125,11 @@
 .nautilus-flow-metric--warning .nautilus-flow-metric-label,
 .nautilus-flow-metric--warning .nautilus-flow-metric-value {
   color: var(--nautilus-flow-warning);
+}
+
+.nautilus-flow-metric--event .nautilus-flow-metric-label,
+.nautilus-flow-metric--event .nautilus-flow-metric-value {
+  color: var(--nautilus-flow-event);
 }
 
 .nautilus-flow-html-legend {
