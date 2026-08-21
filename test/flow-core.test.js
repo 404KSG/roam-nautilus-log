@@ -307,6 +307,38 @@ test('moves colliding labels to progressively farther external tracks', () => {
   assert.ok(placed[1].y < placed[0].y);
 });
 
+test('side-rail labels stay beside the spiral and inside a compact vertical band', () => {
+  const centerX = 300;
+  const centerY = 210;
+  const exclusionRadius = 150;
+  const gap = 24;
+  const maxVerticalOffset = 92;
+  const placed = placeExternalLabels({
+    centerX,
+    centerY,
+    exclusionRadius,
+    gap,
+    maxVerticalOffset,
+    layout: 'side-rails',
+    labels: [
+      { uid: 'top', angle: Math.PI / 2, width: 180, height: 20 },
+      { uid: 'upper-left', angle: 2.35, width: 160, height: 20 },
+      { uid: 'bottom', angle: -Math.PI / 2, width: 150, height: 20 },
+      { uid: 'lower-right', angle: -0.8, width: 140, height: 20 },
+    ],
+  });
+
+  assert.ok(placed.every((label) => {
+    const completelyLeft = label.x + label.width <= centerX - exclusionRadius - gap;
+    const completelyRight = label.x >= centerX + exclusionRadius + gap;
+    const labelCenterY = label.y + label.height / 2;
+    return (completelyLeft || completelyRight)
+      && Math.abs(labelCenterY - centerY) <= maxVerticalOffset;
+  }));
+  assert.ok(Math.max(...placed.map(({ y, height }) => y + height))
+    - Math.min(...placed.map(({ y }) => y)) <= maxVerticalOffset * 2 + 20);
+});
+
 test('switches to the compact label list at the narrow-container boundary', () => {
   assert.equal(isCompactChartWidth(519), true);
   assert.equal(isCompactChartWidth(520), true);

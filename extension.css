@@ -251,8 +251,13 @@
   stroke-width: 1.5px;
 }
 
-.nautilus-flow-past {
+.nautilus-flow-past .nautilus-flow-slice,
+.nautilus-flow-past .nautilus-flow-slice-group text {
   opacity: 0.35;
+}
+
+.nautilus-flow-past .nautilus-flow-link-line {
+  opacity: 0.52;
 }
 
 .nautilus-flow-controls-top {

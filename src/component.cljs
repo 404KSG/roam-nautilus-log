@@ -265,6 +265,8 @@
                                         :exclusionRadius max-spiral-radius
                                         :gap (if mobile? 14 24)
                                         :trackGap 18
+                                        :layout "side-rails"
+                                        :maxVerticalOffset (* max-spiral-radius 0.62)
                                         :collisionPadding 6
                                         :occupiedRects rects
                                         :labels [{:uid text
@@ -682,7 +684,7 @@
         border-color (if (= border-color nil) "none" border-color)
         stroke-dasharray (if (= stroke-dasharray nil) "2,2" stroke-dasharray)
         bg-color (if (= bg-color nil) "rgba(255,255,255,0)" bg-color)
-        legend-color (if-not done? (update-opacity-str bg-color "1") (update-opacity-str bg-color "0.2"))
+        legend-color (update-opacity-str bg-color "1")
         font-weight (if font-weight font-weight "normal")
         path (create-arc-path start-angle end-angle inner-radius outer-radius center)
         debug? @debug-state-atom                                       

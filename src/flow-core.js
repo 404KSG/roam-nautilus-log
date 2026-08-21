@@ -494,6 +494,34 @@ function externalLabelRect(label, options, track = 0) {
   const trackGap = Math.max(1, asNumber(options.trackGap) || 18);
   const directionX = Math.cos(angle);
   const directionY = -Math.sin(angle);
+  if (options.layout === 'side-rails') {
+    const maxVerticalOffset = Math.max(
+      0,
+      asNumber(options.maxVerticalOffset) || exclusionRadius * 0.62,
+    );
+    const side = directionX < 0 ? -1 : 1;
+    const verticalOffset = clamp(
+      directionY * maxVerticalOffset,
+      -maxVerticalOffset,
+      maxVerticalOffset,
+    );
+    const railDistance = exclusionRadius + gap + track * trackGap;
+    const x = side > 0
+      ? centerX + railDistance
+      : centerX - railDistance - width;
+
+    return {
+      ...label,
+      x,
+      y: centerY + verticalOffset - height / 2,
+      width,
+      height,
+      w: width,
+      h: height,
+      side: side > 0 ? 'right' : 'left',
+      track,
+    };
+  }
   const projectedHalfSize = Math.abs(directionX) * width / 2
     + Math.abs(directionY) * height / 2;
   const distance = exclusionRadius + gap + projectedHalfSize + track * trackGap + 0.001;
@@ -532,7 +560,9 @@ function placeExternalLabels(options = {}) {
   return labels.map((label) => {
     let track = Math.max(0, Math.floor(asNumber(label.track) || 0));
     let candidate = externalLabelRect(label, options, track);
-    const searchLimit = occupied.length + labels.length + 4;
+    const searchLimit = options.layout === 'side-rails'
+      ? Math.max(64, occupied.length * 8 + labels.length + 8)
+      : occupied.length + labels.length + 4;
     while (track < searchLimit && occupied.some((rect) => labelRectsOverlap(candidate, rect, collisionPadding))) {
       track += 1;
       candidate = externalLabelRect(label, options, track);
