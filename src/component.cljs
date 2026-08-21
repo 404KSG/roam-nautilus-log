@@ -335,13 +335,6 @@
       first
       first))
 
-(defn open-block-in-main [block-uid]
-  (try
-    (let [ui (.-ui js/window.roamAlphaAPI)
-          main-window (.-mainWindow ui)]
-      (.openBlock main-window (clj->js {:block {:uid block-uid}})))
-    (catch :default _e nil)))
-
 (defn minutes->time [minutes]
   (let [h (int (/ minutes 60))
         m (mod minutes 60)]
@@ -721,9 +714,7 @@
                 :alignment-baseline "baseline"
                 :font-weight font-weight
                 :style (when click-to-progress {:cursor "pointer"})
-                :on-click #(do
-                             (.stopPropagation %)
-                             (open-block-in-main uid))
+                :on-click #(when click-to-progress (update-block-progress uid 10 now-time-atom))
                 :text-decoration (if done? "line-through" "none")
                 :fill (if-not done? (update-opacity-str bg-color "1") (update-opacity-str bg-color "0.5"))}
          (if debug? (str dbg-radians-txt)
