@@ -1,179 +1,173 @@
 import cljsFile from "./component.cljs";
-import { getTemplateString } from "./index.js";
 
+const RENDER_PAGE = "roam/render";
 
-async function removeTheBlock(uid){
-    roamAlphaAPI.deleteBlock({"block":{"uid": uid}})
+function api() {
+  return typeof window !== "undefined" ? window.roamAlphaAPI : undefined;
 }
 
-function createPage(title){
-    // creates the page if it does not exist
-    let pageUID = roamAlphaAPI.util.generateUID()
-    roamAlphaAPI.data
-        .page.create(
-            {"page": 
-                {"title": title, 
-                "uid": pageUID}})
-    return pageUID;
+function blockByUid(uid) {
+  const roam = api();
+  if (!roam || !uid) return null;
+  return roam.data?.pull?.("[*]", [":block/uid", uid]) || null;
 }
 
-function getPageUidByPageTitle(title){
-    return roamAlphaAPI.q(
-        `[:find (pull ?e [:block/uid]) :where [?e :node/title "${title}"]]`
-        )?.[0]?.[0].uid || null
+function queryBlock(uid) {
+  const roam = api();
+  if (!roam || !uid) return null;
+  return roam.q?.(`[:find (pull ?e [:block/uid :block/string :block/order :block/children]) :where [?e :block/uid "${uid}"]]`)?.[0]?.[0] || null;
 }
 
-function getBlockContentStringByUID(uid){
-    return roamAlphaAPI.q(
-        `[:find (pull ?e [:block/string]) :where [?e :block/uid "${uid}"]]`
-        )?.[0]?.[0].string || null
+function getPageUidByPageTitle(title) {
+  const roam = api();
+  if (!roam?.q) return null;
+  return roam.q(
+    `[:find (pull ?e [:block/uid]) :where [?e :node/title "${title}"]]`,
+  )?.[0]?.[0]?.uid || null;
 }
 
-
-async function createRenderBlock(renderPageName, titleblockUID, version, codeBlockUID, componentName, templateString){
-    let renderPageUID = getPageUidByPageTitle(renderPageName)|| createPage(renderPageName);
-    let templateBlockUID = roamAlphaAPI.util.generateUID()
-    let codeBlockHeaderUID = roamAlphaAPI.util.generateUID()
-    let renderBlockUID = roamAlphaAPI.util.generateUID()
-
-    // create the titleblock
-    //Component Name
-    roamAlphaAPI.createBlock(
-        {"location": 
-            {"parent-uid": renderPageUID, 
-            "order": 0}, 
-        "block": 
-            {"string": `${componentName}`, // old: [[${uidForToday()}]]`,
-            "uid":titleblockUID,
-            "open":true,
-            "heading":3}})
-    // create the template name block
-    // Component Name vXX [[roam/templates]]
-    roamAlphaAPI.createBlock(
-        {"location": 
-            {"parent-uid": titleblockUID, 
-            "order": 0}, 
-        "block": 
-            {"string": `Nautilus Enhanced [[roam/templates]]`,
-            "uid":templateBlockUID,
-            "open":true}})
-    // create the render component block
-    // {{roam/render:((diA0Fyj5m))}}
-    roamAlphaAPI.createBlock(
-        {"location": 
-            {"parent-uid": templateBlockUID, 
-            "order": 0}, 
-        "block": 
-            {"string": templateString, 
-            "uid":renderBlockUID}})
-
-    // create code header block
-    roamAlphaAPI.createBlock(
-        {"location": 
-            {"parent-uid": titleblockUID, 
-            "order": 'last'}, 
-        "block": 
-            {"string": `code`,
-            "uid":codeBlockHeaderUID,
-            "open":false}})
-
-    // create codeblock for the component
-    let cljs = cljsFile
-    let blockString = "```clojure\n " + cljs + " ```"
-    await roamAlphaAPI.createBlock(
-        {"location": 
-            {"parent-uid": codeBlockHeaderUID, 
-            "order": 0}, 
-        "block": 
-            {"uid": codeBlockUID,
-            "string": blockString}})
-    
+function getBlockContentStringByUID(uid) {
+  return queryBlock(uid)?.string || null;
 }
 
-export function updateTemplateString(renderString, renderStringWSettings){ 
-    let query = `[:find
-        (pull ?node [:block/string :block/uid])
-      :where
-        [?page :node/title "roam/render"]
-        [?node :block/page ?page]
-        [?node :block/string ?node-String]
-        [(clojure.string/includes? ?node-String "${renderString}")]
-      ]`;
-    
-    let result = window.roamAlphaAPI.q(query).flat();
-    result.forEach(block => {
-        const updatedString = renderStringWSettings 
-        window.roamAlphaAPI.updateBlock({
-          block: {
-            uid: block.uid,
-            string: updatedString
-          }
-        });
-    });
+function createPage(title) {
+  const roam = api();
+  const uid = roam?.util?.generateUID?.();
+  if (!roam || !uid) return null;
+  roam.data.page.create({ page: { title, uid } });
+  return uid;
 }
 
-
-function replaceRenderString(searchString, replacementString){
-    // replaces the {{[[roam/render]]:((5juEDRY_n))}} string across the entire graph
-    // I do this because when the original block is deleted Roam leaves massive codeblocks wherever it was ref'd
-    // also allows me to re-add back if a user uninstalls and then re-installs  
-
-    let query = `[:find
-        (pull ?node [:block/string :node/title :block/uid])
-      :where
-        (or [?node :block/string ?node-String]
-      [?node :node/title ?node-String])
-        [(clojure.string/includes? ?node-String "${searchString}")]
-      ]`;
-    
-    let result = window.roamAlphaAPI.q(query).flat();
-    result.forEach(block => {
-        const updatedString = block.string.replace(searchString, replacementString);
-        window.roamAlphaAPI.updateBlock({
-          block: {
-            uid: block.uid,
-            string: updatedString
-          }
-        });
-    });
+function createBlock(parentUid, order, string, uid, extra = {}) {
+  const roam = api();
+  if (!roam?.createBlock || !parentUid || !uid) return null;
+  return roam.createBlock({
+    location: { "parent-uid": parentUid, order },
+    block: { string, uid, open: true, ...extra },
+  });
 }
 
-async function updateBlockContentByUID(uid, content){
-    roamAlphaAPI.updateBlock({"block": {"uid": uid, "string": content}});
+function childBlocks(parentUid) {
+  const roam = api();
+  if (!roam?.q || !parentUid) return [];
+  return (roam.q(`[:find (pull ?child [:block/uid :block/string :block/order])
+                 :where [?parent :block/uid "${parentUid}"]
+                        [?parent :block/children ?child]]`) || [])
+    .map((row) => row?.[0])
+    .filter(Boolean)
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
-export function toggleRenderComponent(state, titleblockUID, version, renderStringCore, disabledReplacementString, codeBlockUID, componentName, templateString) {
-    let renderPageName = 'roam/render'
-    if (state==true) {
-        replaceRenderString(disabledReplacementString, renderStringCore); // replaces all {{Nautilus-disabled}} with render component call string – backward compatibility with older versions
-        if (!roamAlphaAPI.data.pull("[*]", [":block/uid", codeBlockUID])) { // if the code block does not exist 
-            removeTheBlock(titleblockUID); // remove the remains if these exist
-            createRenderBlock(renderPageName, titleblockUID, version, codeBlockUID, componentName, templateString);
-            console.log(`load ${componentName} plugin anew`);
-        } else { // if the code block already exists
-            // check if the codeBlockUIDs child content is the same as the current code block and update if not
-            if ((getBlockContentStringByUID(codeBlockUID)) != "```clojure\n " + cljsFile + " ```") {
-                updateBlockContentByUID(codeBlockUID, "```clojure\n " + cljsFile + " ```");
-                console.log(`load ${componentName} plugin via update`);
-            }
-            
-            // forcefully update the old template name text to Nautilus Enhanced if it exists
-            let tQuery = `[:find (pull ?child [:block/uid :block/string]) 
-                           :where 
-                           [?parent :block/uid "${titleblockUID}"] 
-                           [?parent :block/children ?child] 
-                           [?child :block/order 0] ]`;
-            let res = window.roamAlphaAPI.q(tQuery);
-            if (res && res.length > 0) {
-                let firstChild = res[0][0];
-                if (firstChild && firstChild.string !== "Nautilus Enhanced [[roam/templates]]") {
-                    window.roamAlphaAPI.updateBlock({
-                        block: { uid: firstChild.uid, string: "Nautilus Enhanced [[roam/templates]]" }
-                    });
-                }
-            }
-        }
-    } else if (state = false) {
-        // TODO: since we're not doing anything on state=false maybe call this fn onLoadHelper?
+function updateBlockIfChanged(uid, string) {
+  const roam = api();
+  if (!roam?.updateBlock || !uid || getBlockContentStringByUID(uid) === string) return false;
+  roam.updateBlock({ block: { uid, string } });
+  return true;
+}
+
+function renderBlockString(renderStringCore, templateString) {
+  return templateString || `${renderStringCore}}}`;
+}
+
+/**
+ * Creates/repairs only Nautilus Flow's own stable render scaffolding. It never
+ * searches the whole graph or rewrites blocks belonging to the old extension.
+ */
+export async function createRenderBlock(
+  renderPageName,
+  titleblockUID,
+  version,
+  codeBlockUID,
+  componentName,
+  templateString,
+  renderStringCore,
+) {
+  const roam = api();
+  if (!roam) return false;
+  const renderPageUID = getPageUidByPageTitle(renderPageName) || createPage(renderPageName);
+  if (!renderPageUID) return false;
+
+  const existingTitle = blockByUid(titleblockUID);
+  if (!existingTitle) {
+    createBlock(renderPageUID, "last", componentName, titleblockUID, { heading: 3 });
+  }
+
+  const children = childBlocks(titleblockUID);
+  let templateBlock = children.find((child) => child.string?.includes("Nautilus Flow [[roam/templates]]"));
+  if (!templateBlock) {
+    const templateBlockUID = roam.util.generateUID();
+    createBlock(titleblockUID, 0, "Nautilus Flow [[roam/templates]]", templateBlockUID);
+    templateBlock = { uid: templateBlockUID };
+  }
+
+  const templateChildren = childBlocks(templateBlock.uid);
+  const renderBlock = templateChildren.find((child) => child.string?.includes(renderStringCore));
+  if (!renderBlock) {
+    const renderBlockUID = roam.util.generateUID();
+    createBlock(templateBlock.uid, 0, renderBlockString(renderStringCore, templateString), renderBlockUID);
+  } else {
+    updateBlockIfChanged(renderBlock.uid, renderBlockString(renderStringCore, templateString));
+  }
+
+  const codeHeader = children.find((child) => child.string === "code");
+  let codeHeaderUID = codeHeader?.uid;
+  if (!codeHeaderUID) {
+    codeHeaderUID = roam.util.generateUID();
+    createBlock(titleblockUID, "last", "code", codeHeaderUID, { open: false });
+  }
+
+  const blockString = `\`\`\`clojure\n ${cljsFile} \`\`\``;
+  if (!blockByUid(codeBlockUID)) {
+    createBlock(codeHeaderUID, 0, blockString, codeBlockUID);
+  } else {
+    updateBlockIfChanged(codeBlockUID, blockString);
+  }
+  return true;
+}
+
+export function updateTemplateString(renderString, renderStringWithSettings) {
+  const roam = api();
+  if (!roam?.q) return 0;
+  const query = `[:find (pull ?node [:block/string :block/uid])
+                 :where [?page :node/title "${RENDER_PAGE}"]
+                        [?node :block/page ?page]
+                        [?node :block/string ?node-string]
+                        [(clojure.string/includes? ?node-string "${renderString}")]]`;
+  const blocks = (roam.q(query) || []).map((row) => row?.[0]).filter(Boolean);
+  let updates = 0;
+  blocks.forEach((block) => {
+    if (block.string !== renderStringWithSettings) {
+      roam.updateBlock({ block: { uid: block.uid, string: renderStringWithSettings } });
+      updates += 1;
     }
+  });
+  return updates;
 }
+
+/**
+ * Compatibility entry point used by the extension. `state=false` is a pure
+ * no-op: unloading a Depot extension must not delete or rewrite user blocks.
+ */
+export function toggleRenderComponent(
+  state,
+  titleblockUID,
+  version,
+  renderStringCore,
+  disabledReplacementString,
+  codeBlockUID,
+  componentName,
+  templateString,
+) {
+  if (state !== true) return Promise.resolve(false);
+  return createRenderBlock(
+    RENDER_PAGE,
+    titleblockUID,
+    version,
+    codeBlockUID,
+    componentName,
+    templateString,
+    renderStringCore,
+  );
+}
+
+export { getBlockContentStringByUID, queryBlock };

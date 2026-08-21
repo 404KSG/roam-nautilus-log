@@ -1,145 +1,294 @@
-/* Nautilus Roam Depot Plugin Styles */
+/* Nautilus Flow – scoped styles. Every selector is Flow-specific so the
+   original Nautilus Enhanced extension can remain installed during migration. */
 
-/* Base & Dark Mode Semantic Variable Layer */
 :root {
-  --naut-text-main: #555555;
-  --naut-text-sub: #aaaaaa;
-  --naut-spiral: #888888;
+  --nautilus-flow-text-main: #555;
+  --nautilus-flow-text-sub: #999;
+  --nautilus-flow-spiral: #888;
+  --nautilus-flow-capacity-bg: rgba(127, 127, 127, 0.08);
+  --nautilus-flow-warning: #c96c00;
 }
 
-.bp3-dark, .roam-app.rm-dark-theme {
-  --naut-text-main: #eeeeee;
-  --naut-text-sub: #cccccc;
-  --naut-spiral: #aaaaaa;
+.bp3-dark,
+.roam-app.rm-dark-theme {
+  --nautilus-flow-text-main: #eee;
+  --nautilus-flow-text-sub: #c7c7c7;
+  --nautilus-flow-spiral: #aaa;
+  --nautilus-flow-capacity-bg: rgba(255, 255, 255, 0.09);
+  --nautilus-flow-warning: #f4b75d;
 }
 
-/* Center the graphic and buttons */
-.nautilus-container {
+.nautilus-flow-container {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
   padding: 16px;
   width: 100%;
-  position: relative; /* important for absolute positioning of controls */
+  position: relative;
+  color: var(--nautilus-flow-text-main);
 }
 
-/* A focused child block in the right sidebar also mounts its parent render.
-   Hide the chart there so the invisible/narrow render does not reserve space
-   above the focused task. */
-#roam-right-sidebar-content .nautilus-container,
-#right-sidebar .nautilus-container {
+/* A right-sidebar render must not reserve chart space or run visual work. The
+   component also detects this location and renders a placeholder; this rule
+   is only a defensive fallback for Roam layout variants. */
+#roam-right-sidebar-content .nautilus-flow-container,
+#right-sidebar .nautilus-flow-container {
   display: none !important;
 }
 
-.nautilus-svg {
+.nautilus-flow-sidebar-placeholder {
+  display: none !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.nautilus-flow-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.nautilus-flow-svg {
+  display: block;
+  width: 100%;
+  max-width: 100%;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.05));
-  transition: filter 0.3s ease;
   margin-bottom: 8px;
 }
 
-/* Graphic slices */
-.nautilus-slice {
-  transition: fill 0.25s ease, stroke 0.25s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  transform-origin: center;
+.bp3-dark .nautilus-flow-svg,
+.roam-app.rm-dark-theme .nautilus-flow-svg {
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.3));
 }
 
-/* Give a slightly elevated hover effect inside the SVG */
-.event-slice-group:hover .nautilus-slice {
-  filter: brightness(1.1) drop-shadow(0px 2px 6px rgba(0,0,0,0.15));
-  stroke: rgba(255,255,255,0.7);
+.nautilus-flow-slice {
+  transition: fill 0.2s ease, stroke 0.2s ease;
+}
+
+.nautilus-flow-event-slice-group:hover .nautilus-flow-slice {
+  filter: brightness(1.08) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.15));
+  stroke: rgba(255, 255, 255, 0.7);
   stroke-width: 1.5px;
 }
 
-.event-slice-group text {
-  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), font-weight 0.2s ease, filter 0.2s ease;
+.nautilus-flow-slice-group text {
+  transition: font-weight 0.15s ease, filter 0.15s ease;
 }
 
-.event-slice-group:hover text {
+.nautilus-flow-event-slice-group:hover .nautilus-flow-slice-group text {
   font-weight: bold;
-  filter: drop-shadow(0px 1px 2px rgba(0,0,0,0.15));
-  transform: translateX(3px);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15));
 }
 
-.nautilus-link-line {
-  transition: opacity 0.3s ease, stroke-width 0.2s ease;
-  opacity: 0.4;
+.nautilus-flow-link-line {
+  opacity: 0.42;
   stroke-dasharray: 4, 3;
+  transition: opacity 0.2s ease, stroke-width 0.2s ease;
 }
 
-.event-slice-group:hover .nautilus-link-line {
+.nautilus-flow-event-slice-group:hover .nautilus-flow-link-line {
   opacity: 0.9;
   stroke-dasharray: none;
   stroke-width: 1.5px;
 }
 
-/* Top Controls container for a minimal overlay layout */
-.nautilus-controls-top {
+.nautilus-flow-past {
+  opacity: 0.35;
+}
+
+.nautilus-flow-controls-top {
   position: absolute;
   top: 12px;
   right: 12px;
   display: flex;
-  gap: 8px;
-  opacity: 0.2;
-  transition: opacity 0.3s ease;
+  gap: 6px;
+  opacity: 0.24;
+  transition: opacity 0.2s ease;
   z-index: 10;
 }
 
-.nautilus-container:hover .nautilus-controls-top {
+.nautilus-flow-container:hover .nautilus-flow-controls-top,
+.nautilus-flow-controls-top:focus-within {
   opacity: 1;
 }
 
-/* Minimalist Icon Button for Visible Toggle */
-.nautilus-toggle-btn {
+.nautilus-flow-toggle-btn {
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  padding: 6px;
+  border: 0;
+  border-radius: 6px;
   background: transparent;
   color: #888;
-  padding: 6px;
-  border: none;
-  border-radius: 50%;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  font: inherit;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.nautilus-toggle-btn:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+.nautilus-flow-toggle-btn:hover,
+.nautilus-flow-toggle-btn:focus-visible {
+  background-color: rgba(0, 0, 0, 0.06);
   color: #333;
-  transform: scale(1.1);
+  outline: none;
 }
 
-.nautilus-toggle-btn:active {
-  transform: scale(0.95);
-}
-
-/* Dark mode compatibility for floating icon button */
-.bp3-dark .nautilus-toggle-btn,
-.roam-app.rm-dark-theme .nautilus-toggle-btn {
+.bp3-dark .nautilus-flow-toggle-btn,
+.roam-app.rm-dark-theme .nautilus-flow-toggle-btn {
   color: #aaa;
 }
 
-.bp3-dark .nautilus-toggle-btn:hover,
-.roam-app.rm-dark-theme .nautilus-toggle-btn:hover {
+.bp3-dark .nautilus-flow-toggle-btn:hover,
+.bp3-dark .nautilus-flow-toggle-btn:focus-visible,
+.roam-app.rm-dark-theme .nautilus-flow-toggle-btn:hover,
+.roam-app.rm-dark-theme .nautilus-flow-toggle-btn:focus-visible {
   background-color: rgba(255, 255, 255, 0.1);
   color: #fff;
 }
 
-.bp3-dark .nautilus-svg,
-.roam-app.rm-dark-theme .nautilus-svg {
-  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.3));
+.nautilus-flow-capacity-bar {
+  align-self: stretch;
+  box-sizing: border-box;
+  margin: 0 0 8px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  background: var(--nautilus-flow-capacity-bg);
+  color: var(--nautilus-flow-text-sub);
+  font-size: 12px;
+  text-align: center;
+  letter-spacing: 0.01em;
 }
 
-.nautilus-svg.playback-active .nautilus-slice,
-.nautilus-svg.playback-active .nautilus-slice-group text,
-.nautilus-svg.playback-active .nautilus-link-line {
+.nautilus-flow-overflow-panel {
+  align-self: stretch;
+  box-sizing: border-box;
+  margin: 4px 12px 0;
+  padding: 7px 10px;
+  border: 1px dashed var(--nautilus-flow-warning);
+  border-radius: 6px;
+  color: var(--nautilus-flow-warning);
+  font-size: 12px;
+}
+
+.nautilus-flow-overflow-panel summary {
+  cursor: pointer;
+}
+
+.nautilus-flow-overflow-panel ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.nautilus-flow-overflow-panel li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+}
+
+.nautilus-flow-overflow-duration {
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
+.nautilus-flow-legend {
+  fill: var(--nautilus-flow-text-sub);
+  font-size: 11px;
+}
+
+.nautilus-flow-center-date,
+.nautilus-flow-midnight-label {
+  pointer-events: none;
+}
+
+.nautilus-flow-collapsed {
+  min-height: 0;
+  height: auto;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.nautilus-flow-collapsed-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  align-self: stretch;
+  min-height: 24px;
+  padding: 3px 48px 3px 8px;
+  color: var(--nautilus-flow-text-sub);
+  font-size: 12px;
+}
+
+.nautilus-flow-collapsed-summary-title {
+  color: var(--nautilus-flow-text-main);
+  font-weight: 600;
+}
+
+.nautilus-flow-collapsed-summary-capacity {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@container (max-width: 520px) {
+  .nautilus-flow-container {
+    padding: 10px 4px;
+  }
+
+  .nautilus-flow-capacity-bar {
+    font-size: 11px;
+    white-space: normal;
+  }
+
+  .nautilus-flow-legend {
+    font-size: 10px;
+  }
+
+  .nautilus-flow-controls-top {
+    top: 6px;
+    right: 6px;
+  }
+}
+
+@container (max-width: 360px) {
+  .nautilus-flow-svg {
+    max-height: 48vh;
+  }
+
+  .nautilus-flow-overflow-panel {
+    margin-left: 4px;
+    margin-right: 4px;
+  }
+}
+
+.nautilus-flow-playback-active .nautilus-flow-slice,
+.nautilus-flow-playback-active .nautilus-flow-slice-group text,
+.nautilus-flow-playback-active .nautilus-flow-link-line {
   opacity: 0;
-  animation: slicePopIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  animation: nautilus-flow-slice-pop-in 0.35s ease forwards;
   animation-delay: var(--pb-delay, 0s);
-  transform-origin: center;
 }
 
-@keyframes slicePopIn {
-  0% { opacity: 0; transform: translateY(2px); }
-  100% { opacity: 1; transform: translateY(0); }
+@keyframes nautilus-flow-slice-pop-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nautilus-flow-container *,
+  .nautilus-flow-container *::before,
+  .nautilus-flow-container *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

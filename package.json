@@ -1,11 +1,12 @@
 {
-  "name": "nautilus-enhanced",
+  "name": "nautilus-flow",
   "version": "1.0.0",
-  "description": "Roam Research Plugin",
+  "description": "A transparent dynamic day planner for Roam Research",
   "main": "index.js",
   "scripts": {
     "build": "webpack",
-    "watch": "webpack --watch"
+    "watch": "webpack --watch",
+    "test": "node --test test/*.test.js"
   },
   "license": "MIT",
   "author": "hopeserena",

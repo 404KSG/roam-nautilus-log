@@ -1,4 +1,4 @@
-(ns nautilus-roam-3-5-2024-v5d
+(ns nautilus-flow-v1
   (:require [clojure.string :as str]
             [reagent.core :as r]
             [roam.datascript :as rd]
@@ -11,15 +11,15 @@
 
 (def init-len-limit 22) ;; value used when no legend length limit is specified as a render parameter
 
-(def custom-color-1 "rgba(255,0,0,0.5)")
+(def custom-color-1 "rgba(234,15,15,0.72)")
 
 (def init-custom-color-1-tag "")
 
-(def init-workday-start 480)
+(def init-workday-start 300)
 
 ;; ------- other defaults –––––––
 
-(def workday-end 1320)
+(def init-workday-end 1440)
 
 (def init-starting-distance 30)
 
@@ -67,7 +67,7 @@
 
 ;; ----------------- colors, darling ---------------
 
-(def snail-template-color "var(--naut-spiral)")
+(def snail-template-color "var(--nautilus-flow-spiral)")
 
 (def clock-hand-color "#EA0F0F5B")
 
@@ -267,19 +267,22 @@
                         {})]
     (assoc new-text-rect :real-rect-radians (real-rect-radians new-text-rect center))))
 
-;; --------------- o`clock ----------------------
+;; --------------- Flow core bridge ----------------------
 
-(defonce now-time-atom (r/atom 0))
-(defonce playback-state-atom (r/atom false))
+(defn flow-core-call [function-name value]
+  "Calls the single tested JavaScript scheduling core and turns its result into
+   ordinary keywordized ClojureScript data. The extension entry point installs
+   this object before any render block can mount."
+  (try
+    (let [core (.-nautilusFlowCore js/window)
+          function (aget core function-name)]
+      (when function
+        (js->clj (.call function nil (clj->js value)) :keywordize-keys true)))
+    (catch :default _e nil)))
 
-(defn start-clock-alignment []
-  (let [now (new js/Date)
-        ms-to-next-min (- 60000 (mod (.getTime now) 60000))]
-    (reset! now-time-atom (+ (* (.getHours now) 60) (.getMinutes now)))
-    (js/setTimeout start-clock-alignment ms-to-next-min)))
-
-(defonce minute-updater
-  (start-clock-alignment))
+(defn now-minutes []
+  (let [now (new js/Date)]
+    (+ (* (.getHours now) 60) (.getMinutes now))))
 
 
 
@@ -348,7 +351,7 @@
                      {:uid uid
                       :string stripped}}))))
 
-(defn update-block-progress [block-uid increment] 
+(defn update-block-progress [block-uid increment now-time-atom]
    (let [s (get-block-str-naked block-uid)
          progress-format #"(\sd)(\d{1,3})(\%)" ; #"(\s\%)(\d{1,3})"
          updated-str (if-let [progress-match (re-find progress-format s)]
@@ -363,7 +366,7 @@
                            (str (->
                                  (str/replace s old-progress-str "")
                                  (str/replace #"\{\{\[\[TODO\]\]\}\}" "{{[[DONE]]}}"))
-                                " d" (minutes->time @now-time-atom))))
+                                 " d" (minutes->time @now-time-atom))))
                        (-> (str s " d" increment "%")
                            (str/replace #"\{\{\[\[DONE\]\]\}\}" "{{[[TODO]]}}")
                            (str/replace #"\b(d\d{1,2}(:\d{1,2})?)\b(?!%)" "")))]
@@ -413,9 +416,10 @@
             [_ from-str to-str] (re-find #"(.*)(?:-|–|až|to)(.*)" range-str)
             [to-min h12] (from-1224->min to-str nil)
             [from-min _] (from-1224->min from-str h12)]
-        {:range (if (> to-min from-min)
-                  [from-min to-min]
-                  [from-min from-min])
+        {:range (cond
+                  (> to-min from-min) [from-min to-min]
+                  (= to-min 0) [from-min 1440]
+                  :else [from-min from-min])
          :cleaned-str cleaned-str})
       {:range nil :cleaned-str s})))
 
@@ -527,40 +531,53 @@
 
 ;; --------------- fill day with events and todos ----------------------
 
-(defn fill-day [events workday-start plan-from-time]
-  (let [sorted-events (sort-by #(if (:meeting %) (:start %) 0) events)
-        todo-events (filter #(= true (:todo %)) sorted-events)
-        meeting-events (filter #(= true (:meeting %)) sorted-events)
-        not-done-todos (filter #(not (:done %)) todo-events)]
-    (loop [todos not-done-todos
-           meetings meeting-events
-           time workday-start
+(defn fill-day [events workday-start workday-end plan-from-time]
+  "Builds the visible timeline through the tested JS scheduler. Fixed events
+   stay visible even after they have passed today; flexible work is scheduled
+   only from the current planning cursor and overflow is returned separately
+   by calculate-capacity."
+  (let [todo-events (vec (filter #(= true (:todo %)) events))
+        meeting-events (vec (filter #(= true (:meeting %)) events))
+        pending-todos (vec (filter #(not (:done %)) todo-events))
+        scheduler-input (flow-core-call "scheduleTasks"
+                                        {:startMinutes workday-start
+                                         :endMinutes workday-end
+                                         :nowMinutes plan-from-time
+                                         :tasks (map #(dissoc % :progress) pending-todos)
+                                         :fixedEvents meeting-events})
+        scheduled-by-uid (into {} (map (juxt :uid identity) (:scheduledTasks scheduler-input)))
+        scheduled-todos (keep (fn [todo]
+                                (when-let [planned (get scheduled-by-uid (:uid todo))]
+                                  (assoc todo
+                                         :start (:start planned)
+                                         :end (:end planned)
+                                         :duration (:duration planned))))
+                              pending-todos)
+        visible-meetings (->> meeting-events
+                              (filter #(and (:start %) (:end %)
+                                            (> (:end %) workday-start)
+                                            (< (:start %) workday-end)))
+                              (map #(assoc %
+                                           :start (max workday-start (:start %))
+                                           :end (min workday-end (:end %))))
+                              (filter #(< (:start %) (:end %))))
+        occupied (sort-by :start (concat visible-meetings scheduled-todos))]
+    (loop [items occupied
+           cursor workday-start
            result []]
-      (if (and (empty? todos) (empty? meetings))
-        (conj result {:freetime true :start time :end workday-end})  ; Day is over (no todos or meetings left)
-        (if (< time plan-from-time)
-          (let [time (max time workday-start)
-                next-meeting (first meetings)]
-            (if next-meeting
-              (if (> (:start next-meeting) time)
-                (recur todos meetings (min plan-from-time (:start next-meeting)) (conj result {:freetime true :start time :end (min plan-from-time (:start next-meeting))}))
-                (recur todos (rest meetings) (:end next-meeting) (conj result next-meeting)))
-              (recur todos [] plan-from-time (conj result {:freetime true :start time :end plan-from-time}))))
-          (let [time (max time workday-start) ; Ensure time doesn't fall before workday-start
-                next-todo (first todos)
-                next-meeting (first meetings)]
-            (if next-meeting
-              (if (> (:start next-meeting) time)
-                ;; if the next meeting starts later than the current time
-                (if (and next-todo (< (+ time (:duration next-todo)) (:start next-meeting)) (<= (:start-after next-todo) time))
-                    ;; if there is another todo and it ends before the next meeting starts,
-                    ;; and at the same time starts after start-after (i.e. the end of the previous meeting after which it was placed in the list)
-                  (recur (rest todos) meetings (+ time (:duration next-todo)) (conj result (assoc next-todo :start time :end (+ time (:duration next-todo)))))
-                  (recur todos meetings (:start next-meeting) (conj result {:freetime true :start time :end (:start next-meeting)})))
-                (recur todos (rest meetings) (:end next-meeting) (conj result next-meeting)))
-              (if next-todo
-                (recur (rest todos) [] (+ time (:duration next-todo)) (conj result (assoc next-todo :start time :end (+ time (:duration next-todo)))))
-                (recur [] [] time result)))))))))
+      (if-let [event (first items)]
+        (let [event-start (:start event)
+              event-end (:end event)
+              result (if (> event-start cursor)
+                        (conj result {:freetime true :start cursor :end event-start})
+                        result)
+              result (if (>= event-end cursor)
+                        (conj result event)
+                        result)]
+          (recur (rest items) (max cursor event-end) result))
+        (if (< cursor workday-end)
+          (conj result {:freetime true :start cursor :end workday-end})
+          result)))))
 
 
 ;; --------------- slice component ----------------------
@@ -573,7 +590,7 @@
      [:path {:d (str "M " legend-start-x "," legend-start-y 
                      " Q " middle-x "," middle-y " " 
                      text-x "," text-y)
-             :class "nautilus-link-line"
+             :class "nautilus-flow-link-line"
              :stroke color
              :stroke-width "1.5px"
              :fill "none"}]]))
@@ -604,7 +621,7 @@
 (defn slice
   "Draws and colors the slice section according to the specified parameters"
   [[start-angle end-angle inner-radius outer-radius center settings]
-   & {:keys [bg-color border-color legend-rect text timestamp stroke-dasharray font-weight shaky done? uid non-zero-progress? click-to-progress task-start-min task-end-min]}]
+   & {:keys [bg-color border-color legend-rect text timestamp stroke-dasharray font-weight shaky done? uid non-zero-progress? click-to-progress task-start-min task-end-min now-time-atom past?]}]
   (let [start-radians (angle->rad (+ start-angle (shake-if shaky)))
         end-radians (angle->rad (+ end-angle (shake-if shaky)))
         mid-radians (if (and task-start-min task-end-min)
@@ -642,7 +659,7 @@
         dbg-radians-txt (if debug? (str "slc:" (round2 start-radians)  
                                         "–>" (round2 end-radians) "/ leg:" (round2 legend-radians)) "") 
         on-left? (or (<= legend-radians (- (/ pi 2))) (>= legend-radians (/ pi 2)))] 
-    [:g
+    [:g {:class (when past? "nautilus-flow-past")}
      [:defs
       [:pattern
        {:id "dot-pattern" :width "4" :height "4" :patternUnits "userSpaceOnUse"}
@@ -658,20 +675,22 @@
      
      [:path
       {:d path
-       :class "nautilus-slice"
+       :class "nautilus-flow-slice"
        :style (merge
                 (when click-to-progress {:cursor "pointer"})
                 {:--pb-delay (str (* (/ (or task-start-min 0) 1440.0) 6.0) "s")})
        :stroke-dasharray stroke-dasharray
        :fill bg-color
-       :on-click #(when click-to-progress (update-block-progress uid 10))
+       :on-click #(when click-to-progress (update-block-progress uid 10 now-time-atom))
        ; :on-mouse-enter (fn [_] (reset! hovered true))
        ; :on-mouse-leave (fn [_] (reset! hovered false))
        :stroke border-color}]
      ;; ⤵ adds an event legend
      ;; (when @hovered [:g [:text {:x center-x :y center-y} (str progress)]])
      (when text
-       [:g {:style {:--pb-delay (str (* (/ (or task-start-min 0) 1440.0) 6.0) "s")} :class "nautilus-slice-group"}
+       [:g {:style {:--pb-delay (str (* (/ (or task-start-min 0) 1440.0) 6.0) "s")}
+             :class "nautilus-flow-slice-group"
+            :title text}
         [bent-line-component legend-line-start-x legend-line-start-y legend-line-end-x legend-line-end-y legend-color at-vertex? on-left?]
         [:text {:x (if at-vertex? legend-line-end-x (+ legend-line-end-x (if on-left? (- bent-line-gap) bent-line-gap))) 
                 :y (+ legend-y legend-h)
@@ -681,11 +700,13 @@
                 :alignment-baseline "baseline"
                 :font-weight font-weight
                 :style (when click-to-progress {:cursor "pointer"})
-                :on-click #(when click-to-progress (update-block-progress uid 10))
+                :on-click #(when click-to-progress (update-block-progress uid 10 now-time-atom))
                 :text-decoration (if done? "line-through" "none")
                 :fill (if-not done? (update-opacity-str bg-color "1") (update-opacity-str bg-color "0.5"))}
-         (if debug? (str dbg-radians-txt)                                            
-             (str #_progress-str (subs text 0 (:legend-len-limit settings))))        
+         (if debug? (str dbg-radians-txt)
+             (or (flow-core-call "truncateTextToWidth"
+                                 {:text text :maxWidth (:legend-len-limit settings)})
+                 text))
          ]])     
      (when (seq timestamp)
        ;; ⤵ adds a clock label for the snail template
@@ -704,44 +725,56 @@
         (if debug? (str (round2 start-radians) " / " start-angle) timestamp)])]))
 
 
-(defn snail-blueprint-component [color inner-radius center settings]
-  (let
-   [workday-start (:workday-start settings)]
-    [:g (mapcat (fn [[start end timestamp]]
-                  [[slice
-                    [start end inner-radius (outer-radius-at timestamp) center settings]
-                    :border-color color
-                    :timestamp (str timestamp)]])
-                (concat
-                 (cond (between workday-start 420 479) [(vector 300 330 7)]
-                       (between workday-start 360 419) [(vector 270 300 6) (vector 300 330 7)]
-                       (between workday-start 300 359) [(vector 240 270 5) (vector 270 300 6) (vector 300 330 7)])
-                 (map vector
-                      (range 0 390 30)
-                      (range 30 390 30)
-                      (range 9 21))
-                 [(vector 0 30 21) (vector 330 360 8)]))]))
+(defn snail-blueprint-component [color inner-radius center settings daily-page? now-time-atom]
+  (let [workday-start (:workday-start settings)
+        workday-end (:workday-end settings)
+        segments (loop [minute workday-start
+                        result []]
+                   (if (>= minute workday-end)
+                     result
+                     (let [next-minute (min workday-end (+ minute 30))
+                           label (when (zero? (mod minute 60)) (str (mod (quot minute 60) 24)))]
+                       (recur next-minute (conj result [minute next-minute label])))))]
+    [:g
+     (mapcat (fn [[start end timestamp]]
+               [[slice
+                 [(min->angle start) (min->angle end) inner-radius
+                  (outer-radius-at (mod (quot start 60) (count snail-blueprint-outer-radiuses)))
+                 center settings]
+                 :border-color color
+                 :past? (and daily-page? (<= end @now-time-atom))
+                 :timestamp timestamp]])
+             segments)
+     (when (= workday-end 1440)
+       (let [angle (min->angle workday-end)
+             radians (angle->rad angle)
+             radius (+ (outer-radius-at (mod 23 (count snail-blueprint-outer-radiuses))) 12)
+             x (+ (:center-x center) (* (cos radians) radius))
+             y (- (:center-y center) (* (sin radians) radius))]
+         [:text {:class "nautilus-flow-midnight-label"
+                 :x x :y y :fill color :font-size (- font-size 3)
+                 :text-anchor "middle" :alignment-baseline "central"} "0"]))]))
 
 (defn central-label-component [[first-row second-row] center]
   (let [[center-x center-y] [(:center-x center) (:center-y center)]
         common-attr {:x center-x
                      :text-anchor "middle"
                      :dominant-baseline "central"}]
-    [:g {:class "nautilus-center-date"}
+    [:g {:class "nautilus-flow-center-date"}
      [:text (assoc common-attr 
                    :y (- center-y 2) 
-                   :fill "var(--naut-text-main)" 
+                   :fill "var(--nautilus-flow-text-main)"
                    :font-weight "bold" 
                    :font-size (str (* font-size 0.85))) 
        first-row]
      [:text (assoc common-attr 
                    :y (+ center-y 13) 
-                   :fill "var(--naut-text-sub)" 
+                   :fill "var(--nautilus-flow-text-sub)"
                    :font-weight "500" 
                    :font-size (str (* font-size 0.7))) 
        second-row]]))
 
-(defn calculate-slice-params [event index daily-page?]
+(defn calculate-slice-params [event index daily-page? now-time-atom]
   (let [outer-radius (outer-radius-at (mod (quot (int (:start event)) 60) (count snail-blueprint-outer-radiuses)))
         start-angle (min->angle (:start event))
         end-angle (min->angle (:end event))
@@ -770,8 +803,8 @@
         first-bound (if (<= first-bound start-min) (+ first-bound 60) first-bound)]
     (range first-bound end-min 60)))
 
-(defn event-slice-component [event index legend-rect inner-radius daily-page? center settings]
-  (let [{:keys [bg-color done click-to-progress]} (calculate-slice-params event index daily-page?)
+(defn event-slice-component [event index legend-rect inner-radius daily-page? center settings now-time-atom]
+  (let [{:keys [bg-color done click-to-progress]} (calculate-slice-params event index daily-page? now-time-atom)
         description (:description event)
         uid (:uid event)
         progress (:progress event)
@@ -786,7 +819,7 @@
                        (conj segs [curr end-min])
                        segs)
                      (recur (first bounds) (rest bounds) (conj segs [curr (first bounds)]))))]
-    (into [:g {:class "event-slice-group"}]
+    (into [:g {:class (str "nautilus-flow-event-slice-group" (when (and daily-page? (:end event) (<= (:end event) @now-time-atom)) " nautilus-flow-past"))}]
           (map-indexed
            (fn [idx [s e]]
              (let [start-angle (min->angle s)
@@ -805,16 +838,24 @@
                 :non-zero-progress? (if (> progress 0) true false)
                 :click-to-progress click-to-progress
                 :task-start-min start-min
-                :task-end-min end-min]))
+                :task-end-min end-min
+                :now-time-atom now-time-atom]))
            segments))))
+
+(defn label-track-map [events]
+  (let [labels (mapv #(select-keys % [:uid :start :end]) events)
+        placed (or (flow-core-call "placeLabelTracks" {:labels labels :maxTracks 3}) [])]
+    (into {} (map (juxt :uid :track) placed))))
 
 (defn events->slices
   "Returns svg vector of all slice components + list of legend rectangles"
-  ([events daily-page-atom? center settings]
-   (events->slices events daily-page-atom? center settings []))
-  ([events daily-page-atom? center settings init-rects]
+  ([events daily-page-atom? center settings now-time-atom]
+   (events->slices events daily-page-atom? center settings now-time-atom []))
+   ([events daily-page-atom? center settings now-time-atom init-rects]
+   (let [events (vec (filter #(not= true (:freetime %)) events))
+         track-map (label-track-map events)]
    (loop [i 0
-          events (filter #(not= true (:freetime %)) events)
+          events events
           rects init-rects
           all-slice-components [:g]]
     (if-let [event (first events)]
@@ -822,19 +863,22 @@
                          (angle->rad (min->angle (:start event)))
                          (angle->rad (min->angle (:end event))))
             text (:description event)
-            radius (nth snail-blueprint-outer-radiuses (mod (quot (int (:start event)) 60) (count snail-blueprint-outer-radiuses)))
+            radius (+ (nth snail-blueprint-outer-radiuses (mod (quot (int (:start event)) 60) (count snail-blueprint-outer-radiuses)))
+                      (* 18 (or (get track-map (:uid event)) 0)))
             new-rect (get-legend-rect rects text mid-radians radius center settings)]
         (println?debug "RADIUS INSIDE EVENTS-SLICES: " radius)              
-        (recur (inc i) (rest events) (conj rects new-rect) (conj all-slice-components (event-slice-component event i new-rect snail-inner-radius @daily-page-atom? center settings))))
-      [all-slice-components rects]))))
+        (recur (inc i) (rest events) (conj rects new-rect) (conj all-slice-components (event-slice-component event i new-rect snail-inner-radius @daily-page-atom? center settings now-time-atom))))
+      [all-slice-components rects])))))
 
 (defn events->new-dimensions
   "Returns a new center and width so that events can be aligned"
   [events center settings]
   (let [center-x (:center-x center)
-        center-y (:center-y center)]
+        center-y (:center-y center)
+        visible-events (vec (filter #(not= true (:freetime %)) events))
+        track-map (label-track-map visible-events)]
     (loop [i 0
-           events (filter #(not= true (:freetime %)) events)
+           events visible-events
            rects []
            left-min (- center-x (outer-radius-at 9))
            right-max (+ center-x (outer-radius-at 14))
@@ -845,7 +889,8 @@
                            (angle->rad (min->angle (:start event)))
                            (angle->rad (min->angle (:end event))))
               text (:description event)
-              radius (nth snail-blueprint-outer-radiuses (mod (quot (int (:start event)) 60) (count snail-blueprint-outer-radiuses)))
+              radius (+ (nth snail-blueprint-outer-radiuses (mod (quot (int (:start event)) 60) (count snail-blueprint-outer-radiuses)))
+                        (* 18 (or (get track-map (:uid event)) 0)))
               new-rect (get-legend-rect rects text mid-radians radius center settings)]
           (recur (inc i) (rest events) (conj rects new-rect) (min left-min (:x new-rect)) (max right-max (+ (:x new-rect) (:w new-rect))) (min top-min (:y new-rect)) (max bottom-max (+ (:y new-rect) (:h new-rect)))))
         [(+ reserve (- center-x left-min))
@@ -856,31 +901,41 @@
 (defn split-and-trim [page-title n]
   (map #(subs % 0 (min n (count %))) (str/split page-title #"," 2)))
 
-(defn show-events [events-state daily-page-atom? show-done-atom? page-title dimensions settings]
+(defn flow-legend-component [x y]
+  [:g {:class "nautilus-flow-legend" :transform (str "translate(" x "," y ")")}
+   [:circle {:cx 0 :cy 0 :r 4 :fill "#EA0F0F"}]
+   [:text {:x 9 :y 4} "紧急"]
+   [:circle {:cx 62 :cy 0 :r 4 :fill "#FCC200"}]
+   [:text {:x 71 :y 4} "事件"]
+   [:circle {:cx 124 :cy 0 :r 4 :fill "#0899C8"}]
+   [:text {:x 133 :y 4} "任务"]])
+
+(defn show-events [events-state daily-page-atom? show-done-atom? playback-state-atom now-time-atom page-title dimensions settings]
   (let [[events done-todos] events-state
         old-width (js/Math.round (:width dimensions))
         old-height (js/Math.round (:height dimensions))
         all-events-for-dim (if @show-done-atom? (concat events done-todos) events)
         [center-x suggested-width center-y suggested-height] (events->new-dimensions all-events-for-dim {:center-x (/ old-width 2) :center-y (/ old-height 2)} settings)
         center {:center-x center-x :center-y center-y}
-        [all-slice-components rects] (events->slices events daily-page-atom? center settings)
+        [all-slice-components rects] (events->slices events daily-page-atom? center settings now-time-atom)
         done-slices-and-rects (when @show-done-atom?
-                                (events->slices done-todos daily-page-atom? center settings rects))
+                                (events->slices done-todos daily-page-atom? center settings now-time-atom rects))
         done-slice-components (first done-slices-and-rects)
         rects (or (second done-slices-and-rects) rects)]
     [:svg {:viewBox (str "0 0 " suggested-width " " suggested-height)
            :width "100%"
            :style {:max-width (str suggested-width "px")}
            :xmlns "http://www.w3.org/2000/svg"
-           :class (str "nautilus-svg" (when @playback-state-atom " playback-active"))
+           :class (str "nautilus-flow-svg" (when @playback-state-atom " nautilus-flow-playback-active"))
            :font-family font-family
            :font-size font-size}
      [:g
-      [snail-blueprint-component snail-template-color snail-inner-radius center settings]
+      [snail-blueprint-component snail-template-color snail-inner-radius center settings @daily-page-atom? now-time-atom]
       (when @show-done-atom? done-slice-components)
       all-slice-components         ;; zobrazení všech událostí
-      (when (or @daily-page-atom? @playback-state-atom)      ;; ukáže aktuální čas pomocí úzké výseče
-        (let [now-angle (min->angle @now-time-atom)
+      (when (or @daily-page-atom? @playback-state-atom)
+        (let [visible-now (min (:workday-end settings) (max (:workday-start settings) @now-time-atom))
+              now-angle (min->angle visible-now)
               now-rad (angle->rad now-angle)
               inner-r (+ snail-inner-radius 2)
               max-r (apply max snail-blueprint-outer-radiuses)
@@ -893,6 +948,7 @@
                   :stroke-width 2
                   :stroke-linecap "round"
                   :style {:filter "drop-shadow(0px 0px 4px rgba(233, 79, 79, 0.4))"}}]))
+      [flow-legend-component (- suggested-width 205) (- suggested-height 12)]
       [central-label-component (split-and-trim page-title len-central-legend) center]
      
       (when @debug-state-atom ;; just for debug ⤵  #FIXME remove in production later
@@ -936,7 +992,7 @@
 (defn switch-done-visibility-button [show-done-state]
   [:button
    {:on-click #(swap! show-done-state not)
-    :class "nautilus-toggle-btn"
+    :class "nautilus-flow-toggle-btn"
     :title (if @show-done-state "隐藏已完成事项" "显示已完成事项")}
    (if @show-done-state
      [:svg {:width "16" :height "16" :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}
@@ -946,25 +1002,49 @@
       [:path {:d "M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"}]
       [:line {:x1 "1" :y1 "1" :x2 "23" :y2 "23"}]])])
 
-(defn playback-button [settings]
+(defn collapse-storage-key [block-uid]
+  (str "nautilus-flow:collapsed:v1:" block-uid))
+
+(defn read-collapsed-state [block-uid]
+  (try
+    (= "true" (.getItem js/localStorage (collapse-storage-key block-uid)))
+    (catch :default _e false)))
+
+(defn write-collapsed-state [block-uid value]
+  (try
+    (.setItem js/localStorage (collapse-storage-key block-uid) (str value))
+    (catch :default _e nil)))
+
+(defn collapse-button [collapsed-state block-uid]
+  [:button
+   {:on-click #(let [next (not @collapsed-state)]
+                 (reset! collapsed-state next)
+                 (write-collapsed-state block-uid next))
+    :class "nautilus-flow-toggle-btn nautilus-flow-collapse-btn"
+    :title (if @collapsed-state "展开 Nautilus Flow" "折叠 Nautilus Flow")
+    :aria-label (if @collapsed-state "展开 Nautilus Flow" "折叠 Nautilus Flow")}
+   (if @collapsed-state "▸" "▾")])
+
+(defn playback-button [settings now-time-atom playback-state-atom playback-frame-atom]
   [:button
    {:on-click #(when-not @playback-state-atom
                  (reset! playback-state-atom true)
                  (let [start-time (js/performance.now)
                        duration 6000.0]
-                   (defn tick [now]
-                     (let [elapsed (- now start-time)
-                           progress (min 1.0 (/ elapsed duration))
-                           w-start (:workday-start settings)
-                           simulated-minute (int (+ w-start (* progress (- workday-end w-start))))]
-                       (reset! now-time-atom simulated-minute)
-                       (if (< progress 1.0)
-                         (js/requestAnimationFrame tick)
-                         (do
-                           (reset! playback-state-atom false)
-                           (reset-now-time-atom now-time-atom)))))
-                   (js/requestAnimationFrame tick)))
-    :class "nautilus-toggle-btn"
+                   (letfn [(tick [now]
+                             (let [elapsed (- now start-time)
+                                   progress (min 1.0 (/ elapsed duration))
+                                   w-start (:workday-start settings)
+                                   simulated-minute (int (+ w-start (* progress (- (:workday-end settings) w-start))))]
+                               (reset! now-time-atom simulated-minute)
+                               (if (< progress 1.0)
+                                 (reset! playback-frame-atom (js/requestAnimationFrame tick))
+                                 (do
+                                   (reset! playback-frame-atom nil)
+                                   (reset! playback-state-atom false)
+                                   (reset-now-time-atom now-time-atom)))))]
+                     (reset! playback-frame-atom (js/requestAnimationFrame tick)))))
+    :class "nautilus-flow-toggle-btn"
     :title "回放一整天 (Hyper-Lapse Playback)"
     :disabled @playback-state-atom}
    [:svg {:width "16" :height "16" :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}
@@ -985,65 +1065,135 @@
       (str "#" decoded))
     arg))
 
-(defn args->settings [[a1 a2 a3 a4]]
+(defn args->settings [[a1 a2 a3 a4 a5]]
   (let [a1 (when a1 (int a1))
         a2 (when a2 (int a2))
-        a3 (when a3 (int a3))]
-      {:legend-len-limit (if (and a1 (between a1 15 30)) a1 init-len-limit) ;; allowed legend length interval
-       :default-duration (if (and a2 (between a2 5 60)) a2 init-duration) ;; allowed default todo duration interval
-       :workday-start (if (and a3 (between a3 5 8)) (* 60 a3) init-workday-start) ;; allowed default start of the workday
-       :custom-color-1-tag (if (nil? a4)
-                             init-custom-color-1-tag
-                             (if (string? a4) 
-                               (str a4)
-                               (arg-tag->str a4)))}))
+        a3 (when a3 (int a3))
+        a5 (when a5 (int a5))
+        normalized (or (flow-core-call "normalizeScheduleSettings"
+                                       {:startHour (or a3 (/ init-workday-start 60))
+                                        :endHour (or a5 (/ init-workday-end 60))})
+                       {:startHour 5 :endHour 24 :startMinutes 300 :endMinutes 1440})]
+    {:legend-len-limit (if (and a1 (between a1 15 30)) a1 init-len-limit)
+     :default-duration (if (and a2 (between a2 5 60)) a2 init-duration)
+     :workday-start (:startMinutes normalized)
+     :workday-end (:endMinutes normalized)
+     :workday-start-hour (:startHour normalized)
+     :workday-end-hour (:endHour normalized)
+     :custom-color-1-tag (if (nil? a4)
+                           init-custom-color-1-tag
+                           (if (string? a4)
+                             (str a4)
+                             (arg-tag->str a4)))}))
+
+(defn in-right-sidebar? [block-uid]
+  (try
+    (let [selector (str "[data-uid='" block-uid "'],[data-block-uid='" block-uid "']")
+          nodes (.querySelectorAll js/document selector)]
+      (boolean
+       (some (fn [node]
+               (or (.closest node "#roam-right-sidebar-content")
+                   (.closest node "#right-sidebar")))
+             (array-seq nodes))))
+    (catch :default _e false)))
+
+(defn capacity-summary [capacity]
+  (or (flow-core-call "formatCapacitySummary" capacity)
+      "可安排 0m · 待办需求 0m · 余量 0m"))
+
+(defn overflow-panel [capacity]
+  (let [overflow (:overflowTasks capacity)
+        count-overflow (count overflow)
+        total (:overloadMinutes capacity)]
+    (when (pos? count-overflow)
+      [:details {:class "nautilus-flow-overflow-panel"}
+       [:summary (str "今日放不下 · " (or (flow-core-call "formatDuration" total) "0m") " · " count-overflow " 项")]
+       [:ul
+        (for [task overflow]
+          ^{:key (:uid task)} [:li
+                               [:span (:description task)]
+                               [:span {:class "nautilus-flow-overflow-duration"}
+                                (or (flow-core-call "formatDuration" (:duration task)) "0m")]])]])))
+
+(defn collapsed-summary [capacity]
+  [:div {:class "nautilus-flow-collapsed-summary"}
+   [:span {:class "nautilus-flow-collapsed-summary-title"} "Nautilus Flow"]
+   [:span {:class "nautilus-flow-collapsed-summary-capacity"} (capacity-summary capacity)]])
 
 (defn main [{:keys [:block-uid]} & args]
-  (r/with-let [is-running?    #(try
-                                  (.-running js/window.nautilusExtensionData)
-                                 (catch :default _e
-                                   false))
-               *running?      (r/atom (or (is-running?) nil))
+  (r/with-let [is-running? #(try
+                              (boolean (.-running js/window.nautilusFlowExtensionData))
+                              (catch :default _e false))
+               *running? (r/atom (or (is-running?) nil))
                check-interval (js/setInterval #(reset! *running? (is-running?)) 5000)
                settings (args->settings args)
+               now-time-atom (r/atom (now-minutes))
+               playback-state-atom (r/atom false)
+               playback-frame-atom (r/atom nil)
+               collapsed-state (r/atom (read-collapsed-state block-uid))
+               sidebar-state (r/atom (in-right-sidebar? block-uid))
+               clock-interval (js/setInterval #(when-not @playback-state-atom
+                                                 (reset-now-time-atom now-time-atom)) 60000)
+               sidebar-interval (js/setInterval #(reset! sidebar-state (in-right-sidebar? block-uid)) 1000)
                *get-children-atom (get-children-pull block-uid)
                *children (r/track eval-state *get-children-atom)
                *text-events (r/track
                              (fn []
-                               (let [children-list (->> @*children
-                                                        (filter #(not= "" (:block/string %)))
-                                                        (sort-by :block/order))
-                                     mapped (mapv #(hash-map :s (str-with-resolved-block-refs %) :uid (:block/uid %)) children-list)
-                                     parsed (mapv #(parse-row-params % settings) mapped)
-                                     filtered (filterv #(not= "" (:description %)) parsed)]
-                                 (let [dones (filterv #(or (:done-at %) (and (:meeting %) (:done %))) filtered)
-                                       pendings (filterv #(not (or (:done-at %) (and (:meeting %) (:done %)))) filtered)]
-                                   [(add-start-after pendings) dones]))))
+                               (if @sidebar-state
+                                 [[] []]
+                                 (let [children-list (->> @*children
+                                                          (filter #(not= "" (:block/string %)))
+                                                          (sort-by :block/order))
+                                       mapped (mapv #(hash-map :s (str-with-resolved-block-refs %) :uid (:block/uid %)) children-list)
+                                       parsed (mapv #(parse-row-params % settings) mapped)
+                                       filtered (filterv #(not= "" (:description %)) parsed)]
+                                   (let [dones (filterv #(or (:done-at %) (and (:meeting %) (:done %))) filtered)
+                                         pendings (filterv #(not (or (:done-at %) (and (:meeting %) (:done %)))) filtered)]
+                                     [(add-start-after pendings) dones])))))
                show-done-state (r/atom true)
                daily-page-atom? (r/atom (daily-page? block-uid))
                page-title-val (page-title block-uid)]
     (case @*running?
-      nil
-      [:div
-       [:strong "Loading nautilus extension..."]]
-      false
-      [:div
-       [:strong {:style {:color "red"}} "Extension not installed. To use, please install “Nautilus” from Roam Depot."]]
-      (do
-        (reset-now-time-atom now-time-atom)
-        (let [dimensions {:width (if mobile? mob-width desk-width)
-                          :height (* start-svg-rect-ratio (if mobile? mob-width desk-width))}
-              show-debug-button? (= :debug (first args))
-              plan-from-time (if @daily-page-atom? 
-                               (if @playback-state-atom 0 @now-time-atom) 
-                               (:workday-start settings))
-              [text-events done-events] @*text-events
-              events-state [(fill-day text-events (:workday-start settings) plan-from-time) done-events]]
-          [:div {:class "nautilus-container"}
-           [:div {:class "nautilus-controls-top"}
-            [switch-done-visibility-button show-done-state]
-            [playback-button settings]
-            (when show-debug-button? [switch-debug-button])]
-           [show-events events-state daily-page-atom? show-done-state page-title-val dimensions settings]]))) 
+      nil [:div {:class "nautilus-flow-loading"} [:strong "Loading Nautilus Flow..."]]
+      false [:div {:class "nautilus-flow-not-installed"}
+             [:strong {:style {:color "red"}} "Extension not installed. To use Nautilus Flow, install it from Roam Depot."]]
+      (if @sidebar-state
+        [:div {:class "nautilus-flow-sidebar-placeholder" :aria-hidden "true"}]
+        (do
+          (when-not @playback-state-atom (reset-now-time-atom now-time-atom))
+          (let [dimensions {:width (if mobile? mob-width desk-width)
+                            :height (* start-svg-rect-ratio (if mobile? mob-width desk-width))}
+                show-debug-button? (= :debug (first args))
+                plan-from-time (if @daily-page-atom?
+                                 (if @playback-state-atom (:workday-start settings) @now-time-atom)
+                                 (:workday-start settings))
+                [text-events done-events] @*text-events
+                pending-tasks (vec (filter #(and (:todo %) (not (:done %))) text-events))
+                fixed-events (vec (filter #(and (:meeting %) (not (:done %))) text-events))
+                capacity (or (flow-core-call "calculateCapacity"
+                                             {:startMinutes (:workday-start settings)
+                                              :endMinutes (:workday-end settings)
+                                              :nowMinutes plan-from-time
+                                              :fixedEvents fixed-events
+                                              :pendingTasks (map #(dissoc % :progress) pending-tasks)})
+                             {:availableMinutes 0 :demandMinutes 0 :overloadMinutes 0 :slackMinutes 0 :overflowTasks []})
+                events-state [(fill-day text-events (:workday-start settings) (:workday-end settings) plan-from-time) done-events]]
+            [:div {:class (str "nautilus-flow-container" (when @collapsed-state " nautilus-flow-collapsed"))}
+             [:div {:class "nautilus-flow-controls-top"}
+              [switch-done-visibility-button show-done-state]
+              [playback-button settings now-time-atom playback-state-atom playback-frame-atom]
+              [collapse-button collapsed-state block-uid]
+              (when show-debug-button? [switch-debug-button])]
+             (if @collapsed-state
+               [collapsed-summary capacity]
+               [:div {:class "nautilus-flow-content"}
+                [:div {:class "nautilus-flow-capacity-bar" :aria-label (capacity-summary capacity)}
+                 (capacity-summary capacity)]
+                [show-events events-state daily-page-atom? show-done-state playback-state-atom now-time-atom page-title-val dimensions settings]
+                [overflow-panel capacity]])]))))
     (finally
-      (js/clearInterval check-interval))))
+      (js/clearInterval check-interval)
+      (js/clearInterval clock-interval)
+      (js/clearInterval sidebar-interval)
+      (when @playback-frame-atom
+        (js/cancelAnimationFrame @playback-frame-atom)))))
