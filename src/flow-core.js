@@ -319,6 +319,7 @@ function formatDuration(minutes) {
   const hours = Math.floor(value / 60);
   const remainder = value % 60;
   if (!hours) return `${remainder}m`;
+  if (!remainder) return `${hours}h`;
   return `${hours}h${String(remainder).padStart(2, '0')}m`;
 }
 

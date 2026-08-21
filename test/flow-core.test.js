@@ -227,11 +227,12 @@ test('reports fragmented free time when an atomic task cannot fit any continuous
   assert.equal(result.unplacedMinutes, 45);
   assert.equal(
     formatCapacitySummary(result),
-    '可安排 1h00m · 事件 1h00m · 待办需求 45m · 空档不足 45m',
+    '可安排 1h · 事件 1h · 待办需求 45m · 空档不足 45m',
   );
 });
 
 test('formats capacity values in the compact dashboard style', () => {
+  assert.equal(formatDuration(540), '9h');
   assert.equal(formatDuration(200), '3h20m');
   assert.equal(formatDuration(0), '0m');
   assert.equal(
