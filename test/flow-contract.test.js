@@ -8,6 +8,34 @@ const entry = fs.readFileSync(path.join(__dirname, '..', 'src', 'index.js'), 'ut
 const helpers = fs.readFileSync(path.join(__dirname, '..', 'src', 'entry-helpers.js'), 'utf8');
 const css = fs.readFileSync(path.join(__dirname, '..', 'extension.css'), 'utf8');
 
+function parenDepthBefore(source, targetIndex) {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let inComment = false;
+
+  for (let index = 0; index < targetIndex; index += 1) {
+    const char = source[index];
+
+    if (inComment) {
+      if (char === '\n') inComment = false;
+      continue;
+    }
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === ';') inComment = true;
+    else if (char === '"') inString = true;
+    else if (char === '(') depth += 1;
+    else if (char === ')') depth -= 1;
+  }
+
+  return depth;
+}
+
 test('the Roam renderer delegates schedule and capacity behavior to the tested Flow core', () => {
   assert.match(component, /flow-core-call "scheduleTasks"/);
   assert.match(component, /flow-core-call "calculateCapacity"/);
@@ -48,4 +76,17 @@ test('Flow uses a flat Linear-style header with left-aligned metrics and legend'
   assert.doesNotMatch(component, /\[flow-legend-component/);
   assert.doesNotMatch(css, /filter:\s*drop-shadow\(0 4px 12px/);
   assert.doesNotMatch(css, /border:\s*1px dashed/);
+});
+
+test('the Roam renderer cleanup remains a sibling of the render body inside with-let', () => {
+  const withLetIndex = component.indexOf('(r/with-let');
+  const finallyIndex = component.indexOf('(finally', withLetIndex);
+
+  assert.notEqual(withLetIndex, -1);
+  assert.notEqual(finallyIndex, -1);
+  assert.equal(
+    parenDepthBefore(component, finallyIndex),
+    parenDepthBefore(component, withLetIndex) + 1,
+    'finally must be directly nested in r/with-let, not inside case'
+  );
 });

@@ -1282,10 +1282,10 @@
                 [:div {:class "nautilus-flow-content"}
                  [show-events events-state daily-page-atom? show-done-state playback-state-atom now-time-atom page-title-val dimensions settings]
                  [overflow-panel capacity copy]
-                 [schedule-warning-panel text-events copy]]])]))
+                 [schedule-warning-panel text-events copy]]])])))
     (finally
       (js/clearInterval check-interval)
       (js/clearInterval clock-interval)
       (.removeEventListener js/window settings-event-name settings-listener)
       (when @playback-frame-atom
-        (js/cancelAnimationFrame @playback-frame-atom))))))
+        (js/cancelAnimationFrame @playback-frame-atom)))))
