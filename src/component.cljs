@@ -709,7 +709,8 @@
                     :timestamp (str timestamp)]])
                 (concat
                  (cond (between workday-start 420 479) [(vector 300 330 7)]
-                       (between workday-start 360 419) [(vector 270 300 6) (vector 300 330 7)])
+                       (between workday-start 360 419) [(vector 270 300 6) (vector 300 330 7)]
+                       (between workday-start 300 359) [(vector 240 270 5) (vector 270 300 6) (vector 300 330 7)])
                  (map vector
                       (range 0 390 30)
                       (range 30 390 30)
@@ -985,7 +986,7 @@
         a3 (when a3 (int a3))]
       {:legend-len-limit (if (and a1 (between a1 15 30)) a1 init-len-limit) ;; allowed legend length interval
        :default-duration (if (and a2 (between a2 5 60)) a2 init-duration) ;; allowed default todo duration interval
-       :workday-start (if (and a3 (between a3 6 8)) (* 60 a3) init-workday-start) ;; allowed default start of the workday 
+       :workday-start (if (and a3 (between a3 5 8)) (* 60 a3) init-workday-start) ;; allowed default start of the workday
        :custom-color-1-tag (if (nil? a4)
                              init-custom-color-1-tag
                              (if (string? a4) 

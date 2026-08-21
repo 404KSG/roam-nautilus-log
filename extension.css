@@ -24,6 +24,14 @@
   position: relative; /* important for absolute positioning of controls */
 }
 
+/* A focused child block in the right sidebar also mounts its parent render.
+   Hide the chart there so the invisible/narrow render does not reserve space
+   above the focused task. */
+#roam-right-sidebar-content .nautilus-container,
+#right-sidebar .nautilus-container {
+  display: none !important;
+}
+
 .nautilus-svg {
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.05));
   transition: filter 0.3s ease;

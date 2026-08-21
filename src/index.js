@@ -75,7 +75,7 @@ async function onload({extensionAPI}) {
       languageName: "语言 / Language",
       languageDesc: "选择设置面板显示的语言 (切换后立即生效)。",
       workdayStartName: "工作开始时间",
-      workdayStartDesc: "默认工作日的开始时间（6点、7点或8点）。",
+      workdayStartDesc: "默认工作日的开始时间（5点、6点、7点或8点）。",
       prefixStrName: "组件前缀文本",
       prefixStrDesc: "在新建的组件前默认插入的文本前缀（例如：#日程）。",
       descLengthName: "最大图例长度",
@@ -90,7 +90,7 @@ async function onload({extensionAPI}) {
       languageName: "Language",
       languageDesc: "Select the language for the settings panel (takes effect immediately).",
       workdayStartName: "Workday Start Time",
-      workdayStartDesc: "Default start time of the workday (6, 7, or 8 AM).",
+      workdayStartDesc: "Default start time of the workday (5, 6, 7, or 8 AM).",
       prefixStrName: "Component Prefix",
       prefixStrDesc: "Prefix text inserted before a new component (e.g., #schedule).",
       descLengthName: "Legend Max Length",
@@ -132,7 +132,7 @@ async function onload({extensionAPI}) {
                action: {
                  type: "select",
                  default: defaults['workday-start'],
-                 items: [6, 7, 8],
+                 items: [5, 6, 7, 8],
                  onChange: async (evt) => {
                    let newString = await generateUpdatedRenderString(renderStringCore, extensionAPI, 'workday-start', evt);
                    updateTemplateString(renderStringCore, newString);

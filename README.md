@@ -16,7 +16,7 @@ This project is an enhanced fork of the original [roam-depot-nautilus](https://g
 **One-time Setup:**
 1. Install **Nautilus Enhanced**.
 2. (Optional but Recommended) Install [Todo Trigger](https://github.com/dvargas92495/roamjs-todo-trigger) from Roam Depot to automatically append timestamps to completed tasks.
-3. Configure your preferences (workday start time, colors, lengths) in the Settings panel.
+3. Configure your preferences (including a 5, 6, 7, or 8 AM workday start, colors, and lengths) in the Settings panel.
 
 **Daily Routine:**
 1. Type `;;` and select `Nautilus Enhanced` to insert the spiral component into today's Daily Note.
@@ -39,7 +39,7 @@ This project is an enhanced fork of the original [roam-depot-nautilus](https://g
 **首次配置（只需做一次）：**
 1. 安装本插件。
 2. （建议配合使用）在 Roam 商店中安装 [Todo Trigger](https://github.com/dvargas92495/roamjs-todo-trigger) 插件，以实现当你勾选 TODO 为 DONE 时，系统能自动在句尾打上完成时间戳。
-3. 在插件设置页中，按你的习惯配置“工作开始时间”、“高亮触发词”、“默认时长”等内容。
+3. 在插件设置页中，按你的习惯配置“工作开始时间”（支持 5、6、7、8 点）、“高亮触发词”、“默认时长”等内容。
 
 **日常使用工作流：**
 1. 每天在你的 **Daily Note（每日笔记）** 页面通过输入 `;;` 唤出模板菜单，选择 `Nautilus Enhanced` 组件。
