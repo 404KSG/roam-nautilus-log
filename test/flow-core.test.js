@@ -5,6 +5,8 @@ const {
   normalizeScheduleSettings,
   resolveRendererSettings,
   hourlyGridSegments,
+  uiCopy,
+  capacityMetrics,
   scheduleTasks,
   historicalDoneSlice,
   calculateCapacity,
@@ -21,6 +23,35 @@ test('the chart background uses one grid sector per hour', () => {
   ]);
 });
 
+test('English UI settings localize all extension-owned status labels', () => {
+  const copy = uiCopy('en');
+  assert.deepEqual(copy.legend, { urgent: 'Urgent', event: 'Event', task: 'Task' });
+  assert.deepEqual(copy.controls, {
+    hideDone: 'Hide completed items',
+    showDone: 'Show completed items',
+    playback: 'Play back the day',
+    collapse: 'Collapse Nautilus Flow',
+    expand: 'Expand Nautilus Flow',
+  });
+  assert.deepEqual(copy.panels, {
+    overflow: 'Unscheduled today',
+    warnings: 'Schedule warnings',
+    item: 'item',
+    items: 'items',
+  });
+  assert.deepEqual(
+    capacityMetrics({
+      language: 'en',
+      capacity: { availableMinutes: 0, demandMinutes: 30, overloadMinutes: 30, slackMinutes: 0, unplacedMinutes: 30 },
+    }),
+    [
+      { key: 'available', label: 'Available', value: '0m', tone: 'neutral' },
+      { key: 'demand', label: 'Demand', value: '30m', tone: 'neutral' },
+      { key: 'overload', label: 'Overload', value: '30m', tone: 'warning' },
+    ],
+  );
+});
+
 test('runtime extension settings override stale or nested render arguments', () => {
   assert.deepEqual(
     resolveRendererSettings({
@@ -31,6 +62,7 @@ test('runtime extension settings override stale or nested render arguments', () 
         'workday-start': '6',
         'color-1-trigger': '#Top',
         'workday-end': '21',
+        language: 'en',
       },
     }),
     {
@@ -41,6 +73,7 @@ test('runtime extension settings override stale or nested render arguments', () 
       'workday-start-hour': 6,
       'workday-end-hour': 21,
       'custom-color-1-tag': '#Top',
+      language: 'en',
     },
   );
 });

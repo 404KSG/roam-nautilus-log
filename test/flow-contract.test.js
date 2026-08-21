@@ -15,6 +15,8 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested F
   assert.match(component, /flow-core-call "truncateTextToWidth"/);
   assert.match(component, /flow-core-call "resolveRendererSettings"/);
   assert.match(component, /flow-core-call "hourlyGridSegments"/);
+  assert.match(component, /flow-core-call "uiCopy"/);
+  assert.match(component, /flow-core-call "capacityMetrics"/);
   assert.match(component, /nautilus-flow:settings-changed/);
   assert.match(component, /\.addEventListener/);
   assert.match(component, /\.removeEventListener/);
@@ -37,4 +39,13 @@ test('Flow owns the previously tested controls and collapses without reserving c
   assert.match(css, /\.nautilus-flow-collapsed\s*\{[^}]*height:\s*0;/s);
   assert.match(css, /\.nautilus-flow-collapsed \.nautilus-flow-controls-top\s*\{[^}]*top:\s*-26px;/s);
   assert.doesNotMatch(css, /#roam-right-sidebar-content \.nautilus-flow-container/);
+});
+
+test('Flow uses a flat Linear-style header with left-aligned metrics and legend', () => {
+  assert.match(component, /nautilus-flow-header/);
+  assert.match(component, /nautilus-flow-metrics/);
+  assert.match(component, /nautilus-flow-html-legend/);
+  assert.doesNotMatch(component, /\[flow-legend-component/);
+  assert.doesNotMatch(css, /filter:\s*drop-shadow\(0 4px 12px/);
+  assert.doesNotMatch(css, /border:\s*1px dashed/);
 });

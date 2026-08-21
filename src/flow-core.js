@@ -98,6 +98,7 @@ function resolveRendererSettings({ runtime = {}, args = [] } = {}) {
     'workday-start-hour': schedule.startHour,
     'workday-end-hour': schedule.endHour,
     'custom-color-1-tag': trigger === undefined || trigger === null ? '' : String(trigger),
+    language: runtime.language === 'en' ? 'en' : 'zh',
   };
 }
 
@@ -321,6 +322,86 @@ function formatDuration(minutes) {
   return `${hours}h${String(remainder).padStart(2, '0')}m`;
 }
 
+const UI_COPY = {
+  en: {
+    capacity: {
+      available: 'Available',
+      demand: 'Demand',
+      overload: 'Overload',
+      fragmented: 'No fitting slot',
+      remaining: 'Remaining',
+    },
+    legend: { urgent: 'Urgent', event: 'Event', task: 'Task' },
+    controls: {
+      hideDone: 'Hide completed items',
+      showDone: 'Show completed items',
+      playback: 'Play back the day',
+      collapse: 'Collapse Nautilus Flow',
+      expand: 'Expand Nautilus Flow',
+    },
+    panels: {
+      overflow: 'Unscheduled today',
+      warnings: 'Schedule warnings',
+      item: 'item',
+      items: 'items',
+    },
+    warnings: {
+      overnight: 'Overnight events display only through 24:00',
+      sameTime: 'Start and end times cannot be the same',
+    },
+  },
+  zh: {
+    capacity: {
+      available: '可安排',
+      demand: '待办需求',
+      overload: '超载',
+      fragmented: '空档不足',
+      remaining: '余量',
+    },
+    legend: { urgent: '紧急', event: '事件', task: '任务' },
+    controls: {
+      hideDone: '隐藏已完成事项',
+      showDone: '显示已完成事项',
+      playback: '回放一整天',
+      collapse: '折叠 Nautilus Flow',
+      expand: '展开 Nautilus Flow',
+    },
+    panels: {
+      overflow: '今日放不下',
+      warnings: '时间范围提醒',
+      item: '项',
+      items: '项',
+    },
+    warnings: {
+      overnight: '跨日事件仅显示至 24:00',
+      sameTime: '开始时间与结束时间不能相同',
+    },
+  },
+};
+
+function uiCopy(language = 'zh') {
+  return language === 'en' ? UI_COPY.en : UI_COPY.zh;
+}
+
+function capacityMetrics({ capacity = {}, language = 'zh' } = {}) {
+  const copy = uiCopy(language).capacity;
+  const available = {
+    key: 'available', label: copy.available, value: formatDuration(capacity.availableMinutes), tone: 'neutral',
+  };
+  const demand = {
+    key: 'demand', label: copy.demand, value: formatDuration(capacity.demandMinutes), tone: 'neutral',
+  };
+  let status;
+  if (capacity.overloadMinutes > 0) {
+    status = { key: 'overload', label: copy.overload, value: formatDuration(capacity.overloadMinutes), tone: 'warning' };
+  } else if (capacity.unplacedMinutes > 0) {
+    status = { key: 'fragmented', label: copy.fragmented, value: formatDuration(capacity.unplacedMinutes), tone: 'warning' };
+  } else {
+    status = { key: 'remaining', label: copy.remaining, value: formatDuration(capacity.slackMinutes), tone: 'neutral' };
+  }
+  return [available, demand, status];
+}
+
 function formatCapacitySummary(capacity) {
   const available = formatDuration(capacity.availableMinutes);
   const demand = formatDuration(capacity.demandMinutes);
@@ -412,6 +493,8 @@ module.exports = {
   historicalDoneSlice,
   calculateCapacity,
   formatDuration,
+  uiCopy,
+  capacityMetrics,
   formatCapacitySummary,
   truncateTextToWidth,
   placeLabelTracks,

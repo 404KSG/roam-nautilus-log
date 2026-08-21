@@ -84,6 +84,7 @@ test('built extension creates Flow scaffolding sequentially and unload is graph-
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#${Date.now()}`;
   const extension = (await import(moduleUrl)).default;
   const settings = new Map();
+  settings.set('language', 'en');
   settings.set('workday-end', 21);
   let latestPanel;
   const extensionAPI = {
@@ -100,6 +101,11 @@ test('built extension creates Flow scaffolding sequentially and unload is graph-
   assert.equal(blocks.get('roam-render-Nautilus-Flow').string, 'Nautilus Flow');
   assert.match(blocks.get('roam-render-Nautilus-Flow-cljs').string, /nautilus-flow-v1/);
   assert.equal(window.nautilusFlowExtensionData.settings['workday-end'], 21);
+  assert.equal(window.nautilusFlowExtensionData.settings.language, 'en');
+
+  const languageSetting = latestPanel.settings.find(({ id }) => id === 'language');
+  await languageSetting.action.onChange('zh');
+  assert.equal(window.nautilusFlowExtensionData.settings.language, 'zh');
 
   const endSetting = latestPanel.settings.find(({ id }) => id === 'workday-end');
   assert.equal(endSetting.action.default, 21);

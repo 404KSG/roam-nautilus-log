@@ -27,9 +27,12 @@ function settingValue(extensionAPI, key) {
 }
 
 function runtimeSettings(extensionAPI) {
-  return Object.fromEntries(
-    Object.keys(defaults).map((key) => [key, settingValue(extensionAPI, key)]),
-  );
+  return {
+    ...Object.fromEntries(
+      Object.keys(defaults).map((key) => [key, settingValue(extensionAPI, key)]),
+    ),
+    language: extensionAPI.settings.get("language") || "zh",
+  };
 }
 
 function publishRuntimeSettings(extensionAPI) {
@@ -138,6 +141,7 @@ function panelConfig(extensionAPI, language) {
           items: ["zh", "en"],
           onChange: async (value) => {
             await extensionAPI.settings.set("language", value);
+            publishRuntimeSettings(extensionAPI);
             extensionAPI.settings.panel.create(panelConfig(extensionAPI, value));
           },
         },

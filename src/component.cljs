@@ -914,15 +914,6 @@
 (defn split-and-trim [page-title n]
   (map #(subs % 0 (min n (count %))) (str/split page-title #"," 2)))
 
-(defn flow-legend-component [x y]
-  [:g {:class "nautilus-flow-legend" :transform (str "translate(" x "," y ")")}
-   [:circle {:cx 0 :cy 0 :r 4 :fill "#EA0F0F"}]
-   [:text {:x 9 :y 4} "紧急"]
-   [:circle {:cx 62 :cy 0 :r 4 :fill "#FCC200"}]
-   [:text {:x 71 :y 4} "事件"]
-   [:circle {:cx 124 :cy 0 :r 4 :fill "#0899C8"}]
-   [:text {:x 133 :y 4} "任务"]])
-
 (defn show-events [events-state daily-page-atom? show-done-atom? playback-state-atom now-time-atom page-title dimensions settings]
   (let [[events done-todos] events-state
         old-width (js/Math.round (:width dimensions))
@@ -961,7 +952,6 @@
                   :stroke-width 2
                   :stroke-linecap "round"
                   :style {:filter "drop-shadow(0px 0px 4px rgba(233, 79, 79, 0.4))"}}]))
-      [flow-legend-component (- suggested-width 205) (- suggested-height 12)]
       [central-label-component (split-and-trim page-title len-central-legend) center]
      
       (when @debug-state-atom ;; just for debug ⤵  #FIXME remove in production later
@@ -1002,12 +992,12 @@
                 minutes (+ (* (.getHours now) 60) (.getMinutes now))]
             minutes)))
 
-(defn switch-done-visibility-button [show-done-state]
+(defn switch-done-visibility-button [show-done-state copy]
   [:button
    {:on-click #(swap! show-done-state not)
     :class "nautilus-flow-toggle-btn"
-    :title (if @show-done-state "隐藏已完成事项" "显示已完成事项")
-    :aria-label (if @show-done-state "隐藏已完成事项" "显示已完成事项")}
+    :title (if @show-done-state (:hideDone copy) (:showDone copy))
+    :aria-label (if @show-done-state (:hideDone copy) (:showDone copy))}
    (if @show-done-state
      [:svg {:width "16" :height "16" :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}
       [:path {:d "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"}]
@@ -1029,14 +1019,14 @@
     (.setItem js/localStorage (collapse-storage-key block-uid) (str value))
     (catch :default _e nil)))
 
-(defn collapse-button [collapsed-state block-uid]
+(defn collapse-button [collapsed-state block-uid copy]
   [:button
    {:on-click #(let [next (not @collapsed-state)]
                  (reset! collapsed-state next)
                  (write-collapsed-state block-uid next))
     :class "nautilus-flow-toggle-btn nautilus-flow-collapse-btn"
-    :title (if @collapsed-state "展开 Nautilus Flow" "折叠 Nautilus Flow")
-    :aria-label (if @collapsed-state "展开 Nautilus Flow" "折叠 Nautilus Flow")}
+    :title (if @collapsed-state (:expand copy) (:collapse copy))
+    :aria-label (if @collapsed-state (:expand copy) (:collapse copy))}
    [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none"
           :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"
           :aria-hidden "true"}
@@ -1044,7 +1034,7 @@
     [:path {:d "M3 9h18"}]
     [:path {:d (if @collapsed-state "m9 13 3 3 3-3" "m9 16 3-3 3 3")}]]])
 
-(defn playback-button [settings now-time-atom playback-state-atom playback-frame-atom]
+(defn playback-button [settings now-time-atom playback-state-atom playback-frame-atom copy]
   [:button
    {:on-click #(when-not @playback-state-atom
                  (reset! playback-state-atom true)
@@ -1064,8 +1054,8 @@
                                    (reset-now-time-atom now-time-atom)))))]
                      (reset! playback-frame-atom (js/requestAnimationFrame tick)))))
     :class "nautilus-flow-toggle-btn"
-    :title "回放一整天 (Hyper-Lapse Playback)"
-    :aria-label "回放一整天 (Hyper-Lapse Playback)"
+    :title (:playback copy)
+    :aria-label (:playback copy)
     :disabled @playback-state-atom}
    [:svg {:width "16" :height "16" :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}
     [:polygon {:points "5 3 19 12 5 21 5 3"}]]])
@@ -1142,17 +1132,58 @@
                          :args values})
         (args->settings values))))
 
-(defn capacity-summary [capacity]
-  (or (flow-core-call "formatCapacitySummary" capacity)
-      "可安排 0m · 待办需求 0m · 余量 0m"))
+(defn ui-copy [settings]
+  (or (flow-core-call "uiCopy" (:language settings))
+      {:capacity {:available "Available" :demand "Demand" :overload "Overload" :fragmented "No fitting slot" :remaining "Remaining"}
+       :legend {:urgent "Urgent" :event "Event" :task "Task"}
+       :controls {:hideDone "Hide completed items" :showDone "Show completed items" :playback "Play back the day"
+                  :collapse "Collapse Nautilus Flow" :expand "Expand Nautilus Flow"}
+       :panels {:overflow "Unscheduled today" :warnings "Schedule warnings" :item "item" :items "items"}
+       :warnings {:overnight "Overnight events display only through 24:00"
+                  :sameTime "Start and end times cannot be the same"}}))
 
-(defn overflow-panel [capacity]
+(defn capacity-metrics [capacity settings]
+  (or (flow-core-call "capacityMetrics" {:capacity capacity :language (:language settings)})
+      [{:key "available" :label "Available" :value "0m" :tone "neutral"}
+       {:key "demand" :label "Demand" :value "0m" :tone "neutral"}
+       {:key "remaining" :label "Remaining" :value "0m" :tone "neutral"}]))
+
+(defn capacity-metrics-component [capacity settings]
+  (let [metrics (capacity-metrics capacity settings)
+        aria-label (str/join ", " (map #(str (:label %) " " (:value %)) metrics))]
+    [:div {:class "nautilus-flow-metrics" :aria-label aria-label}
+     (for [metric metrics]
+       ^{:key (:key metric)}
+       [:div {:class (str "nautilus-flow-metric nautilus-flow-metric--" (:tone metric))}
+        [:span {:class "nautilus-flow-metric-label"} (:label metric)]
+        [:strong {:class "nautilus-flow-metric-value"} (:value metric)]])]))
+
+(defn html-legend-component [copy]
+  [:div {:class "nautilus-flow-html-legend" :aria-label "Nautilus Flow legend"}
+   [:span {:class "nautilus-flow-legend-item"}
+    [:i {:class "nautilus-flow-legend-dot nautilus-flow-legend-dot--urgent" :aria-hidden "true"}]
+    (get-in copy [:legend :urgent])]
+   [:span {:class "nautilus-flow-legend-item"}
+    [:i {:class "nautilus-flow-legend-dot nautilus-flow-legend-dot--event" :aria-hidden "true"}]
+    (get-in copy [:legend :event])]
+   [:span {:class "nautilus-flow-legend-item"}
+    [:i {:class "nautilus-flow-legend-dot nautilus-flow-legend-dot--task" :aria-hidden "true"}]
+    (get-in copy [:legend :task])]])
+
+(defn localized-warning [warning copy]
+  (case warning
+    "跨日事件仅显示至 24:00" (get-in copy [:warnings :overnight])
+    "开始时间与结束时间不能相同" (get-in copy [:warnings :sameTime])
+    warning))
+
+(defn overflow-panel [capacity copy]
   (let [overflow (:overflowTasks capacity)
         count-overflow (count overflow)
-        total (:unplacedMinutes capacity)]
+        total (:unplacedMinutes capacity)
+        item-label (if (= count-overflow 1) (get-in copy [:panels :item]) (get-in copy [:panels :items]))]
     (when (pos? count-overflow)
       [:details {:class "nautilus-flow-overflow-panel"}
-       [:summary (str "今日放不下 · " (or (flow-core-call "formatDuration" total) "0m") " · " count-overflow " 项")]
+       [:summary (str (get-in copy [:panels :overflow]) " · " (or (flow-core-call "formatDuration" total) "0m") " · " count-overflow " " item-label)]
        [:ul
         (for [task overflow]
           ^{:key (:uid task)} [:li
@@ -1160,17 +1191,25 @@
                                [:span {:class "nautilus-flow-overflow-duration"}
                                 (or (flow-core-call "formatDuration" (:duration task)) "0m")]])]])))
 
-(defn schedule-warning-panel [events]
+(defn schedule-warning-panel [events copy]
   (let [warnings (vec (filter :warning events))]
     (when (seq warnings)
       [:details {:class "nautilus-flow-warning-panel"}
-       [:summary (str "时间范围提醒 · " (count warnings) " 项")]
+       [:summary (str (get-in copy [:panels :warnings]) " · " (count warnings) " "
+                      (if (= 1 (count warnings)) (get-in copy [:panels :item]) (get-in copy [:panels :items])))]
        [:ul
         (for [event warnings]
           ^{:key (:uid event)}
           [:li
            [:span (:description event)]
-           [:span {:class "nautilus-flow-warning-message"} (:warning event)]])]])))
+           [:span {:class "nautilus-flow-warning-message"} (localized-warning (:warning event) copy)]])]])))
+
+(defn flow-controls [show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid copy show-debug-button?]
+  [:div {:class "nautilus-flow-controls-top"}
+   [switch-done-visibility-button show-done-state (:controls copy)]
+   [playback-button settings now-time-atom playback-state-atom playback-frame-atom (:controls copy)]
+   [collapse-button collapsed-state block-uid (:controls copy)]
+   (when show-debug-button? [switch-debug-button])])
 
 (defn main [{:keys [:block-uid]} & args]
   (r/with-let [is-running? #(try
@@ -1212,6 +1251,7 @@
       (do
         (when-not @playback-state-atom (reset-now-time-atom now-time-atom))
         (let [settings @settings-state
+              copy (ui-copy settings)
               dimensions {:width (if mobile? mob-width desk-width)
                             :height (* start-svg-rect-ratio (if mobile? mob-width desk-width))}
                 show-debug-button? (= :debug (first args))
@@ -1231,21 +1271,21 @@
                 events-state [(fill-day text-events (:workday-start settings) (:workday-end settings) plan-from-time) done-events]]
             [:div {:class (str "nautilus-flow-container" (when @collapsed-state " nautilus-flow-collapsed"))
                    :data-nautilus-flow-block block-uid}
-             [:div {:class "nautilus-flow-controls-top"}
-              [switch-done-visibility-button show-done-state]
-              [playback-button settings now-time-atom playback-state-atom playback-frame-atom]
-              [collapse-button collapsed-state block-uid]
-              (when show-debug-button? [switch-debug-button])]
-             (when-not @collapsed-state
-               [:div {:class "nautilus-flow-content"}
-                [:div {:class "nautilus-flow-capacity-bar" :aria-label (capacity-summary capacity)}
-                 (capacity-summary capacity)]
-                [show-events events-state daily-page-atom? show-done-state playback-state-atom now-time-atom page-title-val dimensions settings]
-                [overflow-panel capacity]
-                [schedule-warning-panel text-events]])])))
+             (if @collapsed-state
+               [flow-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid copy show-debug-button?]
+               [:div {:class "nautilus-flow-shell"}
+                [:header {:class "nautilus-flow-header"}
+                 [:div {:class "nautilus-flow-header-copy"}
+                  [capacity-metrics-component capacity settings]
+                  [html-legend-component copy]]
+                 [flow-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid copy show-debug-button?]]
+                [:div {:class "nautilus-flow-content"}
+                 [show-events events-state daily-page-atom? show-done-state playback-state-atom now-time-atom page-title-val dimensions settings]
+                 [overflow-panel capacity copy]
+                 [schedule-warning-panel text-events copy]]])]))
     (finally
       (js/clearInterval check-interval)
       (js/clearInterval clock-interval)
       (.removeEventListener js/window settings-event-name settings-listener)
       (when @playback-frame-atom
-        (js/cancelAnimationFrame @playback-frame-atom)))))
+        (js/cancelAnimationFrame @playback-frame-atom))))))
