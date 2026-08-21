@@ -1286,7 +1286,7 @@
                             (when (not= @compact-state next-state)
                               (reset! compact-state next-state))))]
       (update-width! (.-width (.getBoundingClientRect node)))
-      (when (exists? js/ResizeObserver)
+      (when (.-ResizeObserver js/window)
         (let [observer (js/ResizeObserver.
                         (fn [entries]
                           (when-let [entry (aget entries 0)]

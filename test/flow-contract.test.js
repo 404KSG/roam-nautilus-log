@@ -97,6 +97,11 @@ test('Flow renders a below-chart label list in narrow containers', () => {
   assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-flow-compact-list\s*\{[^}]*display:\s*(?:grid|flex);/);
 });
 
+test('Flow feature-detects ResizeObserver with syntax supported by Roam SCI', () => {
+  assert.doesNotMatch(component, /\(exists\?/);
+  assert.match(component, /\(\.-ResizeObserver js\/window\)/);
+});
+
 test('the Roam renderer cleanup remains a sibling of the render body inside with-let', () => {
   const withLetIndex = component.indexOf('(r/with-let');
   const finallyIndex = component.indexOf('(finally', withLetIndex);
