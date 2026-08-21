@@ -264,10 +264,17 @@ function characterWidth(character) {
   return character === '…' || character === '·' || character.charCodeAt(0) <= 255 ? 1 : 2;
 }
 
-function truncateTextToWidth(text, maxWidth, measure = null) {
-  const value = String(text ?? '');
-  const limit = Math.max(1, asNumber(maxWidth) || 1);
-  const width = measure || ((candidate) => Array.from(candidate).reduce((sum, char) => sum + characterWidth(char), 0));
+function truncateTextToWidth(textOrOptions, maxWidth, measure = null) {
+  // The ClojureScript bridge passes an object, while the small public JS seam
+  // historically accepted positional arguments.  Keep both contracts so the
+  // renderer and direct callers exercise the same implementation.
+  const options = textOrOptions && typeof textOrOptions === 'object'
+    ? textOrOptions
+    : null;
+  const value = String(options ? (options.text ?? '') : (textOrOptions ?? ''));
+  const limit = Math.max(1, asNumber(options ? options.maxWidth : maxWidth) || 1);
+  const width = (options && options.measure) || measure
+    || ((candidate) => Array.from(candidate).reduce((sum, char) => sum + characterWidth(char), 0));
   if (width(value) <= limit) return value;
   const ellipsis = '…';
   let result = '';
