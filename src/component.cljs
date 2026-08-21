@@ -254,7 +254,7 @@
 
 (defn get-legend-rect
   "Returns a new legend rectangle that does not overlap with any of the rects"
-  [rects text slice-radians outer-radius center settings]
+  [rects text slice-radians outer-radius center settings order-key anchor-y]
   (let [w (* (/ font-size rect-width-coef) (min (display-width text) (:legend-len-limit settings)))  
         h (* font-size rect-height-coef)
         max-spiral-radius (apply max (map outer-radius-at (range (count snail-blueprint-outer-radiuses))))
@@ -272,6 +272,8 @@
                                         :occupiedRects rects
                                         :labels [{:uid text
                                                   :angle slice-radians
+                                                  :anchorY anchor-y
+                                                  :sortKey order-key
                                                   :width w
                                                   :height h}]}))
         fallback-rect (when rects
@@ -616,16 +618,20 @@
 ;; --------------- slice component ----------------------
 
 (defn bent-line-component
-  [legend-start-x legend-start-y text-x text-y color at-vertex? on-left?]
-  (let [middle-x (/ (+ legend-start-x text-x) 2)
-        middle-y (+ (/ (+ legend-start-y text-y) 2) 15)] ; explicit 15px downward curve
+  [legend-start-x legend-start-y text-x text-y color at-vertex? on-left? connector-knee-x connector-rail-x]
+  (let [fallback-middle-x (/ (+ legend-start-x text-x) 2)
+        knee-x (or connector-knee-x fallback-middle-x)
+        rail-x (or connector-rail-x text-x)]
     [:g
-     [:path {:d (str "M " legend-start-x "," legend-start-y 
-                     " Q " middle-x "," middle-y " " 
-                     text-x "," text-y)
+     [:path {:d (str "M " legend-start-x "," legend-start-y
+                     " L " knee-x "," legend-start-y
+                     " L " rail-x "," text-y
+                     " L " text-x "," text-y)
              :class "nautilus-flow-link-line"
              :stroke color
              :stroke-width "1.5px"
+             :stroke-linecap "round"
+             :stroke-linejoin "round"
              :fill "none"}]]))
 
 (defn calculate-coordinates
@@ -724,7 +730,8 @@
        [:g {:style {:--pb-delay (str (* (/ (or task-start-min 0) 1440.0) 6.0) "s")}
              :class "nautilus-flow-slice-group"}
         [:title text]
-        [bent-line-component legend-line-start-x legend-line-start-y legend-line-end-x legend-line-end-y legend-color at-vertex? on-left?]
+        [bent-line-component legend-line-start-x legend-line-start-y legend-line-end-x legend-line-end-y legend-color at-vertex? on-left?
+         (:connector-knee-x legend-rect) (:connector-rail-x legend-rect)]
         [:text {:x (if at-vertex? legend-line-end-x (+ legend-line-end-x (if on-left? (- bent-line-gap) bent-line-gap))) 
                 :y (+ legend-y legend-h)
                 :text-anchor (if at-vertex?
@@ -894,10 +901,13 @@
       (let [mid-radians (pos-sweep-angle-mid
                          (angle->rad (min->angle (:start event)))
                          (angle->rad (min->angle (:end event))))
+            mid-minute (/ (+ (:start event) (:end event)) 2)
+            source-radius (outer-radius-at (mod (quot (int mid-minute) 60) (count snail-blueprint-outer-radiuses)))
+            anchor-y (- (:center-y center) (* (sin mid-radians) (+ source-radius 5)))
             text (:description event)
             radius (+ (nth snail-blueprint-outer-radiuses (mod (quot (int (:start event)) 60) (count snail-blueprint-outer-radiuses)))
                       (* 18 (or (get track-map (:uid event)) 0)))
-            new-rect (get-legend-rect rects text mid-radians radius center settings)]
+            new-rect (get-legend-rect rects text mid-radians radius center settings (:start event) anchor-y)]
         (println?debug "RADIUS INSIDE EVENTS-SLICES: " radius)              
         (recur (inc i) (rest events) (conj rects new-rect) (conj all-slice-components (event-slice-component event i new-rect snail-inner-radius @daily-page-atom? center settings now-time-atom))))
       [all-slice-components rects])))))
@@ -920,10 +930,13 @@
         (let [mid-radians (pos-sweep-angle-mid
                            (angle->rad (min->angle (:start event)))
                            (angle->rad (min->angle (:end event))))
+              mid-minute (/ (+ (:start event) (:end event)) 2)
+              source-radius (outer-radius-at (mod (quot (int mid-minute) 60) (count snail-blueprint-outer-radiuses)))
+              anchor-y (- (:center-y center) (* (sin mid-radians) (+ source-radius 5)))
               text (:description event)
               radius (+ (nth snail-blueprint-outer-radiuses (mod (quot (int (:start event)) 60) (count snail-blueprint-outer-radiuses)))
                         (* 18 (or (get track-map (:uid event)) 0)))
-              new-rect (get-legend-rect rects text mid-radians radius center settings)]
+              new-rect (get-legend-rect rects text mid-radians radius center settings (:start event) anchor-y)]
           (recur (inc i) (rest events) (conj rects new-rect) (min left-min (:x new-rect)) (max right-max (+ (:x new-rect) (:w new-rect))) (min top-min (:y new-rect)) (max bottom-max (+ (:y new-rect) (:h new-rect)))))
         [(+ reserve (- center-x left-min))
          (+ reserve (- right-max left-min))
@@ -939,27 +952,33 @@
     (:meeting event) "event"
     :else "task"))
 
-(defn compact-event-list [events]
+(defn compact-event-list [events copy]
   (let [items (->> events
                    (filter #(and (not= true (:freetime %))
                                  (number? (:start %))
                                  (number? (:end %))))
                    (sort-by (juxt :start :end))
-                   vec)]
-    [:ol {:class "nautilus-flow-compact-list"
-          :aria-label "Nautilus Flow scheduled items"}
-     (for [[index event] (map-indexed vector items)]
-       ^{:key (str (:uid event) ":" (:start event) ":" index)}
-       [:li {:class (str "nautilus-flow-compact-item"
-                         (when (:done event) " nautilus-flow-compact-item--done"))
-             :title (:description event)}
-        [:i {:class (str "nautilus-flow-compact-dot nautilus-flow-compact-dot--" (compact-item-tone event))
-             :aria-hidden "true"}]
-        [:time {:class "nautilus-flow-compact-time"}
-         (str (minutes->time (:start event)) "–" (minutes->time (:end event)))]
-        [:span {:class "nautilus-flow-compact-title"} (:description event)]])]))
+                   vec)
+        item-label (if (= 1 (count items))
+                     (get-in copy [:panels :item])
+                     (get-in copy [:panels :items]))]
+    [:details {:class "nautilus-flow-compact-details" :open true}
+     [:summary {:class "nautilus-flow-compact-summary"}
+      (str (get-in copy [:panels :schedule]) " · " (count items) " " item-label)]
+     [:ol {:class "nautilus-flow-compact-list"
+           :aria-label "Nautilus Flow scheduled items"}
+      (for [[index event] (map-indexed vector items)]
+        ^{:key (str (:uid event) ":" (:start event) ":" index)}
+        [:li {:class (str "nautilus-flow-compact-item"
+                          (when (:done event) " nautilus-flow-compact-item--done"))
+              :title (:description event)}
+         [:i {:class (str "nautilus-flow-compact-dot nautilus-flow-compact-dot--" (compact-item-tone event))
+              :aria-hidden "true"}]
+         [:time {:class "nautilus-flow-compact-time"}
+          (str (minutes->time (:start event)) "–" (minutes->time (:end event)))]
+         [:span {:class "nautilus-flow-compact-title"} (:description event)]])]]))
 
-(defn show-events [events-state daily-page-atom? show-done-atom? playback-state-atom now-time-atom page-title dimensions settings compact?]
+(defn show-events [events-state daily-page-atom? show-done-atom? playback-state-atom now-time-atom page-title dimensions settings compact? copy]
   (let [[events done-todos] events-state
         old-width (js/Math.round (:width dimensions))
         old-height (js/Math.round (:height dimensions))
@@ -1012,7 +1031,7 @@
           " Center-y: " (js/Math.round center-y)]                       
          [:circle {:cx (:center-x center) :cy (:center-y center)        
                    :r 200 :fill "none" :stroke "black" :stroke-width 1}]])]]
-     [compact-event-list all-events-for-dim]]))
+     [compact-event-list all-events-for-dim copy]]))
 
 (defn add-start-after
   "Adds an end time to events so that tasks placed after the meeting cannot start before it"
@@ -1188,7 +1207,7 @@
        :legend {:urgent "Urgent" :event "Event" :task "Task"}
        :controls {:hideDone "Hide completed items" :showDone "Show completed items" :playback "Play back the day"
                   :collapse "Collapse Nautilus Flow" :expand "Expand Nautilus Flow"}
-       :panels {:overflow "Unscheduled today" :warnings "Schedule warnings" :item "item" :items "items"}
+       :panels {:overflow "Unscheduled today" :warnings "Schedule warnings" :schedule "Schedule" :item "item" :items "items"}
        :warnings {:overnight "Overnight events display only through 24:00"
                   :sameTime "Start and end times cannot be the same"}}))
 
@@ -1380,7 +1399,7 @@
                   [html-legend-component copy]]
                  [flow-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid copy show-debug-button?]]
                 [:div {:class "nautilus-flow-content"}
-                 [show-events events-state daily-page-atom? show-done-state playback-state-atom now-time-atom page-title-val dimensions settings @compact-state]
+                 [show-events events-state daily-page-atom? show-done-state playback-state-atom now-time-atom page-title-val dimensions settings @compact-state copy]
                  [overflow-panel capacity copy]
                  [schedule-warning-panel text-events copy]]])]))))
     (finally

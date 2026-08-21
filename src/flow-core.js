@@ -342,6 +342,7 @@ const UI_COPY = {
     panels: {
       overflow: 'Unscheduled today',
       warnings: 'Schedule warnings',
+      schedule: 'Schedule',
       item: 'item',
       items: 'items',
     },
@@ -369,6 +370,7 @@ const UI_COPY = {
     panels: {
       overflow: '今日放不下',
       warnings: '时间范围提醒',
+      schedule: '时间安排',
       item: '项',
       items: '项',
     },
@@ -490,6 +492,40 @@ function sideRailMaxVerticalOffset(options, exclusionRadius) {
   );
 }
 
+function sideRailSourceY(label, options) {
+  const explicitAnchorY = Number(label.anchorY);
+  if (Number.isFinite(explicitAnchorY)) return explicitAnchorY;
+  const centerY = asNumber(options.centerY) || 0;
+  const exclusionRadius = Math.max(0, asNumber(options.exclusionRadius) || 0);
+  return centerY - Math.sin(asNumber(label.angle) || 0) * exclusionRadius;
+}
+
+function sideRailSide(label) {
+  return Math.cos(asNumber(label.angle) || 0) < 0 ? 'left' : 'right';
+}
+
+function compareSideRailSourceOrder(first, second, options) {
+  const firstAnchorY = sideRailSourceY(first, options);
+  const secondAnchorY = sideRailSourceY(second, options);
+  if (Math.abs(firstAnchorY - secondAnchorY) > 0.5) {
+    return firstAnchorY - secondAnchorY;
+  }
+
+  const firstSortKey = Number(first.sortKey);
+  const secondSortKey = Number(second.sortKey);
+  if (Number.isFinite(firstSortKey) && Number.isFinite(secondSortKey)
+      && firstSortKey !== secondSortKey) {
+    // At the leftmost point of the spiral, later times continue upward. On
+    // the right they continue downward. This tie-break keeps that reading
+    // order stable when two connector anchors share almost the same height.
+    return sideRailSide(first) === 'left'
+      ? secondSortKey - firstSortKey
+      : firstSortKey - secondSortKey;
+  }
+
+  return String(first.uid ?? '').localeCompare(String(second.uid ?? ''));
+}
+
 function externalLabelRect(label, options, track = 0) {
   const width = Math.max(1, asNumber(label.width) || 1);
   const height = Math.max(1, asNumber(label.height) || 1);
@@ -510,6 +546,8 @@ function externalLabelRect(label, options, track = 0) {
       maxVerticalOffset,
     );
     const railDistance = exclusionRadius + gap + track * trackGap;
+    const connectorKneeX = centerX + side * (exclusionRadius + gap * 0.42);
+    const connectorRailX = centerX + side * (exclusionRadius + gap);
     const x = side > 0
       ? centerX + railDistance
       : centerX - railDistance - width;
@@ -523,6 +561,9 @@ function externalLabelRect(label, options, track = 0) {
       w: width,
       h: height,
       side: side > 0 ? 'right' : 'left',
+      anchorY: sideRailSourceY(label, options),
+      connectorKneeX,
+      connectorRailX,
       track,
     };
   }
@@ -544,7 +585,27 @@ function externalLabelRect(label, options, track = 0) {
   };
 }
 
-function sideRailRowOffsets(label, options, collisionPadding) {
+function sideRailCenterBounds(label, options, occupied, orderingGap) {
+  const centerY = asNumber(options.centerY) || 0;
+  const exclusionRadius = Math.max(0, asNumber(options.exclusionRadius) || 0);
+  const maxVerticalOffset = sideRailMaxVerticalOffset(options, exclusionRadius);
+  let minimum = centerY - maxVerticalOffset;
+  let maximum = centerY + maxVerticalOffset;
+  const side = sideRailSide(label);
+
+  for (const placed of occupied) {
+    if ((placed.side || sideRailSide(placed)) !== side) continue;
+    const comparison = compareSideRailSourceOrder(label, placed, options);
+    if (!comparison) continue;
+    const placedCenterY = placed.y + (asNumber(placed.height ?? placed.h) || 0) / 2;
+    if (comparison < 0) maximum = Math.min(maximum, placedCenterY - orderingGap);
+    else minimum = Math.max(minimum, placedCenterY + orderingGap);
+  }
+
+  return { minimum, maximum };
+}
+
+function sideRailCenterCandidates(label, baseRect, options, occupied, collisionPadding) {
   const exclusionRadius = Math.max(0, asNumber(options.exclusionRadius) || 0);
   const maxVerticalOffset = sideRailMaxVerticalOffset(options, exclusionRadius);
   const height = Math.max(1, asNumber(label.height) || 1);
@@ -552,37 +613,36 @@ function sideRailRowOffsets(label, options, collisionPadding) {
     1,
     asNumber(options.rowGap) || height + collisionPadding + 4,
   );
-  const directionY = -Math.sin(asNumber(label.angle) || 0);
-  const desiredOffset = clamp(
-    directionY * maxVerticalOffset,
-    -maxVerticalOffset,
-    maxVerticalOffset,
-  );
-  const inwardDirection = desiredOffset > 0 ? -1 : 1;
-  const maxSteps = Math.max(1, Math.ceil((maxVerticalOffset * 2) / rowGap));
-  const offsets = [0];
-  for (let step = 1; step <= maxSteps; step += 1) {
-    offsets.push(inwardDirection * step * rowGap);
-    offsets.push(-inwardDirection * step * rowGap);
+  const orderingGap = Math.max(1, asNumber(options.orderingGap) || rowGap);
+  const { minimum, maximum } = sideRailCenterBounds(label, options, occupied, orderingGap);
+  const desiredCenterY = baseRect.y + baseRect.height / 2;
+  if (minimum > maximum) {
+    const bandMinimum = (asNumber(options.centerY) || 0) - maxVerticalOffset;
+    const bandMaximum = (asNumber(options.centerY) || 0) + maxVerticalOffset;
+    // Dense labels may exhaust the preferred band. Continue the established
+    // order just beyond that band instead of reversing connectors or sending
+    // the label many horizontal tracks away.
+    if (maximum < bandMinimum) return [maximum];
+    if (minimum > bandMaximum) return [minimum];
+    return [(minimum + maximum) / 2];
   }
-  return offsets;
-}
 
-function nudgeSideRailRect(rect, options, rowOffset) {
-  const centerY = asNumber(options.centerY) || 0;
-  const exclusionRadius = Math.max(0, asNumber(options.exclusionRadius) || 0);
-  const maxVerticalOffset = sideRailMaxVerticalOffset(options, exclusionRadius);
-  const baseCenterY = rect.y + rect.height / 2;
-  const labelCenterY = clamp(
-    baseCenterY + rowOffset,
-    centerY - maxVerticalOffset,
-    centerY + maxVerticalOffset,
-  );
-  return {
-    ...rect,
-    y: labelCenterY - rect.height / 2,
-    rowOffset: labelCenterY - baseCenterY,
-  };
+  const nearestCenterY = clamp(desiredCenterY, minimum, maximum);
+  const maxSteps = Math.max(1, Math.ceil((maxVerticalOffset * 2) / rowGap));
+  const candidates = [nearestCenterY];
+  for (let step = 1; step <= maxSteps; step += 1) {
+    candidates.push(nearestCenterY - step * rowGap);
+    candidates.push(nearestCenterY + step * rowGap);
+  }
+  candidates.push(minimum, maximum);
+  const seen = new Set();
+  return candidates.filter((candidate) => {
+    if (candidate < minimum || candidate > maximum) return false;
+    const key = Math.round(candidate * 1000);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function labelRectsOverlap(first, second, padding = 0) {
@@ -605,7 +665,6 @@ function placeExternalLabels(options = {}) {
   return labels.map((label) => {
     let track = Math.max(0, Math.floor(asNumber(label.track) || 0));
     if (options.layout === 'side-rails') {
-      const rowOffsets = sideRailRowOffsets(label, options, collisionPadding);
       const searchLimit = Math.max(16, occupied.length * 2 + labels.length + 4);
       let candidate = null;
       let fallback = externalLabelRect(label, options, track);
@@ -613,12 +672,19 @@ function placeExternalLabels(options = {}) {
       sideRailSearch:
       for (; track <= searchLimit; track += 1) {
         const baseRect = externalLabelRect(label, options, track);
-        const seenRows = new Set();
-        for (const rowOffset of rowOffsets) {
-          const rowCandidate = nudgeSideRailRect(baseRect, options, rowOffset);
-          const rowKey = Math.round(rowCandidate.y * 1000);
-          if (seenRows.has(rowKey)) continue;
-          seenRows.add(rowKey);
+        const centerCandidates = sideRailCenterCandidates(
+          label,
+          baseRect,
+          options,
+          occupied,
+          collisionPadding,
+        );
+        for (const labelCenterY of centerCandidates) {
+          const rowCandidate = {
+            ...baseRect,
+            y: labelCenterY - baseRect.height / 2,
+            rowOffset: labelCenterY - (baseRect.y + baseRect.height / 2),
+          };
           fallback = rowCandidate;
           if (!occupied.some((rect) => labelRectsOverlap(rowCandidate, rect, collisionPadding))) {
             candidate = rowCandidate;

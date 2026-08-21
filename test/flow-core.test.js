@@ -38,6 +38,7 @@ test('English UI settings localize all extension-owned status labels', () => {
   assert.deepEqual(copy.panels, {
     overflow: 'Unscheduled today',
     warnings: 'Schedule warnings',
+    schedule: 'Schedule',
     item: 'item',
     items: 'items',
   });
@@ -359,6 +360,71 @@ test('side-rail collisions use nearby vertical rows before widening the chart', 
   assert.equal(placed[0].x, placed[1].x);
   assert.notEqual(placed[0].y, placed[1].y);
   assert.ok(Math.abs(placed[1].y - placed[0].y) >= 26);
+});
+
+test('side-rail labels preserve connector order instead of crossing after collision nudges', () => {
+  const placed = placeExternalLabels({
+    centerX: 300,
+    centerY: 210,
+    exclusionRadius: 150,
+    gap: 24,
+    maxVerticalOffset: 138,
+    rowGap: 26,
+    collisionPadding: 6,
+    layout: 'side-rails',
+    labels: [
+      { uid: 'earlier', angle: 2.2, width: 180, height: 20, anchorY: 90, sortKey: 600 },
+      { uid: 'later', angle: 2.15, width: 180, height: 20, anchorY: 82, sortKey: 660 },
+      { uid: 'latest', angle: 2.1, width: 180, height: 20, anchorY: 74, sortKey: 720 },
+    ],
+  });
+  const byAnchor = placed.slice().sort((first, second) => first.anchorY - second.anchorY);
+  const labelCenters = byAnchor.map((label) => label.y + label.height / 2);
+
+  assert.deepEqual(byAnchor.map(({ uid }) => uid), ['latest', 'later', 'earlier']);
+  assert.ok(labelCenters[0] < labelCenters[1]);
+  assert.ok(labelCenters[1] < labelCenters[2]);
+  assert.ok(placed.every(({ connectorKneeX, connectorRailX }) => (
+    Number.isFinite(connectorKneeX) && Number.isFinite(connectorRailX)
+  )));
+});
+
+test('equal-height left-side anchors put later tasks above earlier tasks', () => {
+  const placed = placeExternalLabels({
+    centerX: 300,
+    centerY: 210,
+    exclusionRadius: 150,
+    gap: 24,
+    maxVerticalOffset: 138,
+    rowGap: 26,
+    collisionPadding: 6,
+    layout: 'side-rails',
+    labels: [
+      { uid: 'earlier', angle: Math.PI, width: 180, height: 20, anchorY: 210, sortKey: 600 },
+      { uid: 'later', angle: Math.PI, width: 180, height: 20, anchorY: 210, sortKey: 1320 },
+    ],
+  });
+
+  assert.ok(placed[1].y < placed[0].y);
+});
+
+test('equal-height right-side anchors keep later tasks below earlier tasks', () => {
+  const placed = placeExternalLabels({
+    centerX: 300,
+    centerY: 210,
+    exclusionRadius: 150,
+    gap: 24,
+    maxVerticalOffset: 138,
+    rowGap: 26,
+    collisionPadding: 6,
+    layout: 'side-rails',
+    labels: [
+      { uid: 'earlier', angle: 0, width: 180, height: 20, anchorY: 210, sortKey: 600 },
+      { uid: 'later', angle: 0, width: 180, height: 20, anchorY: 210, sortKey: 960 },
+    ],
+  });
+
+  assert.ok(placed[1].y > placed[0].y);
 });
 
 test('switches to the compact label list at the narrow-container boundary', () => {

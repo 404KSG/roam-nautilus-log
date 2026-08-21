@@ -88,12 +88,17 @@ test('Flow suppresses breadcrumb and collapsed-path replicas before mounting the
   assert.match(css, /\.rm-zoom-item-content\.rm-zoom-collapsed-item \.nautilus-flow-container/);
 });
 
-test('Flow renders a below-chart label list in narrow containers', () => {
+test('Flow renders a collapsible below-chart label list in narrow containers', () => {
   assert.match(component, /ResizeObserver/);
   assert.match(component, /isCompactChartWidth/);
+  assert.match(component, /nautilus-flow-compact-details/);
+  assert.match(component, /nautilus-flow-compact-summary/);
   assert.match(component, /nautilus-flow-compact-list/);
+  assert.match(component, /:open true/);
+  assert.match(css, /\.nautilus-flow-compact-details\s*\{[^}]*display:\s*none;/s);
   assert.match(css, /\.nautilus-flow-compact-list\s*\{[^}]*display:\s*none;/s);
   assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-flow-slice-group\s*\{[^}]*display:\s*none\s*!important;/);
+  assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-flow-compact-details\s*\{[^}]*display:\s*block;/);
   assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-flow-compact-list\s*\{[^}]*display:\s*(?:grid|flex);/);
 });
 
@@ -107,6 +112,10 @@ test('Flow prefers horizontal label rails and keeps past leader lines legible', 
   assert.match(component, /:maxVerticalOffset \(\* max-spiral-radius 0\.92\)/);
   assert.match(component, /:rowGap 26/);
   assert.match(component, /legend-color \(update-opacity-str bg-color "1"\)/);
+  assert.match(component, /:anchorY anchor-y/);
+  assert.match(component, /:sortKey order-key/);
+  assert.match(component, /:connector-knee-x/);
+  assert.match(component, /:connector-rail-x/);
   assert.doesNotMatch(css, /\.nautilus-flow-past\s*\{[^}]*opacity:/s);
   assert.match(css, /\.nautilus-flow-past \.nautilus-flow-link-line\s*\{[^}]*opacity:\s*0\.[4-9]/s);
 });
