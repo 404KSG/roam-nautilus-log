@@ -121,6 +121,15 @@ test('Flow prefers horizontal label rails and keeps past leader lines legible', 
   assert.match(css, /\.nautilus-flow-past \.nautilus-flow-link-line\s*\{[^}]*opacity:\s*0\.[4-9]/s);
 });
 
+test('flexible task labels and connectors use one semantic blue', () => {
+  assert.match(component, /def task-legend-color "var\(--nautilus-flow-task\)"/);
+  assert.match(component, /legend-color \(when \(and \(:todo event\)[\s\S]*task-legend-color\)/);
+  assert.match(component, /:legend-color legend-color/);
+  assert.match(component, /:fill \(if-not done\? legend-color/);
+  assert.match(css, /--nautilus-flow-task:\s*#0899c8/);
+  assert.match(css, /\.nautilus-flow-legend-dot--task\s*\{\s*background:\s*var\(--nautilus-flow-task\);\s*\}/);
+});
+
 test('the Roam renderer cleanup remains a sibling of the render body inside with-let', () => {
   const withLetIndex = component.indexOf('(r/with-let');
   const finallyIndex = component.indexOf('(finally', withLetIndex);

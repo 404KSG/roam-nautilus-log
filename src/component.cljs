@@ -71,6 +71,8 @@
 
 (def clock-hand-color "#EA0F0F5B")
 
+(def task-legend-color "var(--nautilus-flow-task)")
+
 (def meeting-color-palette
   ["rgba(252,194,0,0.8)", "rgba(252,194,0,0.6)", "rgba(252,194,0,0.4)", "rgba(252,194,0,0.3)"])
 
@@ -660,7 +662,7 @@
 (defn slice
   "Draws and colors the slice section according to the specified parameters"
   [[start-angle end-angle inner-radius outer-radius center settings]
-   & {:keys [bg-color border-color legend-rect text timestamp stroke-dasharray font-weight shaky done? uid non-zero-progress? click-to-progress task-start-min task-end-min now-time-atom past?]}]
+   & {:keys [bg-color border-color legend-color legend-rect text timestamp stroke-dasharray font-weight shaky done? uid non-zero-progress? click-to-progress task-start-min task-end-min now-time-atom past?]}]
   (let [start-radians (angle->rad (+ start-angle (shake-if shaky)))
         end-radians (angle->rad (+ end-angle (shake-if shaky)))
         mid-radians (if (and task-start-min task-end-min)
@@ -691,7 +693,7 @@
         border-color (if (= border-color nil) "none" border-color)
         stroke-dasharray (if (= stroke-dasharray nil) "2,2" stroke-dasharray)
         bg-color (if (= bg-color nil) "rgba(255,255,255,0)" bg-color)
-        legend-color (update-opacity-str bg-color "1")
+        legend-color (or legend-color (update-opacity-str bg-color "1"))
         font-weight (if font-weight font-weight "normal")
         path (create-arc-path start-angle end-angle inner-radius outer-radius center)
         debug? @debug-state-atom                                       
@@ -742,7 +744,7 @@
                 :style (when click-to-progress {:cursor "pointer"})
                 :on-click #(when click-to-progress (update-block-progress uid 10 now-time-atom))
                 :text-decoration (if done? "line-through" "none")
-                :fill (if-not done? (update-opacity-str bg-color "1") (update-opacity-str bg-color "0.5"))}
+                :fill (if-not done? legend-color (update-opacity-str bg-color "0.5"))}
          (if debug? (str dbg-radians-txt)
              (or (flow-core-call "truncateTextToWidth"
                                  {:text text
@@ -844,6 +846,10 @@
 
 (defn event-slice-component [event index legend-rect inner-radius daily-page? center settings now-time-atom]
   (let [{:keys [bg-color done click-to-progress]} (calculate-slice-params event index daily-page? now-time-atom)
+        legend-color (when (and (:todo event)
+                                (not done)
+                                (nil? (:bg-color event)))
+                       task-legend-color)
         description (:description event)
         uid (:uid event)
         progress (:progress event)
@@ -867,6 +873,7 @@
                [slice
                 [start-angle end-angle inner-radius seg-outer-radius center settings]
                 :bg-color bg-color
+                :legend-color legend-color
                 :text (if (= idx 0) description nil)
                 :shaky shaky
                 :done? done

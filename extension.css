@@ -9,6 +9,7 @@
   --nautilus-flow-hover: rgba(25, 25, 25, 0.05);
   --nautilus-flow-warning: #c96c00;
   --nautilus-flow-event: #c58a00;
+  --nautilus-flow-task: #0899c8;
 }
 
 .bp3-dark,
@@ -20,6 +21,7 @@
   --nautilus-flow-hover: rgba(255, 255, 255, 0.08);
   --nautilus-flow-warning: #f4b75d;
   --nautilus-flow-event: #f2c14e;
+  --nautilus-flow-task: #47b8df;
 }
 
 .nautilus-flow-container {
@@ -159,7 +161,7 @@
 
 .nautilus-flow-legend-dot--urgent { background: #ea0f0f; }
 .nautilus-flow-legend-dot--event { background: #fcc200; }
-.nautilus-flow-legend-dot--task { background: #0899c8; }
+.nautilus-flow-legend-dot--task { background: var(--nautilus-flow-task); }
 
 .nautilus-flow-svg {
   display: block;
@@ -253,7 +255,7 @@
 
 .nautilus-flow-compact-dot--urgent { background: #ea0f0f; }
 .nautilus-flow-compact-dot--event { background: #fcc200; }
-.nautilus-flow-compact-dot--task { background: #0899c8; }
+.nautilus-flow-compact-dot--task { background: var(--nautilus-flow-task); }
 
 .nautilus-flow-compact-time {
   color: var(--nautilus-flow-text-sub);

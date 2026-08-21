@@ -19,6 +19,8 @@
 - DONE blocks no longer cause identical Roam writes.
 - Midnight-crossing events are clipped at 24:00 and shown in a warning panel.
 - Fragmented free time is distinguished from aggregate overload.
+- Flexible task titles and connector lines now use one semantic blue while
+  adjacent task slices retain their subtle fill variations.
 - Unload no longer rewrites or deletes graph content.
 - Right-sidebar renders avoid chart work and reserve no visible space.
 - Template and code scaffolding updates are idempotent and Flow-only.
