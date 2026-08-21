@@ -51,6 +51,13 @@ The Chinese UI displays `可安排 · 待办需求 · 超载/余量`. Future fix
 subtracted from available time, and partially completed tasks count only their
 remaining duration.
 
+When a completed task has an explicit `dHH:MM` completion marker, its historical
+slice ends at that time and starts by subtracting the original estimate. For
+example, a 60-minute task completed at 21:50 is shown as 20:50–21:50, regardless
+of when the previous task ended. A `DONE` item without `dHH:MM` produces no
+inferred historical interval; an untimed task uses the configured default
+duration.
+
 The legend is intentionally minimal: a red dot means **urgent**, yellow means
 **event**, and blue means **task**. The red line is the current-time pointer.
 Past time on today's page is subdued so the remaining day stays readable.
@@ -100,6 +107,11 @@ Todo Trigger 仍然是可选工具：它可以在完成时追加时间戳，但 
 
 如果没有超载，最后一项显示为“余量”。未来固定事件会从可安排时间中扣除，
 部分完成的任务只计算剩余时长。
+
+已完成任务如果带有明确的 `d小时:分钟` 完成时间标记，历史切片以该时间结束，
+并按任务原始预计时长倒推开始时间。例如，预计 60 分钟、21:50 完成的任务会显示为
+20:50–21:50，不会根据上一个任务的完成时间推断开始。没有 `d小时:分钟` 的 DONE
+事项不会制造推断出的历史区间；未填写时长的任务使用设置中的默认时长。
 
 图例保持简洁：红色圆点表示“紧急”，黄色表示“事件”，蓝色表示“任务”。
 红色细线代表当前时间，不额外加入 NOW 图标。今天已经过去的时间会降低视觉权重。

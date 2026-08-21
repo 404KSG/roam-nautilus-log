@@ -514,6 +514,14 @@
         {:keys [progress cleaned-str]} (parse-progress cleaned-str)
         {:keys [done-at cleaned-str]} (parse-done-time cleaned-str)
         {:keys [done cleaned-str]} (parse-DONE cleaned-str)
+        ;; Completed work gets a historical slice only from its explicit
+        ;; completion marker.  The Flow core derives its start by subtracting
+        ;; the original estimate; it must never use the preceding task's end.
+        done-slice (flow-core-call "historicalDoneSlice"
+                                   {:done done
+                                    :doneAt done-at
+                                    :duration duration
+                                    :defaultDuration (:default-duration settings)})
         description (parse-rest cleaned-str)
         event-type (if range :meeting :todo)]
     (when done
@@ -522,8 +530,8 @@
          :progress progress
          :duration (int (* (/ (- 100 progress) 100) duration))
          :uid (:uid block-map)
-         :start (if done-at (abs (- done-at duration)) (first range))
-         :end (or done-at (second range))
+         :start (if done-slice (:start done-slice) (first range))
+         :end (if done-slice (:end done-slice) (second range))
          :done done
          :bg-color custom-color
          :done-at (if done done-at nil)}

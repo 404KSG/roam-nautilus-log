@@ -177,6 +177,37 @@ function scheduleTasks({
   };
 }
 
+/**
+ * Return the historical slice for a completed item only when the graph has an
+ * explicit completion timestamp.  The start is deliberately derived from the
+ * original estimate, never from a previous task's completion time: a task
+ * estimated at 60 minutes and completed at 21:50 occupies 20:50–21:50.
+ *
+ * `duration` is expected to be the original estimate (before progress is
+ * applied).  Callers that parse a task can pass their configured default when
+ * the task has no explicit estimate.
+ */
+function historicalDoneSlice({ done, doneAt, duration, defaultDuration } = {}) {
+  if (done !== true || doneAt === null || doneAt === undefined) return null;
+
+  const end = asNumber(doneAt);
+  const explicitDuration = asNumber(duration);
+  const fallbackDuration = asNumber(defaultDuration);
+  const originalDuration = Number.isFinite(explicitDuration) && explicitDuration > 0
+    ? explicitDuration
+    : fallbackDuration;
+
+  if (!Number.isFinite(end) || !Number.isFinite(originalDuration) || originalDuration <= 0) {
+    return null;
+  }
+
+  return {
+    start: end - originalDuration,
+    end,
+    duration: originalDuration,
+  };
+}
+
 function calculateCapacity({
   startMinutes,
   endMinutes,
@@ -277,6 +308,7 @@ module.exports = {
   END_HOURS,
   normalizeScheduleSettings,
   scheduleTasks,
+  historicalDoneSlice,
   calculateCapacity,
   formatDuration,
   formatCapacitySummary,

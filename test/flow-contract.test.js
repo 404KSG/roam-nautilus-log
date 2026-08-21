@@ -10,8 +10,10 @@ const helpers = fs.readFileSync(path.join(__dirname, '..', 'src', 'entry-helpers
 test('the Roam renderer delegates schedule and capacity behavior to the tested Flow core', () => {
   assert.match(component, /flow-core-call "scheduleTasks"/);
   assert.match(component, /flow-core-call "calculateCapacity"/);
+  assert.match(component, /flow-core-call "historicalDoneSlice"/);
   assert.match(component, /flow-core-call "truncateTextToWidth"/);
   assert.match(entry, /window\.nautilusFlowCore = flowCore/);
+  assert.doesNotMatch(component, /\(abs \(- done-at duration\)\)/);
 });
 test('Flow scaffolding is isolated and unload is graph-safe', () => {
   assert.match(entry, /Nautilus Flow/);

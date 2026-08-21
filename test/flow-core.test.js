@@ -4,12 +4,37 @@ const assert = require('node:assert/strict');
 const {
   normalizeScheduleSettings,
   scheduleTasks,
+  historicalDoneSlice,
   calculateCapacity,
   formatDuration,
   formatCapacitySummary,
   truncateTextToWidth,
   placeLabelTracks,
 } = require('../src/flow-core');
+
+test('historical DONE slices use explicit completion time minus the original estimate', () => {
+  const result = historicalDoneSlice({
+    done: true,
+    doneAt: 21 * 60 + 50,
+    duration: 60,
+    // This value must never become the historical start.
+    previousDoneAt: 18 * 60,
+  });
+
+  assert.deepEqual(result, { start: 20 * 60 + 50, end: 21 * 60 + 50, duration: 60 });
+});
+
+test('historical DONE slices use the default estimate when no duration is present', () => {
+  assert.deepEqual(
+    historicalDoneSlice({ done: true, doneAt: 1310, defaultDuration: 15 }),
+    { start: 1295, end: 1310, duration: 15 },
+  );
+});
+
+test('DONE without an explicit completion time does not manufacture a historical interval', () => {
+  assert.equal(historicalDoneSlice({ done: true, duration: 60 }), null);
+  assert.equal(historicalDoneSlice({ done: false, doneAt: 1310, duration: 60 }), null);
+});
 
 test('normalizes selectable start/end hours and keeps 24:00 as minute 1440', () => {
   assert.deepEqual(
