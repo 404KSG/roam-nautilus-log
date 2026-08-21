@@ -1226,18 +1226,23 @@
   (or (flow-core-call "capacityMetrics" {:capacity capacity :language (:language settings)})
       [{:key "available" :label "Available" :value "0m" :tone "neutral"}
        {:key "events" :label "Events" :value "0m" :tone "event"}
-       {:key "demand" :label "Demand" :value "0m" :tone "neutral"}
+       {:key "demand" :label "Demand" :value "0m" :percent "0%" :percentTone "neutral" :tone "neutral"}
        {:key "remaining" :label "Remaining" :value "0m" :tone "neutral"}]))
 
 (defn capacity-metrics-component [capacity settings]
   (let [metrics (capacity-metrics capacity settings)
-        aria-label (str/join ", " (map #(str (:label %) " " (:value %)) metrics))]
+        aria-label (str/join ", " (map #(str (:label %) " " (:value %)
+                                                (when-let [percent (:percent %)] (str ", " percent))) metrics))]
     [:div {:class "nautilus-flow-metrics" :aria-label aria-label}
      (for [metric metrics]
        ^{:key (:key metric)}
        [:div {:class (str "nautilus-flow-metric nautilus-flow-metric--" (:tone metric))}
         [:span {:class "nautilus-flow-metric-label"} (:label metric)]
-        [:strong {:class "nautilus-flow-metric-value"} (:value metric)]])]))
+        [:span {:class "nautilus-flow-metric-reading"}
+         [:strong {:class "nautilus-flow-metric-value"} (:value metric)]
+         (when-let [percent (:percent metric)]
+           [:span {:class (str "nautilus-flow-metric-percent nautilus-flow-metric-percent--" (:percentTone metric))}
+            (str "/ " percent)])]])]))
 
 (defn html-legend-component [copy]
   [:div {:class "nautilus-flow-html-legend" :aria-label "Nautilus Flow legend"}
@@ -1418,9 +1423,10 @@
                [:div {:class "nautilus-flow-shell"}
                 [:header {:class "nautilus-flow-header"}
                  [:div {:class "nautilus-flow-header-copy"}
-                  [capacity-metrics-component capacity settings]
-                  [html-legend-component copy]]
-                 [flow-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid copy show-debug-button?]]
+                  [capacity-metrics-component capacity settings]]
+                 [:div {:class "nautilus-flow-header-actions"}
+                  [flow-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid copy show-debug-button?]
+                  [html-legend-component copy]]]
                 [:div {:class "nautilus-flow-content"}
                  [show-events events-state daily-page-atom? show-done-state playback-state-atom now-time-atom page-title-val dimensions settings @compact-state copy compact-list-open-state]
                  [overflow-panel capacity copy]

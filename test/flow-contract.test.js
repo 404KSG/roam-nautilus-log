@@ -70,14 +70,18 @@ test('Flow owns the previously tested controls and collapses without reserving c
   assert.doesNotMatch(css, /#roam-right-sidebar-content \.nautilus-flow-container/);
 });
 
-test('Flow uses a flat Linear-style header with left-aligned metrics and legend', () => {
+test('Flow uses a flat two-row header with metrics left and controls plus legend right', () => {
   assert.match(component, /nautilus-flow-header/);
   assert.match(component, /nautilus-flow-metrics/);
+  assert.match(component, /nautilus-flow-metric-percent/);
+  assert.match(component, /nautilus-flow-header-actions/);
   assert.match(component, /nautilus-flow-html-legend/);
   assert.doesNotMatch(component, /\[flow-legend-component/);
   assert.doesNotMatch(css, /filter:\s*drop-shadow\(0 4px 12px/);
   assert.doesNotMatch(css, /border:\s*1px dashed/);
   assert.match(css, /\.nautilus-flow-metric--event/);
+  assert.match(css, /\.nautilus-flow-metrics\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(2, max-content\);/s);
+  assert.match(css, /\.nautilus-flow-header-actions\s*\{[^}]*align-items:\s*flex-end;/s);
 });
 
 test('Flow suppresses breadcrumb and collapsed-path replicas before mounting the chart', () => {

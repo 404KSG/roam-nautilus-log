@@ -50,10 +50,27 @@ test('English UI settings localize all extension-owned status labels', () => {
     [
       { key: 'available', label: 'Available', value: '0m', tone: 'neutral' },
       { key: 'events', label: 'Events', value: '1h30m', tone: 'event' },
-      { key: 'demand', label: 'Demand', value: '30m', tone: 'neutral' },
+      { key: 'demand', label: 'Demand', value: '30m', percent: '—', percentTone: 'neutral', tone: 'neutral' },
       { key: 'overload', label: 'Overload', value: '30m', tone: 'warning' },
     ],
   );
+});
+
+test('Demand reports its share of available flexible time without capping overload', () => {
+  assert.deepEqual(
+    capacityMetrics({
+      language: 'en',
+      capacity: { availableMinutes: 540, fixedMinutes: 420, demandMinutes: 105, overloadMinutes: 0, slackMinutes: 435, unplacedMinutes: 0 },
+    })[2],
+    { key: 'demand', label: 'Demand', value: '1h45m', percent: '19%', percentTone: 'neutral', tone: 'neutral' },
+  );
+
+  const overloadedDemand = capacityMetrics({
+      language: 'en',
+      capacity: { availableMinutes: 90, demandMinutes: 105 },
+    })[2];
+  assert.equal(overloadedDemand.percent, '117%');
+  assert.equal(overloadedDemand.percentTone, 'warning');
 });
 
 test('runtime extension settings override stale or nested render arguments', () => {

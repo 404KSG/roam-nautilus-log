@@ -77,13 +77,13 @@
 
 .nautilus-flow-header {
   box-sizing: border-box;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 24px;
   width: 100%;
   min-height: 54px;
-  padding: 2px 0 10px;
+  padding: 0 0 8px;
   border: 0;
   border-bottom: 1px solid var(--nautilus-flow-line);
   border-radius: 0;
@@ -97,11 +97,12 @@
 }
 
 .nautilus-flow-metrics {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 5px 18px;
-  min-height: 20px;
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  grid-template-rows: 32px 16px;
+  align-items: center;
+  gap: 2px 28px;
+  min-height: 50px;
 }
 
 .nautilus-flow-metric {
@@ -124,6 +125,22 @@
   font-weight: 600;
 }
 
+.nautilus-flow-metric-reading {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.nautilus-flow-metric-percent {
+  color: var(--nautilus-flow-text-sub);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.nautilus-flow-metric-percent--warning {
+  color: var(--nautilus-flow-warning);
+}
+
 .nautilus-flow-metric--warning .nautilus-flow-metric-label,
 .nautilus-flow-metric--warning .nautilus-flow-metric-value {
   color: var(--nautilus-flow-warning);
@@ -139,10 +156,22 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 6px 14px;
-  margin-top: 5px;
+  margin-top: 0;
   color: var(--nautilus-flow-text-sub);
   font-size: 11px;
   line-height: 16px;
+}
+
+.nautilus-flow-header-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: max-content;
+}
+
+.nautilus-flow-header-actions .nautilus-flow-html-legend {
+  justify-content: flex-end;
 }
 
 .nautilus-flow-legend-item {
@@ -459,6 +488,11 @@
 
   .nautilus-flow-metrics {
     column-gap: 12px;
+  }
+
+  .nautilus-flow-html-legend {
+    gap: 6px 10px;
+    font-size: 10px;
   }
 
   .nautilus-flow-controls-top {

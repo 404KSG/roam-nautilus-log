@@ -389,14 +389,24 @@ function uiCopy(language = 'zh') {
 
 function capacityMetrics({ capacity = {}, language = 'zh' } = {}) {
   const copy = uiCopy(language).capacity;
+  const availableMinutes = Math.max(0, asNumber(capacity.availableMinutes) || 0);
+  const demandMinutes = Math.max(0, asNumber(capacity.demandMinutes) || 0);
+  const demandPercent = availableMinutes > 0
+    ? `${Math.round((demandMinutes / availableMinutes) * 100)}%`
+    : (demandMinutes === 0 ? '0%' : '—');
   const available = {
-    key: 'available', label: copy.available, value: formatDuration(capacity.availableMinutes), tone: 'neutral',
+    key: 'available', label: copy.available, value: formatDuration(availableMinutes), tone: 'neutral',
   };
   const events = {
     key: 'events', label: copy.events, value: formatDuration(capacity.fixedMinutes), tone: 'event',
   };
   const demand = {
-    key: 'demand', label: copy.demand, value: formatDuration(capacity.demandMinutes), tone: 'neutral',
+    key: 'demand',
+    label: copy.demand,
+    value: formatDuration(demandMinutes),
+    percent: demandPercent,
+    percentTone: availableMinutes > 0 && demandMinutes > availableMinutes ? 'warning' : 'neutral',
+    tone: 'neutral',
   };
   let status;
   if (capacity.overloadMinutes > 0) {
