@@ -744,22 +744,19 @@
 (defn snail-blueprint-component [color inner-radius center settings daily-page? now-time-atom]
   (let [workday-start (:workday-start settings)
         workday-end (:workday-end settings)
-        segments (loop [minute workday-start
-                        result []]
-                   (if (>= minute workday-end)
-                     result
-                     (let [next-minute (min workday-end (+ minute 30))
-                           label (when (zero? (mod minute 60)) (str (mod (quot minute 60) 24)))]
-                       (recur next-minute (conj result [minute next-minute label])))))]
+        segments (or (flow-core-call "hourlyGridSegments"
+                                     {:startMinutes workday-start
+                                      :endMinutes workday-end})
+                     [])]
     [:g
-     (mapcat (fn [[start end timestamp]]
+     (mapcat (fn [{:keys [start end label]}]
                [[slice
                  [(min->angle start) (min->angle end) inner-radius
                   (outer-radius-at (mod (quot start 60) (count snail-blueprint-outer-radiuses)))
                  center settings]
                  :border-color color
                  :past? (and daily-page? (<= end @now-time-atom))
-                 :timestamp timestamp]])
+                 :timestamp label]])
              segments)
      (when (= workday-end 1440)
        (let [angle (min->angle workday-end)

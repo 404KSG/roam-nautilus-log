@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const {
   normalizeScheduleSettings,
   resolveRendererSettings,
+  hourlyGridSegments,
   scheduleTasks,
   historicalDoneSlice,
   calculateCapacity,
@@ -12,6 +13,13 @@ const {
   truncateTextToWidth,
   placeLabelTracks,
 } = require('../src/flow-core');
+
+test('the chart background uses one grid sector per hour', () => {
+  assert.deepEqual(hourlyGridSegments({ startMinutes: 300, endMinutes: 420 }), [
+    { start: 300, end: 360, label: '5' },
+    { start: 360, end: 420, label: '6' },
+  ]);
+});
 
 test('runtime extension settings override stale or nested render arguments', () => {
   assert.deepEqual(

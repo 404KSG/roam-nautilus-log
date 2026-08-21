@@ -101,6 +101,22 @@ function resolveRendererSettings({ runtime = {}, args = [] } = {}) {
   };
 }
 
+function hourlyGridSegments({ startMinutes, endMinutes } = {}) {
+  const start = asNumber(startMinutes);
+  const end = asNumber(endMinutes);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return [];
+
+  const segments = [];
+  for (let minute = start; minute < end; minute += 60) {
+    segments.push({
+      start: minute,
+      end: Math.min(end, minute + 60),
+      label: minute % 60 === 0 ? String(Math.floor(minute / 60) % 24) : '',
+    });
+  }
+  return segments;
+}
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -391,6 +407,7 @@ module.exports = {
   END_HOURS,
   normalizeScheduleSettings,
   resolveRendererSettings,
+  hourlyGridSegments,
   scheduleTasks,
   historicalDoneSlice,
   calculateCapacity,

@@ -14,6 +14,7 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested F
   assert.match(component, /flow-core-call "historicalDoneSlice"/);
   assert.match(component, /flow-core-call "truncateTextToWidth"/);
   assert.match(component, /flow-core-call "resolveRendererSettings"/);
+  assert.match(component, /flow-core-call "hourlyGridSegments"/);
   assert.match(component, /nautilus-flow:settings-changed/);
   assert.match(component, /\.addEventListener/);
   assert.match(component, /\.removeEventListener/);
