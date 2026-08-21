@@ -33,13 +33,31 @@
   color: var(--nautilus-flow-text-main);
 }
 
+.nautilus-flow-context-probe {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
 /* Roam can repeat an ancestor block inside a zoom breadcrumb. Suppress only
    those duplicate breadcrumb renders; a focused block in the right sidebar
    is a real workspace and must keep the chart visible. */
 .rm-zoom-path .nautilus-flow-container,
 .rm-breadcrumbs .nautilus-flow-container,
-[data-testid="breadcrumbs"] .nautilus-flow-container {
+[data-testid="breadcrumbs"] .nautilus-flow-container,
+.parent-path-wrapper .nautilus-flow-container,
+.rm-zoom.zoom-path-view .nautilus-flow-container,
+.rm-zoom-item-content.rm-zoom-collapsed-item .nautilus-flow-container {
   display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
 }
 
 .nautilus-flow-content {

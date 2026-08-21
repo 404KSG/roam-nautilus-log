@@ -2,6 +2,27 @@ import cljsFile from "./component.cljs";
 
 const RENDER_PAGE = "roam/render";
 
+const SUPPRESSED_RENDER_CONTEXT_SELECTOR = [
+  ".rm-zoom-path",
+  ".rm-breadcrumbs",
+  '[data-testid="breadcrumbs"]',
+  ".parent-path-wrapper",
+  ".rm-zoom.zoom-path-view",
+  ".rm-zoom-item-content.rm-zoom-collapsed-item",
+].join(", ");
+
+export function shouldSuppressRenderContext(node) {
+  try {
+    return Boolean(
+      node
+      && typeof node.closest === "function"
+      && node.closest(SUPPRESSED_RENDER_CONTEXT_SELECTOR),
+    );
+  } catch (_error) {
+    return false;
+  }
+}
+
 function api() {
   return typeof window !== "undefined" ? window.roamAlphaAPI : undefined;
 }

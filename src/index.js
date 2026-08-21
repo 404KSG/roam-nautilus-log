@@ -1,4 +1,8 @@
-import { toggleRenderComponent, updateTemplateString } from "./entry-helpers";
+import {
+  shouldSuppressRenderContext,
+  toggleRenderComponent,
+  updateTemplateString,
+} from "./entry-helpers";
 import * as flowCore from "./flow-core";
 import "../extension.css";
 
@@ -188,7 +192,7 @@ function panelConfig(extensionAPI, language) {
 
 async function onload({ extensionAPI }) {
   window.nautilusFlowCore = flowCore;
-  window.nautilusFlowExtensionData = { running: true };
+  window.nautilusFlowExtensionData = { running: true, shouldSuppressRenderContext };
   await setDefaultSettings(extensionAPI);
   publishRuntimeSettings(extensionAPI);
   const language = extensionAPI.settings.get("language") || "zh";

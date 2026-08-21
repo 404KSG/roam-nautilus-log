@@ -78,6 +78,15 @@ test('Flow uses a flat Linear-style header with left-aligned metrics and legend'
   assert.doesNotMatch(css, /border:\s*1px dashed/);
 });
 
+test('Flow suppresses breadcrumb and collapsed-path replicas before mounting the chart', () => {
+  assert.match(component, /shouldSuppressRenderContext/);
+  assert.match(component, /nautilus-flow-context-probe/);
+  assert.match(css, /\.nautilus-flow-context-probe\s*\{[^}]*display:\s*none\s*!important;[^}]*height:\s*0\s*!important;/s);
+  assert.match(css, /\.rm-zoom\.zoom-path-view \.nautilus-flow-container/);
+  assert.match(css, /\.parent-path-wrapper \.nautilus-flow-container/);
+  assert.match(css, /\.rm-zoom-item-content\.rm-zoom-collapsed-item \.nautilus-flow-container/);
+});
+
 test('the Roam renderer cleanup remains a sibling of the render body inside with-let', () => {
   const withLetIndex = component.indexOf('(r/with-let');
   const finallyIndex = component.indexOf('(finally', withLetIndex);

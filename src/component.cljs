@@ -1211,6 +1211,21 @@
    [collapse-button collapsed-state block-uid (:controls copy)]
    (when show-debug-button? [switch-debug-button])])
 
+(defn render-context-probe [render-context-state]
+  [:span
+   {:class "nautilus-flow-context-probe"
+    :aria-hidden "true"
+    :ref (fn [node]
+           (when node
+             (let [suppress? (try
+                               (if-let [detector (.-shouldSuppressRenderContext js/window.nautilusFlowExtensionData)]
+                                 (boolean (detector node))
+                                 false)
+                               (catch :default _e false))
+                   next-state (if suppress? :suppressed :visible)]
+               (when (not= @render-context-state next-state)
+                 (reset! render-context-state next-state)))))}])
+
 (defn main [{:keys [:block-uid]} & args]
   (r/with-let [is-running? #(try
                               (boolean (.-running js/window.nautilusFlowExtensionData))
@@ -1225,6 +1240,7 @@
                playback-state-atom (r/atom false)
                playback-frame-atom (r/atom nil)
                collapsed-state (r/atom (read-collapsed-state block-uid))
+               render-context-state (r/atom :pending)
                clock-interval (js/setInterval #(when-not @playback-state-atom
                                                  (reset-now-time-atom now-time-atom)) 60000)
                *get-children-atom (get-children-pull block-uid)
@@ -1248,11 +1264,19 @@
       nil [:div {:class "nautilus-flow-loading"} [:strong "Loading Nautilus Flow..."]]
       false [:div {:class "nautilus-flow-not-installed"}
              [:strong {:style {:color "red"}} "Extension not installed. To use Nautilus Flow, install it from Roam Depot."]]
-      (do
-        (when-not @playback-state-atom (reset-now-time-atom now-time-atom))
-        (let [settings @settings-state
-              copy (ui-copy settings)
-              dimensions {:width (if mobile? mob-width desk-width)
+      (cond
+        (= :pending @render-context-state)
+        [render-context-probe render-context-state]
+
+        (= :suppressed @render-context-state)
+        [:span {:class "nautilus-flow-context-probe" :aria-hidden "true"}]
+
+        :else
+        (do
+          (when-not @playback-state-atom (reset-now-time-atom now-time-atom))
+          (let [settings @settings-state
+                copy (ui-copy settings)
+                dimensions {:width (if mobile? mob-width desk-width)
                             :height (* start-svg-rect-ratio (if mobile? mob-width desk-width))}
                 show-debug-button? (= :debug (first args))
                 plan-from-time (if @daily-page-atom?
@@ -1282,7 +1306,7 @@
                 [:div {:class "nautilus-flow-content"}
                  [show-events events-state daily-page-atom? show-done-state playback-state-atom now-time-atom page-title-val dimensions settings]
                  [overflow-panel capacity copy]
-                 [schedule-warning-panel text-events copy]]])])))
+                 [schedule-warning-panel text-events copy]]])]))))
     (finally
       (js/clearInterval check-interval)
       (js/clearInterval clock-interval)

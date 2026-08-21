@@ -103,6 +103,16 @@ test('built extension creates Flow scaffolding sequentially and unload is graph-
   assert.equal(window.nautilusFlowExtensionData.settings['workday-end'], 21);
   assert.equal(window.nautilusFlowExtensionData.settings.language, 'en');
 
+  const shouldSuppressRenderContext = window.nautilusFlowExtensionData.shouldSuppressRenderContext;
+  const contextNode = (matchedSelector) => ({
+    closest: (selector) => (selector.includes(matchedSelector) ? {} : null),
+  });
+  assert.equal(typeof shouldSuppressRenderContext, 'function');
+  assert.equal(shouldSuppressRenderContext({ closest: () => null }), false);
+  assert.equal(shouldSuppressRenderContext(contextNode('.parent-path-wrapper')), true);
+  assert.equal(shouldSuppressRenderContext(contextNode('.rm-zoom.zoom-path-view')), true);
+  assert.equal(shouldSuppressRenderContext(contextNode('.rm-zoom-item-content.rm-zoom-collapsed-item')), true);
+
   const languageSetting = latestPanel.settings.find(({ id }) => id === 'language');
   await languageSetting.action.onChange('zh');
   assert.equal(window.nautilusFlowExtensionData.settings.language, 'zh');
