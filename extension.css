@@ -167,7 +167,8 @@
   letter-spacing: 0.01em;
 }
 
-.nautilus-flow-overflow-panel {
+.nautilus-flow-overflow-panel,
+.nautilus-flow-warning-panel {
   align-self: stretch;
   box-sizing: border-box;
   margin: 4px 12px 0;
@@ -178,16 +179,19 @@
   font-size: 12px;
 }
 
-.nautilus-flow-overflow-panel summary {
+.nautilus-flow-overflow-panel summary,
+.nautilus-flow-warning-panel summary {
   cursor: pointer;
 }
 
-.nautilus-flow-overflow-panel ul {
+.nautilus-flow-overflow-panel ul,
+.nautilus-flow-warning-panel ul {
   margin: 6px 0 0;
   padding-left: 18px;
 }
 
-.nautilus-flow-overflow-panel li {
+.nautilus-flow-overflow-panel li,
+.nautilus-flow-warning-panel li {
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -197,6 +201,11 @@
 .nautilus-flow-overflow-duration {
   white-space: nowrap;
   opacity: 0.8;
+}
+
+.nautilus-flow-warning-message {
+  text-align: right;
+  opacity: 0.85;
 }
 
 .nautilus-flow-legend {
@@ -263,7 +272,8 @@
     max-height: 48vh;
   }
 
-  .nautilus-flow-overflow-panel {
+  .nautilus-flow-overflow-panel,
+  .nautilus-flow-warning-panel {
     margin-left: 4px;
     margin-right: 4px;
   }

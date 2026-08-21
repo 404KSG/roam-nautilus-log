@@ -114,7 +114,30 @@ test('capacity reports overflow instead of silently dropping tasks', () => {
   assert.equal(result.availableMinutes, 60);
   assert.equal(result.demandMinutes, 75);
   assert.equal(result.overloadMinutes, 15);
+  assert.equal(result.unplacedMinutes, 30);
   assert.deepEqual(result.overflowTasks.map((task) => task.uid), ['b']);
+});
+
+test('reports fragmented free time when an atomic task cannot fit any continuous slot', () => {
+  const result = calculateCapacity({
+    startMinutes: 300,
+    endMinutes: 420,
+    nowMinutes: 300,
+    fixedEvents: [
+      { meeting: true, start: 330, end: 360 },
+      { meeting: true, start: 390, end: 420 },
+    ],
+    pendingTasks: [{ uid: 'atomic', duration: 45, done: false }],
+  });
+
+  assert.equal(result.availableMinutes, 60);
+  assert.equal(result.demandMinutes, 45);
+  assert.equal(result.overloadMinutes, 0);
+  assert.equal(result.unplacedMinutes, 45);
+  assert.equal(
+    formatCapacitySummary(result),
+    '可安排 1h00m · 待办需求 45m · 空档不足 45m',
+  );
 });
 
 test('formats capacity values in the compact dashboard style', () => {
@@ -135,6 +158,13 @@ test('truncates mixed Chinese/ASCII text by measured width and keeps the full va
   assert.equal(truncateTextToWidth('short', 20), 'short');
 });
 
+test('accepts the object-shaped truncation contract used by the Roam renderer', () => {
+  assert.equal(
+    truncateTextToWidth({ text: '研究 Nautilus 中文任务', maxWidth: 8 }),
+    '研究 Na…',
+  );
+});
+
 test('places colliding labels on a finite set of tracks', () => {
   const labels = [
     { uid: 'a', start: 0, end: 30 },
@@ -150,4 +180,18 @@ test('places colliding labels on a finite set of tracks', () => {
     { uid: 'd', track: 0 },
   ]);
   assert.ok(placed.every(({ track }) => track >= 0 && track < 3));
+});
+
+test('accepts the object-shaped label contract used by the Roam renderer', () => {
+  const placed = placeLabelTracks({
+    labels: [
+      { uid: 'a', start: 0, end: 30 },
+      { uid: 'b', start: 10, end: 40 },
+    ],
+    maxTracks: 2,
+  });
+  assert.deepEqual(placed.map(({ uid, track }) => ({ uid, track })), [
+    { uid: 'a', track: 0 },
+    { uid: 'b', track: 1 },
+  ]);
 });

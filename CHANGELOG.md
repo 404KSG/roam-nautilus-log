@@ -16,6 +16,10 @@
 ### Fixed
 
 - DONE blocks no longer cause identical Roam writes.
+- Midnight-crossing events are clipped at 24:00 and shown in a warning panel.
+- Fragmented free time is distinguished from aggregate overload.
 - Unload no longer rewrites or deletes graph content.
 - Right-sidebar renders avoid chart work and reserve no visible space.
 - Template and code scaffolding updates are idempotent and Flow-only.
+- Render scaffolding is created sequentially so delayed Roam writes cannot race
+  ahead of their parent blocks.

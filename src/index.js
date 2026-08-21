@@ -9,12 +9,6 @@ const disabledReplacementString = `{{${componentName}-disabled`;
 const version = "v1";
 const titleblockUID = "roam-render-Nautilus-Flow";
 
-// The ClojureScript source is stored in a Roam code block at runtime. Expose
-// the tested scheduling core as one shared implementation for that renderer.
-if (typeof window !== "undefined") {
-  window.nautilusFlowCore = flowCore;
-}
-
 // Keep the existing argument order for old templates; the new end-hour value
 // is appended after the old color trigger argument.
 const defaults = {
@@ -91,7 +85,7 @@ function panelConfig(extensionAPI, language) {
       start: "Chart Start Time",
       startDesc: "Draw the spiral from 5, 6, 7, or 8 AM. Defaults to 5 AM.",
       end: "Chart End Time",
-      endDesc: "Draw through 6–24:00. 24:00 means midnight at the end of today.",
+      endDesc: "Draw through 18:00–24:00. 24:00 means midnight at the end of today.",
       prefix: "Component Prefix",
       prefixDesc: "Text inserted before a new component (for example, #schedule).",
       length: "Legend Max Length",
@@ -105,7 +99,7 @@ function panelConfig(extensionAPI, language) {
   const update = async (key, value) => {
     const next = key === "color-1-trigger" ? String(value).replace(/\s/g, "") : value;
     await extensionAPI.settings.set(key, next);
-    updateTemplateString(renderStringCore, await generateUpdatedRenderString(renderStringCore, extensionAPI, key, next));
+    await updateTemplateString(renderStringCore, await generateUpdatedRenderString(renderStringCore, extensionAPI, key, next));
   };
 
   return {
@@ -166,6 +160,7 @@ function panelConfig(extensionAPI, language) {
 }
 
 async function onload({ extensionAPI }) {
+  window.nautilusFlowCore = flowCore;
   window.nautilusFlowExtensionData = { running: true };
   setDefaultSettings(extensionAPI);
   const language = extensionAPI.settings.get("language") || "zh";
@@ -184,8 +179,11 @@ async function onload({ extensionAPI }) {
 }
 
 function onunload() {
-  if (typeof window !== "undefined" && window.nautilusFlowExtensionData) {
-    window.nautilusFlowExtensionData.running = false;
+  if (typeof window !== "undefined") {
+    if (window.nautilusFlowExtensionData) {
+      window.nautilusFlowExtensionData.running = false;
+    }
+    delete window.nautilusFlowCore;
   }
   // Do not mutate the graph during unload; the render scaffolding is owned by
   // the user's graph and should remain available for a later reload.

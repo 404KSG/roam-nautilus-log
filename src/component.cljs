@@ -335,6 +335,13 @@
       first
       first))
 
+(defn open-block-in-main [block-uid]
+  (try
+    (let [ui (.-ui js/window.roamAlphaAPI)
+          main-window (.-mainWindow ui)]
+      (.openBlock main-window (clj->js {:block {:uid block-uid}})))
+    (catch :default _e nil)))
+
 (defn minutes->time [minutes]
   (let [h (int (/ minutes 60))
         m (mod minutes 60)]
@@ -419,9 +426,14 @@
         {:range (cond
                   (> to-min from-min) [from-min to-min]
                   (= to-min 0) [from-min 1440]
+                  (< to-min from-min) [from-min 1440]
                   :else [from-min from-min])
+         :warning (cond
+                    (and (< to-min from-min) (not= to-min 0)) "跨日事件仅显示至 24:00"
+                    (= to-min from-min) "开始时间与结束时间不能相同"
+                    :else nil)
          :cleaned-str cleaned-str})
-      {:range nil :cleaned-str s})))
+      {:range nil :warning nil :cleaned-str s})))
 
 (defn parse-duration [s settings]
   (let [duration-format #"(\d{1,3})(min|m)"]
@@ -509,7 +521,7 @@
   (let [s (:s block-map)
         cleaned-str (parse-URLs s) ;; remove URLs – it has to start with this, because URLs can contain other markers
         {:keys [custom-color cleaned-str]} (parse-custom-color-1 cleaned-str settings)
-        {:keys [range cleaned-str]} (parse-time-range cleaned-str)
+        {:keys [range warning cleaned-str]} (parse-time-range cleaned-str)
         {:keys [duration cleaned-str]} (parse-duration cleaned-str settings)
         {:keys [progress cleaned-str]} (parse-progress cleaned-str)
         {:keys [done-at cleaned-str]} (parse-done-time cleaned-str)
@@ -533,6 +545,7 @@
          :start (if done-slice (:start done-slice) (first range))
          :end (if done-slice (:end done-slice) (second range))
          :done done
+         :warning warning
          :bg-color custom-color
          :done-at (if done done-at nil)}
         (assoc event-type true))))
@@ -697,8 +710,8 @@
      ;; (when @hovered [:g [:text {:x center-x :y center-y} (str progress)]])
      (when text
        [:g {:style {:--pb-delay (str (* (/ (or task-start-min 0) 1440.0) 6.0) "s")}
-             :class "nautilus-flow-slice-group"
-            :title text}
+             :class "nautilus-flow-slice-group"}
+        [:title text]
         [bent-line-component legend-line-start-x legend-line-start-y legend-line-end-x legend-line-end-y legend-color at-vertex? on-left?]
         [:text {:x (if at-vertex? legend-line-end-x (+ legend-line-end-x (if on-left? (- bent-line-gap) bent-line-gap))) 
                 :y (+ legend-y legend-h)
@@ -708,12 +721,16 @@
                 :alignment-baseline "baseline"
                 :font-weight font-weight
                 :style (when click-to-progress {:cursor "pointer"})
-                :on-click #(when click-to-progress (update-block-progress uid 10 now-time-atom))
+                :on-click #(do
+                             (.stopPropagation %)
+                             (open-block-in-main uid))
                 :text-decoration (if done? "line-through" "none")
                 :fill (if-not done? (update-opacity-str bg-color "1") (update-opacity-str bg-color "0.5"))}
          (if debug? (str dbg-radians-txt)
              (or (flow-core-call "truncateTextToWidth"
-                                 {:text text :maxWidth (:legend-len-limit settings)})
+                                 {:text text
+                                  :maxWidth (* (:legend-len-limit settings) (/ font-size rect-width-coef))
+                                  :font (str font-size "px " font-family)})
                  text))
          ]])     
      (when (seq timestamp)
@@ -1073,11 +1090,20 @@
       (str "#" decoded))
     arg))
 
+(defn safe-int [value]
+  (try
+    (cond
+      (number? value) (int value)
+      (and (string? value) (re-matches #"\d+" (str/trim value)))
+      (js/parseInt value 10)
+      :else nil)
+    (catch :default _e nil)))
+
 (defn args->settings [[a1 a2 a3 a4 a5]]
-  (let [a1 (when a1 (int a1))
-        a2 (when a2 (int a2))
-        a3 (when a3 (int a3))
-        a5 (when a5 (int a5))
+  (let [a1 (safe-int a1)
+        a2 (safe-int a2)
+        a3 (safe-int a3)
+        a5 (safe-int a5)
         normalized (or (flow-core-call "normalizeScheduleSettings"
                                        {:startHour (or a3 (/ init-workday-start 60))
                                         :endHour (or a5 (/ init-workday-end 60))})
@@ -1094,16 +1120,19 @@
                              (str a4)
                              (arg-tag->str a4)))}))
 
-(defn in-right-sidebar? [block-uid]
+(defn node-in-right-sidebar? [node]
   (try
-    (let [selector (str "[data-uid='" block-uid "'],[data-block-uid='" block-uid "']")
-          nodes (.querySelectorAll js/document selector)]
-      (boolean
-       (some (fn [node]
-               (or (.closest node "#roam-right-sidebar-content")
-                   (.closest node "#right-sidebar")))
-             (array-seq nodes))))
+    (boolean
+     (and node
+          (or (.closest node "#roam-right-sidebar-content")
+              (.closest node "#right-sidebar"))))
     (catch :default _e false)))
+
+(defn sync-sidebar-state-from-node! [sidebar-state node]
+  (when node
+    (let [next (node-in-right-sidebar? node)]
+      (when (not= next @sidebar-state)
+        (reset! sidebar-state next)))))
 
 (defn capacity-summary [capacity]
   (or (flow-core-call "formatCapacitySummary" capacity)
@@ -1112,7 +1141,7 @@
 (defn overflow-panel [capacity]
   (let [overflow (:overflowTasks capacity)
         count-overflow (count overflow)
-        total (:overloadMinutes capacity)]
+        total (:unplacedMinutes capacity)]
     (when (pos? count-overflow)
       [:details {:class "nautilus-flow-overflow-panel"}
        [:summary (str "今日放不下 · " (or (flow-core-call "formatDuration" total) "0m") " · " count-overflow " 项")]
@@ -1122,6 +1151,18 @@
                                [:span (:description task)]
                                [:span {:class "nautilus-flow-overflow-duration"}
                                 (or (flow-core-call "formatDuration" (:duration task)) "0m")]])]])))
+
+(defn schedule-warning-panel [events]
+  (let [warnings (vec (filter :warning events))]
+    (when (seq warnings)
+      [:details {:class "nautilus-flow-warning-panel"}
+       [:summary (str "时间范围提醒 · " (count warnings) " 项")]
+       [:ul
+        (for [event warnings]
+          ^{:key (:uid event)}
+          [:li
+           [:span (:description event)]
+           [:span {:class "nautilus-flow-warning-message"} (:warning event)]])]])))
 
 (defn collapsed-summary [capacity]
   [:div {:class "nautilus-flow-collapsed-summary"}
@@ -1139,10 +1180,10 @@
                playback-state-atom (r/atom false)
                playback-frame-atom (r/atom nil)
                collapsed-state (r/atom (read-collapsed-state block-uid))
-               sidebar-state (r/atom (in-right-sidebar? block-uid))
+               sidebar-state (r/atom false)
+               sidebar-ref #(sync-sidebar-state-from-node! sidebar-state %)
                clock-interval (js/setInterval #(when-not @playback-state-atom
                                                  (reset-now-time-atom now-time-atom)) 60000)
-               sidebar-interval (js/setInterval #(reset! sidebar-state (in-right-sidebar? block-uid)) 1000)
                *get-children-atom (get-children-pull block-uid)
                *children (r/track eval-state *get-children-atom)
                *text-events (r/track
@@ -1166,7 +1207,7 @@
       false [:div {:class "nautilus-flow-not-installed"}
              [:strong {:style {:color "red"}} "Extension not installed. To use Nautilus Flow, install it from Roam Depot."]]
       (if @sidebar-state
-        [:div {:class "nautilus-flow-sidebar-placeholder" :aria-hidden "true"}]
+        [:div {:class "nautilus-flow-sidebar-placeholder" :aria-hidden "true" :ref sidebar-ref}]
         (do
           (when-not @playback-state-atom (reset-now-time-atom now-time-atom))
           (let [dimensions {:width (if mobile? mob-width desk-width)
@@ -1184,9 +1225,10 @@
                                               :nowMinutes plan-from-time
                                               :fixedEvents fixed-events
                                               :pendingTasks (map #(dissoc % :progress) pending-tasks)})
-                             {:availableMinutes 0 :demandMinutes 0 :overloadMinutes 0 :slackMinutes 0 :overflowTasks []})
+                             {:availableMinutes 0 :demandMinutes 0 :overloadMinutes 0 :slackMinutes 0 :unplacedMinutes 0 :overflowTasks []})
                 events-state [(fill-day text-events (:workday-start settings) (:workday-end settings) plan-from-time) done-events]]
-            [:div {:class (str "nautilus-flow-container" (when @collapsed-state " nautilus-flow-collapsed"))}
+            [:div {:class (str "nautilus-flow-container" (when @collapsed-state " nautilus-flow-collapsed"))
+                   :ref sidebar-ref}
              [:div {:class "nautilus-flow-controls-top"}
               [switch-done-visibility-button show-done-state]
               [playback-button settings now-time-atom playback-state-atom playback-frame-atom]
@@ -1198,10 +1240,10 @@
                 [:div {:class "nautilus-flow-capacity-bar" :aria-label (capacity-summary capacity)}
                  (capacity-summary capacity)]
                 [show-events events-state daily-page-atom? show-done-state playback-state-atom now-time-atom page-title-val dimensions settings]
-                [overflow-panel capacity]])]))))
+                [overflow-panel capacity]
+                [schedule-warning-panel text-events]])]))))
     (finally
       (js/clearInterval check-interval)
       (js/clearInterval clock-interval)
-      (js/clearInterval sidebar-interval)
       (when @playback-frame-atom
         (js/cancelAnimationFrame @playback-frame-atom)))))

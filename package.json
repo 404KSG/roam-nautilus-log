@@ -6,10 +6,10 @@
   "scripts": {
     "build": "webpack",
     "watch": "webpack --watch",
-    "test": "node --test test/*.test.js"
+    "test": "npm run build && node --test test/*.test.js"
   },
   "license": "MIT",
-  "author": "hopeserena",
+  "author": "404KSG",
   "devDependencies": {
     "css-loader": "^6.7.3",
     "text-loader": "^0.0.1",

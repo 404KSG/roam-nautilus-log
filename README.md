@@ -47,9 +47,14 @@ The chart header reports the same three quantities every time:
 
 `Available 3h20m · Demand 4h05m · Overload 45m`
 
-The Chinese UI displays `可安排 · 待办需求 · 超载/余量`. Future fixed events are
-subtracted from available time, and partially completed tasks count only their
-remaining duration.
+The Chinese UI displays `可安排 · 待办需求 · 超载/余量`. If aggregate free time
+exists but an atomic task cannot fit any continuous slot, it instead reports
+`空档不足`. Future fixed events are subtracted from available time, and partially
+completed tasks count only their remaining duration.
+
+An event that crosses midnight is clipped at the selected day's `24:00`
+boundary and shown in a visible warning panel; Flow does not silently schedule
+the next day's portion.
 
 When a completed task has an explicit `dHH:MM` completion marker, its historical
 slice ends at that time and starts by subtracting the original estimate. For
@@ -105,8 +110,12 @@ Todo Trigger 仍然是可选工具：它可以在完成时追加时间戳，但 
 
 `可安排 3h20m · 待办需求 4h05m · 超载 45m`
 
-如果没有超载，最后一项显示为“余量”。未来固定事件会从可安排时间中扣除，
-部分完成的任务只计算剩余时长。
+如果没有超载，最后一项显示为“余量”；如果总空闲时间足够、但某个完整任务无法放进
+任何连续空档，则显示“空档不足”。未来固定事件会从可安排时间中扣除，部分完成的
+任务只计算剩余时长。
+
+跨越午夜的固定事件会在当天 `24:00` 截断，并进入可见的时间范围提醒；Flow 不会
+悄悄把次日部分排进今天。
 
 已完成任务如果带有明确的 `d小时:分钟` 完成时间标记，历史切片以该时间结束，
 并按任务原始预计时长倒推开始时间。例如，预计 60 分钟、21:50 完成的任务会显示为

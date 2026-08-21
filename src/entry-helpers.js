@@ -30,21 +30,22 @@ function getBlockContentStringByUID(uid) {
   return queryBlock(uid)?.string || null;
 }
 
-function createPage(title) {
+async function createPage(title) {
   const roam = api();
   const uid = roam?.util?.generateUID?.();
   if (!roam || !uid) return null;
-  roam.data.page.create({ page: { title, uid } });
+  await roam.data.page.create({ page: { title, uid } });
   return uid;
 }
 
-function createBlock(parentUid, order, string, uid, extra = {}) {
+async function createBlock(parentUid, order, string, uid, extra = {}) {
   const roam = api();
   if (!roam?.createBlock || !parentUid || !uid) return null;
-  return roam.createBlock({
+  await roam.createBlock({
     location: { "parent-uid": parentUid, order },
     block: { string, uid, open: true, ...extra },
   });
+  return uid;
 }
 
 function childBlocks(parentUid) {
@@ -58,10 +59,10 @@ function childBlocks(parentUid) {
     .sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
-function updateBlockIfChanged(uid, string) {
+async function updateBlockIfChanged(uid, string) {
   const roam = api();
   if (!roam?.updateBlock || !uid || getBlockContentStringByUID(uid) === string) return false;
-  roam.updateBlock({ block: { uid, string } });
+  await roam.updateBlock({ block: { uid, string } });
   return true;
 }
 
@@ -84,19 +85,19 @@ export async function createRenderBlock(
 ) {
   const roam = api();
   if (!roam) return false;
-  const renderPageUID = getPageUidByPageTitle(renderPageName) || createPage(renderPageName);
+  const renderPageUID = getPageUidByPageTitle(renderPageName) || await createPage(renderPageName);
   if (!renderPageUID) return false;
 
   const existingTitle = blockByUid(titleblockUID);
   if (!existingTitle) {
-    createBlock(renderPageUID, "last", componentName, titleblockUID, { heading: 3 });
+    await createBlock(renderPageUID, "last", componentName, titleblockUID, { heading: 3 });
   }
 
   const children = childBlocks(titleblockUID);
   let templateBlock = children.find((child) => child.string?.includes("Nautilus Flow [[roam/templates]]"));
   if (!templateBlock) {
     const templateBlockUID = roam.util.generateUID();
-    createBlock(titleblockUID, 0, "Nautilus Flow [[roam/templates]]", templateBlockUID);
+    await createBlock(titleblockUID, 0, "Nautilus Flow [[roam/templates]]", templateBlockUID);
     templateBlock = { uid: templateBlockUID };
   }
 
@@ -104,28 +105,28 @@ export async function createRenderBlock(
   const renderBlock = templateChildren.find((child) => child.string?.includes(renderStringCore));
   if (!renderBlock) {
     const renderBlockUID = roam.util.generateUID();
-    createBlock(templateBlock.uid, 0, renderBlockString(renderStringCore, templateString), renderBlockUID);
+    await createBlock(templateBlock.uid, 0, renderBlockString(renderStringCore, templateString), renderBlockUID);
   } else {
-    updateBlockIfChanged(renderBlock.uid, renderBlockString(renderStringCore, templateString));
+    await updateBlockIfChanged(renderBlock.uid, renderBlockString(renderStringCore, templateString));
   }
 
   const codeHeader = children.find((child) => child.string === "code");
   let codeHeaderUID = codeHeader?.uid;
   if (!codeHeaderUID) {
     codeHeaderUID = roam.util.generateUID();
-    createBlock(titleblockUID, "last", "code", codeHeaderUID, { open: false });
+    await createBlock(titleblockUID, "last", "code", codeHeaderUID, { open: false });
   }
 
   const blockString = `\`\`\`clojure\n ${cljsFile} \`\`\``;
   if (!blockByUid(codeBlockUID)) {
-    createBlock(codeHeaderUID, 0, blockString, codeBlockUID);
+    await createBlock(codeHeaderUID, 0, blockString, codeBlockUID);
   } else {
-    updateBlockIfChanged(codeBlockUID, blockString);
+    await updateBlockIfChanged(codeBlockUID, blockString);
   }
   return true;
 }
 
-export function updateTemplateString(renderString, renderStringWithSettings) {
+export async function updateTemplateString(renderString, renderStringWithSettings) {
   const roam = api();
   if (!roam?.q) return 0;
   const query = `[:find (pull ?node [:block/string :block/uid])
@@ -135,12 +136,14 @@ export function updateTemplateString(renderString, renderStringWithSettings) {
                         [(clojure.string/includes? ?node-string "${renderString}")]]`;
   const blocks = (roam.q(query) || []).map((row) => row?.[0]).filter(Boolean);
   let updates = 0;
+  const writes = [];
   blocks.forEach((block) => {
     if (block.string !== renderStringWithSettings) {
-      roam.updateBlock({ block: { uid: block.uid, string: renderStringWithSettings } });
+      writes.push(roam.updateBlock({ block: { uid: block.uid, string: renderStringWithSettings } }));
       updates += 1;
     }
   });
+  await Promise.all(writes);
   return updates;
 }
 

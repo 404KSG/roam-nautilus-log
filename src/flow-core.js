@@ -229,12 +229,17 @@ function calculateCapacity({
   const overloadMinutes = Math.max(0, demandMinutes - availableMinutes);
   const slackMinutes = Math.max(0, availableMinutes - demandMinutes);
   const plan = scheduleTasks({ startMinutes: start, endMinutes: end, nowMinutes, tasks: pendingTasks, fixedEvents });
+  const unplacedMinutes = plan.overflowTasks.reduce(
+    (total, task) => total + remainingDuration(task),
+    0,
+  );
 
   return {
     availableMinutes,
     demandMinutes,
     overloadMinutes,
     slackMinutes,
+    unplacedMinutes,
     fixedMinutes: intervalMinutes(fixedIntervals),
     overflowTasks: plan.overflowTasks,
   };
@@ -254,6 +259,9 @@ function formatCapacitySummary(capacity) {
   if (capacity.overloadMinutes > 0) {
     return `可安排 ${available} · 待办需求 ${demand} · 超载 ${formatDuration(capacity.overloadMinutes)}`;
   }
+  if (capacity.unplacedMinutes > 0) {
+    return `可安排 ${available} · 待办需求 ${demand} · 空档不足 ${formatDuration(capacity.unplacedMinutes)}`;
+  }
   return `可安排 ${available} · 待办需求 ${demand} · 余量 ${formatDuration(capacity.slackMinutes)}`;
 }
 
@@ -262,6 +270,20 @@ function characterWidth(character) {
   // renderer's default font.  This is a fallback; callers can pass a real
   // measurement function to truncateTextToWidth when one is available.
   return character === '…' || character === '·' || character.charCodeAt(0) <= 255 ? 1 : 2;
+}
+
+let textCanvasContext;
+
+function fallbackTextWidth(candidate) {
+  return Array.from(candidate).reduce((sum, char) => sum + characterWidth(char), 0);
+}
+
+function browserTextWidth(candidate, font) {
+  if (typeof document === 'undefined' || !document.createElement) return fallbackTextWidth(candidate);
+  if (!textCanvasContext) textCanvasContext = document.createElement('canvas').getContext('2d');
+  if (!textCanvasContext) return fallbackTextWidth(candidate);
+  if (font) textCanvasContext.font = font;
+  return textCanvasContext.measureText(candidate).width;
 }
 
 function truncateTextToWidth(textOrOptions, maxWidth, measure = null) {
@@ -273,8 +295,10 @@ function truncateTextToWidth(textOrOptions, maxWidth, measure = null) {
     : null;
   const value = String(options ? (options.text ?? '') : (textOrOptions ?? ''));
   const limit = Math.max(1, asNumber(options ? options.maxWidth : maxWidth) || 1);
-  const width = (options && options.measure) || measure
-    || ((candidate) => Array.from(candidate).reduce((sum, char) => sum + characterWidth(char), 0));
+  const requestedMeasure = (options && options.measure) || measure;
+  const width = typeof requestedMeasure === 'function'
+    ? requestedMeasure
+    : (candidate) => browserTextWidth(candidate, options?.font);
   if (width(value) <= limit) return value;
   const ellipsis = '…';
   let result = '';

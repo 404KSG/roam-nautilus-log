@@ -1,0 +1,102 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const delay = () => new Promise((resolve) => setTimeout(resolve, 2));
+
+function createRoamMock() {
+  const pages = new Map();
+  const blocks = new Map();
+  let generated = 0;
+
+  const entity = (uid) => blocks.get(uid)
+    || [...pages.entries()].find(([, pageUid]) => pageUid === uid)?.[1]
+    || null;
+
+  const childrenOf = (parentUid) => [...blocks.values()]
+    .filter((block) => block.parentUid === parentUid)
+    .sort((a, b) => Number(a.order) - Number(b.order));
+
+  const roam = {
+    util: { generateUID: () => `flowtest${++generated}` },
+    data: {
+      pull: (_pattern, lookup) => entity(lookup?.[1]),
+      page: {
+        create: async ({ page }) => {
+          await delay();
+          pages.set(page.title, page.uid);
+        },
+      },
+    },
+    createBlock: async ({ location, block }) => {
+      await delay();
+      const parentUid = location['parent-uid'];
+      const parentExists = blocks.has(parentUid) || [...pages.values()].includes(parentUid);
+      if (!parentExists) throw new Error(`parent ${parentUid} did not exist before child ${block.uid}`);
+      blocks.set(block.uid, {
+        uid: block.uid,
+        string: block.string,
+        order: location.order === 'last' ? childrenOf(parentUid).length : location.order,
+        parentUid,
+      });
+    },
+    updateBlock: async ({ block }) => {
+      await delay();
+      const current = blocks.get(block.uid);
+      if (!current) throw new Error(`cannot update missing block ${block.uid}`);
+      blocks.set(block.uid, { ...current, string: block.string });
+    },
+    q: (query) => {
+      const pageTitle = query.match(/:node\/title "([^"]+)"/)?.[1];
+      if (pageTitle && query.includes('pull ?e [:block/uid]')) {
+        const uid = pages.get(pageTitle);
+        return uid ? [[{ uid }]] : [];
+      }
+
+      const parentUid = query.match(/\[\?parent :block\/uid "([^"]+)"\]/)?.[1];
+      if (parentUid && query.includes(':block/children')) {
+        return childrenOf(parentUid).map((block) => [[block][0]]);
+      }
+
+      const uid = query.match(/\[\?e :block\/uid "([^"]+)"\]/)?.[1];
+      if (uid) {
+        const block = blocks.get(uid);
+        return block ? [[block]] : [];
+      }
+      return [];
+    },
+  };
+
+  return { roam, pages, blocks };
+}
+
+test('built extension creates Flow scaffolding sequentially and unload is graph-safe', async (t) => {
+  const { roam, pages, blocks } = createRoamMock();
+  global.window = { roamAlphaAPI: roam };
+  t.after(() => { delete global.window; });
+
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#${Date.now()}`;
+  const extension = (await import(moduleUrl)).default;
+  const settings = new Map();
+  const extensionAPI = {
+    settings: {
+      get: (key) => settings.get(key),
+      set: async (key, value) => settings.set(key, value),
+      panel: { create: () => {} },
+    },
+  };
+
+  await extension.onload({ extensionAPI });
+
+  assert.ok(pages.has('roam/render'));
+  assert.equal(blocks.get('roam-render-Nautilus-Flow').string, 'Nautilus Flow');
+  assert.match(blocks.get('roam-render-Nautilus-Flow-cljs').string, /nautilus-flow-v1/);
+  const blockCount = blocks.size;
+
+  await extension.onunload();
+  assert.equal(blocks.size, blockCount);
+  assert.equal(window.nautilusFlowExtensionData.running, false);
+  assert.equal(window.nautilusFlowCore, undefined);
+});
