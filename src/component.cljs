@@ -1218,7 +1218,7 @@
        :legend {:urgent "Urgent" :event "Event" :task "Task"}
        :controls {:hideDone "Hide completed items" :showDone "Show completed items" :playback "Play back the day"
                   :collapse "Collapse Nautilus Flow" :expand "Expand Nautilus Flow"}
-       :panels {:overflow "Unscheduled today" :warnings "Schedule warnings" :schedule "Schedule" :item "item" :items "items"}
+       :panels {:overview "Overview" :overflow "Unscheduled today" :warnings "Schedule warnings" :schedule "Schedule" :item "item" :items "items"}
        :warnings {:overnight "Overnight events display only through 24:00"
                   :sameTime "Start and end times cannot be the same"}}))
 
@@ -1229,10 +1229,9 @@
        {:key "demand" :label "Demand" :value "0m" :percent "0%" :percentTone "neutral" :tone "neutral"}
        {:key "remaining" :label "Remaining" :value "0m" :tone "neutral"}]))
 
-(defn capacity-metrics-component [capacity settings]
-  (let [metrics (capacity-metrics capacity settings)
-        aria-label (str/join ", " (map #(str (:label %) " " (:value %)
-                                                (when-let [percent (:percent %)] (str ", " percent))) metrics))]
+(defn metrics-component [metrics]
+  (let [aria-label (str/join ", " (map #(str (:label %) " " (:value %)
+                                             (when-let [percent (:percent %)] (str ", " percent))) metrics))]
     [:div {:class "nautilus-flow-metrics" :aria-label aria-label}
      (for [metric metrics]
        ^{:key (:key metric)}
@@ -1243,6 +1242,9 @@
          (when-let [percent (:percent metric)]
            [:span {:class (str "nautilus-flow-metric-percent nautilus-flow-metric-percent--" (:percentTone metric))}
             (str "/ " percent)])]])]))
+
+(defn capacity-metrics-component [capacity settings]
+  [metrics-component (capacity-metrics capacity settings)])
 
 (defn html-legend-component [copy]
   [:div {:class "nautilus-flow-html-legend" :aria-label "Nautilus Flow legend"}
@@ -1255,6 +1257,24 @@
    [:span {:class "nautilus-flow-legend-item"}
     [:i {:class "nautilus-flow-legend-dot nautilus-flow-legend-dot--task" :aria-hidden "true"}]
     (get-in copy [:legend :task])]])
+
+(defn compact-overview-component [capacity settings copy compact-open-state]
+  (let [metrics (capacity-metrics capacity settings)
+        status (last metrics)
+        warning? (= "warning" (:tone status))
+        summary (str (get-in copy [:panels :overview])
+                     (when warning? (str " · " (:label status) " " (:value status))))]
+    [:details {:class (str "nautilus-flow-compact-overview"
+                           (when warning? " nautilus-flow-compact-overview--warning"))
+               :open @compact-open-state
+               :on-toggle #(let [next-open? (.-open (.-currentTarget %))]
+                             (when (not= next-open? @compact-open-state)
+                               (reset! compact-open-state next-open?)))}
+     [:summary {:class "nautilus-flow-compact-summary nautilus-flow-compact-overview-summary"}
+      summary]
+     [:div {:class "nautilus-flow-compact-overview-body"}
+      [metrics-component metrics]
+      [html-legend-component copy]]]))
 
 (defn localized-warning [warning copy]
   (case warning
@@ -1359,6 +1379,7 @@
                collapsed-state (r/atom (read-collapsed-state block-uid))
                render-context-state (r/atom :pending)
                compact-list-open-state (r/atom nil)
+               compact-overview-open-state (r/atom false)
                compact-state (r/atom false)
                resize-observer-state (atom nil)
                container-ref (fn [node]
@@ -1421,12 +1442,15 @@
              (if @collapsed-state
                [flow-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid copy show-debug-button?]
                [:div {:class "nautilus-flow-shell"}
-                [:header {:class "nautilus-flow-header"}
+                [:header {:class (str "nautilus-flow-header"
+                                     (when @compact-state " nautilus-flow-header--compact"))}
                  [:div {:class "nautilus-flow-header-copy"}
                   [capacity-metrics-component capacity settings]]
                  [:div {:class "nautilus-flow-header-actions"}
                   [flow-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid copy show-debug-button?]
                   [html-legend-component copy]]]
+                (when @compact-state
+                  [compact-overview-component capacity settings copy compact-overview-open-state])
                 [:div {:class "nautilus-flow-content"}
                  [show-events events-state daily-page-atom? show-done-state playback-state-atom now-time-atom page-title-val dimensions settings @compact-state copy compact-list-open-state]
                  [overflow-panel capacity copy]

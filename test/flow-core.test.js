@@ -36,6 +36,7 @@ test('English UI settings localize all extension-owned status labels', () => {
     expand: 'Expand Nautilus Flow',
   });
   assert.deepEqual(copy.panels, {
+    overview: 'Overview',
     overflow: 'Unscheduled today',
     warnings: 'Schedule warnings',
     schedule: 'Schedule',

@@ -111,6 +111,18 @@ test('Flow renders a collapsible below-chart label list in narrow containers', (
   assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-flow-compact-list\s*\{[^}]*display:\s*(?:grid|flex);/);
 });
 
+test('Flow moves metrics and the legend into a folded Overview in narrow containers', () => {
+  assert.match(component, /nautilus-flow-compact-overview/);
+  assert.match(component, /nautilus-flow-compact-overview-summary/);
+  assert.match(component, /compact-overview-open-state/);
+  assert.match(component, /compact-overview-component/);
+  assert.match(component, /:open @compact-open-state/);
+  assert.match(component, /\(when warning\?/);
+  assert.match(css, /\.nautilus-flow-compact-overview\s*\{[^}]*display:\s*none;/s);
+  assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-flow-compact-overview\s*\{[^}]*display:\s*block;/);
+  assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-flow-header--compact\s*\{[^}]*justify-content:\s*flex-end;/);
+});
+
 test('Flow feature-detects ResizeObserver with syntax supported by Roam SCI', () => {
   assert.doesNotMatch(component, /\(exists\?/);
   assert.match(component, /\(\.-ResizeObserver js\/window\)/);

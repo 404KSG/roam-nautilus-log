@@ -342,6 +342,7 @@ const UI_COPY = {
       expand: 'Expand Nautilus Flow',
     },
     panels: {
+      overview: 'Overview',
       overflow: 'Unscheduled today',
       warnings: 'Schedule warnings',
       schedule: 'Schedule',
@@ -371,6 +372,7 @@ const UI_COPY = {
       expand: '展开 Nautilus Flow',
     },
     panels: {
+      overview: '概览',
       overflow: '今日放不下',
       warnings: '时间范围提醒',
       schedule: '时间安排',
