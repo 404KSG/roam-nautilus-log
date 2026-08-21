@@ -266,7 +266,8 @@
                                         :gap (if mobile? 14 24)
                                         :trackGap 18
                                         :layout "side-rails"
-                                        :maxVerticalOffset (* max-spiral-radius 0.62)
+                                        :maxVerticalOffset (* max-spiral-radius 0.92)
+                                        :rowGap 26
                                         :collisionPadding 6
                                         :occupiedRects rects
                                         :labels [{:uid text

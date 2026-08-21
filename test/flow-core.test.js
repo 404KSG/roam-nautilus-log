@@ -339,6 +339,28 @@ test('side-rail labels stay beside the spiral and inside a compact vertical band
     - Math.min(...placed.map(({ y }) => y)) <= maxVerticalOffset * 2 + 20);
 });
 
+test('side-rail collisions use nearby vertical rows before widening the chart', () => {
+  const placed = placeExternalLabels({
+    centerX: 300,
+    centerY: 210,
+    exclusionRadius: 150,
+    gap: 24,
+    maxVerticalOffset: 138,
+    rowGap: 32,
+    collisionPadding: 6,
+    layout: 'side-rails',
+    labels: [
+      { uid: 'first', angle: 2.35, width: 180, height: 20 },
+      { uid: 'second', angle: 2.35, width: 180, height: 20 },
+    ],
+  });
+
+  assert.deepEqual(placed.map(({ track }) => track), [0, 0]);
+  assert.equal(placed[0].x, placed[1].x);
+  assert.notEqual(placed[0].y, placed[1].y);
+  assert.ok(Math.abs(placed[1].y - placed[0].y) >= 26);
+});
+
 test('switches to the compact label list at the narrow-container boundary', () => {
   assert.equal(isCompactChartWidth(519), true);
   assert.equal(isCompactChartWidth(520), true);

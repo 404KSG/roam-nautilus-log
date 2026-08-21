@@ -483,6 +483,13 @@ function placeLabelTracks(labelsOrOptions, maxTracks = 3) {
   });
 }
 
+function sideRailMaxVerticalOffset(options, exclusionRadius) {
+  return Math.max(
+    0,
+    asNumber(options.maxVerticalOffset) || exclusionRadius * 0.92,
+  );
+}
+
 function externalLabelRect(label, options, track = 0) {
   const width = Math.max(1, asNumber(label.width) || 1);
   const height = Math.max(1, asNumber(label.height) || 1);
@@ -495,10 +502,7 @@ function externalLabelRect(label, options, track = 0) {
   const directionX = Math.cos(angle);
   const directionY = -Math.sin(angle);
   if (options.layout === 'side-rails') {
-    const maxVerticalOffset = Math.max(
-      0,
-      asNumber(options.maxVerticalOffset) || exclusionRadius * 0.62,
-    );
+    const maxVerticalOffset = sideRailMaxVerticalOffset(options, exclusionRadius);
     const side = directionX < 0 ? -1 : 1;
     const verticalOffset = clamp(
       directionY * maxVerticalOffset,
@@ -540,6 +544,47 @@ function externalLabelRect(label, options, track = 0) {
   };
 }
 
+function sideRailRowOffsets(label, options, collisionPadding) {
+  const exclusionRadius = Math.max(0, asNumber(options.exclusionRadius) || 0);
+  const maxVerticalOffset = sideRailMaxVerticalOffset(options, exclusionRadius);
+  const height = Math.max(1, asNumber(label.height) || 1);
+  const rowGap = Math.max(
+    1,
+    asNumber(options.rowGap) || height + collisionPadding + 4,
+  );
+  const directionY = -Math.sin(asNumber(label.angle) || 0);
+  const desiredOffset = clamp(
+    directionY * maxVerticalOffset,
+    -maxVerticalOffset,
+    maxVerticalOffset,
+  );
+  const inwardDirection = desiredOffset > 0 ? -1 : 1;
+  const maxSteps = Math.max(1, Math.ceil((maxVerticalOffset * 2) / rowGap));
+  const offsets = [0];
+  for (let step = 1; step <= maxSteps; step += 1) {
+    offsets.push(inwardDirection * step * rowGap);
+    offsets.push(-inwardDirection * step * rowGap);
+  }
+  return offsets;
+}
+
+function nudgeSideRailRect(rect, options, rowOffset) {
+  const centerY = asNumber(options.centerY) || 0;
+  const exclusionRadius = Math.max(0, asNumber(options.exclusionRadius) || 0);
+  const maxVerticalOffset = sideRailMaxVerticalOffset(options, exclusionRadius);
+  const baseCenterY = rect.y + rect.height / 2;
+  const labelCenterY = clamp(
+    baseCenterY + rowOffset,
+    centerY - maxVerticalOffset,
+    centerY + maxVerticalOffset,
+  );
+  return {
+    ...rect,
+    y: labelCenterY - rect.height / 2,
+    rowOffset: labelCenterY - baseCenterY,
+  };
+}
+
 function labelRectsOverlap(first, second, padding = 0) {
   const firstWidth = asNumber(first.width ?? first.w) || 0;
   const firstHeight = asNumber(first.height ?? first.h) || 0;
@@ -559,10 +604,34 @@ function placeExternalLabels(options = {}) {
   const occupied = Array.isArray(options.occupiedRects) ? options.occupiedRects.slice() : [];
   return labels.map((label) => {
     let track = Math.max(0, Math.floor(asNumber(label.track) || 0));
+    if (options.layout === 'side-rails') {
+      const rowOffsets = sideRailRowOffsets(label, options, collisionPadding);
+      const searchLimit = Math.max(16, occupied.length * 2 + labels.length + 4);
+      let candidate = null;
+      let fallback = externalLabelRect(label, options, track);
+
+      sideRailSearch:
+      for (; track <= searchLimit; track += 1) {
+        const baseRect = externalLabelRect(label, options, track);
+        const seenRows = new Set();
+        for (const rowOffset of rowOffsets) {
+          const rowCandidate = nudgeSideRailRect(baseRect, options, rowOffset);
+          const rowKey = Math.round(rowCandidate.y * 1000);
+          if (seenRows.has(rowKey)) continue;
+          seenRows.add(rowKey);
+          fallback = rowCandidate;
+          if (!occupied.some((rect) => labelRectsOverlap(rowCandidate, rect, collisionPadding))) {
+            candidate = rowCandidate;
+            break sideRailSearch;
+          }
+        }
+      }
+      occupied.push(candidate || fallback);
+      return candidate || fallback;
+    }
+
     let candidate = externalLabelRect(label, options, track);
-    const searchLimit = options.layout === 'side-rails'
-      ? Math.max(64, occupied.length * 8 + labels.length + 8)
-      : occupied.length + labels.length + 4;
+    const searchLimit = occupied.length + labels.length + 4;
     while (track < searchLimit && occupied.some((rect) => labelRectsOverlap(candidate, rect, collisionPadding))) {
       track += 1;
       candidate = externalLabelRect(label, options, track);

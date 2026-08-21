@@ -104,7 +104,8 @@ test('Flow feature-detects ResizeObserver with syntax supported by Roam SCI', ()
 
 test('Flow prefers horizontal label rails and keeps past leader lines legible', () => {
   assert.match(component, /:layout "side-rails"/);
-  assert.match(component, /:maxVerticalOffset/);
+  assert.match(component, /:maxVerticalOffset \(\* max-spiral-radius 0\.92\)/);
+  assert.match(component, /:rowGap 26/);
   assert.match(component, /legend-color \(update-opacity-str bg-color "1"\)/);
   assert.doesNotMatch(css, /\.nautilus-flow-past\s*\{[^}]*opacity:/s);
   assert.match(css, /\.nautilus-flow-past \.nautilus-flow-link-line\s*\{[^}]*opacity:\s*0\.[4-9]/s);
