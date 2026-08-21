@@ -378,9 +378,9 @@
 ;; ---------------- helpers ----------------------
 
 (defn update-opacity-str [color opacity]
-  (let [s (subs color 0 (- (count color) 5))
-        new-color (str s "," opacity ")")]
-    new-color))
+  (if (re-find #",\s*[\d.]+\)$" color)
+    (str/replace color #",\s*[\d.]+\)$" (str "," opacity ")"))
+    color))
 
 (defn shake-if [shaky]
   (if shaky (- (rand-int 4) 2) 0))
