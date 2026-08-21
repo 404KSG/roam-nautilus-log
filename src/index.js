@@ -8,6 +8,7 @@ const renderStringCore = `{{[[roam/render]]:((${codeBlockUID}))`;
 const disabledReplacementString = `{{${componentName}-disabled`;
 const version = "v1";
 const titleblockUID = "roam-render-Nautilus-Flow";
+const settingsEventName = "nautilus-flow:settings-changed";
 
 // Keep the existing argument order for old templates; the new end-hour value
 // is appended after the old color trigger argument.
@@ -23,6 +24,27 @@ const defaults = {
 function settingValue(extensionAPI, key) {
   const value = extensionAPI.settings.get(key);
   return value === undefined || value === null ? defaults[key] : value;
+}
+
+function runtimeSettings(extensionAPI) {
+  return Object.fromEntries(
+    Object.keys(defaults).map((key) => [key, settingValue(extensionAPI, key)]),
+  );
+}
+
+function publishRuntimeSettings(extensionAPI) {
+  if (typeof window === "undefined") return;
+  const settings = runtimeSettings(extensionAPI);
+  window.nautilusFlowExtensionData = {
+    ...(window.nautilusFlowExtensionData || {}),
+    settings,
+  };
+  if (typeof window.dispatchEvent === "function") {
+    const event = typeof window.CustomEvent === "function"
+      ? new window.CustomEvent(settingsEventName, { detail: { settings } })
+      : { type: settingsEventName, detail: { settings } };
+    window.dispatchEvent(event);
+  }
 }
 
 async function generateUpdatedRenderString(renderCore, extensionAPI, replacementKey, newValue) {
@@ -51,11 +73,11 @@ async function generateTemplateString(extensionAPI) {
   return `${normalizedPrefix ? `${normalizedPrefix} ` : ""}${renderStringCore} ${args.join(" ")}}}`;
 }
 
-function setDefaultSettings(extensionAPI) {
-  Object.keys(defaults).forEach((key) => {
+async function setDefaultSettings(extensionAPI) {
+  await Promise.all(Object.keys(defaults).map(async (key) => {
     const current = extensionAPI.settings.get(key);
-    if (current === undefined || current === null) extensionAPI.settings.set(key, defaults[key]);
-  });
+    if (current === undefined || current === null) await extensionAPI.settings.set(key, defaults[key]);
+  }));
 }
 
 function panelConfig(extensionAPI, language) {
@@ -99,6 +121,7 @@ function panelConfig(extensionAPI, language) {
   const update = async (key, value) => {
     const next = key === "color-1-trigger" ? String(value).replace(/\s/g, "") : value;
     await extensionAPI.settings.set(key, next);
+    publishRuntimeSettings(extensionAPI);
     await updateTemplateString(renderStringCore, await generateUpdatedRenderString(renderStringCore, extensionAPI, key, next));
   };
 
@@ -123,37 +146,37 @@ function panelConfig(extensionAPI, language) {
         id: "workday-start",
         name: labels.start,
         description: labels.startDesc,
-        action: { type: "select", default: defaults["workday-start"], items: [5, 6, 7, 8], onChange: (value) => update("workday-start", value) },
+        action: { type: "select", default: settingValue(extensionAPI, "workday-start"), items: [5, 6, 7, 8], onChange: (value) => update("workday-start", value) },
       },
       {
         id: "workday-end",
         name: labels.end,
         description: labels.endDesc,
-        action: { type: "select", default: defaults["workday-end"], items: [18, 19, 20, 21, 22, 23, 24], onChange: (value) => update("workday-end", value) },
+        action: { type: "select", default: settingValue(extensionAPI, "workday-end"), items: [18, 19, 20, 21, 22, 23, 24], onChange: (value) => update("workday-end", value) },
       },
       {
         id: "prefix-str",
         name: labels.prefix,
         description: labels.prefixDesc,
-        action: { type: "input", default: defaults["prefix-str"], onChange: (event) => update("prefix-str", event.target.value) },
+        action: { type: "input", default: settingValue(extensionAPI, "prefix-str"), onChange: (event) => update("prefix-str", event.target.value) },
       },
       {
         id: "desc-length",
         name: labels.length,
         description: labels.lengthDesc,
-        action: { type: "select", default: defaults["desc-length"], items: [14, 16, 18, 20, 22, 24, 26, 28], onChange: (value) => update("desc-length", value) },
+        action: { type: "select", default: settingValue(extensionAPI, "desc-length"), items: [14, 16, 18, 20, 22, 24, 26, 28], onChange: (value) => update("desc-length", value) },
       },
       {
         id: "todo-duration",
         name: labels.duration,
         description: labels.durationDesc,
-        action: { type: "select", default: defaults["todo-duration"], items: [5, 10, 15, 20, 25, 30, 45, 60], onChange: (value) => update("todo-duration", value) },
+        action: { type: "select", default: settingValue(extensionAPI, "todo-duration"), items: [5, 10, 15, 20, 25, 30, 45, 60], onChange: (value) => update("todo-duration", value) },
       },
       {
         id: "color-1-trigger",
         name: labels.color,
         description: labels.colorDesc,
-        action: { type: "input", default: defaults["color-1-trigger"], onChange: (event) => update("color-1-trigger", event.target.value) },
+        action: { type: "input", default: settingValue(extensionAPI, "color-1-trigger"), onChange: (event) => update("color-1-trigger", event.target.value) },
       },
     ],
   };
@@ -162,7 +185,8 @@ function panelConfig(extensionAPI, language) {
 async function onload({ extensionAPI }) {
   window.nautilusFlowCore = flowCore;
   window.nautilusFlowExtensionData = { running: true };
-  setDefaultSettings(extensionAPI);
+  await setDefaultSettings(extensionAPI);
+  publishRuntimeSettings(extensionAPI);
   const language = extensionAPI.settings.get("language") || "zh";
   if (!extensionAPI.settings.get("language")) await extensionAPI.settings.set("language", language);
   extensionAPI.settings.panel.create(panelConfig(extensionAPI, language));

@@ -31,19 +31,13 @@
   color: var(--nautilus-flow-text-main);
 }
 
-/* A right-sidebar render must not reserve chart space or run visual work. The
-   component also detects this location and renders a placeholder; this rule
-   is only a defensive fallback for Roam layout variants. */
-#roam-right-sidebar-content .nautilus-flow-container,
-#right-sidebar .nautilus-flow-container {
+/* Roam can repeat an ancestor block inside a zoom breadcrumb. Suppress only
+   those duplicate breadcrumb renders; a focused block in the right sidebar
+   is a real workspace and must keep the chart visible. */
+.rm-zoom-path .nautilus-flow-container,
+.rm-breadcrumbs .nautilus-flow-container,
+[data-testid="breadcrumbs"] .nautilus-flow-container {
   display: none !important;
-}
-
-.nautilus-flow-sidebar-placeholder {
-  display: none !important;
-  height: 0 !important;
-  margin: 0 !important;
-  padding: 0 !important;
 }
 
 .nautilus-flow-content {
@@ -118,25 +112,35 @@
 }
 
 .nautilus-flow-toggle-btn {
+  appearance: none;
   box-sizing: border-box;
-  width: 32px;
-  height: 32px;
-  padding: 6px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
+  width: 32px !important;
+  min-width: 32px !important;
+  max-width: 32px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  padding: 7px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  filter: none !important;
+  text-shadow: none !important;
+  transform: none;
   color: #888;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  line-height: 0;
   font: inherit;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .nautilus-flow-toggle-btn:hover,
 .nautilus-flow-toggle-btn:focus-visible {
-  background-color: rgba(0, 0, 0, 0.06);
+  background-color: rgba(0, 0, 0, 0.06) !important;
   color: #333;
   outline: none;
 }
@@ -150,7 +154,7 @@
 .bp3-dark .nautilus-flow-toggle-btn:focus-visible,
 .roam-app.rm-dark-theme .nautilus-flow-toggle-btn:hover,
 .roam-app.rm-dark-theme .nautilus-flow-toggle-btn:focus-visible {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.1) !important;
   color: #fff;
 }
 
@@ -219,32 +223,21 @@
 }
 
 .nautilus-flow-collapsed {
-  min-height: 0;
-  height: auto;
-  padding-top: 8px;
-  padding-bottom: 8px;
+  min-height: 0 !important;
+  height: 0;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible;
 }
 
-.nautilus-flow-collapsed-summary {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  align-self: stretch;
-  min-height: 24px;
-  padding: 3px 48px 3px 8px;
-  color: var(--nautilus-flow-text-sub);
-  font-size: 12px;
+.nautilus-flow-collapsed .nautilus-flow-controls-top {
+  top: -26px;
+  right: 4px;
+  opacity: 1;
 }
 
-.nautilus-flow-collapsed-summary-title {
-  color: var(--nautilus-flow-text-main);
-  font-weight: 600;
-}
-
-.nautilus-flow-collapsed-summary-capacity {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.nautilus-flow-collapsed .nautilus-flow-controls-top > :not(.nautilus-flow-collapse-btn) {
+  display: none !important;
 }
 
 @container (max-width: 520px) {

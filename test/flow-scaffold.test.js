@@ -73,18 +73,24 @@ function createRoamMock() {
 
 test('built extension creates Flow scaffolding sequentially and unload is graph-safe', async (t) => {
   const { roam, pages, blocks } = createRoamMock();
-  global.window = { roamAlphaAPI: roam };
+  const dispatchedEvents = [];
+  global.window = {
+    roamAlphaAPI: roam,
+    dispatchEvent: (event) => dispatchedEvents.push(event),
+  };
   t.after(() => { delete global.window; });
 
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#${Date.now()}`;
   const extension = (await import(moduleUrl)).default;
   const settings = new Map();
+  settings.set('workday-end', 21);
+  let latestPanel;
   const extensionAPI = {
     settings: {
       get: (key) => settings.get(key),
       set: async (key, value) => settings.set(key, value),
-      panel: { create: () => {} },
+      panel: { create: (config) => { latestPanel = config; } },
     },
   };
 
@@ -93,6 +99,13 @@ test('built extension creates Flow scaffolding sequentially and unload is graph-
   assert.ok(pages.has('roam/render'));
   assert.equal(blocks.get('roam-render-Nautilus-Flow').string, 'Nautilus Flow');
   assert.match(blocks.get('roam-render-Nautilus-Flow-cljs').string, /nautilus-flow-v1/);
+  assert.equal(window.nautilusFlowExtensionData.settings['workday-end'], 21);
+
+  const endSetting = latestPanel.settings.find(({ id }) => id === 'workday-end');
+  assert.equal(endSetting.action.default, 21);
+  await endSetting.action.onChange(20);
+  assert.equal(window.nautilusFlowExtensionData.settings['workday-end'], 20);
+  assert.ok(dispatchedEvents.some(({ type }) => type === 'nautilus-flow:settings-changed'));
   const blockCount = blocks.size;
 
   await extension.onunload();

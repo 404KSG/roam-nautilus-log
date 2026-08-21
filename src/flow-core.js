@@ -49,6 +49,58 @@ function normalizeScheduleSettings({ startHour, endHour, workdayStart, workdayEn
   };
 }
 
+function rendererArgumentValues(args) {
+  let values = Array.isArray(args) ? args.slice() : [];
+  while (values.length === 1 && Array.isArray(values[0])) values = values[0].slice();
+  return values;
+}
+
+function runtimeOrFallback(runtime, key, fallback) {
+  const value = runtime && runtime[key];
+  return value === undefined || value === null ? fallback : value;
+}
+
+function boundedInteger(value, min, max, fallback) {
+  const number = asNumber(value);
+  return Number.isInteger(number) && number >= min && number <= max ? number : fallback;
+}
+
+/**
+ * Resolve the renderer's public settings contract. Runtime extension settings
+ * intentionally win over serialized render arguments so an open chart reacts
+ * immediately to a settings-panel change without graph-wide block rewrites.
+ * Direct and one-level nested argument arrays are both accepted because Roam
+ * render hosts have used both shapes.
+ */
+function resolveRendererSettings({ runtime = {}, args = [] } = {}) {
+  const [argLength, argDuration, argStart, argTrigger, argEnd] = rendererArgumentValues(args);
+  const schedule = normalizeScheduleSettings({
+    startHour: runtimeOrFallback(runtime, 'workday-start', argStart),
+    endHour: runtimeOrFallback(runtime, 'workday-end', argEnd),
+  });
+  const trigger = runtimeOrFallback(runtime, 'color-1-trigger', argTrigger);
+
+  return {
+    'legend-len-limit': boundedInteger(
+      runtimeOrFallback(runtime, 'desc-length', argLength),
+      15,
+      30,
+      22,
+    ),
+    'default-duration': boundedInteger(
+      runtimeOrFallback(runtime, 'todo-duration', argDuration),
+      5,
+      60,
+      15,
+    ),
+    'workday-start': schedule.startMinutes,
+    'workday-end': schedule.endMinutes,
+    'workday-start-hour': schedule.startHour,
+    'workday-end-hour': schedule.endHour,
+    'custom-color-1-tag': trigger === undefined || trigger === null ? '' : String(trigger),
+  };
+}
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -338,6 +390,7 @@ module.exports = {
   START_HOURS,
   END_HOURS,
   normalizeScheduleSettings,
+  resolveRendererSettings,
   scheduleTasks,
   historicalDoneSlice,
   calculateCapacity,

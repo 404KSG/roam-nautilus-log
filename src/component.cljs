@@ -1009,7 +1009,8 @@
   [:button
    {:on-click #(swap! show-done-state not)
     :class "nautilus-flow-toggle-btn"
-    :title (if @show-done-state "隐藏已完成事项" "显示已完成事项")}
+    :title (if @show-done-state "隐藏已完成事项" "显示已完成事项")
+    :aria-label (if @show-done-state "隐藏已完成事项" "显示已完成事项")}
    (if @show-done-state
      [:svg {:width "16" :height "16" :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}
       [:path {:d "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"}]
@@ -1039,7 +1040,12 @@
     :class "nautilus-flow-toggle-btn nautilus-flow-collapse-btn"
     :title (if @collapsed-state "展开 Nautilus Flow" "折叠 Nautilus Flow")
     :aria-label (if @collapsed-state "展开 Nautilus Flow" "折叠 Nautilus Flow")}
-   (if @collapsed-state "▸" "▾")])
+   [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none"
+          :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"
+          :aria-hidden "true"}
+    [:rect {:x "3" :y "4" :width "18" :height "16" :rx "2.5"}]
+    [:path {:d "M3 9h18"}]
+    [:path {:d (if @collapsed-state "m9 13 3 3 3-3" "m9 16 3-3 3 3")}]]])
 
 (defn playback-button [settings now-time-atom playback-state-atom playback-frame-atom]
   [:button
@@ -1062,6 +1068,7 @@
                      (reset! playback-frame-atom (js/requestAnimationFrame tick)))))
     :class "nautilus-flow-toggle-btn"
     :title "回放一整天 (Hyper-Lapse Playback)"
+    :aria-label "回放一整天 (Hyper-Lapse Playback)"
     :disabled @playback-state-atom}
    [:svg {:width "16" :height "16" :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}
     [:polygon {:points "5 3 19 12 5 21 5 3"}]]])
@@ -1090,8 +1097,18 @@
       :else nil)
     (catch :default _e nil)))
 
-(defn args->settings [[a1 a2 a3 a4 a5]]
-  (let [a1 (safe-int a1)
+(def settings-event-name "nautilus-flow:settings-changed")
+
+(defn render-arg-values [args]
+  (let [values (vec args)]
+    (if (and (= 1 (count values)) (sequential? (first values)))
+      (vec (first values))
+      values)))
+
+(defn args->settings [args]
+  (let [[a1 a2 a3 a4 a5] (render-arg-values args)
+        a4 (when-not (nil? a4) (arg-tag->str a4))
+        a1 (safe-int a1)
         a2 (safe-int a2)
         a3 (safe-int a3)
         a5 (safe-int a5)
@@ -1111,19 +1128,22 @@
                              (str a4)
                              (arg-tag->str a4)))}))
 
-(defn node-in-right-sidebar? [node]
+(defn extension-runtime-settings []
   (try
-    (boolean
-     (and node
-          (or (.closest node "#roam-right-sidebar-content")
-              (.closest node "#right-sidebar"))))
-    (catch :default _e false)))
+    (if-let [settings (some-> js/window .-nautilusFlowExtensionData .-settings)]
+      (js->clj settings :keywordize-keys true)
+      {})
+    (catch :default _e {})))
 
-(defn sync-sidebar-state-from-node! [sidebar-state node]
-  (when node
-    (let [next (node-in-right-sidebar? node)]
-      (when (not= next @sidebar-state)
-        (reset! sidebar-state next)))))
+(defn resolve-render-settings [args]
+  (let [values (render-arg-values args)
+        values (if (> (count values) 3)
+                 (assoc values 3 (arg-tag->str (nth values 3)))
+                 values)]
+    (or (flow-core-call "resolveRendererSettings"
+                        {:runtime (extension-runtime-settings)
+                         :args values})
+        (args->settings values))))
 
 (defn capacity-summary [capacity]
   (or (flow-core-call "formatCapacitySummary" capacity)
@@ -1155,41 +1175,36 @@
            [:span (:description event)]
            [:span {:class "nautilus-flow-warning-message"} (:warning event)]])]])))
 
-(defn collapsed-summary [capacity]
-  [:div {:class "nautilus-flow-collapsed-summary"}
-   [:span {:class "nautilus-flow-collapsed-summary-title"} "Nautilus Flow"]
-   [:span {:class "nautilus-flow-collapsed-summary-capacity"} (capacity-summary capacity)]])
-
 (defn main [{:keys [:block-uid]} & args]
   (r/with-let [is-running? #(try
                               (boolean (.-running js/window.nautilusFlowExtensionData))
                               (catch :default _e false))
                *running? (r/atom (or (is-running?) nil))
                check-interval (js/setInterval #(reset! *running? (is-running?)) 5000)
-               settings (args->settings args)
+               settings-state (r/atom (resolve-render-settings args))
+               settings-listener (fn [_event]
+                                   (reset! settings-state (resolve-render-settings args)))
+               _settings-listener (.addEventListener js/window settings-event-name settings-listener)
                now-time-atom (r/atom (now-minutes))
                playback-state-atom (r/atom false)
                playback-frame-atom (r/atom nil)
                collapsed-state (r/atom (read-collapsed-state block-uid))
-               sidebar-state (r/atom false)
-               sidebar-ref #(sync-sidebar-state-from-node! sidebar-state %)
                clock-interval (js/setInterval #(when-not @playback-state-atom
                                                  (reset-now-time-atom now-time-atom)) 60000)
                *get-children-atom (get-children-pull block-uid)
                *children (r/track eval-state *get-children-atom)
                *text-events (r/track
                              (fn []
-                               (if @sidebar-state
-                                 [[] []]
-                                 (let [children-list (->> @*children
-                                                          (filter #(not= "" (:block/string %)))
-                                                          (sort-by :block/order))
-                                       mapped (mapv #(hash-map :s (str-with-resolved-block-refs %) :uid (:block/uid %)) children-list)
-                                       parsed (mapv #(parse-row-params % settings) mapped)
-                                       filtered (filterv #(not= "" (:description %)) parsed)]
-                                   (let [dones (filterv #(or (:done-at %) (and (:meeting %) (:done %))) filtered)
-                                         pendings (filterv #(not (or (:done-at %) (and (:meeting %) (:done %)))) filtered)]
-                                     [(add-start-after pendings) dones])))))
+                               (let [settings @settings-state
+                                     children-list (->> @*children
+                                                        (filter #(not= "" (:block/string %)))
+                                                        (sort-by :block/order))
+                                     mapped (mapv #(hash-map :s (str-with-resolved-block-refs %) :uid (:block/uid %)) children-list)
+                                     parsed (mapv #(parse-row-params % settings) mapped)
+                                     filtered (filterv #(not= "" (:description %)) parsed)]
+                                 (let [dones (filterv #(or (:done-at %) (and (:meeting %) (:done %))) filtered)
+                                       pendings (filterv #(not (or (:done-at %) (and (:meeting %) (:done %)))) filtered)]
+                                   [(add-start-after pendings) dones]))))
                show-done-state (r/atom true)
                daily-page-atom? (r/atom (daily-page? block-uid))
                page-title-val (page-title block-uid)]
@@ -1197,11 +1212,10 @@
       nil [:div {:class "nautilus-flow-loading"} [:strong "Loading Nautilus Flow..."]]
       false [:div {:class "nautilus-flow-not-installed"}
              [:strong {:style {:color "red"}} "Extension not installed. To use Nautilus Flow, install it from Roam Depot."]]
-      (if @sidebar-state
-        [:div {:class "nautilus-flow-sidebar-placeholder" :aria-hidden "true" :ref sidebar-ref}]
-        (do
-          (when-not @playback-state-atom (reset-now-time-atom now-time-atom))
-          (let [dimensions {:width (if mobile? mob-width desk-width)
+      (do
+        (when-not @playback-state-atom (reset-now-time-atom now-time-atom))
+        (let [settings @settings-state
+              dimensions {:width (if mobile? mob-width desk-width)
                             :height (* start-svg-rect-ratio (if mobile? mob-width desk-width))}
                 show-debug-button? (= :debug (first args))
                 plan-from-time (if @daily-page-atom?
@@ -1219,22 +1233,22 @@
                              {:availableMinutes 0 :demandMinutes 0 :overloadMinutes 0 :slackMinutes 0 :unplacedMinutes 0 :overflowTasks []})
                 events-state [(fill-day text-events (:workday-start settings) (:workday-end settings) plan-from-time) done-events]]
             [:div {:class (str "nautilus-flow-container" (when @collapsed-state " nautilus-flow-collapsed"))
-                   :ref sidebar-ref}
+                   :data-nautilus-flow-block block-uid}
              [:div {:class "nautilus-flow-controls-top"}
               [switch-done-visibility-button show-done-state]
               [playback-button settings now-time-atom playback-state-atom playback-frame-atom]
               [collapse-button collapsed-state block-uid]
               (when show-debug-button? [switch-debug-button])]
-             (if @collapsed-state
-               [collapsed-summary capacity]
+             (when-not @collapsed-state
                [:div {:class "nautilus-flow-content"}
                 [:div {:class "nautilus-flow-capacity-bar" :aria-label (capacity-summary capacity)}
                  (capacity-summary capacity)]
                 [show-events events-state daily-page-atom? show-done-state playback-state-atom now-time-atom page-title-val dimensions settings]
                 [overflow-panel capacity]
-                [schedule-warning-panel text-events]])]))))
+                [schedule-warning-panel text-events]])])))
     (finally
       (js/clearInterval check-interval)
       (js/clearInterval clock-interval)
+      (.removeEventListener js/window settings-event-name settings-listener)
       (when @playback-frame-atom
         (js/cancelAnimationFrame @playback-frame-atom)))))

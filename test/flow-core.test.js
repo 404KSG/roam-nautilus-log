@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 
 const {
   normalizeScheduleSettings,
+  resolveRendererSettings,
   scheduleTasks,
   historicalDoneSlice,
   calculateCapacity,
@@ -11,6 +12,34 @@ const {
   truncateTextToWidth,
   placeLabelTracks,
 } = require('../src/flow-core');
+
+test('runtime extension settings override stale or nested render arguments', () => {
+  assert.deepEqual(
+    resolveRendererSettings({
+      args: [[22, 15, 5, '#T0', 24]],
+      runtime: {
+        'desc-length': '20',
+        'todo-duration': '30',
+        'workday-start': '6',
+        'color-1-trigger': '#Top',
+        'workday-end': '21',
+      },
+    }),
+    {
+      'legend-len-limit': 20,
+      'default-duration': 30,
+      'workday-start': 360,
+      'workday-end': 1260,
+      'workday-start-hour': 6,
+      'workday-end-hour': 21,
+      'custom-color-1-tag': '#Top',
+    },
+  );
+});
+
+test('legacy render arguments remain a fallback when runtime settings are absent', () => {
+  assert.equal(resolveRendererSettings({ args: [22, 15, 5, '#T0', 21] })['workday-end'], 1260);
+});
 
 test('historical DONE slices use explicit completion time minus the original estimate', () => {
   const result = historicalDoneSlice({
