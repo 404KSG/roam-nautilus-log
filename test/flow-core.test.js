@@ -14,6 +14,8 @@ const {
   formatCapacitySummary,
   truncateTextToWidth,
   placeLabelTracks,
+  placeExternalLabels,
+  isCompactChartWidth,
 } = require('../src/flow-core');
 
 test('the chart background uses one grid sector per hour', () => {
@@ -264,4 +266,50 @@ test('accepts the object-shaped label contract used by the Roam renderer', () =>
     { uid: 'a', track: 0 },
     { uid: 'b', track: 1 },
   ]);
+});
+
+test('keeps the full task-label rectangle outside the spiral exclusion zone', () => {
+  const exclusionRadius = 100;
+  const gap = 24;
+  const [label] = placeExternalLabels({
+    centerX: 200,
+    centerY: 200,
+    exclusionRadius,
+    gap,
+    labels: [{ uid: 'long-cn', angle: 2.35, width: 180, height: 20 }],
+  });
+  const corners = [
+    [label.x, label.y],
+    [label.x + label.width, label.y],
+    [label.x, label.y + label.height],
+    [label.x + label.width, label.y + label.height],
+  ];
+
+  assert.ok(corners.every(([x, y]) => Math.hypot(x - 200, y - 200) >= exclusionRadius + gap));
+});
+
+test('moves colliding labels to progressively farther external tracks', () => {
+  const placed = placeExternalLabels({
+    centerX: 200,
+    centerY: 200,
+    exclusionRadius: 100,
+    gap: 24,
+    trackGap: 18,
+    collisionPadding: 6,
+    labels: [
+      { uid: 'first', angle: 2, width: 150, height: 20 },
+      { uid: 'second', angle: 2, width: 150, height: 20 },
+    ],
+  });
+
+  assert.deepEqual(placed.map(({ track }) => track), [0, 2]);
+  assert.ok(placed[1].x < placed[0].x);
+  assert.ok(placed[1].y < placed[0].y);
+});
+
+test('switches to the compact label list at the narrow-container boundary', () => {
+  assert.equal(isCompactChartWidth(519), true);
+  assert.equal(isCompactChartWidth(520), true);
+  assert.equal(isCompactChartWidth(521), false);
+  assert.equal(isCompactChartWidth(undefined), false);
 });

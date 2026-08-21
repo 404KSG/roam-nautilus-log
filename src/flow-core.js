@@ -483,6 +483,72 @@ function placeLabelTracks(labelsOrOptions, maxTracks = 3) {
   });
 }
 
+function externalLabelRect(label, options, track = 0) {
+  const width = Math.max(1, asNumber(label.width) || 1);
+  const height = Math.max(1, asNumber(label.height) || 1);
+  const angle = asNumber(label.angle) || 0;
+  const centerX = asNumber(options.centerX) || 0;
+  const centerY = asNumber(options.centerY) || 0;
+  const exclusionRadius = Math.max(0, asNumber(options.exclusionRadius) || 0);
+  const gap = Math.max(0, asNumber(options.gap) || 0);
+  const trackGap = Math.max(1, asNumber(options.trackGap) || 18);
+  const directionX = Math.cos(angle);
+  const directionY = -Math.sin(angle);
+  const projectedHalfSize = Math.abs(directionX) * width / 2
+    + Math.abs(directionY) * height / 2;
+  const distance = exclusionRadius + gap + projectedHalfSize + track * trackGap + 0.001;
+  const labelCenterX = centerX + directionX * distance;
+  const labelCenterY = centerY + directionY * distance;
+
+  return {
+    ...label,
+    x: labelCenterX - width / 2,
+    y: labelCenterY - height / 2,
+    width,
+    height,
+    w: width,
+    h: height,
+    track,
+  };
+}
+
+function labelRectsOverlap(first, second, padding = 0) {
+  const firstWidth = asNumber(first.width ?? first.w) || 0;
+  const firstHeight = asNumber(first.height ?? first.h) || 0;
+  const secondWidth = asNumber(second.width ?? second.w) || 0;
+  const secondHeight = asNumber(second.height ?? second.h) || 0;
+  return !(
+    first.x + firstWidth + padding <= second.x
+    || second.x + secondWidth + padding <= first.x
+    || first.y + firstHeight + padding <= second.y
+    || second.y + secondHeight + padding <= first.y
+  );
+}
+
+function placeExternalLabels(options = {}) {
+  const labels = Array.isArray(options.labels) ? options.labels : [];
+  const collisionPadding = Math.max(0, asNumber(options.collisionPadding) || 0);
+  const occupied = Array.isArray(options.occupiedRects) ? options.occupiedRects.slice() : [];
+  return labels.map((label) => {
+    let track = Math.max(0, Math.floor(asNumber(label.track) || 0));
+    let candidate = externalLabelRect(label, options, track);
+    const searchLimit = occupied.length + labels.length + 4;
+    while (track < searchLimit && occupied.some((rect) => labelRectsOverlap(candidate, rect, collisionPadding))) {
+      track += 1;
+      candidate = externalLabelRect(label, options, track);
+    }
+    occupied.push(candidate);
+    return candidate;
+  });
+}
+
+function isCompactChartWidth(width, threshold = 520) {
+  const normalizedWidth = asNumber(width);
+  const normalizedThreshold = asNumber(threshold);
+  if (!Number.isFinite(normalizedWidth) || !Number.isFinite(normalizedThreshold)) return false;
+  return normalizedWidth <= normalizedThreshold;
+}
+
 module.exports = {
   START_HOURS,
   END_HOURS,
@@ -498,4 +564,6 @@ module.exports = {
   formatCapacitySummary,
   truncateTextToWidth,
   placeLabelTracks,
+  placeExternalLabels,
+  isCompactChartWidth,
 };

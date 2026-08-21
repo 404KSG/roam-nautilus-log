@@ -41,6 +41,7 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested F
   assert.match(component, /flow-core-call "calculateCapacity"/);
   assert.match(component, /flow-core-call "historicalDoneSlice"/);
   assert.match(component, /flow-core-call "truncateTextToWidth"/);
+  assert.match(component, /flow-core-call "placeExternalLabels"/);
   assert.match(component, /flow-core-call "resolveRendererSettings"/);
   assert.match(component, /flow-core-call "hourlyGridSegments"/);
   assert.match(component, /flow-core-call "uiCopy"/);
@@ -85,6 +86,15 @@ test('Flow suppresses breadcrumb and collapsed-path replicas before mounting the
   assert.match(css, /\.rm-zoom\.zoom-path-view \.nautilus-flow-container/);
   assert.match(css, /\.parent-path-wrapper \.nautilus-flow-container/);
   assert.match(css, /\.rm-zoom-item-content\.rm-zoom-collapsed-item \.nautilus-flow-container/);
+});
+
+test('Flow renders a below-chart label list in narrow containers', () => {
+  assert.match(component, /ResizeObserver/);
+  assert.match(component, /isCompactChartWidth/);
+  assert.match(component, /nautilus-flow-compact-list/);
+  assert.match(css, /\.nautilus-flow-compact-list\s*\{[^}]*display:\s*none;/s);
+  assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-flow-slice-group\s*\{[^}]*display:\s*none\s*!important;/);
+  assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-flow-compact-list\s*\{[^}]*display:\s*(?:grid|flex);/);
 });
 
 test('the Roam renderer cleanup remains a sibling of the render body inside with-let', () => {

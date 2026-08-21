@@ -250,21 +250,37 @@
 (defn display-width [s]
   (reduce + (map #(if (> (.charCodeAt % 0) 255) 2 1) s)))
 
+(declare flow-core-call)
+
 (defn get-legend-rect
   "Returns a new legend rectangle that does not overlap with any of the rects"
   [rects text slice-radians outer-radius center settings]
   (let [w (* (/ font-size rect-width-coef) (min (display-width text) (:legend-len-limit settings)))  
-        h (* font-size rect-height-coef)                          
-        new-text-rect (if rects
+        h (* font-size rect-height-coef)
+        max-spiral-radius (apply max (map outer-radius-at (range (count snail-blueprint-outer-radiuses))))
+        external-rect (first
+                       (flow-core-call "placeExternalLabels"
+                                       {:centerX (:center-x center)
+                                        :centerY (:center-y center)
+                                        :exclusionRadius max-spiral-radius
+                                        :gap (if mobile? 14 24)
+                                        :trackGap 18
+                                        :collisionPadding 6
+                                        :occupiedRects rects
+                                        :labels [{:uid text
+                                                  :angle slice-radians
+                                                  :width w
+                                                  :height h}]}))
+        fallback-rect (when rects
                         (assoc
-                         (iterate-rect-place {:w w :h h}               
-                                             rects                     
-                                             (- slice-radians)         
-                                             (+ outer-radius (if mobile? 0 init-starting-distance))  ;; starting distance from the centre
+                         (iterate-rect-place {:w w :h h}
+                                             rects
+                                             (- slice-radians)
+                                             (+ outer-radius (if mobile? 0 init-starting-distance))
                                              text
                                              center)
-                         :text text)                                   ;; FIXME jen pro debug              
-                        {})]
+                         :text text))
+        new-text-rect (assoc (or external-rect fallback-rect {}) :text text)]
     (assoc new-text-rect :real-rect-radians (real-rect-radians new-text-rect center))))
 
 ;; --------------- Flow core bridge ----------------------
@@ -914,19 +930,49 @@
 (defn split-and-trim [page-title n]
   (map #(subs % 0 (min n (count %))) (str/split page-title #"," 2)))
 
-(defn show-events [events-state daily-page-atom? show-done-atom? playback-state-atom now-time-atom page-title dimensions settings]
+(defn compact-item-tone [event]
+  (cond
+    (:bg-color event) "urgent"
+    (:meeting event) "event"
+    :else "task"))
+
+(defn compact-event-list [events]
+  (let [items (->> events
+                   (filter #(and (not= true (:freetime %))
+                                 (number? (:start %))
+                                 (number? (:end %))))
+                   (sort-by (juxt :start :end))
+                   vec)]
+    [:ol {:class "nautilus-flow-compact-list"
+          :aria-label "Nautilus Flow scheduled items"}
+     (for [[index event] (map-indexed vector items)]
+       ^{:key (str (:uid event) ":" (:start event) ":" index)}
+       [:li {:class (str "nautilus-flow-compact-item"
+                         (when (:done event) " nautilus-flow-compact-item--done"))
+             :title (:description event)}
+        [:i {:class (str "nautilus-flow-compact-dot nautilus-flow-compact-dot--" (compact-item-tone event))
+             :aria-hidden "true"}]
+        [:time {:class "nautilus-flow-compact-time"}
+         (str (minutes->time (:start event)) "–" (minutes->time (:end event)))]
+        [:span {:class "nautilus-flow-compact-title"} (:description event)]])]))
+
+(defn show-events [events-state daily-page-atom? show-done-atom? playback-state-atom now-time-atom page-title dimensions settings compact?]
   (let [[events done-todos] events-state
         old-width (js/Math.round (:width dimensions))
         old-height (js/Math.round (:height dimensions))
-        all-events-for-dim (if @show-done-atom? (concat events done-todos) events)
-        [center-x suggested-width center-y suggested-height] (events->new-dimensions all-events-for-dim {:center-x (/ old-width 2) :center-y (/ old-height 2)} settings)
+        all-events-for-dim (vec (if @show-done-atom? (concat events done-todos) events))
+        [center-x suggested-width center-y suggested-height]
+        (if compact?
+          [(/ old-width 2) old-width (/ old-height 2) old-height]
+          (events->new-dimensions all-events-for-dim {:center-x (/ old-width 2) :center-y (/ old-height 2)} settings))
         center {:center-x center-x :center-y center-y}
         [all-slice-components rects] (events->slices events daily-page-atom? center settings now-time-atom)
         done-slices-and-rects (when @show-done-atom?
                                 (events->slices done-todos daily-page-atom? center settings now-time-atom rects))
         done-slice-components (first done-slices-and-rects)
         rects (or (second done-slices-and-rects) rects)]
-    [:svg {:viewBox (str "0 0 " suggested-width " " suggested-height)
+    [:div {:class (str "nautilus-flow-visual" (when compact? " nautilus-flow-visual--compact"))}
+     [:svg {:viewBox (str "0 0 " suggested-width " " suggested-height)
            :width "100%"
            :style {:max-width (str suggested-width "px")}
            :xmlns "http://www.w3.org/2000/svg"
@@ -962,7 +1008,8 @@
           " Center-x: " (:center-x center)                              
           " Center-y: " (js/Math.round center-y)]                       
          [:circle {:cx (:center-x center) :cy (:center-y center)        
-                   :r 200 :fill "none" :stroke "black" :stroke-width 1}]])]]))
+                   :r 200 :fill "none" :stroke "black" :stroke-width 1}]])]]
+     [compact-event-list all-events-for-dim]]))
 
 (defn add-start-after
   "Adds an end time to events so that tasks placed after the meeting cannot start before it"
@@ -1226,6 +1273,27 @@
                (when (not= @render-context-state next-state)
                  (reset! render-context-state next-state)))))}])
 
+(defn compact-chart-width? [width]
+  (boolean (flow-core-call "isCompactChartWidth" width)))
+
+(defn observe-compact-width! [node compact-state resize-observer-state]
+  (when-let [current-observer @resize-observer-state]
+    (.disconnect current-observer)
+    (reset! resize-observer-state nil))
+  (when node
+    (let [update-width! (fn [width]
+                          (let [next-state (compact-chart-width? width)]
+                            (when (not= @compact-state next-state)
+                              (reset! compact-state next-state))))]
+      (update-width! (.-width (.getBoundingClientRect node)))
+      (when (exists? js/ResizeObserver)
+        (let [observer (js/ResizeObserver.
+                        (fn [entries]
+                          (when-let [entry (aget entries 0)]
+                            (update-width! (.-width (.-contentRect entry))))))]
+          (.observe observer node)
+          (reset! resize-observer-state observer))))))
+
 (defn main [{:keys [:block-uid]} & args]
   (r/with-let [is-running? #(try
                               (boolean (.-running js/window.nautilusFlowExtensionData))
@@ -1241,6 +1309,10 @@
                playback-frame-atom (r/atom nil)
                collapsed-state (r/atom (read-collapsed-state block-uid))
                render-context-state (r/atom :pending)
+               compact-state (r/atom false)
+               resize-observer-state (atom nil)
+               container-ref (fn [node]
+                               (observe-compact-width! node compact-state resize-observer-state))
                clock-interval (js/setInterval #(when-not @playback-state-atom
                                                  (reset-now-time-atom now-time-atom)) 60000)
                *get-children-atom (get-children-pull block-uid)
@@ -1294,6 +1366,7 @@
                              {:availableMinutes 0 :demandMinutes 0 :overloadMinutes 0 :slackMinutes 0 :unplacedMinutes 0 :overflowTasks []})
                 events-state [(fill-day text-events (:workday-start settings) (:workday-end settings) plan-from-time) done-events]]
             [:div {:class (str "nautilus-flow-container" (when @collapsed-state " nautilus-flow-collapsed"))
+                   :ref container-ref
                    :data-nautilus-flow-block block-uid}
              (if @collapsed-state
                [flow-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid copy show-debug-button?]
@@ -1304,12 +1377,14 @@
                   [html-legend-component copy]]
                  [flow-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid copy show-debug-button?]]
                 [:div {:class "nautilus-flow-content"}
-                 [show-events events-state daily-page-atom? show-done-state playback-state-atom now-time-atom page-title-val dimensions settings]
+                 [show-events events-state daily-page-atom? show-done-state playback-state-atom now-time-atom page-title-val dimensions settings @compact-state]
                  [overflow-panel capacity copy]
                  [schedule-warning-panel text-events copy]]])]))))
     (finally
       (js/clearInterval check-interval)
       (js/clearInterval clock-interval)
       (.removeEventListener js/window settings-event-name settings-listener)
+      (when-let [resize-observer @resize-observer-state]
+        (.disconnect resize-observer))
       (when @playback-frame-atom
         (js/cancelAnimationFrame @playback-frame-atom)))))
