@@ -13,6 +13,8 @@
 - Per-instance collapse state, playback state, and clock state for multiple renders.
 - Responsive compact layout, measured label truncation, past-time fading, and
   reduced-motion support.
+- Compact schedules start folded when a Nautilus Flow block is focused in the
+  right sidebar, while remaining user-toggleable afterward.
 
 ### Fixed
 

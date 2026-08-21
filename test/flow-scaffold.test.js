@@ -104,6 +104,7 @@ test('built extension creates Flow scaffolding sequentially and unload is graph-
   assert.equal(window.nautilusFlowExtensionData.settings.language, 'en');
 
   const shouldSuppressRenderContext = window.nautilusFlowExtensionData.shouldSuppressRenderContext;
+  const isRightSidebarRenderContext = window.nautilusFlowExtensionData.isRightSidebarRenderContext;
   const contextNode = (matchedSelector) => ({
     closest: (selector) => (selector.includes(matchedSelector) ? {} : null),
   });
@@ -112,6 +113,9 @@ test('built extension creates Flow scaffolding sequentially and unload is graph-
   assert.equal(shouldSuppressRenderContext(contextNode('.parent-path-wrapper')), true);
   assert.equal(shouldSuppressRenderContext(contextNode('.rm-zoom.zoom-path-view')), true);
   assert.equal(shouldSuppressRenderContext(contextNode('.rm-zoom-item-content.rm-zoom-collapsed-item')), true);
+  assert.equal(typeof isRightSidebarRenderContext, 'function');
+  assert.equal(isRightSidebarRenderContext({ closest: () => null }), false);
+  assert.equal(isRightSidebarRenderContext(contextNode('#roam-right-sidebar-content')), true);
 
   const languageSetting = latestPanel.settings.find(({ id }) => id === 'language');
   await languageSetting.action.onChange('zh');

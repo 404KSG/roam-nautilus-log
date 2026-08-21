@@ -1,4 +1,5 @@
 import {
+  isRightSidebarRenderContext,
   shouldSuppressRenderContext,
   toggleRenderComponent,
   updateTemplateString,
@@ -192,7 +193,11 @@ function panelConfig(extensionAPI, language) {
 
 async function onload({ extensionAPI }) {
   window.nautilusFlowCore = flowCore;
-  window.nautilusFlowExtensionData = { running: true, shouldSuppressRenderContext };
+  window.nautilusFlowExtensionData = {
+    running: true,
+    shouldSuppressRenderContext,
+    isRightSidebarRenderContext,
+  };
   await setDefaultSettings(extensionAPI);
   publishRuntimeSettings(extensionAPI);
   const language = extensionAPI.settings.get("language") || "zh";

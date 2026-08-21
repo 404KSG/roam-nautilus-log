@@ -959,7 +959,7 @@
     (:meeting event) "event"
     :else "task"))
 
-(defn compact-event-list [events copy]
+(defn compact-event-list [events copy compact-open-state]
   (let [items (->> events
                    (filter #(and (not= true (:freetime %))
                                  (number? (:start %))
@@ -969,7 +969,11 @@
         item-label (if (= 1 (count items))
                      (get-in copy [:panels :item])
                      (get-in copy [:panels :items]))]
-    [:details {:class "nautilus-flow-compact-details" :open true}
+    [:details {:class "nautilus-flow-compact-details"
+               :open @compact-open-state
+               :on-toggle #(let [next-open? (.-open (.-currentTarget %))]
+                             (when (not= next-open? @compact-open-state)
+                               (reset! compact-open-state next-open?)))}
      [:summary {:class "nautilus-flow-compact-summary"}
       (str (get-in copy [:panels :schedule]) " · " (count items) " " item-label)]
      [:ol {:class "nautilus-flow-compact-list"
@@ -985,7 +989,7 @@
           (str (minutes->time (:start event)) "–" (minutes->time (:end event)))]
          [:span {:class "nautilus-flow-compact-title"} (:description event)]])]]))
 
-(defn show-events [events-state daily-page-atom? show-done-atom? playback-state-atom now-time-atom page-title dimensions settings compact? copy]
+(defn show-events [events-state daily-page-atom? show-done-atom? playback-state-atom now-time-atom page-title dimensions settings compact? copy compact-open-state]
   (let [[events done-todos] events-state
         old-width (js/Math.round (:width dimensions))
         old-height (js/Math.round (:height dimensions))
@@ -1038,7 +1042,7 @@
           " Center-y: " (js/Math.round center-y)]                       
          [:circle {:cx (:center-x center) :cy (:center-y center)        
                    :r 200 :fill "none" :stroke "black" :stroke-width 1}]])]]
-     [compact-event-list all-events-for-dim copy]]))
+     [compact-event-list all-events-for-dim copy compact-open-state]]))
 
 (defn add-start-after
   "Adds an end time to events so that tasks placed after the meeting cannot start before it"
@@ -1288,7 +1292,7 @@
    [collapse-button collapsed-state block-uid (:controls copy)]
    (when show-debug-button? [switch-debug-button])])
 
-(defn render-context-probe [render-context-state]
+(defn render-context-probe [render-context-state compact-list-open-state]
   [:span
    {:class "nautilus-flow-context-probe"
     :aria-hidden "true"
@@ -1299,7 +1303,17 @@
                                  (boolean (detector node))
                                  false)
                                (catch :default _e false))
-                   next-state (if suppress? :suppressed :visible)]
+                   sidebar? (try
+                              (if-let [detector (.-isRightSidebarRenderContext js/window.nautilusFlowExtensionData)]
+                                (boolean (detector node))
+                                false)
+                              (catch :default _e false))
+                   next-state (cond
+                                suppress? :suppressed
+                                sidebar? :sidebar
+                                :else :visible)]
+               (when (nil? @compact-list-open-state)
+                 (reset! compact-list-open-state (not sidebar?)))
                (when (not= @render-context-state next-state)
                  (reset! render-context-state next-state)))))}])
 
@@ -1339,6 +1353,7 @@
                playback-frame-atom (r/atom nil)
                collapsed-state (r/atom (read-collapsed-state block-uid))
                render-context-state (r/atom :pending)
+               compact-list-open-state (r/atom nil)
                compact-state (r/atom false)
                resize-observer-state (atom nil)
                container-ref (fn [node]
@@ -1368,7 +1383,7 @@
              [:strong {:style {:color "red"}} "Extension not installed. To use Nautilus Flow, install it from Roam Depot."]]
       (cond
         (= :pending @render-context-state)
-        [render-context-probe render-context-state]
+        [render-context-probe render-context-state compact-list-open-state]
 
         (= :suppressed @render-context-state)
         [:span {:class "nautilus-flow-context-probe" :aria-hidden "true"}]
@@ -1407,7 +1422,7 @@
                   [html-legend-component copy]]
                  [flow-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid copy show-debug-button?]]
                 [:div {:class "nautilus-flow-content"}
-                 [show-events events-state daily-page-atom? show-done-state playback-state-atom now-time-atom page-title-val dimensions settings @compact-state copy]
+                 [show-events events-state daily-page-atom? show-done-state playback-state-atom now-time-atom page-title-val dimensions settings @compact-state copy compact-list-open-state]
                  [overflow-panel capacity copy]
                  [schedule-warning-panel text-events copy]]])]))))
     (finally

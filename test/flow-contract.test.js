@@ -95,7 +95,11 @@ test('Flow renders a collapsible below-chart label list in narrow containers', (
   assert.match(component, /nautilus-flow-compact-details/);
   assert.match(component, /nautilus-flow-compact-summary/);
   assert.match(component, /nautilus-flow-compact-list/);
-  assert.match(component, /:open true/);
+  assert.match(component, /compact-list-open-state/);
+  assert.match(component, /:open @compact-open-state/);
+  assert.match(component, /:on-toggle/);
+  assert.doesNotMatch(component, /nautilus-flow-compact-details" :open true/);
+  assert.match(helpers, /isRightSidebarRenderContext/);
   assert.match(css, /\.nautilus-flow-compact-details\s*\{[^}]*display:\s*none;/s);
   assert.match(css, /\.nautilus-flow-compact-list\s*\{[^}]*display:\s*none;/s);
   assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-flow-slice-group\s*\{[^}]*display:\s*none\s*!important;/);
