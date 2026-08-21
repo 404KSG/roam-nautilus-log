@@ -338,10 +338,15 @@
     (str (if (< h 10) (str "0" h) h) ":" (if (< m 10) (str "0" m) m))))
 
 (defn rm-prog-from-block-if-done [uid]
-  (let [str (str/replace (get-block-str-naked uid) #"\sd\d{1,3}\%" "")]
-    (block/update {:block
-                   {:uid uid
-                    :string str}})))
+  (let [current (get-block-str-naked uid)
+        stripped (str/replace current #"\sd\d{1,3}\%" "")]
+    ;; Avoid an identical write. This function runs inside a reactive child
+    ;; watcher, so a no-op write retriggers the watcher and creates an endless
+    ;; stream of Roam transactions for ordinary DONE blocks.
+    (when (not= current stripped)
+      (block/update {:block
+                     {:uid uid
+                      :string stripped}}))))
 
 (defn update-block-progress [block-uid increment] 
    (let [s (get-block-str-naked block-uid)
