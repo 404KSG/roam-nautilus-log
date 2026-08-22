@@ -47,6 +47,7 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested F
   assert.match(component, /flow-core-call "pastTimelineSegments"/);
   assert.match(component, /flow-core-call "spiralCellInnerHour"/);
   assert.match(component, /flow-core-call "overlappingFixedEventUids"/);
+  assert.match(component, /flow-core-call "isCurrentPlannedTask"/);
   assert.match(component, /flow-core-call "uiCopy"/);
   assert.match(component, /flow-core-call "capacityMetrics"/);
   assert.match(component, /flow-core-call "burningCapacityBucket"/);
@@ -209,11 +210,22 @@ test('Flow prefers horizontal label rails and keeps past leader lines legible', 
 
 test('flexible task labels and connectors use one semantic blue', () => {
   assert.match(component, /def task-legend-color "var\(--nautilus-flow-task\)"/);
+  assert.match(component, /def task-fill-color "var\(--nautilus-flow-task-fill\)"/);
+  assert.doesNotMatch(component, /todo-color-palette/);
   assert.match(component, /\(and \(:todo event\) \(not done\) \(nil\? \(:bg-color event\)\)\) task-legend-color/);
   assert.match(component, /:legend-color legend-color/);
   assert.match(component, /:fill \(if-not done\? legend-color/);
   assert.match(css, /--nautilus-flow-task:\s*#0899c8/);
+  assert.match(css, /--nautilus-flow-task-fill:\s*rgba\(8,\s*153,\s*200,/);
   assert.match(css, /\.nautilus-flow-legend-dot--task\s*\{\s*background:\s*var\(--nautilus-flow-task\);\s*\}/);
+});
+
+test('the current planned task is outlined and its label receives stronger emphasis', () => {
+  assert.match(component, /flow-core-call "isCurrentPlannedTask"/);
+  assert.match(component, /nautilus-flow-current-task/);
+  assert.match(component, /:aria-current \(when current\? "true"\)/);
+  assert.match(css, /\.nautilus-flow-current-task \.nautilus-flow-slice\s*\{[^}]*stroke:\s*var\(--nautilus-flow-task\);[^}]*stroke-width:\s*2px;/s);
+  assert.match(css, /\.nautilus-flow-current-task \.nautilus-flow-slice-group text\s*\{[^}]*font-weight:\s*800;/s);
 });
 
 test('the Roam renderer cleanup remains a sibling of the render body inside with-let', () => {

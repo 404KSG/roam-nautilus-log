@@ -8,6 +8,7 @@ const {
   pastTimelineSegments,
   spiralCellInnerHour,
   overlappingFixedEventUids,
+  isCurrentPlannedTask,
   uiCopy,
   capacityMetrics,
   scheduleTasks,
@@ -75,6 +76,16 @@ test('fixed event conflicts use half-open overlap boundaries', () => {
   assert.deepEqual(overlappingFixedEventUids({ events: [] }), []);
 });
 
+test('current planned task uses daily-page and half-open time boundaries', () => {
+  const event = { uid: 'task', todo: true, start: 570, end: 630 };
+  assert.equal(isCurrentPlannedTask({ event, nowMinutes: 570, dailyPage: true }), true);
+  assert.equal(isCurrentPlannedTask({ event, nowMinutes: 629, dailyPage: true }), true);
+  assert.equal(isCurrentPlannedTask({ event, nowMinutes: 630, dailyPage: true }), false);
+  assert.equal(isCurrentPlannedTask({ event, nowMinutes: 600, dailyPage: false }), false);
+  assert.equal(isCurrentPlannedTask({ event: { ...event, done: true }, nowMinutes: 600, dailyPage: true }), false);
+  assert.equal(isCurrentPlannedTask({ event: { ...event, todo: false }, nowMinutes: 600, dailyPage: true }), false);
+});
+
 test('English UI settings localize all extension-owned status labels', () => {
   const copy = uiCopy('en');
   assert.equal(copy.capacity.burningAvailable, 'Flexible time is elapsing');
@@ -105,10 +116,11 @@ test('English UI settings localize all extension-owned status labels', () => {
     [
       { key: 'available', label: 'Available', value: '0m', tone: 'neutral' },
       { key: 'events', label: 'Events', value: '1h30m', tone: 'event' },
-      { key: 'demand', label: 'Demand', value: '30m', percent: '—', percentTone: 'neutral', tone: 'neutral' },
+      { key: 'demand', label: 'Planned', value: '30m', percent: '—', percentTone: 'neutral', tone: 'neutral' },
       { key: 'overload', label: 'Overload', value: '30m', tone: 'warning' },
     ],
   );
+  assert.equal(uiCopy('zh').capacity.demand, '已计划');
 });
 
 test('capacity metrics mark exactly the bucket that is currently burning', () => {
@@ -130,13 +142,13 @@ test('capacity metrics mark exactly the bucket that is currently burning', () =>
   assert.equal(metrics[3].burning, undefined);
 });
 
-test('Demand reports its share of available flexible time without capping overload', () => {
+test('Planned reports its share of available flexible time without capping overload', () => {
   assert.deepEqual(
     capacityMetrics({
       language: 'en',
       capacity: { availableMinutes: 540, fixedMinutes: 420, demandMinutes: 105, overloadMinutes: 0, slackMinutes: 435, unplacedMinutes: 0 },
     })[2],
-    { key: 'demand', label: 'Demand', value: '1h45m', percent: '19%', percentTone: 'neutral', tone: 'neutral' },
+    { key: 'demand', label: 'Planned', value: '1h45m', percent: '19%', percentTone: 'neutral', tone: 'neutral' },
   );
 
   const overloadedDemand = capacityMetrics({

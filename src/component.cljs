@@ -73,10 +73,9 @@
 
 (def task-legend-color "var(--nautilus-flow-task)")
 
-(def meeting-fill-color "var(--nautilus-flow-event-fill)")
+(def task-fill-color "var(--nautilus-flow-task-fill)")
 
-(def todo-color-palette
-  ["rgba(4,100,132,0.3)", "rgba(8,153,200,0.3)", "rgba(47,186,232,0.3)", "rgba(58,202,249,0.3)"])
+(def meeting-fill-color "var(--nautilus-flow-event-fill)")
 
 ;; -------------- debug support ------------ 
 
@@ -851,7 +850,11 @@
         progress (:progress event)
         click-to-progress (if (and daily-page? todo?) true false)
         expired? (and meeting? (>= @now-time-atom (:end event)))
-        todo-bg-color (or (:bg-color event ) (nth todo-color-palette (mod index (count todo-color-palette))))
+        current? (= true (flow-core-call "isCurrentPlannedTask"
+                                         {:event event
+                                          :nowMinutes @now-time-atom
+                                          :dailyPage daily-page?}))
+        todo-bg-color (or (:bg-color event) task-fill-color)
         meeting-color (or (:bg-color event) meeting-fill-color)]
     {:start-angle start-angle
      :end-angle end-angle
@@ -864,6 +867,7 @@
      :progress progress
      :meeting? meeting?
      :expired? expired?
+     :current? current?
      :click-to-progress click-to-progress}))
 
 (defn get-hour-boundaries [start-min end-min]
@@ -872,7 +876,7 @@
     (range first-bound end-min 60)))
 
 (defn event-slice-component [event index legend-rect inner-radius daily-page? center settings now-time-atom conflict?]
-  (let [{:keys [bg-color done click-to-progress meeting? expired?]} (calculate-slice-params event index daily-page? now-time-atom)
+  (let [{:keys [bg-color done click-to-progress meeting? expired? current?]} (calculate-slice-params event index daily-page? now-time-atom)
         legend-color (cond
                        (and meeting? (not expired?) (nil? (:bg-color event))) "var(--nautilus-flow-event)"
                        (and (:todo event) (not done) (nil? (:bg-color event))) task-legend-color
@@ -893,7 +897,9 @@
                      (recur (first bounds) (rest bounds) (conj segs [curr (first bounds)]))))]
     (into [:g {:class (str "nautilus-flow-event-slice-group"
                             (when (and daily-page? (:end event) (<= (:end event) @now-time-atom)) " nautilus-flow-past")
-                            (when conflict? " nautilus-flow-event-conflict"))}]
+                            (when conflict? " nautilus-flow-event-conflict")
+                            (when current? " nautilus-flow-current-task"))
+                    :aria-current (when current? "true")}]
           (map-indexed
            (fn [idx [s e]]
              (let [start-angle (min->angle s)

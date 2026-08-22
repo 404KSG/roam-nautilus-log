@@ -44,6 +44,16 @@ actively focused.
   split at hour boundaries because each spiral hour has a different radius,
   but every piece inherits the same fill. The hour grid is rendered above the
   slices so time boundaries remain readable over the opaque fill.
+- Normal flexible tasks likewise use one theme-aware semantic blue fill rather
+  than cycling arbitrary shades by list position. Custom urgent colors and the
+  gray completed state still override that fill. On today's Daily Page, the
+  single unfinished task whose half-open scheduled interval contains now gets
+  a 2 px semantic-blue outline and stronger label weight. Template previews
+  never claim that a task is current.
+- The capacity metric previously labeled `Demand` is presented as `Planned`
+  (`已计划` in Chinese). Its duration and percentage calculation are unchanged;
+  Available, Events, Remaining, and all warning terms retain their existing
+  wording.
 - Actual overlapping fixed-event intervals are detected with half-open time
   ranges and receive a dashed warning outline. Adjacent events whose end/start
   times merely touch are not conflicts. Color continues to mean only “fixed
@@ -76,5 +86,5 @@ Contract tests additionally cover fixed-event conflict boundaries. Renderer
 contracts cover the bridge calls, localized outline flame SVG, compact
 summary, center time, removal of the needle badge/year, overlay/grid render
 order, shared cell clipping across every painted layer, one event fill token,
-conflict styling, and theme-aware CSS. `npm test` and `git diff --check` are the
-acceptance checks.
+one task fill token, current-task interval and styling, conflict styling, and
+theme-aware CSS. `npm test` and `git diff --check` are the acceptance checks.

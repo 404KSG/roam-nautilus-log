@@ -11,6 +11,7 @@
   --nautilus-flow-event: #c58a00;
   --nautilus-flow-event-fill: #fee18a;
   --nautilus-flow-task: #0899c8;
+  --nautilus-flow-task-fill: rgba(8, 153, 200, 0.28);
   --nautilus-flow-control-icon: #888;
   --nautilus-flow-now: #d44b4b;
   --nautilus-flow-past-overlay: rgba(86, 101, 116, 0.08);
@@ -27,6 +28,7 @@
   --nautilus-flow-event: #f2c14e;
   --nautilus-flow-event-fill: #6d570f;
   --nautilus-flow-task: #47b8df;
+  --nautilus-flow-task-fill: rgba(71, 184, 223, 0.32);
   --nautilus-flow-control-icon: #aaa;
   --nautilus-flow-now: #ff8b78;
   --nautilus-flow-past-overlay: rgba(255, 255, 255, 0.06);
@@ -377,6 +379,15 @@
   stroke: var(--nautilus-flow-warning);
   stroke-width: 1.5px;
   stroke-dasharray: 4 2;
+}
+
+.nautilus-flow-current-task .nautilus-flow-slice {
+  stroke: var(--nautilus-flow-task);
+  stroke-width: 2px;
+}
+
+.nautilus-flow-current-task .nautilus-flow-slice-group text {
+  font-weight: 800;
 }
 
 .nautilus-flow-slice-group text {

@@ -182,6 +182,20 @@ function overlappingFixedEventUids({ events = [] } = {}) {
   return fixedEvents.filter((event) => conflicts.has(event.uid)).map((event) => event.uid);
 }
 
+/**
+ * Identify the flexible task whose scheduled half-open interval contains now.
+ * A chart outside today's Daily Page is intentionally inert: it can preview a
+ * plan, but it must not claim that any task is current.
+ */
+function isCurrentPlannedTask({ event, nowMinutes, dailyPage = false } = {}) {
+  if (dailyPage !== true || !event || event.todo !== true || event.done === true) return false;
+  const start = asNumber(event.start);
+  const end = asNumber(event.end);
+  const now = asNumber(nowMinutes);
+  return Number.isFinite(start) && Number.isFinite(end) && Number.isFinite(now)
+    && end > start && start <= now && now < end;
+}
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -428,7 +442,7 @@ const UI_COPY = {
     capacity: {
       available: 'Available',
       events: 'Events',
-      demand: 'Demand',
+      demand: 'Planned',
       overload: 'Overload',
       fragmented: 'No fitting slot',
       remaining: 'Remaining',
@@ -461,7 +475,7 @@ const UI_COPY = {
     capacity: {
       available: '可安排',
       events: '事件',
-      demand: '待办需求',
+      demand: '已计划',
       overload: '超载',
       fragmented: '空档不足',
       remaining: '余量',
@@ -854,6 +868,7 @@ module.exports = {
   pastTimelineSegments,
   spiralCellInnerHour,
   overlappingFixedEventUids,
+  isCurrentPlannedTask,
   scheduleTasks,
   historicalDoneSlice,
   calculateCapacity,
