@@ -10,6 +10,7 @@ const {
   scheduleTasks,
   historicalDoneSlice,
   calculateCapacity,
+  burningCapacityBucket,
   formatDuration,
   formatCapacitySummary,
   truncateTextToWidth,
@@ -27,6 +28,10 @@ test('the chart background uses one grid sector per hour', () => {
 
 test('English UI settings localize all extension-owned status labels', () => {
   const copy = uiCopy('en');
+  assert.equal(copy.capacity.burningAvailable, 'Flexible time is elapsing');
+  assert.equal(copy.capacity.burningEvents, 'Event time is elapsing');
+  assert.equal(uiCopy('zh').capacity.burningAvailable, '可安排时间正在流逝');
+  assert.equal(uiCopy('zh').capacity.burningEvents, '事件时间正在流逝');
   assert.deepEqual(copy.legend, { urgent: 'Urgent', event: 'Event', task: 'Task' });
   assert.deepEqual(copy.controls, {
     hideDone: 'Hide completed items',
@@ -55,6 +60,25 @@ test('English UI settings localize all extension-owned status labels', () => {
       { key: 'overload', label: 'Overload', value: '30m', tone: 'warning' },
     ],
   );
+});
+
+test('capacity metrics mark exactly the bucket that is currently burning', () => {
+  const metrics = capacityMetrics({
+    language: 'en',
+    capacity: {
+      availableMinutes: 420,
+      fixedMinutes: 60,
+      demandMinutes: 30,
+      slackMinutes: 390,
+      burningBucket: 'events',
+    },
+  });
+
+  assert.equal(metrics[0].burning, undefined);
+  assert.equal(metrics[1].burning, true);
+  assert.equal(metrics[1].burningLabel, 'Event time is elapsing');
+  assert.equal(metrics[2].burning, undefined);
+  assert.equal(metrics[3].burning, undefined);
 });
 
 test('Demand reports its share of available flexible time without capping overload', () => {
@@ -189,6 +213,37 @@ test('capacity counts only remaining today, subtracts future fixed time, and exc
   assert.equal(result.overloadMinutes, 0);
   assert.equal(result.slackMinutes, 570);
   assert.equal(result.fixedMinutes, 120);
+});
+
+test('burning bucket uses half-open event boundaries and workday bounds', () => {
+  const options = {
+    startMinutes: 300,
+    endMinutes: 1440,
+    fixedEvents: [{ uid: 'meeting', meeting: true, start: 540, end: 600 }],
+  };
+
+  assert.equal(burningCapacityBucket({ ...options, nowMinutes: 299 }), null);
+  assert.equal(burningCapacityBucket({ ...options, nowMinutes: 300 }), 'available');
+  assert.equal(burningCapacityBucket({ ...options, nowMinutes: 540 }), 'events');
+  assert.equal(burningCapacityBucket({ ...options, nowMinutes: 599 }), 'events');
+  assert.equal(burningCapacityBucket({ ...options, nowMinutes: 600 }), 'available');
+  assert.equal(burningCapacityBucket({ ...options, nowMinutes: 1440 }), null);
+  assert.equal(burningCapacityBucket({ ...options, nowMinutes: 1500 }), null);
+});
+
+test('burning bucket ignores completed/non-meeting events and treats overlaps as Events', () => {
+  const fixedEvents = [
+    { uid: 'done', meeting: true, done: true, start: 500, end: 620 },
+    { uid: 'task', meeting: false, start: 520, end: 640 },
+    { uid: 'first', meeting: true, start: 600, end: 660 },
+    { uid: 'overlap', meeting: true, start: 640, end: 720 },
+  ];
+
+  assert.equal(burningCapacityBucket({ startMinutes: 300, endMinutes: 900, nowMinutes: 599, fixedEvents }), 'available');
+  assert.equal(burningCapacityBucket({ startMinutes: 300, endMinutes: 900, nowMinutes: 600, fixedEvents }), 'events');
+  assert.equal(burningCapacityBucket({ startMinutes: 300, endMinutes: 900, nowMinutes: 659, fixedEvents }), 'events');
+  assert.equal(burningCapacityBucket({ startMinutes: 300, endMinutes: 900, nowMinutes: 660, fixedEvents }), 'events');
+  assert.equal(burningCapacityBucket({ startMinutes: 300, endMinutes: 900, nowMinutes: 720, fixedEvents }), 'available');
 });
 
 test('capacity reports overflow instead of silently dropping tasks', () => {

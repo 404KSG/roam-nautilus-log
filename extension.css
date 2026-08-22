@@ -10,6 +10,10 @@
   --nautilus-flow-warning: #c96c00;
   --nautilus-flow-event: #c58a00;
   --nautilus-flow-task: #0899c8;
+  --nautilus-flow-burning: #e45c3f;
+  --nautilus-flow-now-label-bg: rgba(255, 255, 255, 0.94);
+  --nautilus-flow-now-label-fg: #c63f3f;
+  --nautilus-flow-now-label-border: rgba(198, 63, 63, 0.34);
 }
 
 .bp3-dark,
@@ -22,6 +26,10 @@
   --nautilus-flow-warning: #f4b75d;
   --nautilus-flow-event: #f2c14e;
   --nautilus-flow-task: #47b8df;
+  --nautilus-flow-burning: #ff8a68;
+  --nautilus-flow-now-label-bg: rgba(47, 47, 47, 0.94);
+  --nautilus-flow-now-label-fg: #ff9b8a;
+  --nautilus-flow-now-label-border: rgba(255, 155, 138, 0.46);
 }
 
 .nautilus-flow-container {
@@ -149,6 +157,41 @@
 .nautilus-flow-metric--event .nautilus-flow-metric-label,
 .nautilus-flow-metric--event .nautilus-flow-metric-value {
   color: var(--nautilus-flow-event);
+}
+
+.nautilus-flow-burning-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  color: var(--nautilus-flow-burning);
+  fill: currentColor;
+  vertical-align: -2px;
+}
+
+.nautilus-flow-burning-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.nautilus-flow-now-needle,
+.nautilus-flow-now-label {
+  pointer-events: none;
+}
+
+.nautilus-flow-now-label-bg {
+  fill: var(--nautilus-flow-now-label-bg);
+  stroke: var(--nautilus-flow-now-label-border);
+  stroke-width: 0.75;
+}
+
+.nautilus-flow-now-label-text {
+  fill: var(--nautilus-flow-now-label-fg);
+  font-size: 10px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.1px;
 }
 
 .nautilus-flow-html-legend {

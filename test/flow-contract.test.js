@@ -46,6 +46,7 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested F
   assert.match(component, /flow-core-call "hourlyGridSegments"/);
   assert.match(component, /flow-core-call "uiCopy"/);
   assert.match(component, /flow-core-call "capacityMetrics"/);
+  assert.match(component, /flow-core-call "burningCapacityBucket"/);
   assert.match(component, /nautilus-flow:settings-changed/);
   assert.match(component, /\.addEventListener/);
   assert.match(component, /\.removeEventListener/);
@@ -121,6 +122,29 @@ test('Flow moves metrics and the legend into a folded Overview in narrow contain
   assert.match(css, /\.nautilus-flow-compact-overview\s*\{[^}]*display:\s*none;/s);
   assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-flow-compact-overview\s*\{[^}]*display:\s*block;/);
   assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-flow-header--compact\s*\{[^}]*justify-content:\s*flex-end;/);
+});
+
+test('Flow marks the active capacity bucket with an accessible static flame', () => {
+  assert.match(component, /nautilus-flow-burning-icon/);
+  assert.match(component, /viewBox "0 0 24 24"/);
+  assert.match(component, /burningLabel/);
+  assert.match(component, /burningBucket/);
+  assert.match(component, /burningAvailable/);
+  assert.match(component, /burningEvents/);
+  assert.doesNotMatch(component, /🔥/);
+  assert.match(css, /--nautilus-flow-burning:/);
+  assert.match(css, /\.nautilus-flow-burning-icon[\s\S]*currentColor/);
+});
+
+test('Flow renders a moving in-range 24-hour now label inside the spiral', () => {
+  assert.match(component, /nautilus-flow-now-needle/);
+  assert.match(component, /nautilus-flow-now-label/);
+  assert.match(component, /minutes->time visible-now/);
+  assert.match(component, /:workday-start settings/);
+  assert.match(component, /:workday-end settings/);
+  assert.match(component, /nautilus-flow-now-label-bg/);
+  assert.match(css, /\.nautilus-flow-now-label/);
+  assert.match(css, /--nautilus-flow-now-label-bg:/);
 });
 
 test('Flow feature-detects ResizeObserver with syntax supported by Roam SCI', () => {

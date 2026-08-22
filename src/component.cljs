@@ -1016,8 +1016,10 @@
       [snail-blueprint-component snail-template-color snail-inner-radius center settings @daily-page-atom? now-time-atom]
       (when @show-done-atom? done-slice-components)
       all-slice-components         ;; zobrazení všech událostí
-      (when (or @daily-page-atom? @playback-state-atom)
-        (let [visible-now (min (:workday-end settings) (max (:workday-start settings) @now-time-atom))
+      (when (and (or @daily-page-atom? @playback-state-atom)
+                 (>= @now-time-atom (:workday-start settings))
+                 (< @now-time-atom (:workday-end settings)))
+        (let [visible-now @now-time-atom
               now-angle (min->angle visible-now)
               now-rad (angle->rad now-angle)
               inner-r (+ snail-inner-radius 2)
@@ -1025,12 +1027,33 @@
               x1 (+ (:center-x center) (* inner-r (js/Math.cos now-rad)))
               y1 (- (:center-y center) (* inner-r (js/Math.sin now-rad)))
               x2 (+ (:center-x center) (* (+ max-r 15) (js/Math.cos now-rad)))
-              y2 (- (:center-y center) (* (+ max-r 15) (js/Math.sin now-rad)))]
-          [:line {:x1 x1 :y1 y1 :x2 x2 :y2 y2
-                  :stroke clock-hand-color
-                  :stroke-width 2
-                  :stroke-linecap "round"
-                  :style {:filter "drop-shadow(0px 0px 4px rgba(233, 79, 79, 0.4))"}}]))
+              y2 (- (:center-y center) (* (+ max-r 15) (js/Math.sin now-rad)))
+              needle-label-radius (+ snail-inner-radius 17)
+              label-x (+ (:center-x center) (* needle-label-radius (js/Math.cos now-rad)))
+              label-y (- (:center-y center) (* needle-label-radius (js/Math.sin now-rad)))
+              label (minutes->time visible-now)
+              now-copy (get-in copy [:capacity :now])
+              label-aria (str now-copy " " label)]
+          [:g {:class "nautilus-flow-now-needle" :aria-label label-aria}
+           [:line {:x1 x1 :y1 y1 :x2 x2 :y2 y2
+                   :stroke clock-hand-color
+                   :stroke-width 2
+                   :stroke-linecap "round"
+                   :class "nautilus-flow-now-needle-line"
+                   :style {:filter "drop-shadow(0px 0px 4px rgba(233, 79, 79, 0.4))"}}]
+           [:g {:class "nautilus-flow-now-label" :aria-hidden "true"}
+            [:rect {:x (- label-x 19)
+                    :y (- label-y 9)
+                    :width 38
+                    :height 18
+                    :rx 5
+                    :class "nautilus-flow-now-label-bg"}]
+            [:text {:x label-x
+                    :y (+ label-y 0.5)
+                    :text-anchor "middle"
+                    :dominant-baseline "middle"
+                    :class "nautilus-flow-now-label-text"}
+             label]]]))
       [central-label-component (split-and-trim page-title len-central-legend) center]
      
       (when @debug-state-atom ;; just for debug ⤵  #FIXME remove in production later
@@ -1214,7 +1237,8 @@
 
 (defn ui-copy [settings]
   (or (flow-core-call "uiCopy" (:language settings))
-      {:capacity {:available "Available" :events "Events" :demand "Demand" :overload "Overload" :fragmented "No fitting slot" :remaining "Remaining"}
+      {:capacity {:available "Available" :events "Events" :demand "Demand" :overload "Overload" :fragmented "No fitting slot" :remaining "Remaining"
+                  :burningAvailable "Flexible time is elapsing" :burningEvents "Event time is elapsing" :now "Current time"}
        :legend {:urgent "Urgent" :event "Event" :task "Task"}
        :controls {:hideDone "Hide completed items" :showDone "Show completed items" :playback "Play back the day"
                   :collapse "Collapse Nautilus Flow" :expand "Expand Nautilus Flow"}
@@ -1229,16 +1253,33 @@
        {:key "demand" :label "Demand" :value "0m" :percent "0%" :percentTone "neutral" :tone "neutral"}
        {:key "remaining" :label "Remaining" :value "0m" :tone "neutral"}]))
 
+(defn burning-flame-icon [label]
+  [:svg {:class "nautilus-flow-burning-icon"
+         :width "13"
+         :height "13"
+         :viewBox "0 0 24 24"
+         :fill "currentColor"
+         :role "img"
+         :aria-label label}
+   [:title label]
+   [:path {:d "M13.2 2.4c.6 3.2 4.8 5.2 4.8 9.9a6 6 0 1 1-12 0c0-2.7 1.4-5.1 3.8-6.8-.1 2.1.5 3.4 1.8 4.4.7-2.6.7-4.7 1.6-7.5Zm-.7 9.4c-.8 1.2-2.4 2.1-2.4 4.1a3.3 3.3 0 0 0 6.6 0c0-1.5-1-2.7-2.2-3.7-.2 1.1-.7 1.8-1.5 2.4.1-1.1-.1-2-.5-2.8Z"}]])
+
 (defn metrics-component [metrics]
   (let [aria-label (str/join ", " (map #(str (:label %) " " (:value %)
-                                             (when-let [percent (:percent %)] (str ", " percent))) metrics))]
+                                             (when-let [percent (:percent %)] (str ", " percent))
+                                             (when (:burning %)
+                                               (str ", " (:burningLabel %)))) metrics))]
     [:div {:class "nautilus-flow-metrics" :aria-label aria-label}
      (for [metric metrics]
        ^{:key (:key metric)}
        [:div {:class (str "nautilus-flow-metric nautilus-flow-metric--" (:tone metric))}
         [:span {:class "nautilus-flow-metric-label"} (:label metric)]
-        [:span {:class "nautilus-flow-metric-reading"}
+        [:span {:class "nautilus-flow-metric-reading"
+                :aria-label (when (:burning metric)
+                              (str (:value metric) ". " (:burningLabel metric)))}
          [:strong {:class "nautilus-flow-metric-value"} (:value metric)]
+         (when (:burning metric)
+           [burning-flame-icon (:burningLabel metric)])
          (when-let [percent (:percent metric)]
            [:span {:class (str "nautilus-flow-metric-percent nautilus-flow-metric-percent--" (:percentTone metric))}
             (str "/ " percent)])]])]))
@@ -1262,16 +1303,37 @@
   (let [metrics (capacity-metrics capacity settings)
         status (last metrics)
         warning? (= "warning" (:tone status))
-        summary (str (get-in copy [:panels :overview])
-                     (when warning? (str " · " (:label status) " " (:value status))))]
+        burning-bucket (:burningBucket capacity)
+        burning-label (case burning-bucket
+                        "available" (get-in copy [:capacity :available])
+                        "events" (get-in copy [:capacity :events])
+                        nil)
+        burning-aria (case burning-bucket
+                       "available" (get-in copy [:capacity :burningAvailable])
+                       "events" (get-in copy [:capacity :burningEvents])
+                       nil)
+        summary-aria (str (get-in copy [:panels :overview])
+                          (when burning-label (str ". " burning-label ". " burning-aria))
+                          (when warning? (str ". " (:label status) " " (:value status))))]
     [:details {:class (str "nautilus-flow-compact-overview"
                            (when warning? " nautilus-flow-compact-overview--warning"))
                :open @compact-open-state
                :on-toggle #(let [next-open? (.-open (.-currentTarget %))]
                              (when (not= next-open? @compact-open-state)
                                (reset! compact-open-state next-open?)))}
-     [:summary {:class "nautilus-flow-compact-summary nautilus-flow-compact-overview-summary"}
-      summary]
+     [:summary {:class "nautilus-flow-compact-summary nautilus-flow-compact-overview-summary"
+                :aria-label summary-aria}
+      [:span {:class "nautilus-flow-compact-overview-summary-content"}
+       (get-in copy [:panels :overview])
+       (when burning-label
+         [:span {:class "nautilus-flow-burning-summary"}
+          " · "
+          [burning-flame-icon burning-aria]
+          " "
+          burning-label])]
+      (when warning?
+        [:span {:class "nautilus-flow-compact-overview-warning"}
+         (str " · " (:label status) " " (:value status))])]
      [:div {:class "nautilus-flow-compact-overview-body"}
       [metrics-component metrics]
       [html-legend-component copy]]]))
@@ -1428,13 +1490,19 @@
                 [text-events done-events] @*text-events
                 pending-tasks (vec (filter #(and (:todo %) (not (:done %))) text-events))
                 fixed-events (vec (filter #(and (:meeting %) (not (:done %))) text-events))
-                capacity (or (flow-core-call "calculateCapacity"
-                                             {:startMinutes (:workday-start settings)
-                                              :endMinutes (:workday-end settings)
-                                              :nowMinutes plan-from-time
-                                              :fixedEvents fixed-events
-                                              :pendingTasks (map #(dissoc % :progress) pending-tasks)})
-                             {:availableMinutes 0 :fixedMinutes 0 :demandMinutes 0 :overloadMinutes 0 :slackMinutes 0 :unplacedMinutes 0 :overflowTasks []})
+                capacity-base (or (flow-core-call "calculateCapacity"
+                                                   {:startMinutes (:workday-start settings)
+                                                    :endMinutes (:workday-end settings)
+                                                    :nowMinutes (if @playback-state-atom @now-time-atom plan-from-time)
+                                                    :fixedEvents fixed-events
+                                                    :pendingTasks (map #(dissoc % :progress) pending-tasks)})
+                                  {:availableMinutes 0 :fixedMinutes 0 :demandMinutes 0 :overloadMinutes 0 :slackMinutes 0 :unplacedMinutes 0 :overflowTasks []})
+                burning-bucket (flow-core-call "burningCapacityBucket"
+                                               {:startMinutes (:workday-start settings)
+                                                :endMinutes (:workday-end settings)
+                                                :nowMinutes @now-time-atom
+                                                :fixedEvents fixed-events})
+                capacity (assoc capacity-base :burningBucket burning-bucket)
                 events-state [(fill-day text-events (:workday-start settings) (:workday-end settings) plan-from-time) done-events]]
             [:div {:class (str "nautilus-flow-container" (when @collapsed-state " nautilus-flow-collapsed"))
                    :ref container-ref

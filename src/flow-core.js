@@ -132,6 +132,36 @@ function normalizedInterval(event, startMinutes, endMinutes) {
   return clippedEnd > clippedStart ? [clippedStart, clippedEnd] : null;
 }
 
+/**
+ * Identify the time pool that is currently elapsing.
+ *
+ * Workday and event intervals are deliberately half-open: a minute exactly at
+ * an event's end belongs to Available (unless another overlapping event starts
+ * at that same minute).  The raw now value is used instead of effectiveNow so
+ * callers never turn an out-of-range clock into a false boundary state.
+ */
+function burningCapacityBucket({
+  startMinutes,
+  endMinutes,
+  nowMinutes,
+  fixedEvents = [],
+} = {}) {
+  const start = asNumber(startMinutes);
+  const end = asNumber(endMinutes);
+  const now = asNumber(nowMinutes);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start
+      || !Number.isFinite(now) || now < start || now >= end) {
+    return null;
+  }
+
+  const events = Array.isArray(fixedEvents) ? fixedEvents : [];
+  const eventBurning = events.some((event) => {
+    const interval = normalizedInterval(event, start, end);
+    return interval && now >= interval[0] && now < interval[1];
+  });
+  return eventBurning ? 'events' : 'available';
+}
+
 function mergeIntervals(intervals) {
   const sorted = intervals
     .filter(Boolean)
@@ -310,6 +340,12 @@ function calculateCapacity({
     slackMinutes,
     unplacedMinutes,
     fixedMinutes: intervalMinutes(fixedIntervals),
+    burningBucket: burningCapacityBucket({
+      startMinutes: start,
+      endMinutes: end,
+      nowMinutes,
+      fixedEvents,
+    }),
     overflowTasks: plan.overflowTasks,
   };
 }
@@ -332,6 +368,9 @@ const UI_COPY = {
       overload: 'Overload',
       fragmented: 'No fitting slot',
       remaining: 'Remaining',
+      burningAvailable: 'Flexible time is elapsing',
+      burningEvents: 'Event time is elapsing',
+      now: 'Current time',
     },
     legend: { urgent: 'Urgent', event: 'Event', task: 'Task' },
     controls: {
@@ -362,6 +401,9 @@ const UI_COPY = {
       overload: '超载',
       fragmented: '空档不足',
       remaining: '余量',
+      burningAvailable: '可安排时间正在流逝',
+      burningEvents: '事件时间正在流逝',
+      now: '当前时间',
     },
     legend: { urgent: '紧急', event: '事件', task: '任务' },
     controls: {
@@ -392,17 +434,23 @@ function uiCopy(language = 'zh') {
 
 function capacityMetrics({ capacity = {}, language = 'zh' } = {}) {
   const copy = uiCopy(language).capacity;
+  const burningBucket = capacity.burningBucket;
+  const markBurning = (metric, bucket, label) => (
+    burningBucket === bucket
+      ? { ...metric, burning: true, burningLabel: label }
+      : metric
+  );
   const availableMinutes = Math.max(0, asNumber(capacity.availableMinutes) || 0);
   const demandMinutes = Math.max(0, asNumber(capacity.demandMinutes) || 0);
   const demandPercent = availableMinutes > 0
     ? `${Math.round((demandMinutes / availableMinutes) * 100)}%`
     : (demandMinutes === 0 ? '0%' : '—');
-  const available = {
+  const available = markBurning({
     key: 'available', label: copy.available, value: formatDuration(availableMinutes), tone: 'neutral',
-  };
-  const events = {
+  }, 'available', copy.burningAvailable);
+  const events = markBurning({
     key: 'events', label: copy.events, value: formatDuration(capacity.fixedMinutes), tone: 'event',
-  };
+  }, 'events', copy.burningEvents);
   const demand = {
     key: 'demand',
     label: copy.demand,
@@ -742,6 +790,7 @@ module.exports = {
   scheduleTasks,
   historicalDoneSlice,
   calculateCapacity,
+  burningCapacityBucket,
   formatDuration,
   uiCopy,
   capacityMetrics,
