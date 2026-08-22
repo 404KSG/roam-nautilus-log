@@ -1100,6 +1100,38 @@ function isCompactChartWidth(width, threshold = 520) {
 }
 
 /**
+ * Return the real SVG center and a radial point just outside an interval.
+ * Keeping both points in the same `{ x, y }` coordinate contract prevents the
+ * screen-space direction test from silently treating the center as (0, 0).
+ */
+function radialTooltipGeometry({
+  startMinutes,
+  endMinutes,
+  centerX,
+  centerY,
+  radius,
+} = {}) {
+  const start = asNumber(startMinutes);
+  const end = asNumber(endMinutes);
+  const x = asNumber(centerX);
+  const y = asNumber(centerY);
+  const normalizedRadius = Math.max(0, asNumber(radius) || 0);
+  if (![start, end, x, y].every(Number.isFinite) || end <= start) return null;
+
+  const middle = (start + end) / 2;
+  const rawAngle = (middle - 540) / 2;
+  const angle = ((rawAngle % 360) + 360) % 360;
+  const radians = (180 - angle) * (Math.PI / 180);
+  return {
+    center: { x, y },
+    direction: {
+      x: x + normalizedRadius * Math.cos(radians),
+      y: y - normalizedRadius * Math.sin(radians),
+    },
+  };
+}
+
+/**
  * Position a measured floating tooltip beside an anchor without letting it
  * escape the browser viewport. The preferred radial side is tried first, then
  * its opposite, followed by the two perpendicular sides. Only after choosing
@@ -1188,6 +1220,7 @@ module.exports = {
   truncateTextToWidth,
   placeLabelTracks,
   placeExternalLabels,
+  radialTooltipGeometry,
   placeFloatingTooltip,
   isCompactChartWidth,
 };

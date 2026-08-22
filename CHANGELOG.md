@@ -64,6 +64,8 @@
 - Wide-layout timeline tooltips now anchor outside the spiral, measure before
   appearing, escape chart clipping through a body-level portal, and flip or
   shift within the browser viewport; compact layouts mount no hover surface.
+  Their SVG center and radial direction now share one coordinate contract, so
+  left-side evening items expand outward instead of back across the spiral.
 - The decorative spiral grid no longer intercepts pointer events, so hovering
   the actual task or event slice behaves the same as hovering its outer label.
 - Expanding or folding Unscheduled today no longer makes the focused Plan row

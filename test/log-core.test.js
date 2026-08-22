@@ -24,6 +24,7 @@ const {
   truncateTextToWidth,
   placeLabelTracks,
   placeExternalLabels,
+  radialTooltipGeometry,
   placeFloatingTooltip,
   isCompactChartWidth,
 } = require('../src/log-core');
@@ -182,6 +183,20 @@ test('floating tooltips keep the preferred outside placement when it fits', () =
     }),
     { x: 510, y: 275, placement: 'right' },
   );
+});
+
+test('radial tooltip geometry preserves the real SVG center for evening items', () => {
+  const geometry = radialTooltipGeometry({
+    startMinutes: 1200,
+    endMinutes: 1260,
+    centerX: 300,
+    centerY: 200,
+    radius: 158,
+  });
+
+  assert.deepEqual(geometry.center, { x: 300, y: 200 });
+  assert.ok(geometry.direction.x < geometry.center.x, '20:00–21:00 should anchor left of center');
+  assert.ok(geometry.direction.y > geometry.center.y, '20:00–21:00 should anchor below center');
 });
 
 test('floating tooltips flip before they reach a viewport edge', () => {

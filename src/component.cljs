@@ -395,12 +395,15 @@
      :aria-label (str title ". " kind-label ". " time-range ". " duration)}))
 
 (defn timeline-tooltip-geometry [start end center]
-  (let [mid-minute (/ (+ start end) 2)
-        radians (angle->rad (min->angle mid-minute))
-        radius (+ 8 (apply max (map outer-radius-at (range (count snail-blueprint-outer-radiuses)))))]
-    {:center center
-     :direction-point {:x (+ (:center-x center) (* radius (cos radians)))
-                       :y (- (:center-y center) (* radius (sin radians)))}}))
+  (let [radius (+ 8 (apply max (map outer-radius-at (range (count snail-blueprint-outer-radiuses)))))]
+    (or (log-core-call "radialTooltipGeometry"
+                       {:startMinutes start
+                        :endMinutes end
+                        :centerX (:center-x center)
+                        :centerY (:center-y center)
+                        :radius radius})
+        {:center {:x (:center-x center) :y (:center-y center)}
+         :direction {:x (:center-x center) :y (:center-y center)}})))
 
 (defn svg-screen-point [svg point]
   (try
@@ -416,7 +419,7 @@
   (let [target (.-currentTarget event)
         svg (when target (.closest target "svg.nautilus-log-svg"))
         center-screen (when svg (svg-screen-point svg (:center info)))
-        direction-screen (when svg (svg-screen-point svg (:direction-point info)))]
+        direction-screen (when svg (svg-screen-point svg (:direction info)))]
     (when (and center-screen direction-screen)
       (let [dx (- (:x direction-screen) (:x center-screen))
             dy (- (:y direction-screen) (:y center-screen))

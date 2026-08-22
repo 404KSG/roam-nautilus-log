@@ -110,6 +110,7 @@ test('the spiral exposes slice and available-slot hover targets above an inert g
   assert.match(component, /nautilus-log-available-slot-hit/);
   assert.match(component, /nautilus-log-hover-tooltip/);
   assert.match(component, /log-core-call "placeFloatingTooltip"/);
+  assert.match(component, /log-core-call "radialTooltipGeometry"/);
   assert.match(component, /\.getScreenCTM/);
   assert.match(component, /createPortal/);
   assert.match(component, /nautilus-log-event-slice-group--interactive/);
