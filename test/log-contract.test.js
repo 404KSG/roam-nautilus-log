@@ -12,6 +12,7 @@ const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
 const changelog = fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'utf8');
 const timingTopbar = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-topbar.js'), 'utf8');
 const timingRuntime = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-runtime.js'), 'utf8');
+const timingCommands = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-commands.js'), 'utf8');
 
 function parenDepthBefore(source, targetIndex) {
   let depth = 0;
@@ -96,8 +97,29 @@ test('Actual Time Tracking is opt-in and owns no disabled topbar interaction', (
   assert.match(timingTopbar, /icon\('ring'\)/);
   assert.match(timingTopbar, /iconButton\('locate'/);
   assert.doesNotMatch(timingTopbar, /Dashboard|Activity/);
-  assert.doesNotMatch(timingRuntime, /commands|contextMenu/);
+  assert.match(timingCommands, /const palette = extensionAPI\?\.ui\?\.commandPalette/);
+  assert.match(timingCommands, /palette\.addCommand/);
+  assert.match(timingCommands, /const contextMenu = window\.roamAlphaAPI\?\.ui\?\.blockContextMenu/);
+  assert.match(timingCommands, /contextMenu\.addCommand/);
+  assert.match(timingCommands, /Nautilus Log: Clock out Timing Line/);
   assert.match(timingRuntime, /await closeEntriesAt\(before, instant\);[\s\S]*await createRunningClock\(taskUid, instant\);/);
+});
+
+test('execution popover paints cached state before refreshing and does not rebuild on every tick', () => {
+  const openStart = timingTopbar.indexOf('const openPopover');
+  const openEnd = timingTopbar.indexOf('const renderTrigger', openStart);
+  const openBody = timingTopbar.slice(openStart, openEnd);
+  const appendIndex = openBody.indexOf('document.body.append(popover)');
+  const refreshIndex = openBody.indexOf('runtime.requestRefresh');
+
+  assert.ok(appendIndex >= 0, 'popover should be appended synchronously');
+  assert.ok(refreshIndex > appendIndex, 'graph refresh must be scheduled after the cached shell is visible');
+  assert.doesNotMatch(openBody, /runtime\.refresh\(\)/);
+  assert.match(timingTopbar, /executionStructureKey/);
+  assert.match(timingTopbar, /updateLiveElapsed/);
+  const triggerStart = timingTopbar.indexOf('const renderTrigger');
+  const triggerEnd = timingTopbar.indexOf('const ensureMounted', triggerStart);
+  assert.doesNotMatch(timingTopbar.slice(triggerStart, triggerEnd), /renderPopover/);
 });
 
 test('Log owns the previously tested controls and collapses without reserving chart space', () => {

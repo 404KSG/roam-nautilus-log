@@ -26,6 +26,10 @@
 - Actual/Planned row metadata and deterministic selection of the first Nautilus
   Log component on today's Daily Note as the one Primary Plan.
 - Default component prefix `[[Nautilus Log]]` and default chart range 05:00–21:00.
+- Shortcut-ready Command Palette actions and TODO context-menu actions for Clock
+  In, global Clock Out, and Primary Plan navigation.
+- Optional native right-sidebar fronting for the current Timing Line, enabled by
+  default whenever Actual Time Tracking is on.
 
 ### Fixed
 
@@ -42,3 +46,8 @@
 - Disabling time tracking closes and confirms active CLOCK records before removing
   the entire execution surface; failure preserves the enabled state.
 - Legacy overlapping open CLOCK records reconcile to the newest focused task.
+- The execution popover now paints cached state before graph refresh, schedules
+  periodic graph scans as idle work, and updates only elapsed text on each tick;
+  Timing/Plan switching no longer competes with per-second full DOM rebuilds.
+- The focused task restores the explicit Blueprint `log-out` Clock Out control,
+  and Clock In restores the Roam Logbook-style right-sidebar interaction.

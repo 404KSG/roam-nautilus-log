@@ -85,3 +85,50 @@ test('Pomodoro threshold survives seamless switches and resets only after Clock 
   assert.equal(switched.startedAt, 1000);
   assert.equal(stopped, null);
 });
+
+test('execution surface structure ignores one-second ticks but detects real row changes', () => {
+  const base = {
+    status: 'ready',
+    notice: '',
+    planSnapshot: {
+      plan: { uid: 'plan' },
+      tasks: [{ uid: 'task-a', title: 'Alpha', plannedMinutes: 30 }],
+    },
+    entries: [{
+      clockUid: 'clock-a',
+      taskUid: 'task-a',
+      title: 'Alpha',
+      status: 'TODO',
+      start: new Date(2026, 7, 22, 10, 0),
+      end: null,
+      running: true,
+    }],
+    activeWork: {
+      focused: { taskUid: 'task-a', start: new Date(2026, 7, 22, 10, 0) },
+      recent: [],
+      count: 1,
+    },
+    pomodoro: { startedAt: new Date(2026, 7, 22, 10, 0).getTime() },
+    now: new Date(2026, 7, 22, 10, 1, 0),
+  };
+  const tick = { ...base, now: new Date(2026, 7, 22, 10, 1, 1) };
+  const changed = {
+    ...tick,
+    planSnapshot: {
+      ...tick.planSnapshot,
+      tasks: [...tick.planSnapshot.tasks, { uid: 'task-b', title: 'Beta', plannedMinutes: 15 }],
+    },
+  };
+
+  assert.equal(timing.executionStructureKey(base, 'plan'), timing.executionStructureKey(tick, 'plan'));
+  assert.notEqual(timing.executionStructureKey(tick, 'plan'), timing.executionStructureKey(changed, 'plan'));
+  assert.notEqual(timing.executionStructureKey(tick, 'timing'), timing.executionStructureKey(tick, 'plan'));
+  assert.equal(
+    timing.executionStructureKey({ ...base, revision: 4 }, 'plan'),
+    timing.executionStructureKey({ ...changed, revision: 4 }, 'plan'),
+  );
+  assert.notEqual(
+    timing.executionStructureKey({ ...base, revision: 4 }, 'plan'),
+    timing.executionStructureKey({ ...base, revision: 5 }, 'plan'),
+  );
+});

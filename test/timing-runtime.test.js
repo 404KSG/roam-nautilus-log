@@ -78,12 +78,27 @@ test('runtime serializes close-before-switch and close-before-complete', async (
   const settings = new Map([
     ['todo-duration', 15],
     ['pomodoro-minutes', 45],
+    ['timing-line-sidebar', true],
   ]);
+  const sidebarWindows = [];
   let current = new Date(2026, 7, 22, 10, 0);
   global.window = {
-    roamAlphaAPI: roam,
+    roamAlphaAPI: {
+      ...roam,
+      ui: {
+        rightSidebar: {
+          open: async () => {},
+          getWindows: async () => sidebarWindows.slice(),
+          addWindow: async ({ window }) => sidebarWindows.push(window),
+          setWindowOrder: async () => {},
+          expandWindow: async () => {},
+        },
+      },
+    },
     setInterval: () => 99,
     clearInterval: () => {},
+    setTimeout,
+    clearTimeout,
   };
   t.after(() => { delete global.window; });
 
@@ -98,8 +113,13 @@ test('runtime serializes close-before-switch and close-before-complete', async (
   assert.deepEqual(runtime.getSnapshot().planSnapshot.tasks.map(({ uid }) => uid), ['task-a', 'task-b']);
 
   await runtime.startTask('task-a');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(sidebarWindows, [{ type: 'block', 'block-uid': 'task-a', order: 0 }]);
   const firstClock = [...blocks.values()].find((block) => block.parentUid.startsWith('clock-') && /^CLOCK:/.test(block.string));
   assert.match(firstClock.string, /^CLOCK: \[2026-08-22 Sat 10:00\]$/);
+
+  await runtime.startTask('task-a');
+  assert.match(blocks.get(firstClock.uid).string, /^CLOCK: \[2026-08-22 Sat 10:00\]$/);
 
   current = new Date(2026, 7, 22, 10, 10);
   await runtime.startTask('task-b');

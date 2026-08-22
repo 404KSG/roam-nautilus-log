@@ -5,6 +5,7 @@ import {
   updateTemplateString,
 } from "./entry-helpers";
 import * as logCore from "./log-core";
+import { createTimingCommands } from "./timing-commands";
 import { createTimingRuntime } from "./timing-runtime";
 import { createTimingTopbar } from "./timing-topbar";
 import "../extension.css";
@@ -32,11 +33,13 @@ const defaults = {
 
 const executionDefaults = {
   "actual-time-tracking": false,
+  "timing-line-sidebar": true,
   "pomodoro-minutes": 45,
 };
 
 let timingRuntime = null;
 let timingTopbar = null;
+let timingCommands = null;
 
 function settingValue(extensionAPI, key) {
   const value = extensionAPI.settings.get(key);
@@ -116,13 +119,18 @@ async function startTiming(extensionAPI) {
   if (timingRuntime || typeof document === "undefined") return true;
   const runtime = createTimingRuntime({ extensionAPI });
   let topbar = null;
+  let commands = null;
   try {
     await runtime.initialize();
     topbar = createTimingTopbar({ runtime, extensionAPI });
     topbar.initialize();
+    commands = createTimingCommands({ runtime, extensionAPI });
+    commands.initialize();
     timingRuntime = runtime;
     timingTopbar = topbar;
+    timingCommands = commands;
   } catch (error) {
+    commands?.destroy();
     topbar?.destroy();
     runtime.destroy();
     throw error;
@@ -137,9 +145,11 @@ async function stopTiming({ closeActive = false } = {}) {
   if (!timingRuntime) return true;
   if (closeActive) await timingRuntime.disable();
   else timingRuntime.destroy();
+  timingCommands?.destroy();
   timingTopbar?.destroy();
   timingRuntime = null;
   timingTopbar = null;
+  timingCommands = null;
   if (typeof window !== "undefined" && window.nautilusLogExtensionData) {
     window.nautilusLogExtensionData.timingEnabled = false;
   }
@@ -204,6 +214,8 @@ function panelConfig(extensionAPI, language) {
       colorDesc: "使任务显示为紧急红色的关键词（不可包含空格，例如：重要）。",
       tracking: "实际时间记录",
       trackingDesc: "启用后显示 Nautilus Log 顶栏，并允许聚焦、CLOCK 计时、任务切换和一键完成。默认关闭；关闭时整套顶栏交互均不加载。",
+      sidebar: "计时任务置顶到右侧边栏",
+      sidebarDesc: "Clock In 或切换任务时，将当前 Timing Line 打开或移动到 Roam 右侧边栏顶部。",
       pomodoro: "番茄钟阈值",
       pomodoroDesc: "连续聚焦达到该分钟数后，顶栏计时变红但不会自动停止。任务切换不会重置。",
     }
@@ -225,6 +237,8 @@ function panelConfig(extensionAPI, language) {
       colorDesc: "Keyword that colors a task urgent red (no spaces, for example urgent).",
       tracking: "Actual Time Tracking",
       trackingDesc: "Enable the Nautilus Log topbar for focus, CLOCK timing, task switching, and one-click completion. Defaults off; while off the entire topbar interaction layer stays unloaded.",
+      sidebar: "Keep Timing Line first in right sidebar",
+      sidebarDesc: "After Clock In or a task switch, open or move the Timing Line to the top of Roam's right sidebar.",
       pomodoro: "Pomodoro Threshold",
       pomodoroDesc: "Turn the live elapsed value red after this many continuous focus minutes. Switching tasks keeps the same cycle and never stops time automatically.",
     };
@@ -308,6 +322,20 @@ function panelConfig(extensionAPI, language) {
         },
       },
       {
+        id: "timing-line-sidebar",
+        name: labels.sidebar,
+        description: labels.sidebarDesc,
+        action: {
+          type: "switch",
+          defaultValue: extensionAPI.settings.get("timing-line-sidebar") ?? true,
+          onChange: async (value) => {
+            const enabled = typeof value === "boolean" ? value : Boolean(value?.target?.checked);
+            await extensionAPI.settings.set("timing-line-sidebar", enabled);
+            publishRuntimeSettings(extensionAPI);
+          },
+        },
+      },
+      {
         id: "pomodoro-minutes",
         name: labels.pomodoro,
         description: labels.pomodoroDesc,
@@ -383,6 +411,7 @@ function onunload() {
 
 export {
   createTimingRuntime,
+  createTimingCommands,
   generateTemplateString,
   generateUpdatedRenderString,
   panelConfig,

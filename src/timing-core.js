@@ -241,6 +241,42 @@ function nextPomodoroState(current, { action, nowMs = Date.now() } = {}) {
   return current || null;
 }
 
+function executionStructureKey(snapshot = {}, view = 'timing') {
+  if (Number.isInteger(snapshot.revision)) {
+    return JSON.stringify([
+      view === 'plan' ? 'plan' : 'timing',
+      snapshot.revision,
+      snapshot.status || '',
+      snapshot.notice || '',
+    ]);
+  }
+  const time = (value) => asTime(value);
+  const entry = (value) => value ? [
+    value.clockUid || '',
+    value.taskUid || value.uid || '',
+    value.title || '',
+    value.status || '',
+    time(value.start),
+    time(value.end),
+    Boolean(value.running),
+    Number(value.minutes) || 0,
+    Number(value.plannedMinutes) || 0,
+  ] : null;
+  const plan = snapshot.planSnapshot || {};
+  const active = snapshot.activeWork || {};
+  return JSON.stringify([
+    view === 'plan' ? 'plan' : 'timing',
+    snapshot.status || '',
+    snapshot.notice || '',
+    plan.plan?.uid || '',
+    (plan.tasks || []).map(entry),
+    entry(active.focused),
+    (active.recent || []).map(entry),
+    (snapshot.entries || []).map(entry),
+    Number(snapshot.pomodoro?.startedAt) || 0,
+  ]);
+}
+
 module.exports = {
   ACTIVE_WORK_WINDOW_MINUTES,
   actualMinutesToday,
@@ -248,6 +284,7 @@ module.exports = {
   chooseFocusedEntry,
   compactMinutes,
   durationMetadata,
+  executionStructureKey,
   formatClockLine,
   formatElapsed,
   isNautilusComponent,

@@ -847,12 +847,27 @@
 }
 
 .nautilus-log-timing__row-title {
+  appearance: none;
+  background: transparent;
+  border: 0;
   color: var(--nl-exec-text, #303744);
+  cursor: pointer;
+  display: block;
   font-size: 13px;
   font-weight: 600;
+  line-height: 1.35;
   overflow: hidden;
+  padding: 0;
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+  width: 100%;
+}
+
+.nautilus-log-timing__row-title:hover,
+.nautilus-log-timing__row-title:focus-visible {
+  color: var(--nautilus-log-page-link, #137cbd);
+  outline: none;
 }
 
 .nautilus-log-timing__row-meta {

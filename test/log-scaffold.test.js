@@ -162,11 +162,13 @@ test('a fresh install defaults the settings panel and rendered UI to English', a
   assert.equal(settings.get('workday-end'), 21);
   assert.equal(settings.get('prefix-str'), '[[Nautilus Log]]');
   assert.equal(settings.get('actual-time-tracking'), false);
+  assert.equal(settings.get('timing-line-sidebar'), true);
   assert.equal(window.nautilusLogExtensionData.settings.language, 'en');
   assert.equal(latestPanel.settings.find(({ id }) => id === 'language').action.default, 'en');
   assert.equal(latestPanel.settings.find(({ id }) => id === 'workday-start').name, 'Chart Start Time');
   assert.equal(latestPanel.settings.find(({ id }) => id === 'workday-end').action.default, 21);
   assert.equal(latestPanel.settings.find(({ id }) => id === 'actual-time-tracking').action.defaultValue, false);
+  assert.equal(latestPanel.settings.find(({ id }) => id === 'timing-line-sidebar').action.defaultValue, true);
   assert.equal(global.document, undefined);
 
   await extension.onunload();

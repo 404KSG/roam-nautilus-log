@@ -45,6 +45,25 @@ function api() {
   return typeof window !== 'undefined' ? window.roamAlphaAPI : null;
 }
 
+const sidebarOperationQueues = new WeakMap();
+const knownSidebarWindows = new WeakMap();
+let latestSidebarIntent = 0;
+
+function blockSidebarWindow(uid, order) {
+  const value = { type: 'block', 'block-uid': uid };
+  if (Number.isFinite(order)) value.order = order;
+  return value;
+}
+
+function runSidebarOperation(sidebar, operation) {
+  const previous = sidebarOperationQueues.get(sidebar);
+  const current = previous ? previous.then(operation, operation) : Promise.resolve().then(operation);
+  sidebarOperationQueues.set(sidebar, current);
+  return current.finally(() => {
+    if (sidebarOperationQueues.get(sidebar) === current) sidebarOperationQueues.delete(sidebar);
+  });
+}
+
 function normalizeSequence(value) {
   if (Array.isArray(value)) return value;
   if (value === null || value === undefined || typeof value === 'string') return null;
@@ -152,6 +171,14 @@ export function readBlockString(uid) {
   return typeof rows[0]?.[0] === 'string' ? rows[0][0] : null;
 }
 
+export function getFocusedBlockUid() {
+  try {
+    return api()?.ui?.getFocusedBlock?.()?.['block-uid'] ?? null;
+  } catch (_error) {
+    return null;
+  }
+}
+
 export function readChildren(uid) {
   if (!uid) return [];
   return query(`[:find ?uid ?string ?order
@@ -233,6 +260,116 @@ export async function openPrimaryPlan(planUid) {
     node?.classList?.add('nautilus-log-timing__located');
     window.setTimeout?.(() => node?.classList?.remove('nautilus-log-timing__located'), 1200);
   }, 80);
+}
+
+export async function openTaskInMainWindow(taskUid) {
+  if (!taskUid) throw new Error('This task has no block UID.');
+  const openBlock = api()?.ui?.mainWindow?.openBlock;
+  if (typeof openBlock !== 'function') throw new Error('Roam main-window navigation is unavailable.');
+  await openBlock({ block: { uid: taskUid } });
+  return { ok: true };
+}
+
+/**
+ * Open or move the selected Timing Line to order 0 in Roam's native sidebar.
+ *
+ * Roam remains authoritative: the current window list is read on every queued
+ * user intent when available, so closing a window outside the extension never
+ * leaves behind a permanent false dedupe marker. A newer rapid switch can
+ * supersede an older request before that older request mutates the stack.
+ */
+export function frontBlockInRightSidebar(taskUid) {
+  if (!taskUid) return Promise.resolve({ ok: false, reason: 'missing-uid' });
+  const sidebar = api()?.ui?.rightSidebar;
+  if (typeof sidebar?.addWindow !== 'function') {
+    return Promise.resolve({
+      ok: false,
+      reason: 'unavailable',
+      message: 'Roam right-sidebar block windows are unavailable.',
+    });
+  }
+
+  const intent = ++latestSidebarIntent;
+  const isCurrent = () => intent === latestSidebarIntent;
+  const openRequest = (() => {
+    try { return Promise.resolve(sidebar.open?.()).catch(() => undefined); }
+    catch (_error) { return Promise.resolve(); }
+  })();
+
+  return runSidebarOperation(sidebar, async () => {
+    if (!isCurrent()) return { ok: false, skipped: true, reason: 'superseded' };
+    let windows = null;
+    if (typeof sidebar.getWindows === 'function') {
+      try { windows = await sidebar.getWindows(); }
+      catch (_error) {
+        await openRequest;
+        try { windows = await sidebar.getWindows(); } catch (_retryError) { windows = null; }
+      }
+    }
+    if (!isCurrent()) return { ok: false, skipped: true, reason: 'superseded' };
+
+    const existing = Array.isArray(windows) && windows.find((entry) => (
+      entry?.type === 'block' && entry?.['block-uid'] === taskUid
+    ));
+    if (existing) {
+      if (typeof sidebar.setWindowOrder === 'function') {
+        await sidebar.setWindowOrder({ window: blockSidebarWindow(taskUid, 0) });
+      } else if (Number(existing.order) !== 0) {
+        return {
+          ok: false,
+          reason: 'order-unavailable',
+          message: 'Roam could not move the Timing Line sidebar window to the top.',
+        };
+      }
+      if (!isCurrent()) return { ok: false, skipped: true, reason: 'superseded' };
+      if (typeof sidebar.expandWindow === 'function') {
+        await sidebar.expandWindow({ window: blockSidebarWindow(taskUid) });
+      }
+      let known = knownSidebarWindows.get(sidebar);
+      if (!known) {
+        known = new Set();
+        knownSidebarWindows.set(sidebar, known);
+      }
+      known.add(taskUid);
+      return { ok: true, deduped: true, reordered: typeof sidebar.setWindowOrder === 'function' };
+    }
+
+    if (!Array.isArray(windows) && knownSidebarWindows.get(sidebar)?.has(taskUid)) {
+      if (typeof sidebar.setWindowOrder === 'function') {
+        try {
+          await sidebar.setWindowOrder({ window: blockSidebarWindow(taskUid, 0) });
+          await sidebar.expandWindow?.({ window: blockSidebarWindow(taskUid) });
+          return { ok: true, deduped: true, reordered: true };
+        } catch (_error) {
+          knownSidebarWindows.get(sidebar)?.delete(taskUid);
+        }
+      } else {
+        return { ok: true, deduped: true };
+      }
+    }
+
+    await openRequest;
+    if (!isCurrent()) return { ok: false, skipped: true, reason: 'superseded' };
+    await sidebar.addWindow({ window: blockSidebarWindow(taskUid, 0) });
+    let known = knownSidebarWindows.get(sidebar);
+    if (!known) {
+      known = new Set();
+      knownSidebarWindows.set(sidebar, known);
+    }
+    known.add(taskUid);
+    return { ok: true, added: true };
+  }).catch((error) => ({
+    ok: false,
+    reason: 'sidebar-front-failed',
+    message: error?.message || 'Roam could not move the Timing Line to the top of the right sidebar.',
+    error,
+  }));
+}
+
+export async function openTaskInRightSidebar(taskUid) {
+  const result = await frontBlockInRightSidebar(taskUid);
+  if (!result.ok && !result.skipped) throw new Error(result.message || 'Could not open this task in the right sidebar.');
+  return result;
 }
 
 export function legacyLogbookIsRunning() {

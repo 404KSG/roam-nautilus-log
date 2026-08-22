@@ -3,9 +3,13 @@ import {
   closeClock,
   completeTask,
   createRunningClock,
+  frontBlockInRightSidebar,
   legacyLogbookIsRunning,
+  openTaskInMainWindow,
+  openTaskInRightSidebar,
   openPrimaryPlan,
   readAllEntries,
+  readBlockString,
   readPrimaryPlan,
   showToast,
   updateGraphBlock,
@@ -27,8 +31,13 @@ function currentPomodoro(extensionAPI, focused) {
 export function createTimingRuntime({ extensionAPI, now = () => new Date() }) {
   let destroyed = false;
   let ticker = null;
+  let refreshHandle = null;
+  let refreshHandleKind = null;
+  let refreshPromise = null;
+  let resolveRefresh = null;
   let mutationQueue = Promise.resolve();
   let snapshot = {
+    revision: 0,
     status: 'loading',
     notice: '',
     planSnapshot: null,
@@ -58,6 +67,7 @@ export function createTimingRuntime({ extensionAPI, now = () => new Date() }) {
       const activeWork = timingCore.buildActiveWork(entries, now(), 45);
       const pomodoro = currentPomodoro(extensionAPI, activeWork.focused);
       snapshot = {
+        revision: snapshot.revision + 1,
         status: 'ready',
         notice,
         planSnapshot,
@@ -67,16 +77,50 @@ export function createTimingRuntime({ extensionAPI, now = () => new Date() }) {
         now: now(),
       };
     } catch (error) {
-      snapshot = { ...snapshot, status: 'error', notice: error.message || 'Timing data could not be refreshed.', now: now() };
+      snapshot = {
+        ...snapshot,
+        revision: snapshot.revision + 1,
+        status: 'error',
+        notice: error.message || 'Timing data could not be refreshed.',
+        now: now(),
+      };
     }
     publish();
     return snapshot;
   };
 
+  const requestRefresh = ({ notice = '' } = {}) => {
+    if (destroyed) return Promise.resolve(snapshot);
+    if (refreshPromise) return refreshPromise;
+    refreshPromise = new Promise((resolve) => {
+      resolveRefresh = resolve;
+      const run = () => {
+        refreshHandle = null;
+        refreshHandleKind = null;
+        let next = snapshot;
+        try { next = refresh({ notice }); }
+        finally {
+          const finish = resolveRefresh;
+          resolveRefresh = null;
+          refreshPromise = null;
+          finish?.(next);
+        }
+      };
+      if (typeof window.requestIdleCallback === 'function') {
+        refreshHandleKind = 'idle';
+        refreshHandle = window.requestIdleCallback(run, { timeout: 1200 });
+      } else {
+        refreshHandleKind = 'timeout';
+        refreshHandle = window.setTimeout(run, 0);
+      }
+    });
+    return refreshPromise;
+  };
+
   const enqueue = (operation) => {
     const run = mutationQueue.then(async () => {
       if (destroyed) throw new Error('Actual Time Tracking is no longer active.');
-      snapshot = { ...snapshot, status: 'working', notice: '' };
+      snapshot = { ...snapshot, revision: snapshot.revision + 1, status: 'working', notice: '' };
       publish();
       try {
         return await operation();
@@ -117,23 +161,32 @@ export function createTimingRuntime({ extensionAPI, now = () => new Date() }) {
     }
   };
 
-  const startTask = (taskUid) => enqueue(async () => {
-    const before = readAllEntries();
-    const focused = timingCore.chooseFocusedEntry(before);
-    const instant = now();
-    if (focused?.taskUid === taskUid) {
-      await closeEntriesAt(before, instant);
-      await setPomodoro(null);
-      return refresh();
+  const startTask = (taskUid) => {
+    const taskString = readBlockString(taskUid);
+    if (timingCore.taskStatus(taskString) !== 'TODO') {
+      return Promise.reject(new Error('Only an unfinished TODO can own the Timing Line.'));
     }
-    await closeEntriesAt(before, instant);
-    await createRunningClock(taskUid, instant);
-    await setPomodoro(timingCore.nextPomodoroState(snapshot.pomodoro, {
-      action: focused ? 'switch' : 'start',
-      nowMs: instant.getTime(),
-    }));
-    return refresh();
-  });
+    if (extensionAPI.settings.get('timing-line-sidebar') !== false) {
+      void frontBlockInRightSidebar(taskUid).then((result) => {
+        if (!result?.ok && !result?.skipped) showToast(result?.message || 'The task started, but Roam could not show it at the top of the right sidebar.');
+      });
+    }
+    return enqueue(async () => {
+      const before = readAllEntries();
+      const focused = timingCore.chooseFocusedEntry(before);
+      const instant = now();
+      if (focused?.taskUid === taskUid) {
+        return refresh();
+      }
+      await closeEntriesAt(before, instant);
+      await createRunningClock(taskUid, instant);
+      await setPomodoro(timingCore.nextPomodoroState(snapshot.pomodoro, {
+        action: focused ? 'switch' : 'start',
+        nowMs: instant.getTime(),
+      }));
+      return refresh();
+    });
+  };
 
   const stopTask = () => enqueue(async () => {
     const entries = readAllEntries();
@@ -172,20 +225,14 @@ export function createTimingRuntime({ extensionAPI, now = () => new Date() }) {
       snapshot = { ...snapshot, now: now() };
       if (Date.now() - lastGraphRefresh >= REFRESH_INTERVAL_MS) {
         lastGraphRefresh = Date.now();
-        try {
-          const entries = readAllEntries();
-          const hasDoneClock = entries.some((entry) => entry.running && entry.status === 'DONE');
-          if (hasDoneClock) {
+        void requestRefresh().then((next) => {
+          if (next.entries.some((entry) => entry.running && entry.status === 'DONE')) {
             enqueue(async () => {
-              await closeDoneClocks(entries);
+              await closeDoneClocks(next.entries);
               return refresh();
             }).catch((error) => console.error('[Nautilus Log] DONE clock reconciliation failed', error));
-          } else {
-            refresh();
           }
-        } catch (_error) {
-          refresh();
-        }
+        });
       } else {
         publish();
       }
@@ -207,16 +254,29 @@ export function createTimingRuntime({ extensionAPI, now = () => new Date() }) {
     destroyed = true;
     if (ticker !== null) window.clearInterval(ticker);
     ticker = null;
+    if (refreshHandle !== null) {
+      if (refreshHandleKind === 'idle') window.cancelIdleCallback?.(refreshHandle);
+      else window.clearTimeout(refreshHandle);
+    }
+    refreshHandle = null;
+    refreshHandleKind = null;
+    resolveRefresh?.(snapshot);
+    resolveRefresh = null;
+    refreshPromise = null;
     listeners.clear();
   }
 
   return {
     initialize,
     refresh,
+    requestRefresh,
     startTask,
     stopTask,
     completeTask: finishTask,
     locate: () => openPrimaryPlan(snapshot.planSnapshot?.plan?.uid),
+    openTask: (taskUid, { sidebar = false } = {}) => (
+      sidebar ? openTaskInRightSidebar(taskUid) : openTaskInMainWindow(taskUid)
+    ),
     disable,
     destroy,
     getSnapshot: () => snapshot,

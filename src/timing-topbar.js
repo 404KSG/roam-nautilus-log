@@ -55,11 +55,24 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
   let keyHandler = null;
   let view = 'timing';
   let state = runtime.getSnapshot();
+  let lastPopoverKey = null;
+  let deferredRefreshFrame = null;
+  let deferredRefreshTimer = null;
+  let triggerMode = null;
+
+  const cancelDeferredRefresh = () => {
+    if (deferredRefreshFrame !== null) window.cancelAnimationFrame?.(deferredRefreshFrame);
+    if (deferredRefreshTimer !== null) window.clearTimeout(deferredRefreshTimer);
+    deferredRefreshFrame = null;
+    deferredRefreshTimer = null;
+  };
 
   const closePopover = ({ restoreFocus = false } = {}) => {
     if (!popover) return;
+    cancelDeferredRefresh();
     popover.remove();
     popover = null;
+    lastPopoverKey = null;
     document.removeEventListener('mousedown', outsideHandler, true);
     document.removeEventListener('keydown', keyHandler, true);
     outsideHandler = null;
@@ -74,11 +87,19 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
 
   const taskRow = (task, { recent = false } = {}) => {
     const row = element('div', 'nautilus-log-timing__row');
+    row.dataset.taskUid = task.uid;
     const focused = state.activeWork?.focused?.taskUid === task.uid;
     if (focused) row.classList.add('is-focused');
 
     const copy = element('div', 'nautilus-log-timing__row-copy');
-    copy.append(element('div', 'nautilus-log-timing__row-title', task.title));
+    const title = element('button', 'nautilus-log-timing__row-title', task.title);
+    title.type = 'button';
+    title.title = task.title;
+    title.addEventListener('click', (event) => {
+      closePopover();
+      runAction(() => runtime.openTask(task.uid, { sidebar: event.shiftKey }));
+    });
+    copy.append(title);
     const duration = timingCore.durationMetadata({
       taskUid: task.uid,
       plannedMinutes: task.plannedMinutes,
@@ -88,11 +109,12 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     const metaText = focused
       ? `Timing ${timingCore.formatElapsed(state.now - state.activeWork.focused.start)} · ${duration.detailLabel}`
       : recent ? `Recent · ${duration.detailLabel}` : duration.detailLabel;
-    copy.append(element('div', 'nautilus-log-timing__row-meta', metaText));
+    const meta = element('div', `nautilus-log-timing__row-meta${focused ? ' is-live' : ''}`, metaText);
+    copy.append(meta);
     row.append(copy);
 
     const actions = element('div', 'nautilus-log-timing__row-actions');
-    const timingAction = iconButton(focused ? 'pause' : 'play', focused ? 'Clock Out' : 'Clock In', () => {
+    const timingAction = iconButton(focused ? 'log-out' : 'play', focused ? 'Clock Out' : 'Clock In', () => {
       runAction(() => focused ? runtime.stopTask() : runtime.startTask(task.uid));
     });
     const completeAction = iconButton('tick', 'Complete task', () => runAction(() => runtime.completeTask(task.uid)));
@@ -109,8 +131,32 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     plannedMinutes: timingCore.plannedMinutes(entry.taskString, Number(extensionAPI.settings.get('todo-duration')) || 15),
   });
 
-  const renderPopover = () => {
+  const updateLiveElapsed = () => {
     if (!popover) return;
+    const focused = state.activeWork?.focused;
+    if (!focused) return;
+    const row = [...popover.querySelectorAll('.nautilus-log-timing__row')]
+      .find((candidate) => candidate.dataset.taskUid === focused.taskUid);
+    const meta = row?.querySelector('.nautilus-log-timing__row-meta.is-live');
+    if (!meta) return;
+    const task = activeTask(focused);
+    const duration = timingCore.durationMetadata({
+      taskUid: task.uid,
+      plannedMinutes: task.plannedMinutes,
+      entries: state.entries,
+      now: state.now,
+    });
+    meta.textContent = `Timing ${timingCore.formatElapsed(state.now - focused.start)} · ${duration.detailLabel}`;
+  };
+
+  const renderPopover = ({ force = false } = {}) => {
+    if (!popover) return;
+    const structureKey = timingCore.executionStructureKey(state, view);
+    if (!force && structureKey === lastPopoverKey) {
+      updateLiveElapsed();
+      return;
+    }
+    lastPopoverKey = structureKey;
     popover.replaceChildren();
 
     const header = element('div', 'nautilus-log-timing__popover-header');
@@ -118,7 +164,11 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     ['timing', 'plan'].forEach((name) => {
       const button = element('button', `nautilus-log-timing__tab${view === name ? ' is-active' : ''}`, name === 'timing' ? 'Timing' : 'Plan');
       button.type = 'button';
-      button.addEventListener('click', () => { view = name; renderPopover(); });
+      button.addEventListener('click', () => {
+        if (view === name) return;
+        view = name;
+        renderPopover({ force: true });
+      });
       tabs.append(button);
     });
     header.append(tabs);
@@ -166,15 +216,29 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
 
   const openPopover = async () => {
     if (popover) return closePopover({ restoreFocus: true });
-    runtime.refresh();
     popover = element('section', 'nautilus-log-timing__popover');
     popover.id = POPOVER_ID;
     popover.setAttribute('role', 'dialog');
     popover.setAttribute('aria-label', 'Nautilus Log execution panel');
     document.body.append(popover);
     trigger.setAttribute('aria-expanded', 'true');
-    renderPopover();
+    renderPopover({ force: true });
     positionPopover();
+    const refreshAfterPaint = () => {
+      deferredRefreshFrame = null;
+      deferredRefreshTimer = window.setTimeout(() => {
+        deferredRefreshTimer = null;
+        if (popover) void runtime.requestRefresh();
+      }, 0);
+    };
+    if (typeof window.requestAnimationFrame === 'function') {
+      deferredRefreshFrame = window.requestAnimationFrame(refreshAfterPaint);
+    } else {
+      deferredRefreshTimer = window.setTimeout(() => {
+        deferredRefreshTimer = null;
+        if (popover) void runtime.requestRefresh();
+      }, 0);
+    }
     outsideHandler = (event) => {
       if (!popover?.contains(event.target) && !container?.contains(event.target)) closePopover();
     };
@@ -187,11 +251,13 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
 
   const renderTrigger = () => {
     if (!trigger) return;
-    trigger.replaceChildren();
     const focused = state.activeWork?.focused;
     if (!focused) {
+      if (triggerMode !== 'idle') {
+        trigger.replaceChildren(icon('ring'));
+        triggerMode = 'idle';
+      }
       trigger.classList.remove('is-active', 'is-overdue');
-      trigger.append(icon('ring'));
       trigger.setAttribute('aria-label', 'Open Nautilus Log execution panel');
       trigger.title = 'Nautilus Log';
     } else {
@@ -199,15 +265,21 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       const count = state.activeWork.count;
       const pomodoroMinutes = Number(extensionAPI.settings.get('pomodoro-minutes')) || 45;
       const pomodoroElapsed = state.pomodoro ? state.now.getTime() - Number(state.pomodoro.startedAt) : 0;
+      if (triggerMode !== 'active') {
+        trigger.replaceChildren(
+          element('span', 'nautilus-log-timing__elapsed'),
+          element('span', 'nautilus-log-timing__trigger-separator', '·'),
+          element('span', 'nautilus-log-timing__threads'),
+        );
+        triggerMode = 'active';
+      }
       trigger.classList.add('is-active');
       trigger.classList.toggle('is-overdue', pomodoroElapsed >= pomodoroMinutes * 60000);
-      trigger.append(element('span', 'nautilus-log-timing__elapsed', elapsed));
-      trigger.append(element('span', 'nautilus-log-timing__trigger-separator', '·'));
-      trigger.append(element('span', 'nautilus-log-timing__threads', `${count} Thread${count === 1 ? '' : 's'}`));
+      trigger.querySelector('.nautilus-log-timing__elapsed').textContent = elapsed;
+      trigger.querySelector('.nautilus-log-timing__threads').textContent = `${count} Thread${count === 1 ? '' : 's'}`;
       trigger.setAttribute('aria-label', `${elapsed}, ${count} active thread${count === 1 ? '' : 's'}`);
       trigger.title = focused.title;
     }
-    if (popover) renderPopover();
   };
 
   const ensureMounted = () => {
@@ -269,6 +341,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     unsubscribe = runtime.subscribe((next) => {
       state = next;
       ensureMounted();
+      if (popover) renderPopover();
     });
     return true;
   };
@@ -280,6 +353,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     unsubscribe?.();
     unsubscribe = null;
     resetObservers();
+    cancelDeferredRefresh();
     container?.remove();
     container = null;
     trigger = null;

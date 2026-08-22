@@ -60,16 +60,31 @@ changing the spiral's estimated scheduling rules:
   starting the new task at the same instant;
 - Timing shows the focused task plus distinct tasks left within the last 45
   minutes, making quick return and multi-task switching explicit;
-- each row can Clock In/Out or complete the task in one click;
+- Clock In immediately opens or moves the selected task to the top of Roam's
+  native right sidebar by default, without making CLOCK confirmation wait for
+  the sidebar animation;
+- each row can Clock In, explicitly Clock Out with Blueprint's `log-out`
+  control, or complete the task in one click;
 - Actual time is shown when today's CLOCK history exists; otherwise the row
   falls back to its Planned estimate;
 - the shared Pomodoro threshold defaults to 45 minutes, survives task switches,
   turns the live elapsed value red, and never stops work automatically.
 
 The idle topbar entry uses Blueprint's native `ring` icon. The `locate` action
-opens the Primary Plan in Roam's main window. Disabling tracking first closes
-and confirms any running CLOCK; if that cannot be confirmed, tracking remains
-enabled so uncertain graph state is never hidden.
+opens the Primary Plan in Roam's main window. Task titles open in the main
+window; Shift+Click opens them in the right sidebar. The Command Palette exposes
+**Nautilus Log: Focus current block**, **Nautilus Log: Clock out Timing Line**,
+and **Nautilus Log: Locate Primary Plan**. Assign any preferred shortcuts in
+**Roam Settings → Hotkeys**; Nautilus Log installs no conflicting global key
+listener. TODO block context menus also expose Clock In and Clock Out.
+
+The panel paints its last confirmed snapshot immediately, refreshes graph data
+after the first browser paint, and updates only live elapsed text on one-second
+ticks. Timing/Plan switching therefore performs no graph scan or full-list
+rebuild. Disabling tracking first closes and confirms any running CLOCK; if
+that cannot be confirmed, tracking remains enabled so uncertain graph state is
+never hidden. Disabling also unregisters all Nautilus Log timing commands and
+context-menu actions.
 
 Nautilus Log reads and writes the compatible Org-style graph record:
 
@@ -166,11 +181,21 @@ Todo Trigger 仍然是可选工具：它可以在完成时追加时间戳，但 
 - Plan 只显示它的直接子级、尚未完成的 TODO，不提供父子层级折叠；
 - 任意时刻只允许一个 CLOCK；切换任务时，用同一时刻先关旧任务、再启动新任务；
 - Timing 显示当前聚焦任务，以及 45 分钟内离开的去重任务，便于快速切回；
-- 每一行都可以直接开始/停止计时或一键完成；
+- Clock In 默认立即将对应任务打开或移动到 Roam 右侧边栏顶部，同时独立确认 CLOCK 写入；
+- 每一行都可以直接 Clock In、用 Blueprint `log-out` 明确 Clock Out，或一键完成；
 - 当天存在有效 CLOCK 时显示 Actual，否则回退到 Planned 预计时长；
 - 番茄钟阈值默认 45 分钟，任务切换不会重置，达到阈值只把顶栏计时变红，绝不自动停止。
 
 空闲时使用 Blueprint 原生 `ring` 图标；`locate` 会把当天 Primary Plan 定位到主界面。
+点击任务标题在主界面打开，Shift+Click 在右侧边栏打开。命令面板提供“聚焦当前
+block”“Clock out Timing Line”和“定位 Primary Plan”三项操作，可在 **Roam Settings
+→ Hotkeys** 自行绑定快捷键；插件不会安装可能冲突的全局按键监听。TODO 右键菜单也会
+提供 Clock In 和 Clock Out。
+
+面板先立即显示最近一次确认的缓存，再在浏览器完成首帧后刷新图谱。每秒 tick 只更新
+计时文字，不重建整个任务列表，因此 Timing/Plan 切换不再触发图谱扫描，也不会与整表
+重绘竞争。
+
 关闭开关前会先关闭并确认运行中的 CLOCK；如果确认失败，开关会保持开启，避免把不确定
 状态藏起来。开启前请先关闭独立的 Roam Logbook 插件，Nautilus Log 检测到第二个
 CLOCK 写入者时会拒绝启动。
