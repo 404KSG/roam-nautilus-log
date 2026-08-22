@@ -134,6 +134,22 @@ test('execution popover paints cached state before refreshing and does not rebui
   assert.doesNotMatch(timingTopbar.slice(triggerStart, triggerEnd), /renderPopover/);
 });
 
+test('execution popover exposes a lightweight daily Review without another graph reader', () => {
+  assert.match(timingTopbar, /\['timing', 'plan', 'review'\]/);
+  assert.match(timingTopbar, /tabs\.setAttribute\('role', 'tablist'\)/);
+  assert.match(timingTopbar, /button\.setAttribute\('role', 'tab'\)/);
+  assert.match(timingTopbar, /button\.setAttribute\('aria-selected', String\(view === name\)\)/);
+  assert.match(timingTopbar, /view === 'review'/);
+  assert.match(timingTopbar, /nautilus-log-timing__review-summary/);
+  assert.match(timingTopbar, /nautilus-log-timing__review-row/);
+  assert.match(timingTopbar, /reviewLiveActual/);
+  assert.match(css, /\.nautilus-log-timing__review-summary/);
+  assert.match(css, /\.nautilus-log-timing__review-row/);
+  assert.match(css, /@media \(max-width:\s*320px\)[\s\S]*\.nautilus-log-timing__identity-name\s*\{[^}]*display:\s*none;/);
+  assert.match(css, /@media \(max-width:\s*320px\)[\s\S]*\.nautilus-log-timing__tab\s*\{[^}]*padding:\s*0 7px;/);
+  assert.doesNotMatch(timingTopbar, /readAllEntries|readPrimaryPlan/);
+});
+
 test('Log owns the previously tested controls and collapses without reserving chart space', () => {
   assert.match(component, /M3 9h18/);
   assert.match(component, /m9 13 3 3 3-3/);

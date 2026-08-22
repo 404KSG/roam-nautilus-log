@@ -177,10 +177,98 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     plannedMinutes: timingCore.plannedMinutes(entry.taskString, Number(extensionAPI.settings.get('todo-duration')) || 15),
   });
 
+  const signedMinutes = (minutes) => {
+    const value = Number(minutes) || 0;
+    if (value === 0) return '0m';
+    return `${value > 0 ? '+' : '−'}${timingCore.compactMinutes(Math.abs(value))}`;
+  };
+
+  const reviewSummary = (summary = {}) => {
+    const section = element('section', 'nautilus-log-timing__review-summary');
+    section.setAttribute('aria-label', 'Today review summary');
+    const counts = element('div', 'nautilus-log-timing__review-counts');
+    const completed = element('span', 'nautilus-log-timing__review-count');
+    completed.append('Completed ', element('strong', '', `${summary.completedCount || 0}/${summary.totalCount || 0}`));
+    const compared = element('span', 'nautilus-log-timing__review-count');
+    compared.append('Compared ', element('strong', '', String(summary.comparedCount || 0)));
+    counts.append(completed, compared);
+
+    const totals = element('div', 'nautilus-log-timing__review-totals');
+    const metric = (label, value, className = '') => {
+      const item = element('span', `nautilus-log-timing__review-total${className ? ` ${className}` : ''}`);
+      item.append(`${label} `, element('strong', '', value));
+      return item;
+    };
+    const variance = Number(summary.varianceMinutes) || 0;
+    const comparable = Number(summary.comparedCount) > 0;
+    totals.append(
+      metric('Planned', comparable ? timingCore.compactMinutes(summary.plannedMinutes || 0) : '—'),
+      metric('Actual', comparable ? timingCore.compactMinutes(summary.actualMinutes || 0) : '—'),
+      metric('Variance', comparable ? signedMinutes(variance) : '—', comparable && variance > 0 ? 'is-over' : ''),
+    );
+    section.append(counts, totals);
+    return section;
+  };
+
+  const reviewRow = (task) => {
+    const stateLabels = {
+      compared: 'Compared',
+      live: 'Live',
+      paused: 'Paused',
+      'not-tracked': 'Not tracked',
+      'not-started': 'Not started',
+    };
+    const row = element('div', `nautilus-log-timing__review-row is-${task.state}`);
+    row.dataset.taskUid = task.uid;
+    const heading = element('div', 'nautilus-log-timing__review-row-heading');
+    const title = element('button', 'nautilus-log-timing__review-title', task.title);
+    title.type = 'button';
+    title.title = task.title;
+    title.addEventListener('click', (event) => {
+      closePopover();
+      runAction(() => runtime.openTask(task.uid, { sidebar: event.shiftKey }));
+    });
+    heading.append(title, element('span', 'nautilus-log-timing__review-state', stateLabels[task.state] || task.state));
+
+    const metrics = element('div', 'nautilus-log-timing__review-row-metrics');
+    metrics.append(element('span', '', `Planned ${timingCore.compactMinutes(task.plannedMinutes)}`));
+    const actualLabel = task.state === 'not-tracked' || task.state === 'not-started'
+      ? 'Actual —'
+      : `Actual ${timingCore.compactMinutes(task.actualMinutes)}`;
+    const actual = element('span', 'nautilus-log-timing__review-actual', actualLabel);
+    if (task.state === 'live') actual.dataset.reviewLiveActual = task.uid;
+    metrics.append(actual);
+    if (task.state === 'compared') {
+      const variance = element(
+        'span',
+        `nautilus-log-timing__review-variance${task.varianceMinutes > 0 ? ' is-over' : ''}`,
+        signedMinutes(task.varianceMinutes),
+      );
+      metrics.append(variance);
+    }
+    row.append(heading, metrics);
+    return row;
+  };
+
   const updateLiveElapsed = () => {
     if (!popover) return;
     const focused = state.activeWork?.focused;
     if (!focused) return;
+    if (view === 'review') {
+      const actual = [...popover.querySelectorAll('[data-review-live-actual]')]
+        .find((candidate) => candidate.dataset.reviewLiveActual === focused.taskUid);
+      if (!actual) return;
+      const task = state.dailyReview?.rows?.find((candidate) => candidate.uid === focused.taskUid)
+        || activeTask(focused);
+      const duration = timingCore.durationMetadata({
+        taskUid: focused.taskUid,
+        plannedMinutes: task.plannedMinutes,
+        entries: state.entries,
+        now: state.now,
+      });
+      actual.textContent = `Actual ${timingCore.compactMinutes(duration.actualMinutes)}`;
+      return;
+    }
     const row = [...popover.querySelectorAll('.nautilus-log-timing__row')]
       .find((candidate) => candidate.dataset.taskUid === focused.taskUid);
     const meta = row?.querySelector('.nautilus-log-timing__row-meta.is-live');
@@ -225,9 +313,17 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     const identityDivider = element('span', 'nautilus-log-timing__identity-divider');
     identityDivider.setAttribute('aria-hidden', 'true');
     const tabs = element('div', 'nautilus-log-timing__tabs');
-    ['timing', 'plan'].forEach((name) => {
-      const button = element('button', `nautilus-log-timing__tab${view === name ? ' is-active' : ''}`, name === 'timing' ? 'Timing' : 'Plan');
+    tabs.setAttribute('role', 'tablist');
+    tabs.setAttribute('aria-label', 'Nautilus execution views');
+    ['timing', 'plan', 'review'].forEach((name) => {
+      const button = element('button', `nautilus-log-timing__tab${view === name ? ' is-active' : ''}`, {
+        timing: 'Timing',
+        plan: 'Plan',
+        review: 'Review',
+      }[name]);
       button.type = 'button';
+      button.setAttribute('role', 'tab');
+      button.setAttribute('aria-selected', String(view === name));
       button.addEventListener('click', () => {
         if (view === name) return;
         view = name;
@@ -253,13 +349,23 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       if (!focused && !(state.activeWork?.recent || []).length) {
         list.append(element('div', 'nautilus-log-timing__empty', 'No active work. Open Plan to start a task.'));
       }
-    } else {
+    } else if (view === 'plan') {
       const tasks = state.planSnapshot?.tasks || [];
       tasks.forEach((task) => list.append(taskRow(task)));
       if (!state.planSnapshot?.plan) {
         list.append(element('div', 'nautilus-log-timing__empty', 'No Nautilus Log was found on today’s Daily Note.'));
       } else if (!tasks.length) {
         list.append(element('div', 'nautilus-log-timing__empty', 'The Primary Plan has no unfinished direct-child tasks.'));
+      }
+    } else if (view === 'review') {
+      const review = state.dailyReview || timingCore.buildDailyReview();
+      list.classList.add('is-review');
+      if (state.planSnapshot?.plan && review.rows.length) popover.append(reviewSummary(review.summary));
+      review.rows.forEach((task) => list.append(reviewRow(task)));
+      if (!state.planSnapshot?.plan) {
+        list.append(element('div', 'nautilus-log-timing__empty', 'No Nautilus Log was found on today’s Daily Note.'));
+      } else if (!review.rows.length) {
+        list.append(element('div', 'nautilus-log-timing__empty', 'The Primary Plan has no direct-child tasks to review.'));
       }
     }
     popover.append(list);

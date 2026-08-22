@@ -172,7 +172,14 @@ function pageTitleFor(date = new Date()) {
 export function readPrimaryPlan(date = new Date(), fallbackMinutes = 15) {
   const pageTitle = pageTitleFor(date);
   const rows = query(DAILY_PAGE_TREE_QUERY, pageTitle);
-  if (rows.length === 0) return { pageTitle, pageUid: null, plan: null, rows: [], tasks: [] };
+  if (rows.length === 0) return {
+    pageTitle,
+    pageUid: null,
+    plan: null,
+    rows: [],
+    tasks: [],
+    reviewTasks: [],
+  };
   const normalized = rows.map(([pageUid, uid, string, order, parentUid]) => ({
     pageUid,
     uid,
@@ -188,6 +195,7 @@ export function readPrimaryPlan(date = new Date(), fallbackMinutes = 15) {
     plan,
     rows: normalized,
     tasks: plan ? timingCore.projectPlan(normalized, plan.uid, fallbackMinutes) : [],
+    reviewTasks: plan ? timingCore.projectReviewTasks(normalized, plan.uid, fallbackMinutes) : [],
   };
 }
 

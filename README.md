@@ -72,6 +72,9 @@ changing unfinished tasks' Planned scheduling rules:
   open CLOCK, never the task or older CLOCK history;
 - Actual time is shown when today's CLOCK history exists; otherwise the row
   falls back to its Planned estimate;
+- Review lists every direct-child task from today's Primary Plan in Roam order.
+  It shows Compared, Live, Paused, Not tracked, and Not started states while its
+  summary compares only completed tasks with positive same-day CLOCK time;
 - the shared Pomodoro threshold defaults to 45 minutes, survives task switches,
   turns the live elapsed value red, and never stops work automatically.
 - the forgotten-timer threshold is a separate numeric setting (120 minutes by
@@ -79,7 +82,7 @@ changing unfinished tasks' Planned scheduling rules:
   topbar and Timing row without stopping or deleting it.
 
 The popover header presents **Nautilus** beside the same Blueprint `unresolve`
-icon, before the Timing and Plan tabs. The identity is a navigation
+icon, before the Timing, Plan, and Review tabs. The identity is a navigation
 button: its persistent chevron, hover treatment, tooltip, and keyboard focus state
 signal that clicking it locates the Primary Plan in Roam's main window. The separate
 right-side locate icon is intentionally removed. Its hover surface is a complete
@@ -93,11 +96,19 @@ listener. TODO block context menus also expose Clock In and Clock Out.
 
 The panel paints its last confirmed snapshot immediately, refreshes graph data
 after the first browser paint, and updates only live elapsed text on one-second
-ticks. Timing/Plan switching therefore performs no graph scan or full-list
+ticks. Timing/Plan/Review switching therefore performs no graph scan or full-list
 rebuild. Disabling tracking first closes and confirms any running CLOCK; if
 that cannot be confirmed, tracking remains enabled so uncertain graph state is
 never hidden. Disabling also unregisters all Nautilus Log timing commands and
 context-menu actions.
+
+Review is intentionally daily and lightweight rather than a permanent
+dashboard. `Completed` counts finished tasks, and `Compared` counts the subset
+with positive same-day Actual time. Planned, Actual, and Variance totals use
+only that same comparable subset, so missing tracking can never masquerade as
+zero work. Live and paused tasks remain visible at row level but do not affect
+final variance. Review reuses the existing Primary Plan and CLOCK snapshots and
+performs no additional graph read when its tab opens.
 
 Nautilus Log reads and writes the compatible Org-style graph record:
 
@@ -206,11 +217,13 @@ Todo Trigger 仍然是可选工具：它可以在完成时追加时间戳，但 
   Blueprint `confirm` 图标完成任务；当前 Timing 行还提供两次点击确认的 `trash`，只删除本次
   未闭合 CLOCK，不删除任务和旧历史；
 - 当天存在有效 CLOCK 时显示 Actual，否则回退到 Planned 预计时长；
+- Review 按 Roam 顺序显示当天 Primary Plan 的全部直接子任务，区分 Compared、Live、
+  Paused、Not tracked 和 Not started；顶部汇总只比较当天已完成且存在 Actual 的任务；
 - 番茄钟阈值默认 45 分钟，任务切换不会重置，达到阈值只把顶栏计时变红，绝不自动停止。
 - 遗忘计时阈值是独立的数字设置，默认 120 分钟，填写 0 可关闭；达到阈值只在顶栏和
   Timing 行显示警告，不会自动停止或删除 CLOCK。
 
-弹窗头部会在 Timing / Plan 前以相同的 `unresolve` 图标和 **Nautilus** 名称表示计划入口；
+弹窗头部会在 Timing / Plan / Review 前以相同的 `unresolve` 图标和 **Nautilus** 名称表示计划入口；
 整块区域就是定位按钮，常驻细箭头，并通过完整的圆角悬停底色、Tooltip 和键盘焦点提示
 可点击。按钮与标签分隔线之间保留固定空隙；点击后会把当天 Primary Plan 定位到主界面，
 不再保留右侧独立 `locate` 按钮；顶栏空闲入口也沿用 `unresolve` 图标。
@@ -226,6 +239,12 @@ block”“Clock out Timing Line”和“定位 Primary Plan”三项操作，�
 关闭开关前会先关闭并确认运行中的 CLOCK；如果确认失败，开关会保持开启，避免把不确定
 状态藏起来。开启前请先关闭独立的 Roam Logbook 插件，Nautilus Log 检测到第二个
 CLOCK 写入者时会拒绝启动。
+
+Review 保持当天范围和轻量呈现，不做常驻 Dashboard。“Completed”统计已完成任务，
+“Compared”统计其中当天 Actual 大于 0 的可比任务；Planned、Actual 和 Variance 总计
+只使用同一批可比任务，因此漏记 CLOCK 不会被误写成 0 分钟。Live 和 Paused 仍会在
+任务行中显示，但不进入最终偏差。打开 Review 只复用现有 Primary Plan 与 CLOCK 快照，
+不会再发起一次图谱读取。
 
 图表上方把动态变化的剩余时间与当天稳定基准放在一起显示：
 

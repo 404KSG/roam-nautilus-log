@@ -46,6 +46,9 @@
 - Completed flexible tasks now condense all valid closed CLOCK sessions for the
   displayed date into one completion-anchored Actual slice; Planned remains the
   fallback, and cross-midnight sessions are clipped to the day.
+- A lightweight daily Review tab lists all Primary Plan tasks, distinguishes
+  live/paused/untracked states, and compares Planned with Actual only for the
+  completed tasks that have same-day CLOCK history.
 
 ### Fixed
 

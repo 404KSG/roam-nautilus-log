@@ -42,6 +42,67 @@ test('Plan is a flat ordered projection of unfinished direct children', () => {
   );
 });
 
+test('Review projects ordered direct-child TODO and DONE tasks without fixed events or nested tasks', () => {
+  const rows = [
+    { uid: 'event', parentUid: 'plan', order: 0, string: '10:00-11:00 Meeting' },
+    { uid: 'done-event', parentUid: 'plan', order: 0, string: '{{[[DONE]]}} 12:00-13:00 Lunch' },
+    { uid: 'later', parentUid: 'plan', order: 3, string: '{{[[TODO]]}} Later 15m' },
+    { uid: 'done', parentUid: 'plan', order: 1, string: '{{[[DONE]]}} Finished 20m' },
+    { uid: 'first', parentUid: 'plan', order: 1, string: '{{[[TODO]]}} First 30m' },
+    { uid: 'nested', parentUid: 'first', order: 0, string: '{{[[DONE]]}} Nested 45m' },
+  ];
+
+  assert.deepEqual(
+    timing.projectReviewTasks(rows, 'plan').map(({ uid, status, plannedMinutes }) => [uid, status, plannedMinutes]),
+    [
+      ['done', 'DONE', 20],
+      ['first', 'TODO', 30],
+      ['later', 'TODO', 15],
+    ],
+  );
+});
+
+test('Daily Review compares only completed tasks with same-day Actual and classifies every row state', () => {
+  const now = new Date(2026, 7, 22, 12, 0);
+  const tasks = [
+    { uid: 'done-over', title: 'Done over', status: 'DONE', plannedMinutes: 30 },
+    { uid: 'done-under', title: 'Done under', status: 'DONE', plannedMinutes: 60 },
+    { uid: 'done-untracked', title: 'Done untracked', status: 'DONE', plannedMinutes: 20 },
+    { uid: 'live', title: 'Live', status: 'TODO', plannedMinutes: 45 },
+    { uid: 'paused', title: 'Paused', status: 'TODO', plannedMinutes: 60 },
+    { uid: 'new', title: 'New', status: 'TODO', plannedMinutes: 15 },
+  ];
+  const entries = [
+    { taskUid: 'done-over', start: new Date(2026, 7, 22, 9, 0), end: new Date(2026, 7, 22, 9, 50), running: false },
+    { taskUid: 'done-under', start: new Date(2026, 7, 22, 10, 0), end: new Date(2026, 7, 22, 10, 45), running: false },
+    { taskUid: 'done-untracked', start: new Date(2026, 7, 21, 10, 0), end: new Date(2026, 7, 21, 10, 20), running: false },
+    { taskUid: 'live', start: new Date(2026, 7, 22, 11, 30), end: null, running: true },
+    { taskUid: 'paused', start: new Date(2026, 7, 22, 8, 0), end: new Date(2026, 7, 22, 8, 20), running: false },
+  ];
+
+  const review = timing.buildDailyReview({ tasks, entries, now });
+
+  assert.deepEqual(review.summary, {
+    totalCount: 6,
+    completedCount: 3,
+    comparedCount: 2,
+    plannedMinutes: 90,
+    actualMinutes: 95,
+    varianceMinutes: 5,
+  });
+  assert.deepEqual(
+    review.rows.map(({ uid, state, actualMinutes, varianceMinutes }) => [uid, state, actualMinutes, varianceMinutes]),
+    [
+      ['done-over', 'compared', 50, 20],
+      ['done-under', 'compared', 45, -15],
+      ['done-untracked', 'not-tracked', 0, null],
+      ['live', 'live', 30, null],
+      ['paused', 'paused', 20, null],
+      ['new', 'not-started', 0, null],
+    ],
+  );
+});
+
 test('Active Work keeps one focused task and distinct tasks closed in the last 45 minutes', () => {
   const now = new Date(2026, 7, 22, 11, 0);
   const entries = [
@@ -97,6 +158,16 @@ test('duration metadata prefers today Actual and otherwise falls back to Planned
   );
 });
 
+test('today Actual totals partial-minute CLOCK sessions before rounding once', () => {
+  const now = new Date(2026, 7, 22, 12, 0);
+  const entries = [
+    { taskUid: 'task', start: new Date(2026, 7, 22, 10, 0, 0), end: new Date(2026, 7, 22, 10, 0, 40), running: false },
+    { taskUid: 'task', start: new Date(2026, 7, 22, 10, 1, 0), end: new Date(2026, 7, 22, 10, 1, 40), running: false },
+  ];
+
+  assert.equal(timing.actualMinutesToday('task', entries, now), 1);
+});
+
 test('Pomodoro threshold survives seamless switches and resets only after Clock Out', () => {
   const initial = timing.nextPomodoroState(null, { action: 'start', nowMs: 1000 });
   const switched = timing.nextPomodoroState(initial, { action: 'switch', nowMs: 5000 });
@@ -144,6 +215,8 @@ test('execution surface structure ignores one-second ticks but detects real row 
   assert.equal(timing.executionStructureKey(base, 'plan'), timing.executionStructureKey(tick, 'plan'));
   assert.notEqual(timing.executionStructureKey(tick, 'plan'), timing.executionStructureKey(changed, 'plan'));
   assert.notEqual(timing.executionStructureKey(tick, 'timing'), timing.executionStructureKey(tick, 'plan'));
+  assert.notEqual(timing.executionStructureKey(tick, 'timing'), timing.executionStructureKey(tick, 'review'));
+  assert.equal(timing.executionStructureKey(base, 'review'), timing.executionStructureKey(tick, 'review'));
   assert.equal(
     timing.executionStructureKey({ ...base, revision: 4 }, 'plan'),
     timing.executionStructureKey({ ...changed, revision: 4 }, 'plan'),

@@ -127,6 +127,10 @@ test('runtime serializes close-before-switch and close-before-complete', async (
   const runtime = extension.createTimingRuntime({ extensionAPI, now: () => new Date(current) });
   await runtime.initialize();
   assert.deepEqual(runtime.getSnapshot().planSnapshot.tasks.map(({ uid }) => uid), ['task-a', 'task-b']);
+  assert.deepEqual(
+    runtime.getSnapshot().dailyReview.rows.map(({ uid, state }) => [uid, state]),
+    [['task-a', 'not-started'], ['task-b', 'not-started']],
+  );
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(trace.includes('sidebar:getWindows'), true, 'startup should warm the sidebar cache read-only');
   assert.equal(trace.includes('sidebar:open'), false, 'cache warmup must not open the sidebar');
@@ -170,6 +174,14 @@ test('runtime serializes close-before-switch and close-before-complete', async (
   assert.equal([...blocks.values()].filter((block) => /^CLOCK:/.test(block.string) && !block.string.includes('--')).length, 0);
   assert.equal(settings.get('actual-time-pomodoro-state'), null);
   assert.deepEqual(runtime.getSnapshot().activeWork.items.map(({ taskUid }) => taskUid), ['task-a']);
+  assert.deepEqual(runtime.getSnapshot().dailyReview.summary, {
+    totalCount: 2,
+    completedCount: 1,
+    comparedCount: 1,
+    plannedMinutes: 45,
+    actualMinutes: 10,
+    varianceMinutes: -35,
+  });
 
   current = new Date(2026, 7, 22, 10, 25);
   await runtime.startTask('task-a');

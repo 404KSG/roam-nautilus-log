@@ -920,10 +920,124 @@
   padding: 9px 12px;
 }
 
+.nautilus-log-timing__review-summary {
+  border-bottom: 1px solid rgba(117, 126, 140, 0.14);
+  padding: 10px 14px 9px;
+}
+
+.nautilus-log-timing__review-counts,
+.nautilus-log-timing__review-totals {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.nautilus-log-timing__review-counts {
+  color: #7f8895;
+  font-size: 11px;
+  gap: 16px;
+}
+
+.nautilus-log-timing__review-count strong,
+.nautilus-log-timing__review-total strong {
+  color: var(--nl-exec-text, #303744);
+  font-weight: 600;
+}
+
+.nautilus-log-timing__review-totals {
+  color: #8a929f;
+  font-size: 11px;
+  gap: 6px 15px;
+  margin-top: 5px;
+}
+
+.nautilus-log-timing__review-total.is-over strong,
+.nautilus-log-timing__review-variance.is-over {
+  color: #ad690f;
+}
+
+.nautilus-log-timing__review-row {
+  border-bottom: 1px solid rgba(117, 126, 140, 0.1);
+  min-width: 0;
+  padding: 9px 10px;
+}
+
+.nautilus-log-timing__review-row:last-child {
+  border-bottom: 0;
+}
+
+.nautilus-log-timing__review-row:hover {
+  background: rgba(111, 120, 132, 0.045);
+}
+
+.nautilus-log-timing__review-row-heading {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.nautilus-log-timing__review-title {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--nl-exec-text, #303744);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nautilus-log-timing__review-title:hover,
+.nautilus-log-timing__review-title:focus-visible {
+  color: var(--nautilus-log-page-link, #137cbd);
+  outline: none;
+}
+
+.nautilus-log-timing__review-state {
+  background: rgba(111, 120, 132, 0.08);
+  border-radius: 999px;
+  color: #858e9b;
+  flex: 0 0 auto;
+  font-size: 10px;
+  line-height: 18px;
+  padding: 0 7px;
+}
+
+.nautilus-log-timing__review-row.is-live .nautilus-log-timing__review-state {
+  background: rgba(20, 145, 190, 0.1);
+  color: #087ca9;
+}
+
+.nautilus-log-timing__review-row-metrics {
+  color: #8a929f;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 11px;
+  gap: 4px 14px;
+  margin-top: 4px;
+}
+
+.nautilus-log-timing__review-variance {
+  color: #68717e;
+  font-weight: 600;
+}
+
 .nautilus-log-timing__list {
   max-height: min(500px, calc(100vh - 126px));
   overflow: auto;
   padding: 6px;
+}
+
+.nautilus-log-timing__list.is-review {
+  max-height: min(430px, calc(100vh - 190px));
 }
 
 .nautilus-log-timing__row {
@@ -1024,6 +1138,34 @@
   --nl-exec-muted: #a0a8b4;
   border-color: rgba(223, 228, 235, 0.13);
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.38);
+}
+
+.bp3-dark .nautilus-log-timing__review-row.is-live .nautilus-log-timing__review-state,
+.dark .nautilus-log-timing__review-row.is-live .nautilus-log-timing__review-state {
+  color: #66c7e8;
+}
+
+/* Preserve the complete three-view switcher in unusually narrow Roam
+   windows. The shell icon and chevron still make the Primary Plan shortcut
+   discoverable when its text label no longer fits. */
+@media (max-width: 320px) {
+  .nautilus-log-timing__popover-header {
+    padding-left: 8px;
+    padding-right: 6px;
+  }
+
+  .nautilus-log-timing__identity-name {
+    display: none;
+  }
+
+  .nautilus-log-timing__identity-divider {
+    margin-left: 5px;
+    margin-right: 5px;
+  }
+
+  .nautilus-log-timing__tab {
+    padding: 0 7px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

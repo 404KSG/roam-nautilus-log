@@ -8,6 +8,7 @@
 
 const TODO_RE = /\{\{\[\[(TODO|DONE)\]\]\}\}|\{\{(TODO|DONE)\}\}/i;
 const CLOCK_RE = /^\s*:?CLOCK:{1,2}\s*\[([^\]]+)\](?:\s*--\s*\[([^\]]+)\])?(?:\s*=>\s*(\d+:[0-5]\d))?\s*$/i;
+const TIME_RANGE_RE = /(?:^|\s)\d{1,2}(?::\d{1,2})?(?:\s*(?:am|pm))?\s*(?:-|–|až|to)\s*\d{1,2}(?::\d{1,2})?(?:\s*(?:am|pm))?(?=\s|$)/i;
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const ACTIVE_WORK_WINDOW_MINUTES = 45;
 const FORGOTTEN_CLOCK_MINUTES = 120;
@@ -142,17 +143,28 @@ function selectPrimaryPlan(rows = [], pageUid, matcher = isNautilusComponent) {
   return pageUid ? walk(pageUid) : null;
 }
 
-function projectPlan(rows = [], planUid, fallbackMinutes = 15) {
+function projectDirectTasks(rows = [], planUid, fallbackMinutes = 15) {
   return (Array.isArray(rows) ? rows : [])
-    .filter((row) => row?.parentUid === planUid && taskStatus(row.string) === 'TODO')
+    .filter((row) => row?.parentUid === planUid && taskStatus(row.string) && !TIME_RANGE_RE.test(row.string))
     .sort(compareTreeOrder)
     .map((row) => ({
       uid: row.uid,
       string: row.string,
       order: row.order,
+      status: taskStatus(row.string),
       title: taskTitle(row.string),
       plannedMinutes: plannedMinutes(row.string, fallbackMinutes),
     }));
+}
+
+function projectPlan(rows = [], planUid, fallbackMinutes = 15) {
+  return projectDirectTasks(rows, planUid, fallbackMinutes)
+    .filter((task) => task.status === 'TODO')
+    .map(({ status: _status, ...task }) => task);
+}
+
+function projectReviewTasks(rows = [], planUid, fallbackMinutes = 15) {
+  return projectDirectTasks(rows, planUid, fallbackMinutes);
 }
 
 function chooseFocusedEntry(entries = []) {
@@ -210,15 +222,66 @@ function actualMinutesToday(taskUid, entries = [], now = new Date()) {
   const dayStart = startOfDay(now).getTime();
   const dayEnd = dayStart + 24 * 60 * 60 * 1000;
   const nowMs = now.getTime();
-  return (Array.isArray(entries) ? entries : []).reduce((total, entry) => {
+  const totalMilliseconds = (Array.isArray(entries) ? entries : []).reduce((total, entry) => {
     if (entry?.taskUid !== taskUid) return total;
     const startMs = asTime(entry.start);
     const endMs = entry.running ? nowMs : asTime(entry.end);
     if (startMs === null || endMs === null) return total;
     const clippedStart = Math.max(dayStart, startMs);
     const clippedEnd = Math.min(dayEnd, endMs);
-    return clippedEnd > clippedStart ? total + Math.floor((clippedEnd - clippedStart) / 60000) : total;
+    return clippedEnd > clippedStart ? total + clippedEnd - clippedStart : total;
   }, 0);
+  return Math.floor(totalMilliseconds / 60000);
+}
+
+function buildDailyReview({ tasks = [], entries = [], now = new Date() } = {}) {
+  const entriesByTask = new Map();
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    if (!entry?.taskUid) continue;
+    if (!entriesByTask.has(entry.taskUid)) entriesByTask.set(entry.taskUid, []);
+    entriesByTask.get(entry.taskUid).push(entry);
+  }
+
+  const rows = (Array.isArray(tasks) ? tasks : []).map((task) => {
+    const taskEntries = entriesByTask.get(task.uid) || [];
+    const closedEntries = taskEntries.filter((entry) => !entry.running);
+    const closedActual = actualMinutesToday(task.uid, closedEntries, now);
+    const currentActual = actualMinutesToday(task.uid, taskEntries, now);
+    const completed = task.status === 'DONE';
+    const live = !completed && currentActual > 0 && taskEntries.some((entry) => entry.running);
+    const comparable = completed && closedActual > 0;
+    const actual = completed ? closedActual : currentActual;
+    const state = comparable
+      ? 'compared'
+      : completed
+        ? 'not-tracked'
+        : live
+          ? 'live'
+          : actual > 0
+            ? 'paused'
+            : 'not-started';
+    return {
+      ...task,
+      state,
+      actualMinutes: actual,
+      varianceMinutes: comparable ? actual - task.plannedMinutes : null,
+    };
+  });
+
+  const compared = rows.filter((row) => row.state === 'compared');
+  const planned = compared.reduce((total, row) => total + row.plannedMinutes, 0);
+  const actual = compared.reduce((total, row) => total + row.actualMinutes, 0);
+  return {
+    summary: {
+      totalCount: rows.length,
+      completedCount: rows.filter((row) => row.status === 'DONE').length,
+      comparedCount: compared.length,
+      plannedMinutes: planned,
+      actualMinutes: actual,
+      varianceMinutes: actual - planned,
+    },
+    rows,
+  };
 }
 
 function compactMinutes(minutes) {
@@ -258,9 +321,10 @@ function nextPomodoroState(current, { action, nowMs = Date.now() } = {}) {
 }
 
 function executionStructureKey(snapshot = {}, view = 'timing') {
+  const normalizedView = ['timing', 'plan', 'review'].includes(view) ? view : 'timing';
   if (Number.isInteger(snapshot.revision)) {
     return JSON.stringify([
-      view === 'plan' ? 'plan' : 'timing',
+      normalizedView,
       snapshot.revision,
       snapshot.status || '',
       snapshot.notice || '',
@@ -281,7 +345,7 @@ function executionStructureKey(snapshot = {}, view = 'timing') {
   const plan = snapshot.planSnapshot || {};
   const active = snapshot.activeWork || {};
   return JSON.stringify([
-    view === 'plan' ? 'plan' : 'timing',
+    normalizedView,
     snapshot.status || '',
     snapshot.notice || '',
     plan.plan?.uid || '',
@@ -297,6 +361,7 @@ module.exports = {
   ACTIVE_WORK_WINDOW_MINUTES,
   FORGOTTEN_CLOCK_MINUTES,
   actualMinutesToday,
+  buildDailyReview,
   buildActiveWork,
   chooseFocusedEntry,
   compactMinutes,
@@ -310,6 +375,7 @@ module.exports = {
   parseClockLine,
   plannedMinutes,
   projectPlan,
+  projectReviewTasks,
   selectPrimaryPlan,
   taskStatus,
   taskTitle,

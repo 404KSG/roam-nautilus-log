@@ -56,6 +56,7 @@ export function createTimingRuntime({
     notice: '',
     planSnapshot: null,
     entries: [],
+    dailyReview: timingCore.buildDailyReview(),
     activeWork: { focused: null, recent: [], items: [], count: 0, windowMinutes: 45 },
     pomodoro: null,
     now: now(),
@@ -76,12 +77,21 @@ export function createTimingRuntime({
   const refresh = ({ notice = '', planSnapshot: suppliedPlanSnapshot, entries: suppliedEntries } = {}) => {
     if (destroyed) return snapshot;
     try {
+      const currentNow = now();
       const planSnapshot = suppliedPlanSnapshot === undefined
-        ? readPrimaryPlan(now(), Number(extensionAPI.settings.get('todo-duration')) || 15)
+        ? readPrimaryPlan(currentNow, Number(extensionAPI.settings.get('todo-duration')) || 15)
         : suppliedPlanSnapshot;
       const entries = suppliedEntries === undefined ? readAllEntries() : suppliedEntries;
+      const reviewTasks = planSnapshot?.reviewTasks || (planSnapshot?.plan
+        ? timingCore.projectReviewTasks(
+          planSnapshot.rows,
+          planSnapshot.plan.uid,
+          Number(extensionAPI.settings.get('todo-duration')) || 15,
+        )
+        : []);
+      const dailyReview = timingCore.buildDailyReview({ tasks: reviewTasks, entries, now: currentNow });
       const recentRetention = extensionAPI.settings.get('recent-retention-minutes') ?? 45;
-      const activeWork = timingCore.buildActiveWork(entries, now(), recentRetention);
+      const activeWork = timingCore.buildActiveWork(entries, currentNow, recentRetention);
       const pomodoro = currentPomodoro(extensionAPI, activeWork.focused);
       snapshot = {
         revision: snapshot.revision + 1,
@@ -89,9 +99,10 @@ export function createTimingRuntime({
         notice,
         planSnapshot,
         entries,
+        dailyReview,
         activeWork,
         pomodoro,
-        now: now(),
+        now: currentNow,
       };
     } catch (error) {
       snapshot = {
