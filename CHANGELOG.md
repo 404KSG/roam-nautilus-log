@@ -21,11 +21,13 @@
   or CLOCK writes until explicitly enabled.
 - A Blueprint-native topbar execution surface with Timing and flat Primary Plan
   tabs, one-click task completion, `unresolve` idle state, and `locate` navigation.
-- A compact `unresolve · Nautilus Log` identity in the popover header makes the
-  execution panel's owning extension explicit without adding another row.
+- A compact `unresolve · Nautilus` identity in the popover header exposes the
+  Primary Plan navigation target without adding another row.
 - The identity itself now locates the Primary Plan and advertises that action with
   a persistent chevron plus hover/focus feedback; the redundant right-side locate
   icon is removed.
+- The Nautilus identity hover surface is now a complete rounded rectangle with an
+  independent, evenly spaced divider before the Timing and Plan tabs.
 - Compatible Org-style `LOGBOOK::` / `CLOCK:` persistence, serialized single-clock
   switching, numerically configurable recent Threads, and a shared configurable
   Pomodoro threshold.

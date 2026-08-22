@@ -807,8 +807,7 @@
   align-items: center;
   background: transparent;
   border: 0;
-  border-right: 1px solid rgba(117, 126, 140, 0.18);
-  border-radius: 4px 0 0 4px;
+  border-radius: 4px;
   box-shadow: none;
   color: #8a929f;
   cursor: pointer;
@@ -818,8 +817,8 @@
   gap: 5px;
   height: 30px;
   margin-left: -4px;
-  margin-right: 8px;
-  padding: 0 10px 0 6px;
+  margin-right: 0;
+  padding: 0 8px 0 6px;
   white-space: nowrap;
 }
 
@@ -854,6 +853,15 @@
 .nautilus-log-timing__identity:focus-visible .nautilus-log-timing__identity-hint {
   opacity: 1;
   transform: translateX(1px);
+}
+
+.nautilus-log-timing__identity-divider {
+  align-self: center;
+  background: rgba(117, 126, 140, 0.18);
+  flex: 0 0 1px;
+  height: 20px;
+  margin: 0 8px;
+  width: 1px;
 }
 
 .nautilus-log-timing__tabs {

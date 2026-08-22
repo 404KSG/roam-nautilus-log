@@ -213,15 +213,17 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     const headerMain = element('div', 'nautilus-log-timing__popover-header-main');
     const identity = element('button', 'nautilus-log-timing__identity');
     identity.type = 'button';
-    identity.title = 'Locate Primary Nautilus Log';
-    identity.setAttribute('aria-label', 'Locate Primary Nautilus Log');
+    identity.title = 'Locate Primary Nautilus';
+    identity.setAttribute('aria-label', 'Locate Primary Nautilus');
     const identityHint = icon('chevron-right');
     identityHint.classList.add('nautilus-log-timing__identity-hint');
-    identity.append(icon('unresolve'), element('span', 'nautilus-log-timing__identity-name', 'Nautilus Log'), identityHint);
+    identity.append(icon('unresolve'), element('span', 'nautilus-log-timing__identity-name', 'Nautilus'), identityHint);
     identity.addEventListener('click', () => {
       closePopover();
       runAction(() => runtime.locate());
     });
+    const identityDivider = element('span', 'nautilus-log-timing__identity-divider');
+    identityDivider.setAttribute('aria-hidden', 'true');
     const tabs = element('div', 'nautilus-log-timing__tabs');
     ['timing', 'plan'].forEach((name) => {
       const button = element('button', `nautilus-log-timing__tab${view === name ? ' is-active' : ''}`, name === 'timing' ? 'Timing' : 'Plan');
@@ -233,7 +235,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       });
       tabs.append(button);
     });
-    headerMain.append(identity, tabs);
+    headerMain.append(identity, identityDivider, tabs);
     header.append(headerMain);
     popover.append(header);
 

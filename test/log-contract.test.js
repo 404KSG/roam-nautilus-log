@@ -95,8 +95,9 @@ test('Actual Time Tracking is opt-in and owns no disabled topbar interaction', (
   assert.match(entry, /stopTiming\(\{ closeActive: false \}\)/);
   assert.match(timingTopbar, /bp3-icon-\$\{name\}/);
   assert.match(timingTopbar, /trigger\.replaceChildren\(icon\('unresolve'\)\)/);
-  assert.match(timingTopbar, /nautilus-log-timing__identity-name', 'Nautilus Log'/);
+  assert.match(timingTopbar, /nautilus-log-timing__identity-name', 'Nautilus'/);
   assert.match(timingTopbar, /identityHint = icon\('chevron-right'\)/);
+  assert.match(timingTopbar, /nautilus-log-timing__identity-divider/);
   assert.match(timingTopbar, /identity\.addEventListener\('click',[\s\S]*runtime\.locate\(\)/);
   assert.doesNotMatch(timingTopbar, /iconButton\('locate'/);
   assert.match(timingTopbar, /iconButton\('confirm', 'Complete task'/);
