@@ -82,3 +82,10 @@
   synchronous graph validation, warms the sidebar-window cache read-only after
   startup, and reuses the confirmed CLOCK/Primary Plan snapshots instead of
   rescanning the full Daily Note at the end of the click path.
+- Clock In now preserves Roam's synchronous `getWindows`/`addWindow` fast path
+  in the original click stack and never waits for the sidebar-open animation;
+  older hosts retain a deduplicated wait-and-retry fallback.
+- CLOCK Out and task switching confirm the one changed CLOCK block by UID rather
+  than rescanning every LOGBOOK drawer between mutations.
+- The execution panel updates only action availability during a queued mutation,
+  and unchanged installation polling no longer invalidates every rendered chart.

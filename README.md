@@ -64,8 +64,10 @@ changing unfinished tasks' Planned scheduling rules:
 - Clock In begins opening or moving the selected task to the top of Roam's
   native right sidebar before graph validation or CLOCK confirmation. The graph
   mutation starts in the next browser task so native sidebar rendering gets the
-  first paint; a read-only startup warmup lets previously confirmed windows be
-  previewed immediately and reconciled in the background;
+  first paint. On standard Roam builds, the native window is added in the
+  original click stack without waiting for the sidebar-open animation; a
+  read-only startup warmup lets previously confirmed windows be previewed
+  immediately and reconciled in the background;
 - each row can Clock In, explicitly Clock Out with Blueprint's `log-out`
   control, or complete the task with Blueprint's `confirm` control. The
   focused row also has a two-click `trash` action that deletes only its current
@@ -97,7 +99,9 @@ listener. TODO block context menus also expose Clock In and Clock Out.
 The panel paints its last confirmed snapshot immediately, refreshes graph data
 after the first browser paint, and updates only live elapsed text on one-second
 ticks. Timing/Plan/Review switching therefore performs no graph scan or full-list
-rebuild. Disabling tracking first closes and confirms any running CLOCK; if
+rebuild. During Clock In/Out, it changes only row-action availability until the
+confirmed snapshot arrives instead of rebuilding every task twice. Disabling
+tracking first closes and confirms any running CLOCK; if
 that cannot be confirmed, tracking remains enabled so uncertain graph state is
 never hidden. Disabling also unregisters all Nautilus Log timing commands and
 context-menu actions.

@@ -309,8 +309,11 @@ export async function createRunningClock(taskUid, now) {
 export async function closeClock(entry, now) {
   if (!entry?.running || !entry.clockUid) return false;
   await updateGraphBlock(entry.clockUid, timingCore.formatClockLine(entry.start, now));
-  const remaining = readAllEntries().find((candidate) => candidate.clockUid === entry.clockUid && candidate.running);
-  if (remaining) throw new Error('Clock Out could not be confirmed.');
+  // The mutation targets one known CLOCK UID. Confirm that block directly
+  // instead of rescanning every LOGBOOK drawer in the graph; the next state
+  // refresh still performs the authoritative aggregate read when required.
+  const confirmed = timingCore.parseClockLine(readBlockString(entry.clockUid));
+  if (!confirmed || confirmed.running) throw new Error('Clock Out could not be confirmed.');
   return true;
 }
 
@@ -431,7 +434,13 @@ export function frontBlockInRightSidebar(taskUid) {
     if (!isCurrent()) return { ok: false, skipped: true, reason: 'superseded' };
     let windows = null;
     if (typeof sidebar.getWindows === 'function') {
-      try { windows = await sidebar.getWindows(); }
+      try {
+        const snapshot = sidebar.getWindows();
+        // Roam normally returns this list synchronously. Preserve that native
+        // fast path so addWindow remains inside the Clock In click stack, while
+        // still accepting Promise-returning host builds.
+        windows = Array.isArray(snapshot) ? snapshot : await snapshot;
+      }
       catch (_error) {
         await openRequest;
         try { windows = await sidebar.getWindows(); } catch (_retryError) { windows = null; }
@@ -485,9 +494,44 @@ export function frontBlockInRightSidebar(taskUid) {
       }
     }
 
-    await openRequest;
     if (!isCurrent()) return { ok: false, skipped: true, reason: 'superseded' };
-    await sidebar.addWindow({ window: blockSidebarWindow(taskUid, 0) });
+    try {
+      // Match Roam's native Shift+Click path: issue addWindow immediately.
+      // rightSidebar.open() may not settle until its transition completes, so
+      // awaiting it here made Clock In feel blocked even though addWindow can
+      // safely create and reveal the block while the sidebar is opening.
+      await sidebar.addWindow({ window: blockSidebarWindow(taskUid, 0) });
+    } catch (_firstError) {
+      // Older Roam builds may require the sidebar to finish opening first.
+      // Treat that as a compatibility fallback, then re-read native state so
+      // a partially successful first attempt cannot create a duplicate.
+      await openRequest;
+      if (!isCurrent()) return { ok: false, skipped: true, reason: 'superseded' };
+      let retryWindows = null;
+      if (typeof sidebar.getWindows === 'function') {
+        try { retryWindows = await sidebar.getWindows(); } catch (_error) { retryWindows = null; }
+      }
+      if (!isCurrent()) return { ok: false, skipped: true, reason: 'superseded' };
+      if (Array.isArray(retryWindows)) rememberSidebarWindows(sidebar, retryWindows);
+      const recovered = Array.isArray(retryWindows) && retryWindows.find((entry) => (
+        entry?.type === 'block' && entry?.['block-uid'] === taskUid
+      ));
+      if (recovered) {
+        if (typeof sidebar.setWindowOrder === 'function') {
+          await sidebar.setWindowOrder({ window: blockSidebarWindow(taskUid, 0) });
+        } else if (Number(recovered.order) !== 0) {
+          return {
+            ok: false,
+            reason: 'order-unavailable',
+            message: 'Roam could not move the Timing Line sidebar window to the top.',
+          };
+        }
+        await sidebar.expandWindow?.({ window: blockSidebarWindow(taskUid) });
+        rememberSidebarWindow(sidebar, taskUid);
+        return { ok: true, added: true, recovered: true };
+      }
+      await sidebar.addWindow({ window: blockSidebarWindow(taskUid, 0) });
+    }
     rememberSidebarWindow(sidebar, taskUid);
     return { ok: true, added: true };
   }).catch((error) => ({

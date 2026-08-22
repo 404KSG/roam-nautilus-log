@@ -287,8 +287,23 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     meta.textContent = `${forgotten ? 'Check CLOCK · ' : ''}Timing ${timingCore.formatElapsed(state.now - focused.start)} · ${duration.detailLabel}`;
   };
 
+  const syncActionAvailability = () => {
+    if (!popover) return;
+    const disabled = state.status === 'working';
+    popover.querySelectorAll('.nautilus-log-timing__row-actions button')
+      .forEach((button) => { button.disabled = disabled; });
+  };
+
   const renderPopover = ({ force = false } = {}) => {
     if (!popover) return;
+    if (!force && state.status === 'working' && lastPopoverKey !== null) {
+      // A queued graph mutation changes only button availability. Rebuilding
+      // every task row here competes with Roam's native sidebar first paint;
+      // the confirmed refresh below will render the new data once.
+      syncActionAvailability();
+      updateLiveElapsed();
+      return;
+    }
     const structureKey = timingCore.executionStructureKey(state, view);
     if (!force && structureKey === lastPopoverKey) {
       updateLiveElapsed();

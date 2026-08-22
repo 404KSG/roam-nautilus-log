@@ -1544,7 +1544,12 @@
                               (boolean (.-running js/window.nautilusLogExtensionData))
                               (catch :default _e false))
                *running? (r/atom (or (is-running?) nil))
-               check-interval (js/setInterval #(reset! *running? (is-running?)) 5000)
+               check-interval (js/setInterval
+                               (fn []
+                                 (let [next-running-state (is-running?)]
+                                   (when (not= @*running? next-running-state)
+                                     (reset! *running? next-running-state))))
+                               5000)
                settings-state (r/atom (resolve-render-settings args))
                settings-listener (fn [_event]
                                    (reset! settings-state (resolve-render-settings args)))

@@ -84,6 +84,18 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested L
   assert.match(entry, /window\.nautilusLogCore = logCore/);
   assert.doesNotMatch(component, /\(abs \(- done-at duration\)\)/);
 });
+
+test('renderer install polling does not invalidate an unchanged chart', () => {
+  const pollStart = component.indexOf('check-interval');
+  const pollEnd = component.indexOf('settings-state', pollStart);
+  const pollBody = component.slice(pollStart, pollEnd);
+
+  assert.match(pollBody, /next-running-state/);
+  assert.match(pollBody, /\(not= @\*running\? next-running-state\)/);
+  assert.match(pollBody, /\(reset! \*running\? next-running-state\)/);
+  assert.doesNotMatch(pollBody, /#\(reset! \*running\? \(is-running\?\)\)/);
+});
+
 test('Log scaffolding is isolated and unload is graph-safe', () => {
   assert.match(entry, /Nautilus Log/);
   assert.match(entry, /roam-render-Nautilus-Log-cljs/);
@@ -129,6 +141,14 @@ test('execution popover paints cached state before refreshing and does not rebui
   assert.doesNotMatch(openBody, /runtime\.refresh\(\)/);
   assert.match(timingTopbar, /executionStructureKey/);
   assert.match(timingTopbar, /updateLiveElapsed/);
+  assert.match(timingTopbar, /syncActionAvailability/);
+  const renderStart = timingTopbar.indexOf('const renderPopover');
+  const renderEnd = timingTopbar.indexOf('const positionPopover', renderStart);
+  const renderBody = timingTopbar.slice(renderStart, renderEnd);
+  const workingFastPath = renderBody.indexOf("state.status === 'working'");
+  const replaceChildren = renderBody.indexOf('popover.replaceChildren()');
+  assert.ok(workingFastPath >= 0, 'working state should have a lightweight popover path');
+  assert.ok(workingFastPath < replaceChildren, 'working state must bypass the full row rebuild');
   const triggerStart = timingTopbar.indexOf('const renderTrigger');
   const triggerEnd = timingTopbar.indexOf('const ensureMounted', triggerStart);
   assert.doesNotMatch(timingTopbar.slice(triggerStart, triggerEnd), /renderPopover/);
