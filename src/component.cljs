@@ -937,7 +937,6 @@
     (into [:g {:class (str "nautilus-flow-event-slice-group"
                             (case past-status
                               "completed" " nautilus-flow-past--completed"
-                              "missed" " nautilus-flow-past--missed"
                               "event" " nautilus-flow-past--event"
                               "")
                             (when conflict? " nautilus-flow-event-conflict")

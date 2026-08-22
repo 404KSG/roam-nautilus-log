@@ -174,18 +174,18 @@ test('Flow shades elapsed time continuously behind slices and through the curren
   assert.match(css, /\.nautilus-flow-past-overlay\s*\{[^}]*fill:\s*var\(--nautilus-flow-past-overlay\);[^}]*pointer-events:\s*none;/s);
 });
 
-test('Flow separates completed, missed, and unplanned past time without calling it waste', () => {
+test('Flow separates recorded and unplanned past time without a missed-task category', () => {
   assert.match(component, /past-unplanned-overlay-component/);
   assert.match(component, /nautilus-flow-unplanned-pattern/);
   assert.match(component, /nautilus-flow-past--completed/);
-  assert.match(component, /nautilus-flow-past--missed/);
   assert.match(component, /nautilus-flow-past--event/);
   assert.match(component, /:data-past-status past-status/);
   assert.match(css, /--nautilus-flow-unplanned-stripe:/);
   assert.match(css, /\.nautilus-flow-unplanned-stripe\s*\{[^}]*stroke:\s*var\(--nautilus-flow-unplanned-stripe\);/s);
   assert.match(css, /\.nautilus-flow-past--completed \.nautilus-flow-slice\s*\{[^}]*fill:\s*var\(--nautilus-flow-completed-fill\);/s);
-  assert.match(css, /\.nautilus-flow-past--missed \.nautilus-flow-slice\s*\{[^}]*stroke:\s*var\(--nautilus-flow-warning\);[^}]*stroke-dasharray:/s);
   assert.match(css, /\.nautilus-flow-past--event \.nautilus-flow-slice\s*\{[^}]*fill:\s*var\(--nautilus-flow-past-event-fill\);/s);
+  assert.doesNotMatch(component, /nautilus-flow-past--missed/);
+  assert.doesNotMatch(css, /nautilus-flow-past--missed/);
   assert.doesNotMatch(component, /浪费|waste/i);
   assert.doesNotMatch(css, /\.nautilus-flow-past \.nautilus-flow-slice/);
 });

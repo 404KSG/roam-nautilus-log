@@ -97,7 +97,7 @@ test('past unplanned segments follow spiral hour-cell boundaries', () => {
   );
 });
 
-test('past item status separates completed work, missed plans, and elapsed events', () => {
+test('past item status keeps only completed work and elapsed events', () => {
   const common = { start: 510, end: 570 };
   assert.equal(
     pastItemStatus({ event: { ...common, todo: true, done: true }, nowMinutes: 570, dailyPage: true }),
@@ -105,7 +105,7 @@ test('past item status separates completed work, missed plans, and elapsed event
   );
   assert.equal(
     pastItemStatus({ event: { ...common, todo: true }, nowMinutes: 570, dailyPage: true }),
-    'missed',
+    null,
   );
   assert.equal(
     pastItemStatus({ event: { ...common, meeting: true }, nowMinutes: 570, dailyPage: true }),

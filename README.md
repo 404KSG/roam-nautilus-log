@@ -67,9 +67,10 @@ The legend is intentionally minimal: a red dot means **urgent**, yellow means
 **event**, and blue means **task**. The red line is the current-time pointer.
 Past time on today's page stays subdued, but it no longer collapses into one
 undifferentiated gray: completed work uses a muted solid fill, elapsed events
-retain a muted yellow, missed planned tasks use a dashed warning outline, and
-elapsed gaps without a recorded item use diagonal hatching. An unplanned gap
-is factual schedule data; Flow does not label it as wasted time.
+retain a muted yellow, and elapsed gaps without a recorded item use diagonal
+hatching. Unfinished flexible tasks simply reflow forward; Flow does not add a
+separate “missed” state. An unplanned gap is factual schedule data, not a claim
+that the time was wasted.
 
 ### Compatibility and safety
 
@@ -129,8 +130,8 @@ Todo Trigger 仍然是可选工具：它可以在完成时追加时间戳，但 
 图例保持简洁：红色圆点表示“紧急”，黄色表示“事件”，蓝色表示“任务”。
 红色细线代表当前时间，不额外加入 NOW 图标。今天已经过去的时间会降低视觉权重，
 但不再全部混成同一种灰色：已完成事项使用灰色实心，已过去事件保留弱黄色，
-已错过的计划任务使用警示虚线，未记录事项的过去空档使用斜纹。这里的“未安排”
-只陈述排程事实，插件不会直接把它判断为“浪费”。
+未记录事项的过去空档使用斜纹。未完成的弹性任务只会继续向后顺延，不再增加
+“错过”状态。这里的“未安排”只陈述排程事实，插件不会直接把它判断为“浪费”。
 
 ### 兼容与安全
 

@@ -197,18 +197,13 @@ function pastUnplannedSegments({
     .filter((segment) => segment.end > segment.start));
 }
 
-/**
- * Classify an elapsed rendered item without assigning intent to blank time.
- * "Missed" means a scheduled flexible task whose interval has passed; it
- * does not mean every unplanned minute was wasted.
- */
+/** Classify only recorded elapsed states that remain meaningful after reflow. */
 function pastItemStatus({ event, nowMinutes, dailyPage = false } = {}) {
   if (dailyPage !== true || !event) return null;
   const end = asNumber(event.end);
   const now = asNumber(nowMinutes);
   if (!Number.isFinite(end) || !Number.isFinite(now) || end > now) return null;
   if (event.done === true) return 'completed';
-  if (event.todo === true) return 'missed';
   if (event.meeting === true) return 'event';
   return null;
 }

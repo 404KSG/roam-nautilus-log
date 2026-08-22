@@ -450,17 +450,6 @@
   opacity: 0.54;
 }
 
-.nautilus-flow-past--missed .nautilus-flow-slice {
-  stroke: var(--nautilus-flow-warning);
-  stroke-width: 1.5px;
-  stroke-dasharray: 4 2;
-}
-
-.nautilus-flow-past--missed .nautilus-flow-slice-group text,
-.nautilus-flow-past--missed .nautilus-flow-link-line {
-  opacity: 0.72;
-}
-
 .nautilus-flow-past--event .nautilus-flow-slice {
   fill: var(--nautilus-flow-past-event-fill);
 }

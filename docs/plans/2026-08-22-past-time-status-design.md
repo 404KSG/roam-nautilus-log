@@ -2,12 +2,10 @@
 
 ## Decision
 
-Past time is rendered as four factual visual states:
+Past time is rendered as three factual visual states:
 
 - completed work: muted solid gray with the existing struck-through label;
 - elapsed fixed events: muted semantic yellow;
-- a planned flexible task whose scheduled interval has passed: normal task
-  blue with a dashed warning outline;
 - elapsed time with no recorded task or event: subtle diagonal hatching.
 
 The renderer does not call an unplanned interval “waste.” That interpretation
@@ -22,15 +20,15 @@ ignored. Completed items continue to reserve their historical intervals even
 when their labels are hidden, so hiding completed work does not reclassify it
 as unplanned.
 
-Normal live planning pushes unfinished tasks forward from now, so a missed
-task interval is most visible during playback or whenever the renderer is
-given an elapsed scheduled interval. The UI does not invent historical plans
-that are absent from the graph.
+Normal live planning pushes unfinished tasks forward from now. A separate
+missed-task state would therefore describe a playback artifact rather than the
+product's actual scheduling model, so it is intentionally omitted. The UI does
+not invent historical plans that are absent from the graph.
 
 ## Verification
 
 Core tests cover clipping, overlaps, generated free-time placeholders, partial
-hours, and the completed/missed/event boundary. Renderer contract tests require
+hours, and the completed/event boundary. Renderer contract tests require
 the unique SVG hatch pattern, all three past-item classes, and distinct light
 and dark theme tokens. The complete build and test suite must pass before the
 Depot draft is updated.
