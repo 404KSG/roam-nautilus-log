@@ -43,14 +43,18 @@ does not require it to draw the schedule.
 - Default duration, label length, an optional urgent trigger word, and a
   bilingual settings panel.
 
-The chart header reports the same three quantities every time:
+The chart header puts the changing remainder beside a stable full-day baseline:
 
-`Available 3h20m · Demand 4h05m · Overload 45m`
+`Available 7h31m / 9h · Events 3h15m / 7h · Planned 1h45m / 19%`
 
-The Chinese UI displays `可安排 · 待办需求 · 超载/余量`. If aggregate free time
-exists but an atomic task cannot fit any continuous slot, it instead reports
-`空档不足`. Future fixed events are subtracted from available time, and partially
-completed tasks count only their remaining duration.
+For Available and Events, the value before `/` is the time still remaining from
+now; the muted value after `/` is the full configured-day total and stays stable
+as the clock advances. Full-day event time uses the union of fixed intervals, so
+overlapping events are not double-counted. Full-day available time is the selected
+chart range minus that event union. The Chinese UI displays `可安排 · 事件 · 已计划 ·
+超载/余量`. If aggregate free time exists but an atomic task cannot fit any
+continuous slot, it instead reports `空档不足`. Partially completed tasks count
+only their remaining duration.
 
 An event that crosses midnight is clipped at the selected day's `24:00`
 boundary and shown in a visible warning panel; Flow does not silently schedule
@@ -111,13 +115,15 @@ Todo Trigger 仍然是可选工具：它可以在完成时追加时间戳，但 
   最后一根边界线标为 `0`。
 - 默认待办时长、标签长度、可选的紧急触发词，以及中英文设置面板。
 
-图表上方显示：
+图表上方把动态变化的剩余时间与当天稳定基准放在一起显示：
 
-`可安排 3h20m · 待办需求 4h05m · 超载 45m`
+`可安排 7h31m / 9h · 事件 3h15m / 7h · 已计划 1h45m / 19%`
 
-如果没有超载，最后一项显示为“余量”；如果总空闲时间足够、但某个完整任务无法放进
-任何连续空档，则显示“空档不足”。未来固定事件会从可安排时间中扣除，部分完成的
-任务只计算剩余时长。
+“可安排”和“事件”中，斜杠左侧是从现在起还剩多少，右侧弱化显示所选完整时间范围
+内的当日总量，并且不会随着时钟推进而改变。事件重叠时按时间并集计算，不会重复统计；
+可安排总量等于完整时间范围减去事件并集。如果没有超载，最后一项显示为“余量”；
+如果总空闲时间足够、但某个完整任务无法放进任何连续空档，则显示“空档不足”。
+部分完成的任务只计算剩余时长。
 
 跨越午夜的固定事件会在当天 `24:00` 截断，并进入可见的时间范围提醒；Flow 不会
 悄悄把次日部分排进今天。

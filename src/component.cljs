@@ -568,8 +568,11 @@
          :progress progress
          :duration (int (* (/ (- 100 progress) 100) duration))
          :uid (:uid block-map)
-         :start (if done-slice (:start done-slice) (first range))
-         :end (if done-slice (:end done-slice) (second range))
+         ;; Fixed events keep their explicit range after completion so the
+         ;; full-day event denominator remains stable. Flexible DONE tasks use
+         ;; their completion marker to reconstruct a historical slice.
+         :start (if range (first range) (:start done-slice))
+         :end (if range (second range) (:end done-slice))
          :done done
          :warning warning
          :bg-color custom-color
@@ -1345,23 +1348,29 @@
 
 (defn metrics-component [metrics]
   (let [aria-label (str/join ", " (map #(str (:label %) " " (:value %)
+                                             (when-let [total (:total %)] (str " / " total))
                                              (when-let [percent (:percent %)] (str ", " percent))
                                              (when (:burning %)
                                                (str ", " (:burningLabel %)))) metrics))]
     [:div {:class "nautilus-flow-metrics" :aria-label aria-label}
-     (for [metric metrics]
+     (for [metric metrics
+           :let [reading-label (str (:value metric)
+                                    (when-let [total (:total metric)] (str " / " total))
+                                    (when (:burning metric)
+                                      (str ". " (:burningLabel metric))))]]
        ^{:key (:key metric)}
        [:div {:class (str "nautilus-flow-metric nautilus-flow-metric--" (:tone metric))}
         [:span {:class "nautilus-flow-metric-label"} (:label metric)]
         [:span {:class "nautilus-flow-metric-reading"
-                :aria-label (when (:burning metric)
-                              (str (:value metric) ". " (:burningLabel metric)))}
+                :aria-label (when (or (:total metric) (:burning metric)) reading-label)}
          [:strong {:class "nautilus-flow-metric-value"} (:value metric)]
-         (when (:burning metric)
-           [burning-flame-icon (:burningLabel metric)])
+         (when-let [total (:total metric)]
+           [:span {:class "nautilus-flow-metric-total"} (str "/ " total)])
          (when-let [percent (:percent metric)]
            [:span {:class (str "nautilus-flow-metric-percent nautilus-flow-metric-percent--" (:percentTone metric))}
-            (str "/ " percent)])]])]))
+            (str "/ " percent)])
+         (when (:burning metric)
+           [burning-flame-icon (:burningLabel metric)])]])]))
 
 (defn capacity-metrics-component [capacity settings]
   [metrics-component (capacity-metrics capacity settings)])
@@ -1569,13 +1578,18 @@
                 [text-events done-events] @*text-events
                 pending-tasks (vec (filter #(and (:todo %) (not (:done %))) text-events))
                 fixed-events (vec (filter #(and (:meeting %) (not (:done %))) text-events))
+                all-fixed-events (vec (concat fixed-events (filter :meeting done-events)))
                 capacity-base (or (flow-core-call "calculateCapacity"
                                                    {:startMinutes (:workday-start settings)
                                                     :endMinutes (:workday-end settings)
                                                     :nowMinutes (if @playback-state-atom @now-time-atom plan-from-time)
                                                     :fixedEvents fixed-events
+                                                    :allFixedEvents all-fixed-events
                                                     :pendingTasks (map #(dissoc % :progress) pending-tasks)})
-                                  {:availableMinutes 0 :fixedMinutes 0 :demandMinutes 0 :overloadMinutes 0 :slackMinutes 0 :unplacedMinutes 0 :overflowTasks []})
+                                  {:availableMinutes 0 :totalAvailableMinutes 0
+                                   :fixedMinutes 0 :totalFixedMinutes 0
+                                   :demandMinutes 0 :overloadMinutes 0 :slackMinutes 0
+                                   :unplacedMinutes 0 :overflowTasks []})
                 burning-bucket (flow-core-call "burningCapacityBucket"
                                                {:startMinutes (:workday-start settings)
                                                 :endMinutes (:workday-end settings)

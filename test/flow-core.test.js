@@ -345,6 +345,51 @@ test('capacity counts only remaining today, subtracts future fixed time, and exc
   assert.equal(result.fixedMinutes, 120);
 });
 
+test('capacity keeps stable full-day totals and counts overlapping fixed events once', () => {
+  const activeFixedEvents = [
+    { uid: 'past-and-current', meeting: true, start: 500, end: 630 },
+    { uid: 'overlap-a', meeting: true, start: 660, end: 720 },
+    { uid: 'overlap-b', meeting: true, start: 700, end: 750 },
+    { uid: 'clipped-at-end', meeting: true, start: 1200, end: 1320 },
+  ];
+  const result = calculateCapacity({
+    startMinutes: 300,
+    endMinutes: 1260,
+    nowMinutes: 600,
+    fixedEvents: activeFixedEvents,
+    allFixedEvents: [
+      { uid: 'completed-morning', meeting: true, done: true, start: 360, end: 420 },
+      ...activeFixedEvents,
+    ],
+    pendingTasks: [],
+  });
+
+  assert.equal(result.fixedMinutes, 180); // 600..630, merged 660..750, 1200..1260
+  assert.equal(result.availableMinutes, 480); // 600..1260 minus remaining fixed time
+  assert.equal(result.totalFixedMinutes, 340); // 60 + 130 + 90 + 60
+  assert.equal(result.totalAvailableMinutes, 620); // full 960-minute range minus fixed union
+});
+
+test('capacity metrics expose optional current / full-day ratios', () => {
+  const metrics = capacityMetrics({
+    language: 'en',
+    capacity: {
+      availableMinutes: 451,
+      totalAvailableMinutes: 540,
+      fixedMinutes: 195,
+      totalFixedMinutes: 420,
+      demandMinutes: 105,
+      overloadMinutes: 0,
+      slackMinutes: 346,
+    },
+  });
+
+  assert.equal(metrics[0].value, '7h31m');
+  assert.equal(metrics[0].total, '9h');
+  assert.equal(metrics[1].value, '3h15m');
+  assert.equal(metrics[1].total, '7h');
+});
+
 test('burning bucket uses half-open event boundaries and workday bounds', () => {
   const options = {
     startMinutes: 300,

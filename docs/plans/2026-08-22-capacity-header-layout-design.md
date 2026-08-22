@@ -9,8 +9,8 @@ Make the Nautilus Flow header easier to scan without turning it into a dense das
 The header uses two columns with two visually matched rows:
 
 ```text
-Available  9h00m       Events  7h00m                 [controls]
-Demand     1h45m / 19% Remaining 7h15m     Urgent · Event · Task
+Available  7h31m / 9h  Events  3h15m / 7h            [controls]
+Planned    1h45m / 19% Remaining 5h46m     Urgent · Event · Task
 ```
 
 - The left column is a 2 × 2 metrics grid.
@@ -18,6 +18,19 @@ Demand     1h45m / 19% Remaining 7h15m     Urgent · Event · Task
 - The second row contains Demand and the dynamic status: Remaining, Overload, or No fitting slot.
 - The right column places the three controls on top and the right-aligned color legend beneath them.
 - The header remains flat: no card background, shadow, or enclosing border beyond the existing bottom divider.
+
+## Current / total ratios
+
+Available and Events use the same ratio grammar:
+
+- the bold value before `/` is the remaining duration from the current minute;
+- the muted value after `/` is the total duration across the configured chart range;
+- the total stays stable as time passes and after a fixed event is completed;
+- overlapping fixed events are merged before summing, so their shared minutes count once;
+- total Available is the configured chart duration minus the merged fixed-event duration;
+- the burning flame follows the complete ratio, identifying which current value is decreasing.
+
+Fixed events retain their explicit written range after completion. Completion timestamps continue to reconstruct historical slices only for flexible tasks.
 
 ## Demand percentage
 
@@ -36,5 +49,7 @@ The 2 × 2 metric grid remains intact in narrow containers. Column and legend sp
 ## Verification
 
 - Unit-test normal, unavailable, and overloaded percentage calculations.
+- Unit-test clipped, completed, and overlapping fixed events in the stable totals.
 - Contract-test the two-column header, 2 × 2 metrics grid, right-aligned action group, and percentage styling.
+- Contract-test the muted denominator and flame ordering.
 - Run the production build and full test suite.

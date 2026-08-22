@@ -149,6 +149,7 @@
   gap: 3px;
 }
 
+.nautilus-flow-metric-total,
 .nautilus-flow-metric-percent {
   color: var(--nautilus-flow-text-sub);
   font-size: 11px;

@@ -81,6 +81,7 @@ test('Flow uses a flat two-row header with metrics left and controls plus legend
   assert.match(component, /nautilus-flow-header/);
   assert.match(component, /nautilus-flow-metrics/);
   assert.match(component, /nautilus-flow-metric-percent/);
+  assert.match(component, /nautilus-flow-metric-total/);
   assert.match(component, /nautilus-flow-header-actions/);
   assert.match(component, /nautilus-flow-html-legend/);
   assert.doesNotMatch(component, /\[flow-legend-component/);
@@ -89,6 +90,19 @@ test('Flow uses a flat two-row header with metrics left and controls plus legend
   assert.match(css, /\.nautilus-flow-metric--event/);
   assert.match(css, /\.nautilus-flow-metrics\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(2, max-content\);/s);
   assert.match(css, /\.nautilus-flow-header-actions\s*\{[^}]*align-items:\s*flex-end;/s);
+  assert.match(css, /\.nautilus-flow-metric-total,[\s\S]*\.nautilus-flow-metric-percent\s*\{[^}]*color:\s*var\(--nautilus-flow-text-sub\);/s);
+});
+
+test('Flow supplies all fixed events for stable totals and keeps the flame after the ratio', () => {
+  assert.match(component, /all-fixed-events/);
+  assert.match(component, /:allFixedEvents all-fixed-events/);
+  assert.match(component, /:start \(if range \(first range\) \(:start done-slice\)\)/);
+  assert.match(component, /:end \(if range \(second range\) \(:end done-slice\)\)/);
+
+  const totalIndex = component.indexOf('(when-let [total (:total metric)]');
+  const flameIndex = component.indexOf('(when (:burning metric)', totalIndex);
+  assert.notEqual(totalIndex, -1);
+  assert.ok(flameIndex > totalIndex, 'the flame should follow the complete current / total reading');
 });
 
 test('Flow suppresses breadcrumb and collapsed-path replicas before mounting the chart', () => {

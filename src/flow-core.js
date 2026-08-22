@@ -267,8 +267,8 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
-function normalizedInterval(event, startMinutes, endMinutes) {
-  if (!event || event.done || event.meeting !== true) return null;
+function normalizedInterval(event, startMinutes, endMinutes, { includeDone = false } = {}) {
+  if (!event || (!includeDone && event.done) || event.meeting !== true) return null;
   const start = asNumber(event.start);
   const end = asNumber(event.end);
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
@@ -457,6 +457,7 @@ function calculateCapacity({
   endMinutes,
   nowMinutes,
   fixedEvents = [],
+  allFixedEvents = fixedEvents,
   pendingTasks = [],
 } = {}) {
   const start = asNumber(startMinutes);
@@ -467,8 +468,21 @@ function calculateCapacity({
   const fixedIntervals = Number.isFinite(start) && Number.isFinite(end) && end > start
     ? futureFixedIntervals({ startMinutes: start, endMinutes: end, nowMinutes, fixedEvents })
     : [];
+  const totalFixedIntervals = Number.isFinite(start) && Number.isFinite(end) && end > start
+    ? mergeIntervals(
+      (Array.isArray(allFixedEvents) ? allFixedEvents : [])
+        .map((event) => normalizedInterval(event, start, end, { includeDone: true }))
+        .filter(Boolean),
+    )
+    : [];
   const rawAvailable = Math.max(0, (Number.isFinite(end) ? end : 0) - cursor);
   const availableMinutes = Math.max(0, rawAvailable - intervalMinutes(fixedIntervals));
+  const totalFixedMinutes = intervalMinutes(totalFixedIntervals);
+  const totalAvailableMinutes = Math.max(
+    0,
+    (Number.isFinite(start) && Number.isFinite(end) && end > start ? end - start : 0)
+      - totalFixedMinutes,
+  );
   const demandMinutes = pendingTasks.reduce((total, task) => total + remainingDuration(task), 0);
   const overloadMinutes = Math.max(0, demandMinutes - availableMinutes);
   const slackMinutes = Math.max(0, availableMinutes - demandMinutes);
@@ -485,6 +499,8 @@ function calculateCapacity({
     slackMinutes,
     unplacedMinutes,
     fixedMinutes: intervalMinutes(fixedIntervals),
+    totalAvailableMinutes,
+    totalFixedMinutes,
     burningBucket: burningCapacityBucket({
       startMinutes: start,
       endMinutes: end,
@@ -586,15 +602,29 @@ function capacityMetrics({ capacity = {}, language = 'zh' } = {}) {
       : metric
   );
   const availableMinutes = Math.max(0, asNumber(capacity.availableMinutes) || 0);
+  const totalAvailableMinutes = asNumber(capacity.totalAvailableMinutes);
+  const totalFixedMinutes = asNumber(capacity.totalFixedMinutes);
   const demandMinutes = Math.max(0, asNumber(capacity.demandMinutes) || 0);
   const demandPercent = availableMinutes > 0
     ? `${Math.round((demandMinutes / availableMinutes) * 100)}%`
     : (demandMinutes === 0 ? '0%' : '—');
   const available = markBurning({
-    key: 'available', label: copy.available, value: formatDuration(availableMinutes), tone: 'neutral',
+    key: 'available',
+    label: copy.available,
+    value: formatDuration(availableMinutes),
+    ...(Number.isFinite(totalAvailableMinutes)
+      ? { total: formatDuration(totalAvailableMinutes) }
+      : {}),
+    tone: 'neutral',
   }, 'available', copy.burningAvailable);
   const events = markBurning({
-    key: 'events', label: copy.events, value: formatDuration(capacity.fixedMinutes), tone: 'event',
+    key: 'events',
+    label: copy.events,
+    value: formatDuration(capacity.fixedMinutes),
+    ...(Number.isFinite(totalFixedMinutes)
+      ? { total: formatDuration(totalFixedMinutes) }
+      : {}),
+    tone: 'event',
   }, 'events', copy.burningEvents);
   const demand = {
     key: 'demand',
