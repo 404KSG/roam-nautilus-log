@@ -70,7 +70,7 @@ actively focused.
 ## Rendering and compatibility
 
 The existing wide header and compact Overview/Schedule split remain unchanged.
-Only CSS variables and Flow-scoped classes are added. The flame SVG is
+Only CSS variables and Log-scoped classes are added. The flame SVG is
 stroke-based (`fill: none`) to match the existing eye, playback, and collapse
 icons. The SVG and Hiccup use syntax already accepted by Roam SCI; all
 time-state decisions stay in the dependency-free JS core so tests do not need

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Prevent capacity metrics and the color legend from overlapping in narrow Nautilus Flow containers without shrinking or hiding useful information.
+Prevent capacity metrics and the color legend from overlapping in narrow Nautilus Log containers without shrinking or hiding useful information.
 
 ## Responsive behavior
 

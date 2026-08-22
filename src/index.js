@@ -4,16 +4,16 @@ import {
   toggleRenderComponent,
   updateTemplateString,
 } from "./entry-helpers";
-import * as flowCore from "./flow-core";
+import * as logCore from "./log-core";
 import "../extension.css";
 
-const componentName = "Nautilus Flow";
-const codeBlockUID = "roam-render-Nautilus-Flow-cljs";
+const componentName = "Nautilus Log";
+const codeBlockUID = "roam-render-Nautilus-Log-cljs";
 const renderStringCore = `{{[[roam/render]]:((${codeBlockUID}))`;
 const disabledReplacementString = `{{${componentName}-disabled`;
 const version = "v1";
-const titleblockUID = "roam-render-Nautilus-Flow";
-const settingsEventName = "nautilus-flow:settings-changed";
+const titleblockUID = "roam-render-Nautilus-Log";
+const settingsEventName = "nautilus-log:settings-changed";
 
 // Keep the existing argument order for old templates; the new end-hour value
 // is appended after the old color trigger argument.
@@ -43,8 +43,8 @@ function runtimeSettings(extensionAPI) {
 function publishRuntimeSettings(extensionAPI) {
   if (typeof window === "undefined") return;
   const settings = runtimeSettings(extensionAPI);
-  window.nautilusFlowExtensionData = {
-    ...(window.nautilusFlowExtensionData || {}),
+  window.nautilusLogExtensionData = {
+    ...(window.nautilusLogExtensionData || {}),
     settings,
   };
   if (typeof window.dispatchEvent === "function") {
@@ -92,7 +92,7 @@ function panelConfig(extensionAPI, language) {
   const zh = language === "zh";
   const labels = zh
     ? {
-      tabTitle: "Nautilus Flow",
+      tabTitle: "Nautilus Log",
       language: "语言 / Language",
       languageDesc: "选择设置面板显示的语言（切换后立即生效）。",
       start: "图表开始时间",
@@ -109,7 +109,7 @@ function panelConfig(extensionAPI, language) {
       colorDesc: "使任务显示为紧急红色的关键词（不可包含空格，例如：重要）。",
     }
     : {
-      tabTitle: "Nautilus Flow",
+      tabTitle: "Nautilus Log",
       language: "Language",
       languageDesc: "Select the settings language (takes effect immediately).",
       start: "Chart Start Time",
@@ -192,8 +192,8 @@ function panelConfig(extensionAPI, language) {
 }
 
 async function onload({ extensionAPI }) {
-  window.nautilusFlowCore = flowCore;
-  window.nautilusFlowExtensionData = {
+  window.nautilusLogCore = logCore;
+  window.nautilusLogExtensionData = {
     running: true,
     shouldSuppressRenderContext,
     isRightSidebarRenderContext,
@@ -217,10 +217,10 @@ async function onload({ extensionAPI }) {
 
 function onunload() {
   if (typeof window !== "undefined") {
-    if (window.nautilusFlowExtensionData) {
-      window.nautilusFlowExtensionData.running = false;
+    if (window.nautilusLogExtensionData) {
+      window.nautilusLogExtensionData.running = false;
     }
-    delete window.nautilusFlowCore;
+    delete window.nautilusLogCore;
   }
   // Do not mutate the graph during unload; the render scaffolding is owned by
   // the user's graph and should remain available for a later reload.

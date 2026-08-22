@@ -1,4 +1,4 @@
-# Nautilus Flow Linear-style UI design
+# Nautilus Log Linear-style UI design
 
 ## Direction
 

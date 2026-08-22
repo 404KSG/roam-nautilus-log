@@ -19,7 +19,7 @@ function createRoamMock() {
     .sort((a, b) => Number(a.order) - Number(b.order));
 
   const roam = {
-    util: { generateUID: () => `flowtest${++generated}` },
+    util: { generateUID: () => `logtest${++generated}` },
     data: {
       pull: (_pattern, lookup) => entity(lookup?.[1]),
       page: {
@@ -71,7 +71,7 @@ function createRoamMock() {
   return { roam, pages, blocks };
 }
 
-test('built extension creates Flow scaffolding sequentially and unload is graph-safe', async (t) => {
+test('built extension creates Log scaffolding sequentially and unload is graph-safe', async (t) => {
   const { roam, pages, blocks } = createRoamMock();
   const dispatchedEvents = [];
   global.window = {
@@ -98,13 +98,13 @@ test('built extension creates Flow scaffolding sequentially and unload is graph-
   await extension.onload({ extensionAPI });
 
   assert.ok(pages.has('roam/render'));
-  assert.equal(blocks.get('roam-render-Nautilus-Flow').string, 'Nautilus Flow');
-  assert.match(blocks.get('roam-render-Nautilus-Flow-cljs').string, /nautilus-flow-v1/);
-  assert.equal(window.nautilusFlowExtensionData.settings['workday-end'], 21);
-  assert.equal(window.nautilusFlowExtensionData.settings.language, 'en');
+  assert.equal(blocks.get('roam-render-Nautilus-Log').string, 'Nautilus Log');
+  assert.match(blocks.get('roam-render-Nautilus-Log-cljs').string, /nautilus-log-v1/);
+  assert.equal(window.nautilusLogExtensionData.settings['workday-end'], 21);
+  assert.equal(window.nautilusLogExtensionData.settings.language, 'en');
 
-  const shouldSuppressRenderContext = window.nautilusFlowExtensionData.shouldSuppressRenderContext;
-  const isRightSidebarRenderContext = window.nautilusFlowExtensionData.isRightSidebarRenderContext;
+  const shouldSuppressRenderContext = window.nautilusLogExtensionData.shouldSuppressRenderContext;
+  const isRightSidebarRenderContext = window.nautilusLogExtensionData.isRightSidebarRenderContext;
   const contextNode = (matchedSelector) => ({
     closest: (selector) => (selector.includes(matchedSelector) ? {} : null),
   });
@@ -119,17 +119,17 @@ test('built extension creates Flow scaffolding sequentially and unload is graph-
 
   const languageSetting = latestPanel.settings.find(({ id }) => id === 'language');
   await languageSetting.action.onChange('zh');
-  assert.equal(window.nautilusFlowExtensionData.settings.language, 'zh');
+  assert.equal(window.nautilusLogExtensionData.settings.language, 'zh');
 
   const endSetting = latestPanel.settings.find(({ id }) => id === 'workday-end');
   assert.equal(endSetting.action.default, 21);
   await endSetting.action.onChange(20);
-  assert.equal(window.nautilusFlowExtensionData.settings['workday-end'], 20);
-  assert.ok(dispatchedEvents.some(({ type }) => type === 'nautilus-flow:settings-changed'));
+  assert.equal(window.nautilusLogExtensionData.settings['workday-end'], 20);
+  assert.ok(dispatchedEvents.some(({ type }) => type === 'nautilus-log:settings-changed'));
   const blockCount = blocks.size;
 
   await extension.onunload();
   assert.equal(blocks.size, blockCount);
-  assert.equal(window.nautilusFlowExtensionData.running, false);
-  assert.equal(window.nautilusFlowCore, undefined);
+  assert.equal(window.nautilusLogExtensionData.running, false);
+  assert.equal(window.nautilusLogCore, undefined);
 });

@@ -2,7 +2,7 @@
 
 ## Decision
 
-When Nautilus Flow renders inside Roam's right sidebar, initialize the compact
+When Nautilus Log renders inside Roam's right sidebar, initialize the compact
 `Schedule` details list as folded. Keep the main-page compact list expanded by
 default so the existing desktop behavior does not change.
 

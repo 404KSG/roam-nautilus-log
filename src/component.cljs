@@ -1,4 +1,4 @@
-(ns nautilus-flow-v1
+(ns nautilus-log-v1
   (:require [clojure.string :as str]
             [reagent.core :as r]
             [roam.datascript :as rd]
@@ -67,19 +67,19 @@
 
 ;; ----------------- colors, darling ---------------
 
-(def snail-template-color "var(--nautilus-flow-spiral)")
+(def snail-template-color "var(--nautilus-log-spiral)")
 
 (def clock-hand-color "#EA0F0F5B")
 
-(def task-legend-color "var(--nautilus-flow-task)")
+(def task-legend-color "var(--nautilus-log-task)")
 
-(def task-fill-color "var(--nautilus-flow-task-fill)")
+(def task-fill-color "var(--nautilus-log-task-fill)")
 
-(def meeting-fill-color "var(--nautilus-flow-event-fill)")
+(def meeting-fill-color "var(--nautilus-log-event-fill)")
 
-(def completed-fill-color "var(--nautilus-flow-completed-fill)")
+(def completed-fill-color "var(--nautilus-log-completed-fill)")
 
-(def past-event-fill-color "var(--nautilus-flow-past-event-fill)")
+(def past-event-fill-color "var(--nautilus-log-past-event-fill)")
 
 ;; -------------- debug support ------------ 
 
@@ -254,7 +254,7 @@
 (defn display-width [s]
   (reduce + (map #(if (> (.charCodeAt % 0) 255) 2 1) s)))
 
-(declare flow-core-call)
+(declare log-core-call)
 
 (defn get-legend-rect
   "Returns a new legend rectangle that does not overlap with any of the rects"
@@ -263,7 +263,7 @@
         h (* font-size rect-height-coef)
         max-spiral-radius (apply max (map outer-radius-at (range (count snail-blueprint-outer-radiuses))))
         external-rect (first
-                       (flow-core-call "placeExternalLabels"
+                       (log-core-call "placeExternalLabels"
                                        {:centerX (:center-x center)
                                         :centerY (:center-y center)
                                         :exclusionRadius max-spiral-radius
@@ -292,21 +292,21 @@
         new-text-rect (assoc (or external-rect fallback-rect {}) :text text)]
     (assoc new-text-rect :real-rect-radians (real-rect-radians new-text-rect center))))
 
-;; --------------- Flow core bridge ----------------------
+;; --------------- Log core bridge ----------------------
 
-(defn flow-core-call [function-name value]
+(defn log-core-call [function-name value]
   "Calls the single tested JavaScript scheduling core and turns its result into
    ordinary keywordized ClojureScript data. The extension entry point installs
    this object before any render block can mount."
   (try
-    (let [core (.-nautilusFlowCore js/window)
+    (let [core (.-nautilusLogCore js/window)
           function (aget core function-name)]
       (when function
         (js->clj (.call function nil (clj->js value)) :keywordize-keys true)))
     (catch :default _e nil)))
 
 (defn spiral-cell-inner-radius [start-minute settings fallback-inner-radius]
-  (let [paired-hour (flow-core-call "spiralCellInnerHour"
+  (let [paired-hour (log-core-call "spiralCellInnerHour"
                                     {:startMinute start-minute
                                      :endMinutes (:workday-end settings)})]
     (if (number? paired-hour)
@@ -553,9 +553,9 @@
         {:keys [done-at cleaned-str]} (parse-done-time cleaned-str)
         {:keys [done cleaned-str]} (parse-DONE cleaned-str)
         ;; Completed work gets a historical slice only from its explicit
-        ;; completion marker.  The Flow core derives its start by subtracting
+        ;; completion marker.  The Log core derives its start by subtracting
         ;; the original estimate; it must never use the preceding task's end.
-        done-slice (flow-core-call "historicalDoneSlice"
+        done-slice (log-core-call "historicalDoneSlice"
                                    {:done done
                                     :doneAt done-at
                                     :duration duration
@@ -589,7 +589,7 @@
   (let [todo-events (vec (filter #(= true (:todo %)) events))
         meeting-events (vec (filter #(= true (:meeting %)) events))
         pending-todos (vec (filter #(not (:done %)) todo-events))
-        scheduler-input (flow-core-call "scheduleTasks"
+        scheduler-input (log-core-call "scheduleTasks"
                                         {:startMinutes workday-start
                                          :endMinutes workday-end
                                          :nowMinutes plan-from-time
@@ -642,7 +642,7 @@
                      " L " knee-x "," legend-start-y
                      " L " rail-x "," text-y
                      " L " text-x "," text-y)
-             :class "nautilus-flow-link-line"
+             :class "nautilus-log-link-line"
              :stroke color
              :stroke-width "1.5px"
              :stroke-linecap "round"
@@ -713,7 +713,7 @@
         dbg-radians-txt (if debug? (str "slc:" (round2 start-radians)  
                                         "–>" (round2 end-radians) "/ leg:" (round2 legend-radians)) "") 
         on-left? (or (<= legend-radians (- (/ pi 2))) (>= legend-radians (/ pi 2)))] 
-    [:g {:class (when past? "nautilus-flow-grid-past")}
+    [:g {:class (when past? "nautilus-log-grid-past")}
      [:defs
       [:pattern
        {:id "dot-pattern" :width "4" :height "4" :patternUnits "userSpaceOnUse"}
@@ -729,7 +729,7 @@
      
      [:path
       {:d path
-       :class "nautilus-flow-slice"
+       :class "nautilus-log-slice"
        :style (merge
                 (when click-to-progress {:cursor "pointer"})
                 {:--pb-delay (str (* (/ (or task-start-min 0) 1440.0) 6.0) "s")})
@@ -743,7 +743,7 @@
      ;; (when @hovered [:g [:text {:x center-x :y center-y} (str progress)]])
      (when text
        [:g {:style {:--pb-delay (str (* (/ (or task-start-min 0) 1440.0) 6.0) "s")}
-             :class "nautilus-flow-slice-group"}
+             :class "nautilus-log-slice-group"}
         [:title text]
         [bent-line-component legend-line-start-x legend-line-start-y legend-line-end-x legend-line-end-y legend-color at-vertex? on-left?
          (:connector-knee-x legend-rect) (:connector-rail-x legend-rect)]
@@ -757,9 +757,9 @@
                 :style (when click-to-progress {:cursor "pointer"})
                 :on-click #(when click-to-progress (update-block-progress uid 10 now-time-atom))
                 :text-decoration (if done? "line-through" "none")
-                :fill (if-not done? legend-color "var(--nautilus-flow-completed)")}
+                :fill (if-not done? legend-color "var(--nautilus-log-completed)")}
          (if debug? (str dbg-radians-txt)
-             (or (flow-core-call "truncateTextToWidth"
+             (or (log-core-call "truncateTextToWidth"
                                  {:text text
                                   :maxWidth (* (:legend-len-limit settings) (/ font-size rect-width-coef))
                                   :font (str font-size "px " font-family)})
@@ -782,12 +782,12 @@
         (if debug? (str (round2 start-radians) " / " start-angle) timestamp)])]))
 
 (defn past-time-overlay-component [inner-radius center settings now-time-atom]
-  (let [segments (or (flow-core-call "pastTimelineSegments"
+  (let [segments (or (log-core-call "pastTimelineSegments"
                                      {:startMinutes (:workday-start settings)
                                       :endMinutes (:workday-end settings)
                                       :nowMinutes @now-time-atom})
                      [])]
-    [:g {:class "nautilus-flow-past-overlay" :aria-hidden "true"}
+    [:g {:class "nautilus-log-past-overlay" :aria-hidden "true"}
      (for [{:keys [start end]} segments]
        ^{:key (str "past:" start ":" end)}
        [:path {:d (create-arc-path
@@ -798,21 +798,21 @@
                     center)}])]))
 
 (defn past-unplanned-overlay-component [occupied-events inner-radius center settings now-time-atom pattern-id]
-  (let [segments (or (flow-core-call "pastUnplannedSegments"
+  (let [segments (or (log-core-call "pastUnplannedSegments"
                                      {:startMinutes (:workday-start settings)
                                       :endMinutes (:workday-end settings)
                                       :nowMinutes @now-time-atom
                                       :occupiedEvents occupied-events})
                      [])]
-    [:g {:class "nautilus-flow-unplanned-overlay" :aria-hidden "true"}
+    [:g {:class "nautilus-log-unplanned-overlay" :aria-hidden "true"}
      [:defs
       [:pattern {:id pattern-id
-                 :class "nautilus-flow-unplanned-pattern"
+                 :class "nautilus-log-unplanned-pattern"
                  :width "7"
                  :height "7"
                  :patternUnits "userSpaceOnUse"
                  :patternTransform "rotate(45)"}
-       [:line {:class "nautilus-flow-unplanned-stripe"
+       [:line {:class "nautilus-log-unplanned-stripe"
                :x1 "0" :y1 "0" :x2 "0" :y2 "7"}]]]
      (for [{:keys [start end]} segments]
        ^{:key (str "unplanned:" start ":" end)}
@@ -828,7 +828,7 @@
 (defn snail-blueprint-component [color inner-radius center settings daily-page? now-time-atom]
   (let [workday-start (:workday-start settings)
         workday-end (:workday-end settings)
-        segments (or (flow-core-call "hourlyGridSegments"
+        segments (or (log-core-call "hourlyGridSegments"
                                      {:startMinutes workday-start
                                       :endMinutes workday-end})
                      [])]
@@ -848,7 +848,7 @@
              radius (+ (outer-radius-at (mod 23 (count snail-blueprint-outer-radiuses))) 12)
              x (+ (:center-x center) (* (cos radians) radius))
              y (- (:center-y center) (* (sin radians) radius))]
-         [:text {:class "nautilus-flow-midnight-label"
+         [:text {:class "nautilus-log-midnight-label"
                  :x x :y y :fill color :font-size (- font-size 3)
                  :text-anchor "middle" :alignment-baseline "central"} "0"]))]))
 
@@ -857,18 +857,18 @@
         common-attr {:x center-x
                      :text-anchor "middle"
                      :dominant-baseline "central"}]
-    [:g {:class "nautilus-flow-center-date"}
+    [:g {:class "nautilus-log-center-date"}
      [:text (assoc common-attr 
                    :y (- center-y 2) 
-                   :fill "var(--nautilus-flow-text-main)"
+                   :fill "var(--nautilus-log-text-main)"
                    :font-weight "bold" 
                    :font-size (str (* font-size 0.85))) 
        first-row]
      (when center-now-label
        [:text (assoc common-attr
                      :y (+ center-y 13)
-                     :class "nautilus-flow-center-now"
-                     :fill "var(--nautilus-flow-text-sub)"
+                     :class "nautilus-log-center-now"
+                     :fill "var(--nautilus-log-text-sub)"
                      :font-weight "600"
                      :font-size (str (* font-size 0.82)))
         center-now-label])]))
@@ -884,11 +884,11 @@
         progress (:progress event)
         click-to-progress (if (and daily-page? todo?) true false)
         expired? (and meeting? (>= @now-time-atom (:end event)))
-        current? (= true (flow-core-call "isCurrentPlannedTask"
+        current? (= true (log-core-call "isCurrentPlannedTask"
                                          {:event event
                                           :nowMinutes @now-time-atom
                                           :dailyPage daily-page?}))
-        past-status (flow-core-call "pastItemStatus"
+        past-status (log-core-call "pastItemStatus"
                                    {:event event
                                     :nowMinutes @now-time-atom
                                     :dailyPage daily-page?})
@@ -919,8 +919,8 @@
 (defn event-slice-component [event index legend-rect inner-radius daily-page? center settings now-time-atom conflict?]
   (let [{:keys [bg-color done click-to-progress meeting? expired? past-status current?]} (calculate-slice-params event index daily-page? now-time-atom)
         legend-color (cond
-                       (= "completed" past-status) "var(--nautilus-flow-completed)"
-                       (and meeting? (nil? (:bg-color event))) "var(--nautilus-flow-event)"
+                       (= "completed" past-status) "var(--nautilus-log-completed)"
+                       (and meeting? (nil? (:bg-color event))) "var(--nautilus-log-event)"
                        (and (:todo event) (not done) (nil? (:bg-color event))) task-legend-color
                        :else nil)
         description (:description event)
@@ -937,13 +937,13 @@
                        (conj segs [curr end-min])
                        segs)
                      (recur (first bounds) (rest bounds) (conj segs [curr (first bounds)]))))]
-    (into [:g {:class (str "nautilus-flow-event-slice-group"
+    (into [:g {:class (str "nautilus-log-event-slice-group"
                             (case past-status
-                              "completed" " nautilus-flow-past--completed"
-                              "event" " nautilus-flow-past--event"
+                              "completed" " nautilus-log-past--completed"
+                              "event" " nautilus-log-past--event"
                               "")
-                            (when conflict? " nautilus-flow-event-conflict")
-                            (when current? " nautilus-flow-current-task"))
+                            (when conflict? " nautilus-log-event-conflict")
+                            (when current? " nautilus-log-current-task"))
                     :data-past-status past-status
                     :aria-current (when current? "true")}]
           (map-indexed
@@ -972,7 +972,7 @@
 
 (defn label-track-map [events]
   (let [labels (mapv #(select-keys % [:uid :start :end]) events)
-        placed (or (flow-core-call "placeLabelTracks" {:labels labels :maxTracks 3}) [])]
+        placed (or (log-core-call "placeLabelTracks" {:labels labels :maxTracks 3}) [])]
     (into {} (map (juxt :uid :track) placed))))
 
 (defn events->slices
@@ -982,7 +982,7 @@
    ([events daily-page-atom? center settings now-time-atom init-rects]
    (let [events (vec (filter #(not= true (:freetime %)) events))
          track-map (label-track-map events)
-         conflict-uids (set (or (flow-core-call "overlappingFixedEventUids" {:events events}) []))]
+         conflict-uids (set (or (log-core-call "overlappingFixedEventUids" {:events events}) []))]
    (loop [i 0
           events events
           rects init-rects
@@ -1055,25 +1055,25 @@
         item-label (if (= 1 (count items))
                      (get-in copy [:panels :item])
                      (get-in copy [:panels :items]))]
-    [:details {:class "nautilus-flow-compact-details"
+    [:details {:class "nautilus-log-compact-details"
                :open @compact-open-state
                :on-toggle #(let [next-open? (.-open (.-currentTarget %))]
                              (when (not= next-open? @compact-open-state)
                                (reset! compact-open-state next-open?)))}
-     [:summary {:class "nautilus-flow-compact-summary"}
+     [:summary {:class "nautilus-log-compact-summary"}
       (str (get-in copy [:panels :schedule]) " · " (count items) " " item-label)]
-     [:ol {:class "nautilus-flow-compact-list"
-           :aria-label "Nautilus Flow scheduled items"}
+     [:ol {:class "nautilus-log-compact-list"
+           :aria-label "Nautilus Log scheduled items"}
       (for [[index event] (map-indexed vector items)]
         ^{:key (str (:uid event) ":" (:start event) ":" index)}
-        [:li {:class (str "nautilus-flow-compact-item"
-                          (when (:done event) " nautilus-flow-compact-item--done"))
+        [:li {:class (str "nautilus-log-compact-item"
+                          (when (:done event) " nautilus-log-compact-item--done"))
               :title (:description event)}
-         [:i {:class (str "nautilus-flow-compact-dot nautilus-flow-compact-dot--" (compact-item-tone event))
+         [:i {:class (str "nautilus-log-compact-dot nautilus-log-compact-dot--" (compact-item-tone event))
               :aria-hidden "true"}]
-         [:time {:class "nautilus-flow-compact-time"}
+         [:time {:class "nautilus-log-compact-time"}
           (str (minutes->time (:start event)) "–" (minutes->time (:end event)))]
-         [:span {:class "nautilus-flow-compact-title"} (:description event)]])]]))
+         [:span {:class "nautilus-log-compact-title"} (:description event)]])]]))
 
 (defn show-events [events-state daily-page-atom? show-done-atom? playback-state-atom now-time-atom page-title dimensions settings compact? copy compact-open-state block-uid]
   (let [[events done-todos] events-state
@@ -1081,7 +1081,7 @@
         old-height (js/Math.round (:height dimensions))
         all-events-for-dim (vec (if @show-done-atom? (concat events done-todos) events))
         past-occupied-events (vec (concat events done-todos))
-        unplanned-pattern-id (str "nautilus-flow-unplanned-" block-uid)
+        unplanned-pattern-id (str "nautilus-log-unplanned-" block-uid)
         [center-x suggested-width center-y suggested-height]
         (if compact?
           [(/ old-width 2) old-width (/ old-height 2) old-height]
@@ -1096,12 +1096,12 @@
                           (>= @now-time-atom (:workday-start settings))
                           (< @now-time-atom (:workday-end settings)))
         center-now-label (when now-visible? (minutes->time @now-time-atom))]
-    [:div {:class (str "nautilus-flow-visual" (when compact? " nautilus-flow-visual--compact"))}
+    [:div {:class (str "nautilus-log-visual" (when compact? " nautilus-log-visual--compact"))}
      [:svg {:viewBox (str "0 0 " suggested-width " " suggested-height)
            :width "100%"
            :style {:max-width (str suggested-width "px")}
            :xmlns "http://www.w3.org/2000/svg"
-           :class (str "nautilus-flow-svg" (when @playback-state-atom " nautilus-flow-playback-active"))
+           :class (str "nautilus-log-svg" (when @playback-state-atom " nautilus-log-playback-active"))
            :font-family font-family
            :font-size font-size}
      [:g
@@ -1125,12 +1125,12 @@
               label (minutes->time visible-now)
               now-copy (get-in copy [:capacity :now])
               label-aria (str now-copy " " label)]
-          [:g {:class "nautilus-flow-now-needle" :aria-label label-aria}
+          [:g {:class "nautilus-log-now-needle" :aria-label label-aria}
            [:line {:x1 x1 :y1 y1 :x2 x2 :y2 y2
                    :stroke clock-hand-color
                    :stroke-width 2
                    :stroke-linecap "round"
-                   :class "nautilus-flow-now-needle-line"
+                   :class "nautilus-log-now-needle-line"
                    :style {:filter "drop-shadow(0px 0px 4px rgba(233, 79, 79, 0.4))"}}]]))
       [central-label-component (split-and-trim page-title len-central-legend) center center-now-label]
      
@@ -1176,7 +1176,7 @@
 (defn switch-done-visibility-button [show-done-state copy]
   [:button
    {:on-click #(swap! show-done-state not)
-    :class "nautilus-flow-toggle-btn"
+    :class "nautilus-log-toggle-btn"
     :title (if @show-done-state (:hideDone copy) (:showDone copy))
     :aria-label (if @show-done-state (:hideDone copy) (:showDone copy))}
    (if @show-done-state
@@ -1188,7 +1188,7 @@
       [:line {:x1 "1" :y1 "1" :x2 "23" :y2 "23"}]])])
 
 (defn collapse-storage-key [block-uid]
-  (str "nautilus-flow:collapsed:v1:" block-uid))
+  (str "nautilus-log:collapsed:v1:" block-uid))
 
 (defn read-collapsed-state [block-uid]
   (try
@@ -1205,7 +1205,7 @@
    {:on-click #(let [next (not @collapsed-state)]
                  (reset! collapsed-state next)
                  (write-collapsed-state block-uid next))
-    :class "nautilus-flow-toggle-btn nautilus-flow-collapse-btn"
+    :class "nautilus-log-toggle-btn nautilus-log-collapse-btn"
     :title (if @collapsed-state (:expand copy) (:collapse copy))
     :aria-label (if @collapsed-state (:expand copy) (:collapse copy))}
    [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none"
@@ -1234,7 +1234,7 @@
                                    (reset! playback-state-atom false)
                                    (reset-now-time-atom now-time-atom)))))]
                      (reset! playback-frame-atom (js/requestAnimationFrame tick)))))
-    :class "nautilus-flow-toggle-btn"
+    :class "nautilus-log-toggle-btn"
     :title (:playback copy)
     :aria-label (:playback copy)
     :disabled @playback-state-atom}
@@ -1265,7 +1265,7 @@
       :else nil)
     (catch :default _e nil)))
 
-(def settings-event-name "nautilus-flow:settings-changed")
+(def settings-event-name "nautilus-log:settings-changed")
 
 (defn render-arg-values [args]
   (let [values (vec args)]
@@ -1280,7 +1280,7 @@
         a2 (safe-int a2)
         a3 (safe-int a3)
         a5 (safe-int a5)
-        normalized (or (flow-core-call "normalizeScheduleSettings"
+        normalized (or (log-core-call "normalizeScheduleSettings"
                                        {:startHour (or a3 (/ init-workday-start 60))
                                         :endHour (or a5 (/ init-workday-end 60))})
                        {:startHour 5 :endHour 24 :startMinutes 300 :endMinutes 1440})]
@@ -1298,7 +1298,7 @@
 
 (defn extension-runtime-settings []
   (try
-    (if-let [settings (some-> js/window .-nautilusFlowExtensionData .-settings)]
+    (if-let [settings (some-> js/window .-nautilusLogExtensionData .-settings)]
       (js->clj settings :keywordize-keys true)
       {})
     (catch :default _e {})))
@@ -1308,31 +1308,31 @@
         values (if (> (count values) 3)
                  (assoc values 3 (arg-tag->str (nth values 3)))
                  values)]
-    (or (flow-core-call "resolveRendererSettings"
+    (or (log-core-call "resolveRendererSettings"
                         {:runtime (extension-runtime-settings)
                          :args values})
         (args->settings values))))
 
 (defn ui-copy [settings]
-  (or (flow-core-call "uiCopy" (:language settings))
+  (or (log-core-call "uiCopy" (:language settings))
       {:capacity {:available "Available" :events "Events" :demand "Demand" :overload "Overload" :fragmented "No fitting slot" :remaining "Remaining"
                   :burningAvailable "Flexible time is elapsing" :burningEvents "Event time is elapsing" :now "Current time"}
        :legend {:urgent "Urgent" :event "Event" :task "Task"}
        :controls {:hideDone "Hide completed items" :showDone "Show completed items" :playback "Play back the day"
-                  :collapse "Collapse Nautilus Flow" :expand "Expand Nautilus Flow"}
+                  :collapse "Collapse Nautilus Log" :expand "Expand Nautilus Log"}
        :panels {:overview "Overview" :overflow "Unscheduled today" :warnings "Schedule warnings" :schedule "Schedule" :item "item" :items "items"}
        :warnings {:overnight "Overnight events display only through 24:00"
                   :sameTime "Start and end times cannot be the same"}}))
 
 (defn capacity-metrics [capacity settings]
-  (or (flow-core-call "capacityMetrics" {:capacity capacity :language (:language settings)})
+  (or (log-core-call "capacityMetrics" {:capacity capacity :language (:language settings)})
       [{:key "available" :label "Available" :value "0m" :tone "neutral"}
        {:key "events" :label "Events" :value "0m" :tone "event"}
        {:key "demand" :label "Demand" :value "0m" :percent "0%" :percentTone "neutral" :tone "neutral"}
        {:key "remaining" :label "Remaining" :value "0m" :tone "neutral"}]))
 
 (defn burning-flame-icon [label]
-  [:svg {:class "nautilus-flow-burning-icon"
+  [:svg {:class "nautilus-log-burning-icon"
          :width "16"
          :height "16"
          :viewBox "0 0 24 24"
@@ -1352,22 +1352,22 @@
                                              (when-let [percent (:percent %)] (str ", " percent))
                                              (when (:burning %)
                                                (str ", " (:burningLabel %)))) metrics))]
-    [:div {:class "nautilus-flow-metrics" :aria-label aria-label}
+    [:div {:class "nautilus-log-metrics" :aria-label aria-label}
      (for [metric metrics
            :let [reading-label (str (:value metric)
                                     (when-let [total (:total metric)] (str " / " total))
                                     (when (:burning metric)
                                       (str ". " (:burningLabel metric))))]]
        ^{:key (:key metric)}
-       [:div {:class (str "nautilus-flow-metric nautilus-flow-metric--" (:tone metric))}
-        [:span {:class "nautilus-flow-metric-label"} (:label metric)]
-        [:span {:class "nautilus-flow-metric-reading"
+       [:div {:class (str "nautilus-log-metric nautilus-log-metric--" (:tone metric))}
+        [:span {:class "nautilus-log-metric-label"} (:label metric)]
+        [:span {:class "nautilus-log-metric-reading"
                 :aria-label (when (or (:total metric) (:burning metric)) reading-label)}
-         [:strong {:class "nautilus-flow-metric-value"} (:value metric)]
+         [:strong {:class "nautilus-log-metric-value"} (:value metric)]
          (when-let [total (:total metric)]
-           [:span {:class "nautilus-flow-metric-total"} (str "/ " total)])
+           [:span {:class "nautilus-log-metric-total"} (str "/ " total)])
          (when-let [percent (:percent metric)]
-           [:span {:class (str "nautilus-flow-metric-percent nautilus-flow-metric-percent--" (:percentTone metric))}
+           [:span {:class (str "nautilus-log-metric-percent nautilus-log-metric-percent--" (:percentTone metric))}
             (str "/ " percent)])
          (when (:burning metric)
            [burning-flame-icon (:burningLabel metric)])]])]))
@@ -1376,15 +1376,15 @@
   [metrics-component (capacity-metrics capacity settings)])
 
 (defn html-legend-component [copy]
-  [:div {:class "nautilus-flow-html-legend" :aria-label "Nautilus Flow legend"}
-   [:span {:class "nautilus-flow-legend-item"}
-    [:i {:class "nautilus-flow-legend-dot nautilus-flow-legend-dot--urgent" :aria-hidden "true"}]
+  [:div {:class "nautilus-log-html-legend" :aria-label "Nautilus Log legend"}
+   [:span {:class "nautilus-log-legend-item"}
+    [:i {:class "nautilus-log-legend-dot nautilus-log-legend-dot--urgent" :aria-hidden "true"}]
     (get-in copy [:legend :urgent])]
-   [:span {:class "nautilus-flow-legend-item"}
-    [:i {:class "nautilus-flow-legend-dot nautilus-flow-legend-dot--event" :aria-hidden "true"}]
+   [:span {:class "nautilus-log-legend-item"}
+    [:i {:class "nautilus-log-legend-dot nautilus-log-legend-dot--event" :aria-hidden "true"}]
     (get-in copy [:legend :event])]
-   [:span {:class "nautilus-flow-legend-item"}
-    [:i {:class "nautilus-flow-legend-dot nautilus-flow-legend-dot--task" :aria-hidden "true"}]
+   [:span {:class "nautilus-log-legend-item"}
+    [:i {:class "nautilus-log-legend-dot nautilus-log-legend-dot--task" :aria-hidden "true"}]
     (get-in copy [:legend :task])]])
 
 (defn compact-overview-component [capacity settings copy compact-open-state]
@@ -1403,26 +1403,26 @@
         summary-aria (str (get-in copy [:panels :overview])
                           (when burning-label (str ". " burning-label ". " burning-aria))
                           (when warning? (str ". " (:label status) " " (:value status))))]
-    [:details {:class (str "nautilus-flow-compact-overview"
-                           (when warning? " nautilus-flow-compact-overview--warning"))
+    [:details {:class (str "nautilus-log-compact-overview"
+                           (when warning? " nautilus-log-compact-overview--warning"))
                :open @compact-open-state
                :on-toggle #(let [next-open? (.-open (.-currentTarget %))]
                              (when (not= next-open? @compact-open-state)
                                (reset! compact-open-state next-open?)))}
-     [:summary {:class "nautilus-flow-compact-summary nautilus-flow-compact-overview-summary"
+     [:summary {:class "nautilus-log-compact-summary nautilus-log-compact-overview-summary"
                 :aria-label summary-aria}
-      [:span {:class "nautilus-flow-compact-overview-summary-content"}
+      [:span {:class "nautilus-log-compact-overview-summary-content"}
        (get-in copy [:panels :overview])
        (when burning-label
-         [:span {:class "nautilus-flow-burning-summary"}
+         [:span {:class "nautilus-log-burning-summary"}
           " · "
           [burning-flame-icon burning-aria]
           " "
           burning-label])]
       (when warning?
-        [:span {:class "nautilus-flow-compact-overview-warning"}
+        [:span {:class "nautilus-log-compact-overview-warning"}
          (str " · " (:label status) " " (:value status))])]
-     [:div {:class "nautilus-flow-compact-overview-body"}
+     [:div {:class "nautilus-log-compact-overview-body"}
       [metrics-component metrics]
       [html-legend-component copy]]]))
 
@@ -1438,19 +1438,19 @@
         total (:unplacedMinutes capacity)
         item-label (if (= count-overflow 1) (get-in copy [:panels :item]) (get-in copy [:panels :items]))]
     (when (pos? count-overflow)
-      [:details {:class "nautilus-flow-overflow-panel"}
-       [:summary (str (get-in copy [:panels :overflow]) " · " (or (flow-core-call "formatDuration" total) "0m") " · " count-overflow " " item-label)]
+      [:details {:class "nautilus-log-overflow-panel"}
+       [:summary (str (get-in copy [:panels :overflow]) " · " (or (log-core-call "formatDuration" total) "0m") " · " count-overflow " " item-label)]
        [:ul
         (for [task overflow]
           ^{:key (:uid task)} [:li
                                [:span (:description task)]
-                               [:span {:class "nautilus-flow-overflow-duration"}
-                                (or (flow-core-call "formatDuration" (:duration task)) "0m")]])]])))
+                               [:span {:class "nautilus-log-overflow-duration"}
+                                (or (log-core-call "formatDuration" (:duration task)) "0m")]])]])))
 
 (defn schedule-warning-panel [events copy]
   (let [warnings (vec (filter :warning events))]
     (when (seq warnings)
-      [:details {:class "nautilus-flow-warning-panel"}
+      [:details {:class "nautilus-log-warning-panel"}
        [:summary (str (get-in copy [:panels :warnings]) " · " (count warnings) " "
                       (if (= 1 (count warnings)) (get-in copy [:panels :item]) (get-in copy [:panels :items])))]
        [:ul
@@ -1458,10 +1458,10 @@
           ^{:key (:uid event)}
           [:li
            [:span (:description event)]
-           [:span {:class "nautilus-flow-warning-message"} (localized-warning (:warning event) copy)]])]])))
+           [:span {:class "nautilus-log-warning-message"} (localized-warning (:warning event) copy)]])]])))
 
-(defn flow-controls [show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid copy show-debug-button?]
-  [:div {:class "nautilus-flow-controls-top"}
+(defn log-controls [show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid copy show-debug-button?]
+  [:div {:class "nautilus-log-controls-top"}
    [switch-done-visibility-button show-done-state (:controls copy)]
    [playback-button settings now-time-atom playback-state-atom playback-frame-atom (:controls copy)]
    [collapse-button collapsed-state block-uid (:controls copy)]
@@ -1469,17 +1469,17 @@
 
 (defn render-context-probe [render-context-state compact-list-open-state]
   [:span
-   {:class "nautilus-flow-context-probe"
+   {:class "nautilus-log-context-probe"
     :aria-hidden "true"
     :ref (fn [node]
            (when node
              (let [suppress? (try
-                               (if-let [detector (.-shouldSuppressRenderContext js/window.nautilusFlowExtensionData)]
+                               (if-let [detector (.-shouldSuppressRenderContext js/window.nautilusLogExtensionData)]
                                  (boolean (detector node))
                                  false)
                                (catch :default _e false))
                    sidebar? (try
-                              (if-let [detector (.-isRightSidebarRenderContext js/window.nautilusFlowExtensionData)]
+                              (if-let [detector (.-isRightSidebarRenderContext js/window.nautilusLogExtensionData)]
                                 (boolean (detector node))
                                 false)
                               (catch :default _e false))
@@ -1493,7 +1493,7 @@
                  (reset! render-context-state next-state)))))}])
 
 (defn compact-chart-width? [width]
-  (boolean (flow-core-call "isCompactChartWidth" width)))
+  (boolean (log-core-call "isCompactChartWidth" width)))
 
 (defn observe-compact-width! [node compact-state resize-observer-state]
   (when-let [current-observer @resize-observer-state]
@@ -1515,7 +1515,7 @@
 
 (defn main [{:keys [:block-uid]} & args]
   (r/with-let [is-running? #(try
-                              (boolean (.-running js/window.nautilusFlowExtensionData))
+                              (boolean (.-running js/window.nautilusLogExtensionData))
                               (catch :default _e false))
                *running? (r/atom (or (is-running?) nil))
                check-interval (js/setInterval #(reset! *running? (is-running?)) 5000)
@@ -1554,15 +1554,15 @@
                daily-page-atom? (r/atom (daily-page? block-uid))
                page-title-val (page-title block-uid)]
     (case @*running?
-      nil [:div {:class "nautilus-flow-loading"} [:strong "Loading Nautilus Flow..."]]
-      false [:div {:class "nautilus-flow-not-installed"}
-             [:strong {:style {:color "red"}} "Extension not installed. To use Nautilus Flow, install it from Roam Depot."]]
+      nil [:div {:class "nautilus-log-loading"} [:strong "Loading Nautilus Log..."]]
+      false [:div {:class "nautilus-log-not-installed"}
+             [:strong {:style {:color "red"}} "Extension not installed. To use Nautilus Log, install it from Roam Depot."]]
       (cond
         (= :pending @render-context-state)
         [render-context-probe render-context-state compact-list-open-state]
 
         (= :suppressed @render-context-state)
-        [:span {:class "nautilus-flow-context-probe" :aria-hidden "true"}]
+        [:span {:class "nautilus-log-context-probe" :aria-hidden "true"}]
 
         :else
         (do
@@ -1579,7 +1579,7 @@
                 pending-tasks (vec (filter #(and (:todo %) (not (:done %))) text-events))
                 fixed-events (vec (filter #(and (:meeting %) (not (:done %))) text-events))
                 all-fixed-events (vec (concat fixed-events (filter :meeting done-events)))
-                capacity-base (or (flow-core-call "calculateCapacity"
+                capacity-base (or (log-core-call "calculateCapacity"
                                                    {:startMinutes (:workday-start settings)
                                                     :endMinutes (:workday-end settings)
                                                     :nowMinutes (if @playback-state-atom @now-time-atom plan-from-time)
@@ -1590,29 +1590,29 @@
                                    :fixedMinutes 0 :totalFixedMinutes 0
                                    :demandMinutes 0 :overloadMinutes 0 :slackMinutes 0
                                    :unplacedMinutes 0 :overflowTasks []})
-                burning-bucket (flow-core-call "burningCapacityBucket"
+                burning-bucket (log-core-call "burningCapacityBucket"
                                                {:startMinutes (:workday-start settings)
                                                 :endMinutes (:workday-end settings)
                                                 :nowMinutes @now-time-atom
                                                 :fixedEvents fixed-events})
                 capacity (assoc capacity-base :burningBucket burning-bucket)
                 events-state [(fill-day text-events (:workday-start settings) (:workday-end settings) plan-from-time) done-events]]
-            [:div {:class (str "nautilus-flow-container" (when @collapsed-state " nautilus-flow-collapsed"))
+            [:div {:class (str "nautilus-log-container" (when @collapsed-state " nautilus-log-collapsed"))
                    :ref container-ref
-                   :data-nautilus-flow-block block-uid}
+                   :data-nautilus-log-block block-uid}
              (if @collapsed-state
-               [flow-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid copy show-debug-button?]
-               [:div {:class "nautilus-flow-shell"}
-                [:header {:class (str "nautilus-flow-header"
-                                     (when @compact-state " nautilus-flow-header--compact"))}
-                 [:div {:class "nautilus-flow-header-copy"}
+               [log-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid copy show-debug-button?]
+               [:div {:class "nautilus-log-shell"}
+                [:header {:class (str "nautilus-log-header"
+                                     (when @compact-state " nautilus-log-header--compact"))}
+                 [:div {:class "nautilus-log-header-copy"}
                   [capacity-metrics-component capacity settings]]
-                 [:div {:class "nautilus-flow-header-actions"}
-                  [flow-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid copy show-debug-button?]
+                 [:div {:class "nautilus-log-header-actions"}
+                  [log-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid copy show-debug-button?]
                   [html-legend-component copy]]]
                 (when @compact-state
                   [compact-overview-component capacity settings copy compact-overview-open-state])
-                [:div {:class "nautilus-flow-content"}
+                [:div {:class "nautilus-log-content"}
                  [show-events events-state daily-page-atom? show-done-state playback-state-atom now-time-atom page-title-val dimensions settings @compact-state copy compact-list-open-state block-uid]
                  [overflow-panel capacity copy]
                  [schedule-warning-panel text-events copy]]])]))))

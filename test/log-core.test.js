@@ -23,7 +23,7 @@ const {
   placeLabelTracks,
   placeExternalLabels,
   isCompactChartWidth,
-} = require('../src/flow-core');
+} = require('../src/log-core');
 
 test('the chart background uses one grid sector per hour', () => {
   assert.deepEqual(hourlyGridSegments({ startMinutes: 300, endMinutes: 420 }), [
@@ -166,8 +166,8 @@ test('English UI settings localize all extension-owned status labels', () => {
     hideDone: 'Hide completed items',
     showDone: 'Show completed items',
     playback: 'Play back the day',
-    collapse: 'Collapse Nautilus Flow',
-    expand: 'Expand Nautilus Flow',
+    collapse: 'Collapse Nautilus Log',
+    expand: 'Expand Nautilus Log',
   });
   assert.deepEqual(copy.panels, {
     overview: 'Overview',

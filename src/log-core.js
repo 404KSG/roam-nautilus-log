@@ -1,5 +1,5 @@
 /*
- * Public, dependency-free pieces of Nautilus Flow.
+ * Public, dependency-free pieces of Nautilus Log.
  *
  * Keeping the scheduling rules in a small module makes them testable without a
  * Roam graph or a browser.  The ClojureScript renderer uses the same rules in
@@ -538,8 +538,8 @@ const UI_COPY = {
       hideDone: 'Hide completed items',
       showDone: 'Show completed items',
       playback: 'Play back the day',
-      collapse: 'Collapse Nautilus Flow',
-      expand: 'Expand Nautilus Flow',
+      collapse: 'Collapse Nautilus Log',
+      expand: 'Expand Nautilus Log',
     },
     panels: {
       overview: 'Overview',
@@ -571,8 +571,8 @@ const UI_COPY = {
       hideDone: '隐藏已完成事项',
       showDone: '显示已完成事项',
       playback: '回放一整天',
-      collapse: '折叠 Nautilus Flow',
-      expand: '展开 Nautilus Flow',
+      collapse: '折叠 Nautilus Log',
+      expand: '展开 Nautilus Log',
     },
     panels: {
       overview: '概览',

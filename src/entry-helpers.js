@@ -110,7 +110,7 @@ function renderBlockString(renderStringCore, templateString) {
 }
 
 /**
- * Creates/repairs only Nautilus Flow's own stable render scaffolding. It never
+ * Creates/repairs only Nautilus Log's own stable render scaffolding. It never
  * searches the whole graph or rewrites blocks belonging to the old extension.
  */
 export async function createRenderBlock(
@@ -133,10 +133,10 @@ export async function createRenderBlock(
   }
 
   const children = childBlocks(titleblockUID);
-  let templateBlock = children.find((child) => child.string?.includes("Nautilus Flow [[roam/templates]]"));
+  let templateBlock = children.find((child) => child.string?.includes("Nautilus Log [[roam/templates]]"));
   if (!templateBlock) {
     const templateBlockUID = roam.util.generateUID();
-    await createBlock(titleblockUID, 0, "Nautilus Flow [[roam/templates]]", templateBlockUID);
+    await createBlock(titleblockUID, 0, "Nautilus Log [[roam/templates]]", templateBlockUID);
     templateBlock = { uid: templateBlockUID };
   }
 

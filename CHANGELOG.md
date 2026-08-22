@@ -1,10 +1,10 @@
 # Changelog
 
-## Unreleased — Nautilus Flow v1
+## Unreleased — Nautilus Log v1
 
 ### Added
 
-- Rebranded, isolated Nautilus Flow render/template/runtime identifiers.
+- Rebranded, isolated Nautilus Log render/template/runtime identifiers.
 - Configurable chart start (05:00–08:00) and end (18:00–24:00) boundaries.
 - Capacity header showing available time, remaining fixed-event occupancy, task
   demand, and overload/remaining slack.
@@ -13,7 +13,7 @@
 - Per-instance collapse state, playback state, and clock state for multiple renders.
 - Responsive compact layout, measured label truncation, past-time fading, and
   reduced-motion support.
-- Compact schedules start folded when a Nautilus Flow block is focused in the
+- Compact schedules start folded when a Nautilus Log block is focused in the
   right sidebar, while remaining user-toggleable afterward.
 
 ### Fixed
@@ -25,6 +25,6 @@
   adjacent task slices retain their subtle fill variations.
 - Unload no longer rewrites or deletes graph content.
 - Right-sidebar renders avoid chart work and reserve no visible space.
-- Template and code scaffolding updates are idempotent and Flow-only.
+- Template and code scaffolding updates are idempotent and Log-only.
 - Render scaffolding is created sequentially so delayed Roam writes cannot race
   ahead of their parent blocks.

@@ -1,4 +1,4 @@
-# Nautilus Flow
+# Nautilus Log
 
 > **Give every minute a job.**
 >
@@ -8,7 +8,7 @@
 
 ## English
 
-Nautilus Flow is a transparent, dynamic day-planning view for Roam Research. It
+Nautilus Log is a transparent, dynamic day-planning view for Roam Research. It
 starts from the current moment on today's Daily Note, places unfinished work in
 the remaining free time, and makes overload visible instead of silently
 dropping tasks.
@@ -25,14 +25,14 @@ Its scheduling rules are deliberately simple and inspectable:
 
 ### Quick start
 
-1. Install **Nautilus Flow**.
-2. Type `;;` and choose **Nautilus Flow** from the template menu.
+1. Install **Nautilus Log**.
+2. Type `;;` and choose **Nautilus Log** from the template menu.
 3. Put today's tasks as children of the rendered component.
 4. Write a fixed event with a range such as `12:30-14:00 Lunch`.
 5. Write a flexible task with an estimate such as `Read 30m`. Untimed tasks
    use the configured default duration.
 
-Todo Trigger remains optional. It can append completion timestamps, but Flow
+Todo Trigger remains optional. It can append completion timestamps, but Log
 does not require it to draw the schedule.
 
 ### Settings
@@ -57,7 +57,7 @@ continuous slot, it instead reports `空档不足`. Partially completed tasks co
 only their remaining duration.
 
 An event that crosses midnight is clipped at the selected day's `24:00`
-boundary and shown in a visible warning panel; Flow does not silently schedule
+boundary and shown in a visible warning panel; Log does not silently schedule
 the next day's portion.
 
 When a completed task has an explicit `dHH:MM` completion marker, its historical
@@ -72,20 +72,20 @@ The legend is intentionally minimal: a red dot means **urgent**, yellow means
 Past time on today's page stays subdued, but it no longer collapses into one
 undifferentiated gray: completed work uses a muted solid fill, elapsed events
 retain a muted yellow, and elapsed gaps without a recorded item use diagonal
-hatching. Unfinished flexible tasks simply reflow forward; Flow does not add a
+hatching. Unfinished flexible tasks simply reflow forward; Log does not add a
 separate “missed” state. An unplanned gap is factual schedule data, not a claim
 that the time was wasted.
 
 ### Compatibility and safety
 
-Nautilus Flow uses its own render UID, template, CSS namespace, runtime global,
+Nautilus Log uses its own render UID, template, CSS namespace, runtime global,
 and local collapse-state key. It can be tested beside Nautilus Enhanced. It
 does not perform a graph-wide replacement or rewrite old Nautilus blocks.
 Unloading the extension leaves user blocks untouched.
 
 ## 中文
 
-Nautilus Flow（鹦鹉螺时间流）是一个面向 Roam Research 的透明动态日程视图。
+Nautilus Log（鹦鹉螺时间流）是一个面向 Roam Research 的透明动态日程视图。
 它从今天的此刻开始，将未完成任务放入剩余空闲时间，并把时间超载明确显示出来，
 而不是让任务悄悄消失。
 
@@ -100,13 +100,13 @@ Nautilus Flow（鹦鹉螺时间流）是一个面向 Roam Research 的透明动�
 
 ### 快速开始
 
-1. 安装 **Nautilus Flow**。
-2. 输入 `;;`，在模板菜单中选择 **Nautilus Flow**。
+1. 安装 **Nautilus Log**。
+2. 输入 `;;`，在模板菜单中选择 **Nautilus Log**。
 3. 将今天的任务缩进放在渲染组件下面。
 4. 固定事件可以写成 `12:30-14:00 午餐`。
 5. 弹性任务可以写成 `阅读 30m`；没有写时长的任务使用设置中的默认时长。
 
-Todo Trigger 仍然是可选工具：它可以在完成时追加时间戳，但 Flow 不依赖它才能绘图。
+Todo Trigger 仍然是可选工具：它可以在完成时追加时间戳，但 Log 不依赖它才能绘图。
 
 ### 设置
 
@@ -125,7 +125,7 @@ Todo Trigger 仍然是可选工具：它可以在完成时追加时间戳，但 
 如果总空闲时间足够、但某个完整任务无法放进任何连续空档，则显示“空档不足”。
 部分完成的任务只计算剩余时长。
 
-跨越午夜的固定事件会在当天 `24:00` 截断，并进入可见的时间范围提醒；Flow 不会
+跨越午夜的固定事件会在当天 `24:00` 截断，并进入可见的时间范围提醒；Log 不会
 悄悄把次日部分排进今天。
 
 已完成任务如果带有明确的 `d小时:分钟` 完成时间标记，历史切片以该时间结束，
@@ -141,12 +141,12 @@ Todo Trigger 仍然是可选工具：它可以在完成时追加时间戳，但 
 
 ### 兼容与安全
 
-Nautilus Flow 使用独立的渲染 UID、模板、CSS 命名空间、运行时全局变量和折叠状态键，
+Nautilus Log 使用独立的渲染 UID、模板、CSS 命名空间、运行时全局变量和折叠状态键，
 可以与 Nautilus Enhanced 并行测试。它不会全图替换或重写旧 Nautilus block，插件卸载时
 也不会修改用户 block。
 
 ## Credits and license
 
-Nautilus Flow is an independent fork of the Nautilus concept and retains the
+Nautilus Log is an independent fork of the Nautilus concept and retains the
 original MIT license. Thanks to Tomas Barys for the spiral planner concept,
 hopeserena for Nautilus Enhanced, and everyone who contributed fixes upstream.

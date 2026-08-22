@@ -2,7 +2,7 @@
 
 ## Decision
 
-Add `Events` as the second metric in the Nautilus Flow header:
+Add `Events` as the second metric in the Nautilus Log header:
 
 `Available · Events · Demand · Remaining/Overload`
 

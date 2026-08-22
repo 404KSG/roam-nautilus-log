@@ -2,7 +2,7 @@
 
 ## Goal
 
-Make the Nautilus Flow header easier to scan without turning it into a dense dashboard. Keep the existing flat Linear-style presentation, align related information, and show task load in context.
+Make the Nautilus Log header easier to scan without turning it into a dense dashboard. Keep the existing flat Linear-style presentation, align related information, and show task load in context.
 
 ## Layout
 

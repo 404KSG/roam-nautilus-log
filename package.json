@@ -1,5 +1,5 @@
 {
-  "name": "nautilus-flow",
+  "name": "nautilus-log",
   "version": "1.0.0",
   "description": "A transparent dynamic day planner for Roam Research",
   "main": "index.js",
