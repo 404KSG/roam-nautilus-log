@@ -5,6 +5,7 @@ const {
   normalizeScheduleSettings,
   resolveRendererSettings,
   hourlyGridSegments,
+  pastTimelineSegments,
   uiCopy,
   capacityMetrics,
   scheduleTasks,
@@ -24,6 +25,28 @@ test('the chart background uses one grid sector per hour', () => {
     { start: 300, end: 360, label: '5' },
     { start: 360, end: 420, label: '6' },
   ]);
+});
+
+test('past timeline segments include the exact partial current hour', () => {
+  assert.deepEqual(
+    pastTimelineSegments({ startMinutes: 300, endMinutes: 600, nowMinutes: 557 }),
+    [
+      { start: 300, end: 360 },
+      { start: 360, end: 420 },
+      { start: 420, end: 480 },
+      { start: 480, end: 540 },
+      { start: 540, end: 557 },
+    ],
+  );
+});
+
+test('past timeline segments respect workday bounds', () => {
+  assert.deepEqual(pastTimelineSegments({ startMinutes: 300, endMinutes: 420, nowMinutes: 299 }), []);
+  assert.deepEqual(
+    pastTimelineSegments({ startMinutes: 300, endMinutes: 420, nowMinutes: 999 }),
+    [{ start: 300, end: 360 }, { start: 360, end: 420 }],
+  );
+  assert.deepEqual(pastTimelineSegments({ startMinutes: 420, endMinutes: 300, nowMinutes: 360 }), []);
 });
 
 test('English UI settings localize all extension-owned status labels', () => {

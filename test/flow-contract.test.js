@@ -44,6 +44,7 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested F
   assert.match(component, /flow-core-call "placeExternalLabels"/);
   assert.match(component, /flow-core-call "resolveRendererSettings"/);
   assert.match(component, /flow-core-call "hourlyGridSegments"/);
+  assert.match(component, /flow-core-call "pastTimelineSegments"/);
   assert.match(component, /flow-core-call "uiCopy"/);
   assert.match(component, /flow-core-call "capacityMetrics"/);
   assert.match(component, /flow-core-call "burningCapacityBucket"/);
@@ -156,6 +157,16 @@ test('Flow replaces the center year with an in-range 24-hour now value', () => {
   assert.match(component, /:font-size \(str \(\* font-size 0\.82\)\)/);
   assert.match(css, /--nautilus-flow-now:/);
   assert.match(css, /\.nautilus-flow-center-now\s*\{[^}]*fill:\s*var\(--nautilus-flow-now\);[^}]*font-variant-numeric:\s*tabular-nums;/s);
+});
+
+test('Flow shades elapsed time continuously behind slices and through the current minute', () => {
+  assert.match(component, /past-time-overlay-component/);
+  assert.match(component, /nautilus-flow-past-overlay/);
+  assert.match(component, /flow-core-call "pastTimelineSegments"/);
+  assert.match(component, /create-arc-path/);
+  assert.match(component, /\[past-time-overlay-component[^\n]+\]\)\s*\[snail-blueprint-component/s);
+  assert.match(css, /--nautilus-flow-past-overlay:/);
+  assert.match(css, /\.nautilus-flow-past-overlay\s*\{[^}]*fill:\s*var\(--nautilus-flow-past-overlay\);[^}]*pointer-events:\s*none;/s);
 });
 
 test('Flow feature-detects ResizeObserver with syntax supported by Roam SCI', () => {

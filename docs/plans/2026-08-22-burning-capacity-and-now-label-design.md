@@ -32,6 +32,12 @@ actively focused.
   while `now` is inside the configured workday; both disappear outside that
   range instead of being clamped to a false start/end position. The year is not
   rendered.
+- A neutral past-time overlay is drawn behind the grid and all task/event
+  slices. It follows the spiral sector geometry from the configured workday
+  start through the exact current minute, including a partial current hour such
+  as 09:00–09:17. Future unscheduled sectors remain transparent. Existing past
+  task/event fading stays above the overlay, so the overlay clarifies elapsed
+  empty time without replacing semantic task and event colors.
 
 ## Rendering and compatibility
 
@@ -46,6 +52,7 @@ a Roam graph.
 
 Core tests cover before-start, in-event, available, at/after event end,
 workday end, ignored completed/non-meeting events, and overlap boundaries.
-Contract tests cover the bridge call, localized outline flame SVG, compact
-summary, center time, removal of the needle badge/year, and theme-aware CSS.
-`npm test` and `git diff --check` are the acceptance checks.
+Core tests also cover partial-hour and bounded past-overlay segments. Contract
+tests cover the bridge call, localized outline flame SVG, compact summary,
+center time, removal of the needle badge/year, overlay render order, and
+theme-aware CSS. `npm test` and `git diff --check` are the acceptance checks.

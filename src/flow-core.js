@@ -118,6 +118,29 @@ function hourlyGridSegments({ startMinutes, endMinutes } = {}) {
   return segments;
 }
 
+/**
+ * Split elapsed workday time into the same spiral sectors as the hourly grid.
+ * The last segment ends at the exact current minute instead of waiting for the
+ * next whole hour, which gives the renderer a continuous past/now boundary.
+ */
+function pastTimelineSegments({ startMinutes, endMinutes, nowMinutes } = {}) {
+  const start = asNumber(startMinutes);
+  const end = asNumber(endMinutes);
+  const now = asNumber(nowMinutes);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start
+      || !Number.isFinite(now) || now <= start) {
+    return [];
+  }
+
+  const elapsedEnd = Math.min(end, now);
+  return hourlyGridSegments({ startMinutes: start, endMinutes: end })
+    .filter((segment) => segment.start < elapsedEnd)
+    .map((segment) => ({
+      start: segment.start,
+      end: Math.min(segment.end, elapsedEnd),
+    }));
+}
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -787,6 +810,7 @@ module.exports = {
   normalizeScheduleSettings,
   resolveRendererSettings,
   hourlyGridSegments,
+  pastTimelineSegments,
   scheduleTasks,
   historicalDoneSlice,
   calculateCapacity,

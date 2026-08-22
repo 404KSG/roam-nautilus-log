@@ -768,6 +768,22 @@
                                       "before-edge")}
         (if debug? (str (round2 start-radians) " / " start-angle) timestamp)])]))
 
+(defn past-time-overlay-component [inner-radius center settings now-time-atom]
+  (let [segments (or (flow-core-call "pastTimelineSegments"
+                                     {:startMinutes (:workday-start settings)
+                                      :endMinutes (:workday-end settings)
+                                      :nowMinutes @now-time-atom})
+                     [])]
+    [:g {:class "nautilus-flow-past-overlay" :aria-hidden "true"}
+     (for [{:keys [start end]} segments]
+       ^{:key (str "past:" start ":" end)}
+       [:path {:d (create-arc-path
+                    (min->angle start)
+                    (min->angle end)
+                    inner-radius
+                    (outer-radius-at (mod (quot start 60) (count snail-blueprint-outer-radiuses)))
+                    center)}])]))
+
 
 (defn snail-blueprint-component [color inner-radius center settings daily-page? now-time-atom]
   (let [workday-start (:workday-start settings)
@@ -1019,6 +1035,8 @@
            :font-family font-family
            :font-size font-size}
      [:g
+      (when (or @daily-page-atom? @playback-state-atom)
+        [past-time-overlay-component snail-inner-radius center settings now-time-atom])
       [snail-blueprint-component snail-template-color snail-inner-radius center settings @daily-page-atom? now-time-atom]
       (when @show-done-atom? done-slice-components)
       all-slice-components         ;; zobrazení všech událostí
