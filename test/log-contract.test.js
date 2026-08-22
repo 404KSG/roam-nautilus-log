@@ -10,6 +10,8 @@ const css = fs.readFileSync(path.join(__dirname, '..', 'extension.css'), 'utf8')
 const packageJson = fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8');
 const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
 const changelog = fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'utf8');
+const timingTopbar = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-topbar.js'), 'utf8');
+const timingRuntime = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-runtime.js'), 'utf8');
 
 function parenDepthBefore(source, targetIndex) {
   let depth = 0;
@@ -84,6 +86,18 @@ test('Log scaffolding is isolated and unload is graph-safe', () => {
   assert.match(helpers, /state !== true/);
   assert.doesNotMatch(helpers, /replaceRenderString\(/);
   assert.doesNotMatch(helpers, /deleteBlock\(/);
+});
+
+test('Actual Time Tracking is opt-in and owns no disabled topbar interaction', () => {
+  assert.match(entry, /"actual-time-tracking": false/);
+  assert.match(entry, /if \(extensionAPI\.settings\.get\("actual-time-tracking"\) === true\)/);
+  assert.match(entry, /stopTiming\(\{ closeActive: false \}\)/);
+  assert.match(timingTopbar, /bp3-icon-\$\{name\}/);
+  assert.match(timingTopbar, /icon\('ring'\)/);
+  assert.match(timingTopbar, /iconButton\('locate'/);
+  assert.doesNotMatch(timingTopbar, /Dashboard|Activity/);
+  assert.doesNotMatch(timingRuntime, /commands|contextMenu/);
+  assert.match(timingRuntime, /await closeEntriesAt\(before, instant\);[\s\S]*await createRunningClock\(taskUid, instant\);/);
 });
 
 test('Log owns the previously tested controls and collapses without reserving chart space', () => {

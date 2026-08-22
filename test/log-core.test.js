@@ -293,7 +293,7 @@ test('normalizes selectable start/end hours and keeps 24:00 as minute 1440', () 
   );
   assert.deepEqual(
     normalizeScheduleSettings({ startHour: 3, endHour: 17 }),
-    { startHour: 5, endHour: 24, startMinutes: 300, endMinutes: 1440 },
+    { startHour: 5, endHour: 21, startMinutes: 300, endMinutes: 1260 },
   );
   assert.deepEqual(
     normalizeScheduleSettings({ startHour: '8', endHour: '18' }),

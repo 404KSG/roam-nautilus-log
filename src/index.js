@@ -5,6 +5,8 @@ import {
   updateTemplateString,
 } from "./entry-helpers";
 import * as logCore from "./log-core";
+import { createTimingRuntime } from "./timing-runtime";
+import { createTimingTopbar } from "./timing-topbar";
 import "../extension.css";
 
 const componentName = "Nautilus Log";
@@ -15,17 +17,26 @@ const version = "v1";
 const titleblockUID = "roam-render-Nautilus-Log";
 const settingsEventName = "nautilus-log:settings-changed";
 const languageDefaultVersion = "en-v1";
+const productDefaultsVersion = "timing-v1";
 
 // Keep the existing argument order for old templates; the new end-hour value
 // is appended after the old color trigger argument.
 const defaults = {
-  "prefix-str": "",
+  "prefix-str": "[[Nautilus Log]]",
   "desc-length": 22,
   "todo-duration": 15,
   "workday-start": 5,
   "color-1-trigger": "",
-  "workday-end": 24,
+  "workday-end": 21,
 };
+
+const executionDefaults = {
+  "actual-time-tracking": false,
+  "pomodoro-minutes": 45,
+};
+
+let timingRuntime = null;
+let timingTopbar = null;
 
 function settingValue(extensionAPI, key) {
   const value = extensionAPI.settings.get(key);
@@ -36,6 +47,12 @@ function runtimeSettings(extensionAPI) {
   return {
     ...Object.fromEntries(
       Object.keys(defaults).map((key) => [key, settingValue(extensionAPI, key)]),
+    ),
+    ...Object.fromEntries(
+      Object.entries(executionDefaults).map(([key, fallback]) => [
+        key,
+        extensionAPI.settings.get(key) ?? fallback,
+      ]),
     ),
     language: extensionAPI.settings.get("language") || "en",
   };
@@ -72,9 +89,6 @@ async function generateUpdatedRenderString(renderCore, extensionAPI, replacement
 async function generateTemplateString(extensionAPI) {
   const values = Object.keys(defaults).map((key) => settingValue(extensionAPI, key));
   const [prefix, ...args] = values;
-  const defaultValues = Object.values(defaults);
-  const allAreDefault = values.every((value, index) => value === defaultValues[index]);
-  if (allAreDefault) return `${renderStringCore}}}`;
   args[3] = args[3] === "" || args[3] === undefined
     ? '""'
     : `"${String(args[3]).replace(/\s/g, "")}"`;
@@ -83,10 +97,77 @@ async function generateTemplateString(extensionAPI) {
 }
 
 async function setDefaultSettings(extensionAPI) {
-  await Promise.all(Object.keys(defaults).map(async (key) => {
+  await Promise.all(Object.entries({ ...defaults, ...executionDefaults }).map(async ([key, fallback]) => {
     const current = extensionAPI.settings.get(key);
-    if (current === undefined || current === null) await extensionAPI.settings.set(key, defaults[key]);
+    if (current === undefined || current === null) await extensionAPI.settings.set(key, fallback);
   }));
+}
+
+async function migratePreviewDefaults(extensionAPI) {
+  if (extensionAPI.settings.get("product-defaults-version") === productDefaultsVersion) return;
+  const prefix = extensionAPI.settings.get("prefix-str");
+  const end = Number(extensionAPI.settings.get("workday-end"));
+  if (prefix === "") await extensionAPI.settings.set("prefix-str", defaults["prefix-str"]);
+  if (end === 24) await extensionAPI.settings.set("workday-end", defaults["workday-end"]);
+  await extensionAPI.settings.set("product-defaults-version", productDefaultsVersion);
+}
+
+async function startTiming(extensionAPI) {
+  if (timingRuntime || typeof document === "undefined") return true;
+  const runtime = createTimingRuntime({ extensionAPI });
+  let topbar = null;
+  try {
+    await runtime.initialize();
+    topbar = createTimingTopbar({ runtime, extensionAPI });
+    topbar.initialize();
+    timingRuntime = runtime;
+    timingTopbar = topbar;
+  } catch (error) {
+    topbar?.destroy();
+    runtime.destroy();
+    throw error;
+  }
+  if (window.nautilusLogExtensionData) {
+    window.nautilusLogExtensionData.timingEnabled = true;
+  }
+  return true;
+}
+
+async function stopTiming({ closeActive = false } = {}) {
+  if (!timingRuntime) return true;
+  if (closeActive) await timingRuntime.disable();
+  else timingRuntime.destroy();
+  timingTopbar?.destroy();
+  timingRuntime = null;
+  timingTopbar = null;
+  if (typeof window !== "undefined" && window.nautilusLogExtensionData) {
+    window.nautilusLogExtensionData.timingEnabled = false;
+  }
+  return true;
+}
+
+async function setTrackingEnabled(extensionAPI, enabled) {
+  if (enabled) {
+    await extensionAPI.settings.set("actual-time-tracking", true);
+    try {
+      await startTiming(extensionAPI);
+    } catch (error) {
+      await extensionAPI.settings.set("actual-time-tracking", false);
+      publishRuntimeSettings(extensionAPI);
+      throw error;
+    }
+  } else {
+    try {
+      await stopTiming({ closeActive: true });
+      await extensionAPI.settings.set("actual-time-tracking", false);
+    } catch (error) {
+      await extensionAPI.settings.set("actual-time-tracking", true);
+      publishRuntimeSettings(extensionAPI);
+      throw error;
+    }
+  }
+  publishRuntimeSettings(extensionAPI);
+  return enabled;
 }
 
 async function initializeLanguage(extensionAPI) {
@@ -112,7 +193,7 @@ function panelConfig(extensionAPI, language) {
       start: "图表开始时间",
       startDesc: "螺旋图从每天 5、6、7 或 8 点开始绘制。默认 5 点。",
       end: "图表结束时间",
-      endDesc: "螺旋图绘制到每天 18–24 点。24 点表示当天午夜。默认 24 点。",
+      endDesc: "螺旋图绘制到每天 18–24 点。默认 21 点。",
       prefix: "组件前缀文本",
       prefixDesc: "在新建组件前默认插入的文本前缀（例如：#日程）。",
       length: "最大图例长度",
@@ -121,6 +202,10 @@ function panelConfig(extensionAPI, language) {
       durationDesc: "没有写时长的弹性任务默认占用的分钟数。",
       color: "紧急触发词",
       colorDesc: "使任务显示为紧急红色的关键词（不可包含空格，例如：重要）。",
+      tracking: "实际时间记录",
+      trackingDesc: "启用后显示 Nautilus Log 顶栏，并允许聚焦、CLOCK 计时、任务切换和一键完成。默认关闭；关闭时整套顶栏交互均不加载。",
+      pomodoro: "番茄钟阈值",
+      pomodoroDesc: "连续聚焦达到该分钟数后，顶栏计时变红但不会自动停止。任务切换不会重置。",
     }
     : {
       tabTitle: "Nautilus Log",
@@ -129,7 +214,7 @@ function panelConfig(extensionAPI, language) {
       start: "Chart Start Time",
       startDesc: "Draw the spiral from 5, 6, 7, or 8 AM. Defaults to 5 AM.",
       end: "Chart End Time",
-      endDesc: "Draw through 18:00–24:00. 24:00 means midnight at the end of today.",
+      endDesc: "Draw through 18:00–24:00. Defaults to 21:00 (9 PM).",
       prefix: "Component Prefix",
       prefixDesc: "Text inserted before a new component (for example, #schedule).",
       length: "Legend Max Length",
@@ -138,6 +223,10 @@ function panelConfig(extensionAPI, language) {
       durationDesc: "Default minutes for an untimed flexible task.",
       color: "Urgent Trigger Word",
       colorDesc: "Keyword that colors a task urgent red (no spaces, for example urgent).",
+      tracking: "Actual Time Tracking",
+      trackingDesc: "Enable the Nautilus Log topbar for focus, CLOCK timing, task switching, and one-click completion. Defaults off; while off the entire topbar interaction layer stays unloaded.",
+      pomodoro: "Pomodoro Threshold",
+      pomodoroDesc: "Turn the live elapsed value red after this many continuous focus minutes. Switching tasks keeps the same cycle and never stops time automatically.",
     };
 
   const update = async (key, value) => {
@@ -201,6 +290,37 @@ function panelConfig(extensionAPI, language) {
         description: labels.colorDesc,
         action: { type: "input", default: settingValue(extensionAPI, "color-1-trigger"), onChange: (event) => update("color-1-trigger", event.target.value) },
       },
+      {
+        id: "actual-time-tracking",
+        name: labels.tracking,
+        description: labels.trackingDesc,
+        action: {
+          type: "switch",
+          defaultValue: extensionAPI.settings.get("actual-time-tracking") ?? false,
+          onChange: async (value) => {
+            const enabled = typeof value === "boolean" ? value : Boolean(value?.target?.checked);
+            try {
+              await setTrackingEnabled(extensionAPI, enabled);
+            } finally {
+              extensionAPI.settings.panel.create(panelConfig(extensionAPI, extensionAPI.settings.get("language") || "en"));
+            }
+          },
+        },
+      },
+      {
+        id: "pomodoro-minutes",
+        name: labels.pomodoro,
+        description: labels.pomodoroDesc,
+        action: {
+          type: "select",
+          default: extensionAPI.settings.get("pomodoro-minutes") ?? 45,
+          items: [15, 20, 25, 30, 45, 50, 60, 90],
+          onChange: async (value) => {
+            await extensionAPI.settings.set("pomodoro-minutes", value);
+            publishRuntimeSettings(extensionAPI);
+          },
+        },
+      },
     ],
   };
 }
@@ -213,6 +333,7 @@ async function onload({ extensionAPI }) {
     isRightSidebarRenderContext,
   };
   await setDefaultSettings(extensionAPI);
+  await migratePreviewDefaults(extensionAPI);
   const language = await initializeLanguage(extensionAPI);
   publishRuntimeSettings(extensionAPI);
   extensionAPI.settings.panel.create(panelConfig(extensionAPI, language));
@@ -226,9 +347,20 @@ async function onload({ extensionAPI }) {
     componentName,
     await generateTemplateString(extensionAPI),
   );
+  if (extensionAPI.settings.get("actual-time-tracking") === true) {
+    try {
+      await startTiming(extensionAPI);
+    } catch (error) {
+      await extensionAPI.settings.set("actual-time-tracking", false);
+      publishRuntimeSettings(extensionAPI);
+      extensionAPI.settings.panel.create(panelConfig(extensionAPI, language));
+      console.error("[Nautilus Log] Actual Time Tracking could not start", error);
+    }
+  }
 }
 
 function onunload() {
+  stopTiming({ closeActive: false });
   if (typeof window !== "undefined") {
     if (window.nautilusLogExtensionData) {
       window.nautilusLogExtensionData.running = false;
@@ -249,6 +381,13 @@ function onunload() {
   );
 }
 
-export { generateTemplateString, generateUpdatedRenderString, panelConfig, defaults };
+export {
+  createTimingRuntime,
+  generateTemplateString,
+  generateUpdatedRenderString,
+  panelConfig,
+  defaults,
+  executionDefaults,
+};
 
 export default { onload, onunload };

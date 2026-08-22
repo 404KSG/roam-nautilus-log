@@ -158,9 +158,16 @@ test('a fresh install defaults the settings panel and rendered UI to English', a
   await extension.onload({ extensionAPI });
 
   assert.equal(settings.get('language'), 'en');
+  assert.equal(settings.get('workday-start'), 5);
+  assert.equal(settings.get('workday-end'), 21);
+  assert.equal(settings.get('prefix-str'), '[[Nautilus Log]]');
+  assert.equal(settings.get('actual-time-tracking'), false);
   assert.equal(window.nautilusLogExtensionData.settings.language, 'en');
   assert.equal(latestPanel.settings.find(({ id }) => id === 'language').action.default, 'en');
   assert.equal(latestPanel.settings.find(({ id }) => id === 'workday-start').name, 'Chart Start Time');
+  assert.equal(latestPanel.settings.find(({ id }) => id === 'workday-end').action.default, 21);
+  assert.equal(latestPanel.settings.find(({ id }) => id === 'actual-time-tracking').action.defaultValue, false);
+  assert.equal(global.document, undefined);
 
   await extension.onunload();
 });
@@ -199,5 +206,33 @@ test('legacy preview installs migrate the old automatic Chinese default once', a
   assert.equal(settings.get('language'), 'zh');
   assert.equal(window.nautilusLogExtensionData.settings.language, 'zh');
 
+  await extension.onunload();
+});
+
+test('preview defaults migrate once from an empty prefix and midnight end', async (t) => {
+  const { roam } = createRoamMock();
+  global.window = { roamAlphaAPI: roam, dispatchEvent: () => {} };
+  t.after(() => { delete global.window; });
+
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const extension = (await import(`data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#defaults-${Date.now()}`)).default;
+  const settings = new Map([
+    ['language', 'en'],
+    ['language-default-version', 'en-v1'],
+    ['prefix-str', ''],
+    ['workday-end', 24],
+  ]);
+  const extensionAPI = {
+    settings: {
+      get: (key) => settings.get(key),
+      set: async (key, value) => settings.set(key, value),
+      panel: { create: () => {} },
+    },
+  };
+
+  await extension.onload({ extensionAPI });
+  assert.equal(settings.get('prefix-str'), '[[Nautilus Log]]');
+  assert.equal(settings.get('workday-end'), 21);
+  assert.equal(settings.get('product-defaults-version'), 'timing-v1');
   await extension.onunload();
 });

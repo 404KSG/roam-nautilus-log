@@ -682,3 +682,221 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Optional execution layer -------------------------------------------------
+ * This namespace is mounted only while Actual Time Tracking is enabled.
+ * Keeping it separate from the spiral guarantees that the default-off state
+ * leaves no topbar layout, polling, or hidden interaction surface behind.
+ */
+
+.nautilus-log-timing__topbar {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 32px;
+  margin: 0 4px;
+  min-width: 32px;
+}
+
+.nautilus-log-timing__trigger,
+.nautilus-log-timing__icon-button,
+.nautilus-log-timing__tab {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  box-shadow: none;
+  color: var(--nl-exec-muted, #6b7280);
+  cursor: pointer;
+  font: inherit;
+}
+
+.nautilus-log-timing__trigger {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  height: 30px;
+  justify-content: center;
+  min-width: 30px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.nautilus-log-timing__trigger:hover,
+.nautilus-log-timing__trigger:focus-visible,
+.nautilus-log-timing__icon-button:hover,
+.nautilus-log-timing__icon-button:focus-visible,
+.nautilus-log-timing__tab:hover,
+.nautilus-log-timing__tab:focus-visible {
+  background: rgba(111, 120, 132, 0.1);
+  color: var(--nl-exec-text, #374151);
+  outline: none;
+}
+
+.nautilus-log-timing__trigger.is-active {
+  color: var(--nl-exec-text, #374151);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.nautilus-log-timing__trigger.is-overdue .nautilus-log-timing__elapsed {
+  color: #d14343;
+}
+
+.nautilus-log-timing__trigger-separator {
+  color: #a3aab5;
+}
+
+.nautilus-log-timing__threads {
+  color: #747d8a;
+  font-weight: 500;
+}
+
+.nautilus-log-timing__popover {
+  background: var(--nl-exec-surface, #fff);
+  border: 1px solid rgba(117, 126, 140, 0.22);
+  border-radius: 8px;
+  box-shadow: 0 12px 34px rgba(34, 42, 53, 0.16), 0 2px 8px rgba(34, 42, 53, 0.08);
+  color: var(--nl-exec-text, #303744);
+  max-height: min(560px, calc(100vh - 72px));
+  overflow: hidden;
+  position: fixed;
+  z-index: 10050;
+}
+
+.nautilus-log-timing__popover-header {
+  align-items: center;
+  border-bottom: 1px solid rgba(117, 126, 140, 0.16);
+  display: flex;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 6px 8px 6px 12px;
+}
+
+.nautilus-log-timing__tabs {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+}
+
+.nautilus-log-timing__tab {
+  color: #7a8390;
+  font-size: 12px;
+  font-weight: 600;
+  height: 30px;
+  padding: 0 9px;
+}
+
+.nautilus-log-timing__tab.is-active {
+  background: rgba(73, 82, 94, 0.09);
+  color: var(--nl-exec-text, #303744);
+}
+
+.nautilus-log-timing__icon-button {
+  align-items: center;
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
+  width: 30px;
+}
+
+.nautilus-log-timing__icon-button:disabled {
+  cursor: wait;
+  opacity: 0.38;
+}
+
+.nautilus-log-timing__notice {
+  background: rgba(206, 129, 31, 0.08);
+  border-bottom: 1px solid rgba(206, 129, 31, 0.17);
+  color: #9c5e0b;
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 9px 12px;
+}
+
+.nautilus-log-timing__list {
+  max-height: min(500px, calc(100vh - 126px));
+  overflow: auto;
+  padding: 6px;
+}
+
+.nautilus-log-timing__row {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 54px;
+  padding: 7px 6px 7px 10px;
+}
+
+.nautilus-log-timing__row:hover {
+  background: rgba(111, 120, 132, 0.055);
+}
+
+.nautilus-log-timing__row.is-focused {
+  background: rgba(20, 145, 190, 0.07);
+  border-color: rgba(20, 145, 190, 0.2);
+}
+
+.nautilus-log-timing__row-copy {
+  min-width: 0;
+}
+
+.nautilus-log-timing__row-title {
+  color: var(--nl-exec-text, #303744);
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nautilus-log-timing__row-meta {
+  color: #8a929f;
+  font-size: 11px;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nautilus-log-timing__row-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.nautilus-log-timing__empty {
+  color: #858e9b;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 24px 18px;
+  text-align: center;
+}
+
+.nautilus-log-timing__located {
+  animation: nautilus-log-timing-locate 1.2s ease-out;
+}
+
+@keyframes nautilus-log-timing-locate {
+  0%, 35% { box-shadow: 0 0 0 3px rgba(19, 124, 189, 0.28); }
+  100% { box-shadow: 0 0 0 0 rgba(19, 124, 189, 0); }
+}
+
+.bp3-dark .nautilus-log-timing__popover,
+.dark .nautilus-log-timing__popover {
+  --nl-exec-surface: #242a31;
+  --nl-exec-text: #e4e8ee;
+  --nl-exec-muted: #a0a8b4;
+  border-color: rgba(223, 228, 235, 0.13);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.38);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nautilus-log-timing__located { animation: none; }
+}

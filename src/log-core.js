@@ -32,13 +32,13 @@ function normalizeScheduleSettings({ startHour, endHour, workdayStart, workdayEn
   const normalizedEnd = normalizeHour(
     endHour === undefined ? workdayEnd : endHour,
     END_HOURS,
-    24,
+    21,
   );
 
   // The available choices make this impossible in the settings panel, but a
   // hand-edited render block must still fail safe rather than render backwards.
   if (normalizedStart * 60 >= normalizedEnd * 60) {
-    return { startHour: 5, endHour: 24, startMinutes: 300, endMinutes: 1440 };
+    return { startHour: 5, endHour: 21, startMinutes: 300, endMinutes: 1260 };
   }
 
   return {

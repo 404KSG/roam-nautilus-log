@@ -38,12 +38,49 @@ does not require it to draw the schedule.
 ### Settings
 
 - Chart start: 05:00, 06:00, 07:00, or 08:00 (default 05:00).
-- Chart end: 18:00 through 24:00 (default 24:00). Internally, 24:00 is minute
+- Chart end: 18:00 through 24:00 (default 21:00). If selected, 24:00 is minute
   1440 and the final boundary is labelled `0`.
+- Component prefix defaults to `[[Nautilus Log]]`, so the active daily plan is
+  easy to find and navigate.
 - Default duration, label length, an optional urgent trigger word, and a
   bilingual settings panel.
 - Language defaults to English on a fresh or upgraded preview install; select
   `zh` only when a Chinese interface is preferred. That choice is then preserved.
+
+### Optional Actual Time Tracking
+
+Actual Time Tracking defaults to **off**. While it is off, Nautilus Log does not
+mount a topbar trigger or panel, run a timing poller, register timer commands, or
+write `CLOCK:` records. Enabling it adds a compact execution layer without
+changing the spiral's estimated scheduling rules:
+
+- the first Nautilus Log component on today's Daily Note is the Primary Plan;
+- Plan shows only unfinished direct-child TODO blocks, in Roam order;
+- one `CLOCK:` can run at a time, and switching closes the old task before
+  starting the new task at the same instant;
+- Timing shows the focused task plus distinct tasks left within the last 45
+  minutes, making quick return and multi-task switching explicit;
+- each row can Clock In/Out or complete the task in one click;
+- Actual time is shown when today's CLOCK history exists; otherwise the row
+  falls back to its Planned estimate;
+- the shared Pomodoro threshold defaults to 45 minutes, survives task switches,
+  turns the live elapsed value red, and never stops work automatically.
+
+The idle topbar entry uses Blueprint's native `ring` icon. The `locate` action
+opens the Primary Plan in Roam's main window. Disabling tracking first closes
+and confirms any running CLOCK; if that cannot be confirmed, tracking remains
+enabled so uncertain graph state is never hidden.
+
+Nautilus Log reads and writes the compatible Org-style graph record:
+
+```text
+{{[[TODO]]}} Task 30m
+  - LOGBOOK::
+    - CLOCK: [2026-08-22 Sat 10:00]--[2026-08-22 Sat 10:18] => 0:18
+```
+
+Disable the separate Roam Logbook extension before enabling this layer. Nautilus
+Log refuses to start a second CLOCK writer when it detects that runtime.
 
 The chart header puts the changing remainder beside a stable full-day baseline:
 
@@ -113,11 +150,30 @@ Todo Trigger 仍然是可选工具：它可以在完成时追加时间戳，但 
 ### 设置
 
 - 图表开始时间：5、6、7、8 点（默认 5 点）。
-- 图表结束时间：18 点至 24 点（默认 24 点）。内部将 24 点表示为第 1440 分钟，
+- 图表结束时间：18 点至 24 点（默认 21 点）。选择 24 点时，内部将其表示为第 1440 分钟，
   最后一根边界线标为 `0`。
+- 组件前缀默认使用 `[[Nautilus Log]]`，便于定位每天的主计划。
 - 默认待办时长、标签长度、可选的紧急触发词，以及中英文设置面板。
 - 首次安装或升级预览版时默认显示英文；需要中文界面时，在 Language 设置中选择
   `zh`，选择后会持续保留。
+
+### 可选的实际时间记录
+
+“实际时间记录”默认**关闭**。关闭时，Nautilus Log 不会挂载任何顶栏入口或面板，
+不会运行计时轮询、注册计时命令，也不会写入 `CLOCK:`。开启后才会加载精简执行层：
+
+- 当天 Daily Note 中按 Roam 顺序出现的第一个 Nautilus Log 是 Primary Plan；
+- Plan 只显示它的直接子级、尚未完成的 TODO，不提供父子层级折叠；
+- 任意时刻只允许一个 CLOCK；切换任务时，用同一时刻先关旧任务、再启动新任务；
+- Timing 显示当前聚焦任务，以及 45 分钟内离开的去重任务，便于快速切回；
+- 每一行都可以直接开始/停止计时或一键完成；
+- 当天存在有效 CLOCK 时显示 Actual，否则回退到 Planned 预计时长；
+- 番茄钟阈值默认 45 分钟，任务切换不会重置，达到阈值只把顶栏计时变红，绝不自动停止。
+
+空闲时使用 Blueprint 原生 `ring` 图标；`locate` 会把当天 Primary Plan 定位到主界面。
+关闭开关前会先关闭并确认运行中的 CLOCK；如果确认失败，开关会保持开启，避免把不确定
+状态藏起来。开启前请先关闭独立的 Roam Logbook 插件，Nautilus Log 检测到第二个
+CLOCK 写入者时会拒绝启动。
 
 图表上方把动态变化的剩余时间与当天稳定基准放在一起显示：
 

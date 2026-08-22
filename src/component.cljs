@@ -19,7 +19,7 @@
 
 ;; ------- other defaults –––––––
 
-(def init-workday-end 1440)
+(def init-workday-end 1260)
 
 (def init-starting-distance 30)
 
@@ -1283,7 +1283,7 @@
         normalized (or (log-core-call "normalizeScheduleSettings"
                                        {:startHour (or a3 (/ init-workday-start 60))
                                         :endHour (or a5 (/ init-workday-end 60))})
-                       {:startHour 5 :endHour 24 :startMinutes 300 :endMinutes 1440})]
+                       {:startHour 5 :endHour 21 :startMinutes 300 :endMinutes 1260})]
     {:legend-len-limit (if (and a1 (between a1 15 30)) a1 init-len-limit)
      :default-duration (if (and a2 (between a2 5 60)) a2 init-duration)
      :workday-start (:startMinutes normalized)

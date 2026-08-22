@@ -17,6 +17,15 @@
   right sidebar, while remaining user-toggleable afterward.
 - Fresh installs and existing preview installs default to English once; Chinese remains
   available from Language settings and is preserved after it is selected.
+- Optional Actual Time Tracking, defaulting off with no topbar, poller, commands,
+  or CLOCK writes until explicitly enabled.
+- A Blueprint-native topbar execution surface with Timing and flat Primary Plan
+  tabs, one-click task completion, `ring` idle state, and `locate` navigation.
+- Compatible Org-style `LOGBOOK::` / `CLOCK:` persistence, serialized single-clock
+  switching, 45-minute recent Threads, and a shared configurable Pomodoro threshold.
+- Actual/Planned row metadata and deterministic selection of the first Nautilus
+  Log component on today's Daily Note as the one Primary Plan.
+- Default component prefix `[[Nautilus Log]]` and default chart range 05:00–21:00.
 
 ### Fixed
 
@@ -30,3 +39,6 @@
 - Template and code scaffolding updates are idempotent and Log-only.
 - Render scaffolding is created sequentially so delayed Roam writes cannot race
   ahead of their parent blocks.
+- Disabling time tracking closes and confirms active CLOCK records before removing
+  the entire execution surface; failure preserves the enabled state.
+- Legacy overlapping open CLOCK records reconcile to the newest focused task.
