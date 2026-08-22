@@ -58,17 +58,23 @@ changing the spiral's estimated scheduling rules:
 - Plan shows only unfinished direct-child TODO blocks, in Roam order;
 - one `CLOCK:` can run at a time, and switching closes the old task before
   starting the new task at the same instant;
-- Timing shows the focused task plus distinct tasks left within the last 45
-  minutes, making quick return and multi-task switching explicit;
+- Timing shows the focused task plus distinct recently closed tasks. Recent
+  retention is a numeric minute setting (45 by default; 0 disables Recent),
+  and each Recent row shows its remaining retention time;
 - Clock In immediately opens or moves the selected task to the top of Roam's
   native right sidebar by default, without making CLOCK confirmation wait for
   the sidebar animation;
 - each row can Clock In, explicitly Clock Out with Blueprint's `log-out`
-  control, or complete the task in one click;
+  control, or complete the task with the fuller `unresolve` control. The
+  focused row also has a two-click `trash` action that deletes only its current
+  open CLOCK, never the task or older CLOCK history;
 - Actual time is shown when today's CLOCK history exists; otherwise the row
   falls back to its Planned estimate;
 - the shared Pomodoro threshold defaults to 45 minutes, survives task switches,
   turns the live elapsed value red, and never stops work automatically.
+- the forgotten-timer threshold is a separate numeric setting (120 minutes by
+  default; 0 disables it) that marks an unusually long open CLOCK in the
+  topbar and Timing row without stopping or deleting it.
 
 The idle topbar entry uses Blueprint's native `ring` icon. The `locate` action
 opens the Primary Plan in Roam's main window. Task titles open in the main
@@ -180,11 +186,16 @@ Todo Trigger 仍然是可选工具：它可以在完成时追加时间戳，但 
 - 当天 Daily Note 中按 Roam 顺序出现的第一个 Nautilus Log 是 Primary Plan；
 - Plan 只显示它的直接子级、尚未完成的 TODO，不提供父子层级折叠；
 - 任意时刻只允许一个 CLOCK；切换任务时，用同一时刻先关旧任务、再启动新任务；
-- Timing 显示当前聚焦任务，以及 45 分钟内离开的去重任务，便于快速切回；
+- Timing 显示当前聚焦任务和最近离开的去重任务；Recent 保留时间使用数字分钟设置，
+  默认 45，填写 0 可关闭，并在每一行显示剩余保留时间；
 - Clock In 默认立即将对应任务打开或移动到 Roam 右侧边栏顶部，同时独立确认 CLOCK 写入；
-- 每一行都可以直接 Clock In、用 Blueprint `log-out` 明确 Clock Out，或一键完成；
+- 每一行都可以直接 Clock In、用 Blueprint `log-out` 明确 Clock Out，或用更饱满的
+  `unresolve` 图标完成任务；当前 Timing 行还提供两次点击确认的 `trash`，只删除本次
+  未闭合 CLOCK，不删除任务和旧历史；
 - 当天存在有效 CLOCK 时显示 Actual，否则回退到 Planned 预计时长；
 - 番茄钟阈值默认 45 分钟，任务切换不会重置，达到阈值只把顶栏计时变红，绝不自动停止。
+- 遗忘计时阈值是独立的数字设置，默认 120 分钟，填写 0 可关闭；达到阈值只在顶栏和
+  Timing 行显示警告，不会自动停止或删除 CLOCK。
 
 空闲时使用 Blueprint 原生 `ring` 图标；`locate` 会把当天 Primary Plan 定位到主界面。
 点击任务标题在主界面打开，Shift+Click 在右侧边栏打开。命令面板提供“聚焦当前

@@ -35,6 +35,8 @@ const executionDefaults = {
   "actual-time-tracking": false,
   "timing-line-sidebar": true,
   "pomodoro-minutes": 45,
+  "recent-retention-minutes": 45,
+  "forgotten-timer-minutes": 120,
 };
 
 let timingRuntime = null;
@@ -218,6 +220,10 @@ function panelConfig(extensionAPI, language) {
       sidebarDesc: "Clock In 或切换任务时，将当前 Timing Line 打开或移动到 Roam 右侧边栏顶部。",
       pomodoro: "番茄钟阈值",
       pomodoroDesc: "连续聚焦达到该分钟数后，顶栏计时变红但不会自动停止。任务切换不会重置。",
+      recentRetention: "Recent 保留时间（分钟）",
+      recentRetentionDesc: "Clock Out 或切换任务后，该任务在 Recent 中保留的分钟数。填写 0 可关闭 Recent。",
+      forgottenTimer: "遗忘计时提醒（分钟）",
+      forgottenTimerDesc: "单条 CLOCK 连续运行达到该时长后显示警告。填写 0 可关闭提醒；不会自动停止或删除计时。",
     }
     : {
       tabTitle: "Nautilus Log",
@@ -241,6 +247,10 @@ function panelConfig(extensionAPI, language) {
       sidebarDesc: "After Clock In or a task switch, open or move the Timing Line to the top of Roam's right sidebar.",
       pomodoro: "Pomodoro Threshold",
       pomodoroDesc: "Turn the live elapsed value red after this many continuous focus minutes. Switching tasks keeps the same cycle and never stops time automatically.",
+      recentRetention: "Recent Retention (minutes)",
+      recentRetentionDesc: "Keep a Clocked Out or switched task in Recent for this many minutes. Enter 0 to disable Recent.",
+      forgottenTimer: "Forgotten Timer Warning (minutes)",
+      forgottenTimerDesc: "Warn when one CLOCK has kept running for this many minutes. Enter 0 to disable; the warning never stops or deletes time automatically.",
     };
 
   const update = async (key, value) => {
@@ -248,6 +258,16 @@ function panelConfig(extensionAPI, language) {
     await extensionAPI.settings.set(key, next);
     publishRuntimeSettings(extensionAPI);
     await updateTemplateString(renderStringCore, await generateUpdatedRenderString(renderStringCore, extensionAPI, key, next));
+  };
+
+  const updateExecutionMinutes = async (key, event, fallback) => {
+    const raw = event?.target?.value ?? event;
+    if (String(raw ?? "").trim() === "") return;
+    const parsed = Number(raw);
+    const next = Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : fallback;
+    await extensionAPI.settings.set(key, next);
+    publishRuntimeSettings(extensionAPI);
+    await timingRuntime?.requestRefresh?.();
   };
 
   return {
@@ -347,6 +367,28 @@ function panelConfig(extensionAPI, language) {
             await extensionAPI.settings.set("pomodoro-minutes", value);
             publishRuntimeSettings(extensionAPI);
           },
+        },
+      },
+      {
+        id: "recent-retention-minutes",
+        name: labels.recentRetention,
+        description: labels.recentRetentionDesc,
+        action: {
+          type: "input",
+          default: extensionAPI.settings.get("recent-retention-minutes") ?? 45,
+          placeholder: "45",
+          onChange: (event) => updateExecutionMinutes("recent-retention-minutes", event, 45),
+        },
+      },
+      {
+        id: "forgotten-timer-minutes",
+        name: labels.forgottenTimer,
+        description: labels.forgottenTimerDesc,
+        action: {
+          type: "input",
+          default: extensionAPI.settings.get("forgotten-timer-minutes") ?? 120,
+          placeholder: "120",
+          onChange: (event) => updateExecutionMinutes("forgotten-timer-minutes", event, 120),
         },
       },
     ],

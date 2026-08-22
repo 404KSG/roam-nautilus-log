@@ -90,7 +90,7 @@ function resolveMutation(kind) {
   const roam = api();
   const modern = roam?.data?.block?.[kind];
   if (typeof modern === 'function') return modern.bind(roam.data.block);
-  const legacyName = kind === 'create' ? 'createBlock' : 'updateBlock';
+  const legacyName = kind === 'create' ? 'createBlock' : kind === 'update' ? 'updateBlock' : 'deleteBlock';
   return typeof roam?.[legacyName] === 'function' ? roam[legacyName].bind(roam) : null;
 }
 
@@ -208,6 +208,15 @@ export async function updateGraphBlock(uid, string) {
   await update({ block: { uid, string } });
 }
 
+export async function deleteGraphBlock(uid) {
+  if (!uid) throw new Error('A block UID is required for deletion.');
+  const remove = resolveMutation('delete');
+  if (!remove) throw new Error('Roam block deletion is unavailable.');
+  await remove({ block: { uid } });
+  if (readBlockString(uid) !== null) throw new Error('Roam could not confirm the block deletion.');
+  return true;
+}
+
 export async function ensureDrawer(taskUid) {
   const existing = readChildren(taskUid).find((child) => DRAWER_RE.test(child.string));
   if (existing) return existing.uid;
@@ -235,6 +244,12 @@ export async function closeClock(entry, now) {
   await updateGraphBlock(entry.clockUid, timingCore.formatClockLine(entry.start, now));
   const remaining = readAllEntries().find((candidate) => candidate.clockUid === entry.clockUid && candidate.running);
   if (remaining) throw new Error('Clock Out could not be confirmed.');
+  return true;
+}
+
+export async function deleteClock(entry) {
+  if (!entry?.running || !entry.clockUid) throw new Error('Only the current running CLOCK can be deleted.');
+  await deleteGraphBlock(entry.clockUid);
   return true;
 }
 

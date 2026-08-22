@@ -163,12 +163,20 @@ test('a fresh install defaults the settings panel and rendered UI to English', a
   assert.equal(settings.get('prefix-str'), '[[Nautilus Log]]');
   assert.equal(settings.get('actual-time-tracking'), false);
   assert.equal(settings.get('timing-line-sidebar'), true);
+  assert.equal(settings.get('recent-retention-minutes'), 45);
+  assert.equal(settings.get('forgotten-timer-minutes'), 120);
   assert.equal(window.nautilusLogExtensionData.settings.language, 'en');
   assert.equal(latestPanel.settings.find(({ id }) => id === 'language').action.default, 'en');
   assert.equal(latestPanel.settings.find(({ id }) => id === 'workday-start').name, 'Chart Start Time');
   assert.equal(latestPanel.settings.find(({ id }) => id === 'workday-end').action.default, 21);
   assert.equal(latestPanel.settings.find(({ id }) => id === 'actual-time-tracking').action.defaultValue, false);
   assert.equal(latestPanel.settings.find(({ id }) => id === 'timing-line-sidebar').action.defaultValue, true);
+  assert.equal(latestPanel.settings.find(({ id }) => id === 'recent-retention-minutes').action.default, 45);
+  assert.equal(latestPanel.settings.find(({ id }) => id === 'forgotten-timer-minutes').action.default, 120);
+  await latestPanel.settings.find(({ id }) => id === 'recent-retention-minutes').action.onChange({ target: { value: '30' } });
+  await latestPanel.settings.find(({ id }) => id === 'forgotten-timer-minutes').action.onChange({ target: { value: '0' } });
+  assert.equal(settings.get('recent-retention-minutes'), 30);
+  assert.equal(settings.get('forgotten-timer-minutes'), 0);
   assert.equal(global.document, undefined);
 
   await extension.onunload();

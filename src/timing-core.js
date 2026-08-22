@@ -10,6 +10,7 @@ const TODO_RE = /\{\{\[\[(TODO|DONE)\]\]\}\}|\{\{(TODO|DONE)\}\}/i;
 const CLOCK_RE = /^\s*:?CLOCK:{1,2}\s*\[([^\]]+)\](?:\s*--\s*\[([^\]]+)\])?(?:\s*=>\s*(\d+:[0-5]\d))?\s*$/i;
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const ACTIVE_WORK_WINDOW_MINUTES = 45;
+const FORGOTTEN_CLOCK_MINUTES = 120;
 
 const pad = (value) => String(value).padStart(2, '0');
 const asTime = (value) => {
@@ -161,14 +162,21 @@ function chooseFocusedEntry(entries = []) {
     .sort((left, right) => asTime(right.start) - asTime(left.start))[0] || null;
 }
 
+function normalizedMinuteSetting(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return Math.max(0, Math.round(Number(fallback) || 0));
+  return Math.max(0, Math.round(number));
+}
+
 function buildActiveWork(entries = [], now = new Date(), windowMinutes = ACTIVE_WORK_WINDOW_MINUTES) {
   const source = (Array.isArray(entries) ? entries : []).filter((entry) => entry?.status !== 'DONE');
   const nowMs = asTime(now) ?? Date.now();
-  const windowMs = Math.max(1, Number(windowMinutes) || ACTIVE_WORK_WINDOW_MINUTES) * 60000;
+  const normalizedWindowMinutes = normalizedMinuteSetting(windowMinutes, ACTIVE_WORK_WINDOW_MINUTES);
+  const windowMs = normalizedWindowMinutes * 60000;
   const focused = chooseFocusedEntry(source);
   const byTask = new Map();
   source.forEach((entry, index) => {
-    if (!entry || entry.running || entry.taskUid === focused?.taskUid) return;
+    if (!entry || entry.running || entry.taskUid === focused?.taskUid || normalizedWindowMinutes === 0) return;
     const endMs = asTime(entry.end);
     if (endMs === null || endMs > nowMs || nowMs - endMs >= windowMs) return;
     const previous = byTask.get(entry.taskUid);
@@ -182,8 +190,16 @@ function buildActiveWork(entries = [], now = new Date(), windowMinutes = ACTIVE_
     recent,
     items: [focused, ...recent].filter(Boolean),
     count: (focused ? 1 : 0) + recent.length,
-    windowMinutes: Math.max(1, Number(windowMinutes) || ACTIVE_WORK_WINDOW_MINUTES),
+    windowMinutes: normalizedWindowMinutes,
   };
+}
+
+function isForgottenClock(entry, now = new Date(), thresholdMinutes = FORGOTTEN_CLOCK_MINUTES) {
+  if (!entry?.running) return false;
+  const startMs = asTime(entry.start);
+  const nowMs = asTime(now);
+  const threshold = normalizedMinuteSetting(thresholdMinutes, FORGOTTEN_CLOCK_MINUTES);
+  return threshold > 0 && startMs !== null && nowMs !== null && nowMs - startMs >= threshold * 60000;
 }
 
 function startOfDay(date) {
@@ -279,6 +295,7 @@ function executionStructureKey(snapshot = {}, view = 'timing') {
 
 module.exports = {
   ACTIVE_WORK_WINDOW_MINUTES,
+  FORGOTTEN_CLOCK_MINUTES,
   actualMinutesToday,
   buildActiveWork,
   chooseFocusedEntry,
@@ -288,6 +305,7 @@ module.exports = {
   formatClockLine,
   formatElapsed,
   isNautilusComponent,
+  isForgottenClock,
   nextPomodoroState,
   parseClockLine,
   plannedMinutes,

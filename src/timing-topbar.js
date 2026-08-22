@@ -59,6 +59,17 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
   let deferredRefreshFrame = null;
   let deferredRefreshTimer = null;
   let triggerMode = null;
+  let deleteConfirmation = null;
+
+  const clearDeleteConfirmation = () => {
+    if (!deleteConfirmation) return;
+    window.clearTimeout(deleteConfirmation.timer);
+    const button = deleteConfirmation.button;
+    button?.classList.remove('is-confirming');
+    button?.setAttribute('aria-label', 'Delete current CLOCK');
+    if (button) button.title = 'Delete current CLOCK';
+    deleteConfirmation = null;
+  };
 
   const cancelDeferredRefresh = () => {
     if (deferredRefreshFrame !== null) window.cancelAnimationFrame?.(deferredRefreshFrame);
@@ -70,6 +81,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
   const closePopover = ({ restoreFocus = false } = {}) => {
     if (!popover) return;
     cancelDeferredRefresh();
+    clearDeleteConfirmation();
     popover.remove();
     popover = null;
     lastPopoverKey = null;
@@ -85,11 +97,14 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     try { await action(); } catch (error) { console.error('[Nautilus Log] timing action failed', error); }
   };
 
-  const taskRow = (task, { recent = false } = {}) => {
+  const taskRow = (task, { recent = false, entry = null } = {}) => {
     const row = element('div', 'nautilus-log-timing__row');
     row.dataset.taskUid = task.uid;
     const focused = state.activeWork?.focused?.taskUid === task.uid;
     if (focused) row.classList.add('is-focused');
+    const forgottenMinutes = extensionAPI.settings.get('forgotten-timer-minutes') ?? 120;
+    const forgotten = focused && timingCore.isForgottenClock(entry || state.activeWork?.focused, state.now, forgottenMinutes);
+    if (forgotten) row.classList.add('is-forgotten');
 
     const copy = element('div', 'nautilus-log-timing__row-copy');
     const title = element('button', 'nautilus-log-timing__row-title', task.title);
@@ -106,10 +121,16 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       entries: state.entries,
       now: state.now,
     });
-    const metaText = focused
+    const recentRemaining = recent && entry?.end
+      ? Math.max(0, Math.ceil((Number(state.activeWork?.windowMinutes || 0) * 60000 - (state.now - entry.end)) / 60000))
+      : null;
+    const timingText = focused
       ? `Timing ${timingCore.formatElapsed(state.now - state.activeWork.focused.start)} · ${duration.detailLabel}`
-      : recent ? `Recent · ${duration.detailLabel}` : duration.detailLabel;
-    const meta = element('div', `nautilus-log-timing__row-meta${focused ? ' is-live' : ''}`, metaText);
+      : '';
+    const metaText = focused
+      ? `${forgotten ? 'Check CLOCK · ' : ''}${timingText}`
+      : recent ? `Recent · ${timingCore.compactMinutes(recentRemaining)} left · ${duration.detailLabel}` : duration.detailLabel;
+    const meta = element('div', `nautilus-log-timing__row-meta${focused ? ' is-live' : ''}${forgotten ? ' is-warning' : ''}`, metaText);
     copy.append(meta);
     row.append(copy);
 
@@ -117,10 +138,35 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     const timingAction = iconButton(focused ? 'log-out' : 'play', focused ? 'Clock Out' : 'Clock In', () => {
       runAction(() => focused ? runtime.stopTask() : runtime.startTask(task.uid));
     });
-    const completeAction = iconButton('tick', 'Complete task', () => runAction(() => runtime.completeTask(task.uid)));
+    const completeAction = iconButton('unresolve', 'Complete task', () => runAction(() => runtime.completeTask(task.uid)));
+    completeAction.classList.add('is-complete');
     timingAction.disabled = state.status === 'working';
     completeAction.disabled = state.status === 'working';
     actions.append(timingAction, completeAction);
+    if (focused) {
+      const deleteAction = iconButton('trash', 'Delete current CLOCK', () => {
+        const clockUid = state.activeWork?.focused?.clockUid;
+        if (!clockUid) return;
+        if (deleteConfirmation?.clockUid === clockUid) {
+          clearDeleteConfirmation();
+          deleteAction.disabled = true;
+          runAction(() => runtime.deleteCurrentClock(task.uid));
+          return;
+        }
+        clearDeleteConfirmation();
+        deleteAction.classList.add('is-confirming');
+        deleteAction.title = 'Click again to delete current CLOCK';
+        deleteAction.setAttribute('aria-label', 'Click again to delete current CLOCK');
+        deleteConfirmation = {
+          button: deleteAction,
+          clockUid,
+          timer: window.setTimeout(clearDeleteConfirmation, 2500),
+        };
+      });
+      deleteAction.classList.add('is-delete-clock');
+      deleteAction.disabled = state.status === 'working';
+      actions.append(deleteAction);
+    }
     row.append(actions);
     return row;
   };
@@ -146,7 +192,11 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       entries: state.entries,
       now: state.now,
     });
-    meta.textContent = `Timing ${timingCore.formatElapsed(state.now - focused.start)} · ${duration.detailLabel}`;
+    const forgottenMinutes = extensionAPI.settings.get('forgotten-timer-minutes') ?? 120;
+    const forgotten = timingCore.isForgottenClock(focused, state.now, forgottenMinutes);
+    row.classList.toggle('is-forgotten', forgotten);
+    meta.classList.toggle('is-warning', forgotten);
+    meta.textContent = `${forgotten ? 'Check CLOCK · ' : ''}Timing ${timingCore.formatElapsed(state.now - focused.start)} · ${duration.detailLabel}`;
   };
 
   const renderPopover = ({ force = false } = {}) => {
@@ -187,8 +237,8 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     const list = element('div', 'nautilus-log-timing__list');
     if (view === 'timing') {
       const focused = state.activeWork?.focused;
-      if (focused) list.append(taskRow(activeTask(focused)));
-      (state.activeWork?.recent || []).forEach((entry) => list.append(taskRow(activeTask(entry), { recent: true })));
+      if (focused) list.append(taskRow(activeTask(focused), { entry: focused }));
+      (state.activeWork?.recent || []).forEach((entry) => list.append(taskRow(activeTask(entry), { recent: true, entry })));
       if (!focused && !(state.activeWork?.recent || []).length) {
         list.append(element('div', 'nautilus-log-timing__empty', 'No active work. Open Plan to start a task.'));
       }
@@ -257,7 +307,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
         trigger.replaceChildren(icon('ring'));
         triggerMode = 'idle';
       }
-      trigger.classList.remove('is-active', 'is-overdue');
+      trigger.classList.remove('is-active', 'is-overdue', 'is-forgotten');
       trigger.setAttribute('aria-label', 'Open Nautilus Log execution panel');
       trigger.title = 'Nautilus Log';
     } else {
@@ -265,20 +315,26 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       const count = state.activeWork.count;
       const pomodoroMinutes = Number(extensionAPI.settings.get('pomodoro-minutes')) || 45;
       const pomodoroElapsed = state.pomodoro ? state.now.getTime() - Number(state.pomodoro.startedAt) : 0;
+      const forgottenMinutes = extensionAPI.settings.get('forgotten-timer-minutes') ?? 120;
+      const forgotten = timingCore.isForgottenClock(focused, state.now, forgottenMinutes);
       if (triggerMode !== 'active') {
+        const forgottenSignal = element('span', 'nautilus-log-timing__forgotten-signal');
+        forgottenSignal.append(icon('warning-sign'));
         trigger.replaceChildren(
           element('span', 'nautilus-log-timing__elapsed'),
           element('span', 'nautilus-log-timing__trigger-separator', '·'),
           element('span', 'nautilus-log-timing__threads'),
+          forgottenSignal,
         );
         triggerMode = 'active';
       }
       trigger.classList.add('is-active');
       trigger.classList.toggle('is-overdue', pomodoroElapsed >= pomodoroMinutes * 60000);
+      trigger.classList.toggle('is-forgotten', forgotten);
       trigger.querySelector('.nautilus-log-timing__elapsed').textContent = elapsed;
       trigger.querySelector('.nautilus-log-timing__threads').textContent = `${count} Thread${count === 1 ? '' : 's'}`;
-      trigger.setAttribute('aria-label', `${elapsed}, ${count} active thread${count === 1 ? '' : 's'}`);
-      trigger.title = focused.title;
+      trigger.setAttribute('aria-label', `${forgotten ? 'Check CLOCK, ' : ''}${elapsed}, ${count} active thread${count === 1 ? '' : 's'}`);
+      trigger.title = `${forgotten ? 'Check CLOCK · ' : ''}${focused.title}`;
     }
   };
 
@@ -354,6 +410,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     unsubscribe = null;
     resetObservers();
     cancelDeferredRefresh();
+    clearDeleteConfirmation();
     container?.remove();
     container = null;
     trigger = null;

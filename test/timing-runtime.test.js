@@ -65,6 +65,9 @@ function graphMock() {
     updateBlock: async ({ block }) => {
       blocks.set(block.uid, { ...blocks.get(block.uid), ...block });
     },
+    deleteBlock: async ({ block }) => {
+      blocks.delete(block.uid);
+    },
   };
 
   return { roam, blocks };
@@ -79,6 +82,8 @@ test('runtime serializes close-before-switch and close-before-complete', async (
     ['todo-duration', 15],
     ['pomodoro-minutes', 45],
     ['timing-line-sidebar', true],
+    ['recent-retention-minutes', 45],
+    ['forgotten-timer-minutes', 120],
   ]);
   const sidebarWindows = [];
   let current = new Date(2026, 7, 22, 10, 0);
@@ -133,6 +138,16 @@ test('runtime serializes close-before-switch and close-before-complete', async (
   assert.equal([...blocks.values()].filter((block) => /^CLOCK:/.test(block.string) && !block.string.includes('--')).length, 0);
   assert.equal(settings.get('actual-time-pomodoro-state'), null);
   assert.deepEqual(runtime.getSnapshot().activeWork.items.map(({ taskUid }) => taskUid), ['task-a']);
+
+  current = new Date(2026, 7, 22, 10, 25);
+  await runtime.startTask('task-a');
+  const discarded = [...blocks.values()].find((block) => /^CLOCK:/.test(block.string) && !block.string.includes('--'));
+  assert.ok(discarded);
+  await runtime.deleteCurrentClock('task-a');
+  assert.equal(blocks.has(discarded.uid), false);
+  assert.match(blocks.get('task-a').string, /TODO/);
+  assert.equal([...blocks.values()].filter((block) => /^CLOCK:/.test(block.string) && !block.string.includes('--')).length, 0);
+  assert.equal(runtime.getSnapshot().activeWork.focused, null);
 
   runtime.destroy();
 });

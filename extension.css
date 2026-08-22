@@ -744,6 +744,27 @@
   color: #d14343;
 }
 
+.nautilus-log-timing__forgotten-signal {
+  align-items: center;
+  color: #b96f12;
+  display: none;
+  height: 16px;
+  justify-content: center;
+  width: 16px;
+}
+
+.nautilus-log-timing__trigger.is-forgotten {
+  background: rgba(206, 129, 31, 0.1);
+}
+
+.nautilus-log-timing__trigger.is-forgotten .nautilus-log-timing__elapsed {
+  color: #b96f12;
+}
+
+.nautilus-log-timing__trigger.is-forgotten .nautilus-log-timing__forgotten-signal {
+  display: inline-flex;
+}
+
 .nautilus-log-timing__trigger-separator {
   color: #a3aab5;
 }
@@ -807,6 +828,20 @@
   opacity: 0.38;
 }
 
+.nautilus-log-timing__icon-button.is-complete .bp3-icon {
+  font-size: 18px;
+  height: 18px;
+  line-height: 18px;
+  width: 18px;
+}
+
+.nautilus-log-timing__icon-button.is-delete-clock:hover,
+.nautilus-log-timing__icon-button.is-delete-clock:focus-visible,
+.nautilus-log-timing__icon-button.is-delete-clock.is-confirming {
+  background: rgba(209, 67, 67, 0.1);
+  color: #c73737;
+}
+
 .nautilus-log-timing__notice {
   background: rgba(206, 129, 31, 0.08);
   border-bottom: 1px solid rgba(206, 129, 31, 0.17);
@@ -840,6 +875,11 @@
 .nautilus-log-timing__row.is-focused {
   background: rgba(20, 145, 190, 0.07);
   border-color: rgba(20, 145, 190, 0.2);
+}
+
+.nautilus-log-timing__row.is-forgotten {
+  background: rgba(206, 129, 31, 0.075);
+  border-color: rgba(206, 129, 31, 0.3);
 }
 
 .nautilus-log-timing__row-copy {
@@ -877,6 +917,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.nautilus-log-timing__row-meta.is-warning {
+  color: #ad690f;
+  font-weight: 600;
 }
 
 .nautilus-log-timing__row-actions {

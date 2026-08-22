@@ -22,7 +22,13 @@
 - A Blueprint-native topbar execution surface with Timing and flat Primary Plan
   tabs, one-click task completion, `ring` idle state, and `locate` navigation.
 - Compatible Org-style `LOGBOOK::` / `CLOCK:` persistence, serialized single-clock
-  switching, 45-minute recent Threads, and a shared configurable Pomodoro threshold.
+  switching, numerically configurable recent Threads, and a shared configurable
+  Pomodoro threshold.
+- Numeric Recent-retention and forgotten-CLOCK warning settings, including 0 to
+  disable either behavior, live Recent time-left labels, and a distinct long-running
+  CLOCK warning state.
+- A focused-row `trash` control with two-click confirmation deletes only the current
+  open CLOCK; the fuller Blueprint `unresolve` icon replaces the small completion tick.
 - Actual/Planned row metadata and deterministic selection of the first Nautilus
   Log component on today's Daily Note as the one Primary Plan.
 - Default component prefix `[[Nautilus Log]]` and default chart range 05:00–21:00.

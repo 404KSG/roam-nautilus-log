@@ -3,6 +3,7 @@ import {
   closeClock,
   completeTask,
   createRunningClock,
+  deleteClock,
   frontBlockInRightSidebar,
   legacyLogbookIsRunning,
   openTaskInMainWindow,
@@ -64,7 +65,8 @@ export function createTimingRuntime({ extensionAPI, now = () => new Date() }) {
     try {
       const planSnapshot = readPrimaryPlan(now(), Number(extensionAPI.settings.get('todo-duration')) || 15);
       const entries = readAllEntries();
-      const activeWork = timingCore.buildActiveWork(entries, now(), 45);
+      const recentRetention = extensionAPI.settings.get('recent-retention-minutes') ?? 45;
+      const activeWork = timingCore.buildActiveWork(entries, now(), recentRetention);
       const pomodoro = currentPomodoro(extensionAPI, activeWork.focused);
       snapshot = {
         revision: snapshot.revision + 1,
@@ -210,6 +212,16 @@ export function createTimingRuntime({ extensionAPI, now = () => new Date() }) {
     return refresh();
   });
 
+  const deleteCurrentClock = (taskUid) => enqueue(async () => {
+    const focused = timingCore.chooseFocusedEntry(readAllEntries());
+    if (!focused || focused.taskUid !== taskUid) {
+      throw new Error('Only the current Timing CLOCK can be deleted.');
+    }
+    await deleteClock(focused);
+    await setPomodoro(null);
+    return refresh();
+  });
+
   const initialize = async () => {
     if (legacyLogbookIsRunning()) {
       const message = 'Disable Roam Logbook before enabling Nautilus Log Actual Time Tracking. Only one extension may write CLOCK records.';
@@ -273,6 +285,7 @@ export function createTimingRuntime({ extensionAPI, now = () => new Date() }) {
     startTask,
     stopTask,
     completeTask: finishTask,
+    deleteCurrentClock,
     locate: () => openPrimaryPlan(snapshot.planSnapshot?.plan?.uid),
     openTask: (taskUid, { sidebar = false } = {}) => (
       sidebar ? openTaskInRightSidebar(taskUid) : openTaskInMainWindow(taskUid)

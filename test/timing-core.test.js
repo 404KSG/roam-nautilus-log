@@ -57,6 +57,27 @@ test('Active Work keeps one focused task and distinct tasks closed in the last 4
   assert.equal(active.count, 2);
 });
 
+test('Recent retention accepts a custom numeric window and zero disables Recent', () => {
+  const now = new Date(2026, 7, 22, 11, 0);
+  const entries = [
+    { taskUid: 'recent', title: 'Recent', start: new Date(2026, 7, 22, 10, 40), end: new Date(2026, 7, 22, 10, 50), running: false },
+  ];
+
+  assert.deepEqual(timing.buildActiveWork(entries, now, 15).recent.map(({ taskUid }) => taskUid), ['recent']);
+  assert.deepEqual(timing.buildActiveWork(entries, now, 5).recent, []);
+  assert.deepEqual(timing.buildActiveWork(entries, now, 0).recent, []);
+  assert.equal(timing.buildActiveWork(entries, now, 0).windowMinutes, 0);
+});
+
+test('forgotten CLOCK warning uses the current open CLOCK and can be disabled', () => {
+  const entry = { running: true, start: new Date(2026, 7, 22, 8, 0) };
+
+  assert.equal(timing.isForgottenClock(entry, new Date(2026, 7, 22, 9, 59), 120), false);
+  assert.equal(timing.isForgottenClock(entry, new Date(2026, 7, 22, 10, 0), 120), true);
+  assert.equal(timing.isForgottenClock(entry, new Date(2026, 7, 22, 12, 0), 0), false);
+  assert.equal(timing.isForgottenClock({ ...entry, running: false }, new Date(2026, 7, 22, 12, 0), 120), false);
+});
+
 test('duration metadata prefers today Actual and otherwise falls back to Planned', () => {
   const now = new Date(2026, 7, 22, 12, 0);
   const entries = [

@@ -96,6 +96,9 @@ test('Actual Time Tracking is opt-in and owns no disabled topbar interaction', (
   assert.match(timingTopbar, /bp3-icon-\$\{name\}/);
   assert.match(timingTopbar, /icon\('ring'\)/);
   assert.match(timingTopbar, /iconButton\('locate'/);
+  assert.match(timingTopbar, /iconButton\('unresolve', 'Complete task'/);
+  assert.match(timingTopbar, /iconButton\('trash', 'Delete current CLOCK'/);
+  assert.match(timingTopbar, /isForgottenClock/);
   assert.doesNotMatch(timingTopbar, /Dashboard|Activity/);
   assert.match(timingCommands, /const palette = extensionAPI\?\.ui\?\.commandPalette/);
   assert.match(timingCommands, /palette\.addCommand/);
@@ -103,6 +106,7 @@ test('Actual Time Tracking is opt-in and owns no disabled topbar interaction', (
   assert.match(timingCommands, /contextMenu\.addCommand/);
   assert.match(timingCommands, /Nautilus Log: Clock out Timing Line/);
   assert.match(timingRuntime, /await closeEntriesAt\(before, instant\);[\s\S]*await createRunningClock\(taskUid, instant\);/);
+  assert.match(timingRuntime, /deleteCurrentClock/);
 });
 
 test('execution popover paints cached state before refreshing and does not rebuild on every tick', () => {
