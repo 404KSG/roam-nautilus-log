@@ -642,7 +642,9 @@ function capacityMetrics({ capacity = {}, language = 'en' } = {}) {
   } else {
     status = { key: 'remaining', label: copy.remaining, value: formatDuration(capacity.slackMinutes), tone: 'neutral' };
   }
-  return [available, events, demand, status];
+  // The first row answers the planning question (commitment and headroom),
+  // while the second row provides the capacity inputs behind that answer.
+  return [demand, status, available, events];
 }
 
 function formatCapacitySummary(capacity) {

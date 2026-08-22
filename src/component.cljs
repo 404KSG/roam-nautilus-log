@@ -1326,10 +1326,10 @@
 
 (defn capacity-metrics [capacity settings]
   (or (log-core-call "capacityMetrics" {:capacity capacity :language (:language settings)})
-      [{:key "available" :label "Available" :value "0m" :tone "neutral"}
-       {:key "events" :label "Events" :value "0m" :tone "event"}
-       {:key "demand" :label "Demand" :value "0m" :percent "0%" :percentTone "neutral" :tone "neutral"}
-       {:key "remaining" :label "Remaining" :value "0m" :tone "neutral"}]))
+      [{:key "demand" :label "Demand" :value "0m" :percent "0%" :percentTone "neutral" :tone "neutral"}
+       {:key "remaining" :label "Remaining" :value "0m" :tone "neutral"}
+       {:key "available" :label "Available" :value "0m" :tone "neutral"}
+       {:key "events" :label "Events" :value "0m" :tone "event"}]))
 
 (defn burning-flame-icon [label]
   [:svg {:class "nautilus-log-burning-icon"
@@ -1389,7 +1389,7 @@
 
 (defn compact-overview-component [capacity settings copy compact-open-state]
   (let [metrics (capacity-metrics capacity settings)
-        status (last metrics)
+        status (first (filter #(contains? #{"overload" "fragmented" "remaining"} (:key %)) metrics))
         warning? (= "warning" (:tone status))
         burning-bucket (:burningBucket capacity)
         burning-label (case burning-bucket

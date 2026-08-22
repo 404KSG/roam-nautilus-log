@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-function graphMock() {
+function graphMock({ trace = [] } = {}) {
   let generated = 0;
   const blocks = new Map([
     ['plan', { uid: 'plan', string: '[[Nautilus Log]] {{[[roam/render]]:((roam-render-Nautilus-Log-cljs))}}', parentUid: 'page', order: 0 }],
@@ -51,6 +51,7 @@ function graphMock() {
     q,
     data: {
       pull: (_pattern, lookup) => {
+        trace.push(`pull:${lookup?.[1] || ''}`);
         const block = blocks.get(lookup?.[1]);
         return block ? { ':block/string': block.string } : null;
       },
@@ -70,14 +71,15 @@ function graphMock() {
     },
   };
 
-  return { roam, blocks };
+  return { roam, blocks, trace };
 }
 
 test('runtime serializes close-before-switch and close-before-complete', async (t) => {
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#timing-${Date.now()}`;
   const extension = await import(moduleUrl);
-  const { roam, blocks } = graphMock();
+  const trace = [];
+  const { roam, blocks } = graphMock({ trace });
   const settings = new Map([
     ['todo-duration', 15],
     ['pomodoro-minutes', 45],
@@ -92,8 +94,11 @@ test('runtime serializes close-before-switch and close-before-complete', async (
       ...roam,
       ui: {
         rightSidebar: {
-          open: async () => {},
-          getWindows: async () => sidebarWindows.slice(),
+          open: async () => { trace.push('sidebar:open'); },
+          getWindows: async () => {
+            trace.push('sidebar:getWindows');
+            return sidebarWindows.slice();
+          },
           addWindow: async ({ window }) => sidebarWindows.push(window),
           setWindowOrder: async () => {},
           expandWindow: async () => {},
@@ -117,7 +122,11 @@ test('runtime serializes close-before-switch and close-before-complete', async (
   await runtime.initialize();
   assert.deepEqual(runtime.getSnapshot().planSnapshot.tasks.map(({ uid }) => uid), ['task-a', 'task-b']);
 
-  await runtime.startTask('task-a');
+  trace.length = 0;
+  const firstStart = runtime.startTask('task-a');
+  assert.deepEqual(trace, ['sidebar:open', 'sidebar:getWindows']);
+  assert.equal(trace.includes('pull:task-a'), false);
+  await firstStart;
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(sidebarWindows, [{ type: 'block', 'block-uid': 'task-a', order: 0 }]);
   const firstClock = [...blocks.values()].find((block) => block.parentUid.startsWith('clock-') && /^CLOCK:/.test(block.string));

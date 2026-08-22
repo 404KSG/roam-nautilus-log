@@ -57,7 +57,16 @@ function blockSidebarWindow(uid, order) {
 
 function runSidebarOperation(sidebar, operation) {
   const previous = sidebarOperationQueues.get(sidebar);
-  const current = previous ? previous.then(operation, operation) : Promise.resolve().then(operation);
+  let current;
+  if (previous) {
+    current = previous.then(operation, operation);
+  } else {
+    // Start the first native sidebar operation in the user's click stack.
+    // Deferring it through Promise.resolve().then() made getWindows visibly
+    // trail the Clock In control even before any graph work began.
+    try { current = Promise.resolve(operation()); }
+    catch (error) { current = Promise.reject(error); }
+  }
   sidebarOperationQueues.set(sidebar, current);
   return current.finally(() => {
     if (sidebarOperationQueues.get(sidebar) === current) sidebarOperationQueues.delete(sidebar);
@@ -311,6 +320,27 @@ export function frontBlockInRightSidebar(taskUid) {
     catch (_error) { return Promise.resolve(); }
   })();
 
+  const known = knownSidebarWindows.get(sidebar)?.has(taskUid) === true;
+  let previewPromise = null;
+  if (known && typeof sidebar.setWindowOrder === 'function') {
+    // Previously confirmed windows can be revealed immediately. The queued
+    // getWindows pass below still verifies native state and repairs a window
+    // that the user closed outside Nautilus Log.
+    try {
+      previewPromise = Promise.resolve(sidebar.setWindowOrder({ window: blockSidebarWindow(taskUid, 0) }))
+        .then(async () => {
+          if (!isCurrent()) return false;
+          if (typeof sidebar.expandWindow === 'function') {
+            await sidebar.expandWindow({ window: blockSidebarWindow(taskUid) });
+          }
+          return isCurrent();
+        })
+        .catch(() => false);
+    } catch (_error) {
+      previewPromise = Promise.resolve(false);
+    }
+  }
+
   return runSidebarOperation(sidebar, async () => {
     if (!isCurrent()) return { ok: false, skipped: true, reason: 'superseded' };
     let windows = null;
@@ -327,6 +357,9 @@ export function frontBlockInRightSidebar(taskUid) {
       entry?.type === 'block' && entry?.['block-uid'] === taskUid
     ));
     if (existing) {
+      const previewed = previewPromise ? await previewPromise : false;
+      if (!isCurrent()) return { ok: false, skipped: true, reason: 'superseded' };
+      if (previewed) return { ok: true, deduped: true, reordered: true, previewed: true };
       if (typeof sidebar.setWindowOrder === 'function') {
         await sidebar.setWindowOrder({ window: blockSidebarWindow(taskUid, 0) });
       } else if (Number(existing.order) !== 0) {
@@ -347,6 +380,13 @@ export function frontBlockInRightSidebar(taskUid) {
       }
       known.add(taskUid);
       return { ok: true, deduped: true, reordered: typeof sidebar.setWindowOrder === 'function' };
+    }
+
+    if (previewPromise) {
+      const previewed = await previewPromise;
+      if (!isCurrent()) return { ok: false, skipped: true, reason: 'superseded' };
+      if (previewed) return { ok: true, deduped: true, reordered: true, previewed: true };
+      knownSidebarWindows.get(sidebar)?.delete(taskUid);
     }
 
     if (!Array.isArray(windows) && knownSidebarWindows.get(sidebar)?.has(taskUid)) {

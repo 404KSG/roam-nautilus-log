@@ -164,16 +164,20 @@ export function createTimingRuntime({ extensionAPI, now = () => new Date() }) {
   };
 
   const startTask = (taskUid) => {
-    const taskString = readBlockString(taskUid);
-    if (timingCore.taskStatus(taskString) !== 'TODO') {
-      return Promise.reject(new Error('Only an unfinished TODO can own the Timing Line.'));
-    }
+    // Sidebar navigation is reversible UI feedback, so begin it from the
+    // trusted Plan-row UID before graph validation and CLOCK confirmation.
+    // This mirrors native Roam Logbook: the graph mutation remains the sole
+    // authority, but the selected task starts rendering immediately.
     if (extensionAPI.settings.get('timing-line-sidebar') !== false) {
       void frontBlockInRightSidebar(taskUid).then((result) => {
         if (!result?.ok && !result?.skipped) showToast(result?.message || 'The task started, but Roam could not show it at the top of the right sidebar.');
       });
     }
     return enqueue(async () => {
+      const taskString = readBlockString(taskUid);
+      if (timingCore.taskStatus(taskString) !== 'TODO') {
+        throw new Error('Only an unfinished TODO can own the Timing Line.');
+      }
       const before = readAllEntries();
       const focused = timingCore.chooseFocusedEntry(before);
       const instant = now();

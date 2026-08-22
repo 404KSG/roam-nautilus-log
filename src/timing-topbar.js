@@ -138,7 +138,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     const timingAction = iconButton(focused ? 'log-out' : 'play', focused ? 'Clock Out' : 'Clock In', () => {
       runAction(() => focused ? runtime.stopTask() : runtime.startTask(task.uid));
     });
-    const completeAction = iconButton('unresolve', 'Complete task', () => runAction(() => runtime.completeTask(task.uid)));
+    const completeAction = iconButton('resolve', 'Complete task', () => runAction(() => runtime.completeTask(task.uid)));
     completeAction.classList.add('is-complete');
     timingAction.disabled = state.status === 'working';
     completeAction.disabled = state.status === 'working';
@@ -304,7 +304,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     const focused = state.activeWork?.focused;
     if (!focused) {
       if (triggerMode !== 'idle') {
-        trigger.replaceChildren(icon('ring'));
+        trigger.replaceChildren(icon('unresolve'));
         triggerMode = 'idle';
       }
       trigger.classList.remove('is-active', 'is-overdue', 'is-forgotten');

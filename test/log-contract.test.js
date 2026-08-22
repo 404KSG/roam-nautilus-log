@@ -94,9 +94,9 @@ test('Actual Time Tracking is opt-in and owns no disabled topbar interaction', (
   assert.match(entry, /if \(extensionAPI\.settings\.get\("actual-time-tracking"\) === true\)/);
   assert.match(entry, /stopTiming\(\{ closeActive: false \}\)/);
   assert.match(timingTopbar, /bp3-icon-\$\{name\}/);
-  assert.match(timingTopbar, /icon\('ring'\)/);
+  assert.match(timingTopbar, /trigger\.replaceChildren\(icon\('unresolve'\)\)/);
   assert.match(timingTopbar, /iconButton\('locate'/);
-  assert.match(timingTopbar, /iconButton\('unresolve', 'Complete task'/);
+  assert.match(timingTopbar, /iconButton\('resolve', 'Complete task'/);
   assert.match(timingTopbar, /iconButton\('trash', 'Delete current CLOCK'/);
   assert.match(timingTopbar, /isForgottenClock/);
   assert.doesNotMatch(timingTopbar, /Dashboard|Activity/);

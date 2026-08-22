@@ -183,10 +183,10 @@ test('English UI settings localize all extension-owned status labels', () => {
       capacity: { availableMinutes: 0, fixedMinutes: 90, demandMinutes: 30, overloadMinutes: 30, slackMinutes: 0, unplacedMinutes: 30 },
     }),
     [
-      { key: 'available', label: 'Available', value: '0m', tone: 'neutral' },
-      { key: 'events', label: 'Events', value: '1h30m', tone: 'event' },
       { key: 'demand', label: 'Planned', value: '30m', percent: '—', percentTone: 'neutral', tone: 'neutral' },
       { key: 'overload', label: 'Overload', value: '30m', tone: 'warning' },
+      { key: 'available', label: 'Available', value: '0m', tone: 'neutral' },
+      { key: 'events', label: 'Events', value: '1h30m', tone: 'event' },
     ],
   );
   assert.equal(uiCopy('zh').capacity.demand, '已计划');
@@ -205,10 +205,10 @@ test('capacity metrics mark exactly the bucket that is currently burning', () =>
   });
 
   assert.equal(metrics[0].burning, undefined);
-  assert.equal(metrics[1].burning, true);
-  assert.equal(metrics[1].burningLabel, 'Event time is elapsing');
+  assert.equal(metrics[1].burning, undefined);
   assert.equal(metrics[2].burning, undefined);
-  assert.equal(metrics[3].burning, undefined);
+  assert.equal(metrics[3].burning, true);
+  assert.equal(metrics[3].burningLabel, 'Event time is elapsing');
 });
 
 test('Planned reports its share of available flexible time without capping overload', () => {
@@ -216,14 +216,14 @@ test('Planned reports its share of available flexible time without capping overl
     capacityMetrics({
       language: 'en',
       capacity: { availableMinutes: 540, fixedMinutes: 420, demandMinutes: 105, overloadMinutes: 0, slackMinutes: 435, unplacedMinutes: 0 },
-    })[2],
+    })[0],
     { key: 'demand', label: 'Planned', value: '1h45m', percent: '19%', percentTone: 'neutral', tone: 'neutral' },
   );
 
   const overloadedDemand = capacityMetrics({
       language: 'en',
       capacity: { availableMinutes: 90, demandMinutes: 105 },
-    })[2];
+    })[0];
   assert.equal(overloadedDemand.percent, '117%');
   assert.equal(overloadedDemand.percentTone, 'warning');
 });
@@ -388,10 +388,10 @@ test('capacity metrics expose optional current / full-day ratios', () => {
     },
   });
 
-  assert.equal(metrics[0].value, '7h31m');
-  assert.equal(metrics[0].total, '9h');
-  assert.equal(metrics[1].value, '3h15m');
-  assert.equal(metrics[1].total, '7h');
+  assert.equal(metrics[2].value, '7h31m');
+  assert.equal(metrics[2].total, '9h');
+  assert.equal(metrics[3].value, '3h15m');
+  assert.equal(metrics[3].total, '7h');
 });
 
 test('burning bucket uses half-open event boundaries and workday bounds', () => {
