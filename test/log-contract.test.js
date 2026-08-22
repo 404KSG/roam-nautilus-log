@@ -201,9 +201,16 @@ test('execution panel exposes cached capacity and deterministic Plan sections', 
   assert.match(timingTopbar, /aria-expanded/);
   assert.match(timingTopbar, /execution\?\.scheduledTasks/);
   assert.match(timingTopbar, /execution\?\.overflowTasks/);
+  assert.match(timingTopbar, /element\('div', 'nautilus-log-timing__capacity'\)/);
   assert.match(css, /\.nautilus-log-timing__capacity/);
+  assert.match(css, /\.nautilus-log-timing__capacity\s*\{[^}]*font-family:\s*inherit;[^}]*font-style:\s*normal;/s);
   assert.match(css, /\.nautilus-log-timing__plan-heading/);
-  assert.match(css, /\.nautilus-log-timing__row\.is-unscheduled/);
+  assert.match(css, /\.nautilus-log-timing__row\.is-unscheduled \.nautilus-log-timing__row-meta/);
+  assert.doesNotMatch(
+    css,
+    /\.nautilus-log-timing__row\.is-unscheduled\s*\{[^}]*(?:box-shadow|border(?:-left|-inline-start)?):/s,
+    'Unscheduled rows should not gain a decorative edge or card border',
+  );
   assert.doesNotMatch(timingTopbar, /readAllEntries|readPrimaryPlan/);
 });
 

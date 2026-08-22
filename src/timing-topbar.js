@@ -203,7 +203,9 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
   );
 
   const capacityStrip = (execution) => {
-    const strip = element('section', 'nautilus-log-timing__capacity');
+    // Use a neutral div instead of section so Roam themes cannot accidentally
+    // apply editorial/serif section typography to this compact UI strip.
+    const strip = element('div', 'nautilus-log-timing__capacity');
     strip.setAttribute('aria-label', 'Today capacity');
     const available = element('span', 'nautilus-log-timing__capacity-metric');
     available.append('Available ', element('strong', '', timingCore.compactMinutes(execution.availableMinutes || 0)));

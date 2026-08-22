@@ -58,6 +58,8 @@
 
 ### Fixed
 
+- Execution-panel capacity metrics now keep the normal UI typeface across Roam
+  themes, and Unscheduled rows no longer draw a decorative left rail.
 - Timing, Plan, and Review lists retain scrolling without exposing native
   scrollbar chrome inside the execution popover.
 - Compact right-sidebar Overview metrics stay adjacent instead of being spread

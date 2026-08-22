@@ -32,9 +32,10 @@ The Plan view is divided into `Scheduled today` and `Unscheduled today`. Schedul
 ## Visual Contract
 
 - Use typography, spacing, borders, and neutral surfaces already present in the execution panel.
+- Capacity metrics explicitly inherit the execution-panel UI typeface so Roam themes cannot substitute editorial typography.
 - Do not add filled metric cards, gradients, or shadows.
 - Scheduled rows remain neutral; the focused row keeps its existing pale-blue state.
-- Unscheduled status uses restrained amber text and a subtle section treatment, never a disabled appearance.
+- Unscheduled status uses restrained amber metadata only; rows do not gain a left rail, outline, shadow, or disabled appearance.
 - Section headers use small uppercase labels, compact totals, and a Blueprint chevron for disclosure.
 
 ## Verification

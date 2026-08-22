@@ -934,7 +934,10 @@
   border-bottom: 1px solid rgba(117, 126, 140, 0.12);
   color: #858e9b;
   display: flex;
+  font-family: inherit;
   font-size: 11px;
+  font-style: normal;
+  font-weight: 500;
   gap: 16px;
   justify-content: space-between;
   min-height: 32px;
@@ -950,6 +953,7 @@
 
 .nautilus-log-timing__capacity-metric strong {
   color: #4e5764;
+  font-family: inherit;
   font-weight: 650;
 }
 
@@ -1176,10 +1180,6 @@ button.nautilus-log-timing__plan-heading:focus-visible {
 .nautilus-log-timing__row.is-forgotten {
   background: rgba(206, 129, 31, 0.075);
   border-color: rgba(206, 129, 31, 0.3);
-}
-
-.nautilus-log-timing__row.is-unscheduled {
-  box-shadow: inset 2px 0 0 rgba(206, 129, 31, 0.38);
 }
 
 .nautilus-log-timing__row.is-unscheduled .nautilus-log-timing__row-meta {
