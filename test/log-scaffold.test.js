@@ -133,3 +133,34 @@ test('built extension creates Log scaffolding sequentially and unload is graph-s
   assert.equal(window.nautilusLogExtensionData.running, false);
   assert.equal(window.nautilusLogCore, undefined);
 });
+
+test('a fresh install defaults the settings panel and rendered UI to English', async (t) => {
+  const { roam } = createRoamMock();
+  global.window = {
+    roamAlphaAPI: roam,
+    dispatchEvent: () => {},
+  };
+  t.after(() => { delete global.window; });
+
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#fresh-${Date.now()}`;
+  const extension = (await import(moduleUrl)).default;
+  const settings = new Map();
+  let latestPanel;
+  const extensionAPI = {
+    settings: {
+      get: (key) => settings.get(key),
+      set: async (key, value) => settings.set(key, value),
+      panel: { create: (config) => { latestPanel = config; } },
+    },
+  };
+
+  await extension.onload({ extensionAPI });
+
+  assert.equal(settings.get('language'), 'en');
+  assert.equal(window.nautilusLogExtensionData.settings.language, 'en');
+  assert.equal(latestPanel.settings.find(({ id }) => id === 'language').action.default, 'en');
+  assert.equal(latestPanel.settings.find(({ id }) => id === 'workday-start').name, 'Chart Start Time');
+
+  await extension.onunload();
+});

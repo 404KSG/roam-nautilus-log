@@ -255,7 +255,11 @@ test('runtime extension settings override stale or nested render arguments', () 
 });
 
 test('legacy render arguments remain a fallback when runtime settings are absent', () => {
-  assert.equal(resolveRendererSettings({ args: [22, 15, 5, '#T0', 21] })['workday-end'], 1260);
+  const settings = resolveRendererSettings({ args: [22, 15, 5, '#T0', 21] });
+  assert.equal(settings['workday-end'], 1260);
+  assert.equal(settings.language, 'en');
+  assert.equal(uiCopy().capacity.available, 'Available');
+  assert.equal(uiCopy('zh').capacity.available, '可安排');
 });
 
 test('historical DONE slices use explicit completion time minus the original estimate', () => {

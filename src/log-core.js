@@ -98,7 +98,7 @@ function resolveRendererSettings({ runtime = {}, args = [] } = {}) {
     'workday-start-hour': schedule.startHour,
     'workday-end-hour': schedule.endHour,
     'custom-color-1-tag': trigger === undefined || trigger === null ? '' : String(trigger),
-    language: runtime.language === 'en' ? 'en' : 'zh',
+    language: runtime.language === 'zh' ? 'zh' : 'en',
   };
 }
 
@@ -589,11 +589,11 @@ const UI_COPY = {
   },
 };
 
-function uiCopy(language = 'zh') {
+function uiCopy(language = 'en') {
   return language === 'en' ? UI_COPY.en : UI_COPY.zh;
 }
 
-function capacityMetrics({ capacity = {}, language = 'zh' } = {}) {
+function capacityMetrics({ capacity = {}, language = 'en' } = {}) {
   const copy = uiCopy(language).capacity;
   const burningBucket = capacity.burningBucket;
   const markBurning = (metric, bucket, label) => (

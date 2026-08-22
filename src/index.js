@@ -36,7 +36,7 @@ function runtimeSettings(extensionAPI) {
     ...Object.fromEntries(
       Object.keys(defaults).map((key) => [key, settingValue(extensionAPI, key)]),
     ),
-    language: extensionAPI.settings.get("language") || "zh",
+    language: extensionAPI.settings.get("language") || "en",
   };
 }
 
@@ -143,7 +143,7 @@ function panelConfig(extensionAPI, language) {
         action: {
           type: "select",
           default: language,
-          items: ["zh", "en"],
+          items: ["en", "zh"],
           onChange: async (value) => {
             await extensionAPI.settings.set("language", value);
             publishRuntimeSettings(extensionAPI);
@@ -200,7 +200,7 @@ async function onload({ extensionAPI }) {
   };
   await setDefaultSettings(extensionAPI);
   publishRuntimeSettings(extensionAPI);
-  const language = extensionAPI.settings.get("language") || "zh";
+  const language = extensionAPI.settings.get("language") || "en";
   if (!extensionAPI.settings.get("language")) await extensionAPI.settings.set("language", language);
   extensionAPI.settings.panel.create(panelConfig(extensionAPI, language));
   await toggleRenderComponent(

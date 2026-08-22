@@ -15,6 +15,7 @@
   reduced-motion support.
 - Compact schedules start folded when a Nautilus Log block is focused in the
   right sidebar, while remaining user-toggleable afterward.
+- Fresh installs default to English; Chinese remains available from Language settings.
 
 ### Fixed
 
