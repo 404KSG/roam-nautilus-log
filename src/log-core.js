@@ -1099,6 +1099,70 @@ function isCompactChartWidth(width, threshold = 520) {
   return normalizedWidth <= normalizedThreshold;
 }
 
+/**
+ * Position a measured floating tooltip beside an anchor without letting it
+ * escape the browser viewport. The preferred radial side is tried first, then
+ * its opposite, followed by the two perpendicular sides. Only after choosing
+ * the lowest-overflow side do we shift the box inside the safety margin.
+ */
+function placeFloatingTooltip({
+  anchorX,
+  anchorY,
+  tooltipWidth,
+  tooltipHeight,
+  viewportWidth,
+  viewportHeight,
+  preferred = 'right',
+  margin = 12,
+  gap = 10,
+} = {}) {
+  const xAnchor = asNumber(anchorX);
+  const yAnchor = asNumber(anchorY);
+  const width = Math.max(0, asNumber(tooltipWidth) || 0);
+  const height = Math.max(0, asNumber(tooltipHeight) || 0);
+  const viewportW = Math.max(0, asNumber(viewportWidth) || 0);
+  const viewportH = Math.max(0, asNumber(viewportHeight) || 0);
+  const safeMargin = Math.max(0, asNumber(margin) || 0);
+  const safeGap = Math.max(0, asNumber(gap) || 0);
+  if (!Number.isFinite(xAnchor) || !Number.isFinite(yAnchor)) return null;
+
+  const placements = {
+    right: { x: xAnchor + safeGap, y: yAnchor - height / 2 },
+    left: { x: xAnchor - safeGap - width, y: yAnchor - height / 2 },
+    top: { x: xAnchor - width / 2, y: yAnchor - safeGap - height },
+    bottom: { x: xAnchor - width / 2, y: yAnchor + safeGap },
+  };
+  const orderByPreference = {
+    right: ['right', 'left', 'top', 'bottom'],
+    left: ['left', 'right', 'top', 'bottom'],
+    top: ['top', 'bottom', 'right', 'left'],
+    bottom: ['bottom', 'top', 'right', 'left'],
+  };
+  const order = orderByPreference[preferred] || orderByPreference.right;
+  const overflow = ({ x, y }) => (
+    Math.max(0, safeMargin - x)
+    + Math.max(0, x + width - (viewportW - safeMargin))
+    + Math.max(0, safeMargin - y)
+    + Math.max(0, y + height - (viewportH - safeMargin))
+  );
+  const choice = order
+    .map((placement) => ({ placement, ...placements[placement] }))
+    .reduce((best, candidate) => {
+      const score = overflow(candidate);
+      return !best || score < best.score
+        ? { ...candidate, score }
+        : best;
+    }, null);
+  const maxX = Math.max(safeMargin, viewportW - safeMargin - width);
+  const maxY = Math.max(safeMargin, viewportH - safeMargin - height);
+
+  return {
+    x: Math.round(Math.min(maxX, Math.max(safeMargin, choice.x))),
+    y: Math.round(Math.min(maxY, Math.max(safeMargin, choice.y))),
+    placement: choice.placement,
+  };
+}
+
 module.exports = {
   START_HOURS,
   END_HOURS,
@@ -1124,5 +1188,6 @@ module.exports = {
   truncateTextToWidth,
   placeLabelTracks,
   placeExternalLabels,
+  placeFloatingTooltip,
   isCompactChartWidth,
 };

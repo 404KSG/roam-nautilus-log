@@ -24,6 +24,7 @@ const {
   truncateTextToWidth,
   placeLabelTracks,
   placeExternalLabels,
+  placeFloatingTooltip,
   isCompactChartWidth,
 } = require('../src/log-core');
 
@@ -165,6 +166,63 @@ test('available slots retain full preview ranges and discard invalid intervals',
       clampToNow: true,
     }),
     [],
+  );
+});
+
+test('floating tooltips keep the preferred outside placement when it fits', () => {
+  assert.deepEqual(
+    placeFloatingTooltip({
+      anchorX: 500,
+      anchorY: 300,
+      tooltipWidth: 180,
+      tooltipHeight: 50,
+      viewportWidth: 1000,
+      viewportHeight: 700,
+      preferred: 'right',
+    }),
+    { x: 510, y: 275, placement: 'right' },
+  );
+});
+
+test('floating tooltips flip before they reach a viewport edge', () => {
+  assert.deepEqual(
+    placeFloatingTooltip({
+      anchorX: 900,
+      anchorY: 300,
+      tooltipWidth: 180,
+      tooltipHeight: 50,
+      viewportWidth: 1000,
+      viewportHeight: 700,
+      preferred: 'right',
+    }),
+    { x: 710, y: 275, placement: 'left' },
+  );
+  assert.deepEqual(
+    placeFloatingTooltip({
+      anchorX: 500,
+      anchorY: 20,
+      tooltipWidth: 180,
+      tooltipHeight: 50,
+      viewportWidth: 1000,
+      viewportHeight: 700,
+      preferred: 'top',
+    }),
+    { x: 410, y: 30, placement: 'bottom' },
+  );
+});
+
+test('floating tooltips shift inside the final viewport safety margin', () => {
+  assert.deepEqual(
+    placeFloatingTooltip({
+      anchorX: 100,
+      anchorY: 350,
+      tooltipWidth: 180,
+      tooltipHeight: 50,
+      viewportWidth: 200,
+      viewportHeight: 400,
+      preferred: 'top',
+    }),
+    { x: 12, y: 290, placement: 'top' },
   );
 });
 

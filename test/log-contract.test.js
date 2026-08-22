@@ -109,11 +109,20 @@ test('the spiral exposes slice and available-slot hover targets above an inert g
   assert.doesNotMatch(connectorComponent, /nautilus-log-grid/);
   assert.match(component, /nautilus-log-available-slot-hit/);
   assert.match(component, /nautilus-log-hover-tooltip/);
+  assert.match(component, /log-core-call "placeFloatingTooltip"/);
+  assert.match(component, /\.getScreenCTM/);
+  assert.match(component, /createPortal/);
+  assert.match(component, /nautilus-log-event-slice-group--interactive/);
+  assert.match(component, /hover-enabled\? \(not compact\?\)/);
+  assert.match(component, /\(when hover-enabled\?\s+\[available-slot-component/);
+  assert.match(component, /\(when hover-enabled\? \[hover-tooltip-component/);
   assert.match(component, /:on-mouse-enter/);
   assert.match(component, /:on-focus/);
   assert.match(css, /\.nautilus-log-grid\s*\{[^}]*pointer-events:\s*none;/s);
   assert.match(css, /\.nautilus-log-available-slot-hit/);
-  assert.match(css, /\.nautilus-log-hover-tooltip\s*\{[^}]*pointer-events:\s*none;/s);
+  assert.match(css, /\.nautilus-log-hover-tooltip\s*\{[^}]*position:\s*fixed;[^}]*pointer-events:\s*none;/s);
+  assert.match(css, /\.nautilus-log-event-slice-group--interactive:hover/);
+  assert.doesNotMatch(css, /\.nautilus-log-event-slice-group:hover/);
 });
 
 test('renderer install polling does not invalidate an unchanged chart', () => {

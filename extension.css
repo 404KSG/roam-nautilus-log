@@ -400,8 +400,8 @@
   outline: none;
 }
 
-.nautilus-log-event-slice-group:hover .nautilus-log-slice,
-.nautilus-log-event-slice-group:focus .nautilus-log-slice {
+.nautilus-log-event-slice-group--interactive:hover .nautilus-log-slice,
+.nautilus-log-event-slice-group--interactive:focus .nautilus-log-slice {
   filter: brightness(1.08) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.15));
   stroke: rgba(255, 255, 255, 0.7);
   stroke-width: 1.5px;
@@ -426,8 +426,8 @@
   transition: font-weight 0.15s ease, filter 0.15s ease;
 }
 
-.nautilus-log-event-slice-group:hover .nautilus-log-slice-group text,
-.nautilus-log-event-slice-group:focus .nautilus-log-slice-group text {
+.nautilus-log-event-slice-group--interactive:hover .nautilus-log-slice-group text,
+.nautilus-log-event-slice-group--interactive:focus .nautilus-log-slice-group text {
   font-weight: bold;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15));
 }
@@ -438,8 +438,8 @@
   transition: opacity 0.2s ease, stroke-width 0.2s ease;
 }
 
-.nautilus-log-event-slice-group:hover .nautilus-log-link-line,
-.nautilus-log-event-slice-group:focus .nautilus-log-link-line {
+.nautilus-log-event-slice-group--interactive:hover .nautilus-log-link-line,
+.nautilus-log-event-slice-group--interactive:focus .nautilus-log-link-line {
   opacity: 0.9;
   stroke-dasharray: none;
   stroke-width: 1.5px;
@@ -466,48 +466,44 @@
 }
 
 .nautilus-log-hover-tooltip {
-  --nautilus-log-tooltip-x: -50%;
-  --nautilus-log-tooltip-y: calc(-100% - 8px);
-  position: absolute;
-  z-index: 20;
+  position: fixed;
+  z-index: 10060;
   display: grid;
   gap: 2px;
-  max-width: min(260px, calc(100% - 16px));
+  width: max-content;
+  max-width: min(240px, calc(100vw - 24px));
   padding: 6px 8px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 5px;
-  background: rgba(38, 43, 50, 0.95);
-  box-shadow: 0 4px 12px rgba(18, 23, 29, 0.14);
+  background: rgba(38, 43, 50, 0.96);
+  box-shadow: 0 4px 12px rgba(18, 23, 29, 0.16);
   color: #fff;
   font-family: var(--nl-exec-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   font-size: 11px;
   line-height: 1.35;
+  opacity: 0;
   pointer-events: none;
-  transform: translate(var(--nautilus-log-tooltip-x), var(--nautilus-log-tooltip-y));
-  white-space: nowrap;
+  transform: none;
+  transition: opacity 80ms ease;
 }
 
-.nautilus-log-hover-tooltip--start {
-  --nautilus-log-tooltip-x: 0;
-}
-
-.nautilus-log-hover-tooltip--end {
-  --nautilus-log-tooltip-x: -100%;
-}
-
-.nautilus-log-hover-tooltip--bottom {
-  --nautilus-log-tooltip-y: 10px;
+.nautilus-log-hover-tooltip--positioned {
+  opacity: 1;
 }
 
 .nautilus-log-hover-tooltip-title {
+  display: block;
+  max-width: 220px;
   overflow: hidden;
   font-weight: 650;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nautilus-log-hover-tooltip-meta {
   color: rgba(255, 255, 255, 0.7);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .nautilus-log-past-overlay {

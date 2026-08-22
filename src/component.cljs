@@ -394,48 +394,83 @@
      :meta (str kind-label " · " time-range " · " duration)
      :aria-label (str title ". " kind-label ". " time-range ". " duration)}))
 
-(defn hover-anchor [event]
+(defn timeline-tooltip-geometry [start end center]
+  (let [mid-minute (/ (+ start end) 2)
+        radians (angle->rad (min->angle mid-minute))
+        radius (+ 8 (apply max (map outer-radius-at (range (count snail-blueprint-outer-radiuses)))))]
+    {:center center
+     :direction-point {:x (+ (:center-x center) (* radius (cos radians)))
+                       :y (- (:center-y center) (* radius (sin radians)))}}))
+
+(defn svg-screen-point [svg point]
+  (try
+    (when-let [matrix (.getScreenCTM svg)]
+      (let [svg-point (.createSVGPoint svg)]
+        (set! (.-x svg-point) (:x point))
+        (set! (.-y svg-point) (:y point))
+        (let [screen-point (.matrixTransform svg-point matrix)]
+          {:x (.-x screen-point) :y (.-y screen-point)})))
+    (catch :default _e nil)))
+
+(defn hover-anchor [event info]
   (let [target (.-currentTarget event)
-        visual (when target (.closest target ".nautilus-log-visual"))]
-    (when visual
-      (let [visual-rect (.getBoundingClientRect visual)
-            target-rect (.getBoundingClientRect target)
-            event-x (.-clientX event)
-            event-y (.-clientY event)
-            pointer-event? (= "mouseenter" (.-type event))
-            client-x (if (and pointer-event? (number? event-x))
-                       event-x
-                       (+ (.-left target-rect) (/ (.-width target-rect) 2)))
-            client-y (if (and pointer-event? (number? event-y))
-                       event-y
-                       (+ (.-top target-rect) (/ (.-height target-rect) 2)))
-            raw-x (- client-x (.-left visual-rect))
-            raw-y (- client-y (.-top visual-rect))
-            visual-width (.-width visual-rect)]
-        {:x (max 8 (min (- visual-width 8) raw-x))
-         :y (max 8 raw-y)
-         :align (cond
-                  (< raw-x 140) "start"
-                  (> raw-x (- visual-width 140)) "end"
-                  :else "center")
-         :placement (if (< raw-y 72) "bottom" "top")}))))
+        svg (when target (.closest target "svg.nautilus-log-svg"))
+        center-screen (when svg (svg-screen-point svg (:center info)))
+        direction-screen (when svg (svg-screen-point svg (:direction-point info)))]
+    (when (and center-screen direction-screen)
+      (let [dx (- (:x direction-screen) (:x center-screen))
+            dy (- (:y direction-screen) (:y center-screen))
+            preferred (if (>= (abs dx) (abs dy))
+                        (if (neg? dx) "left" "right")
+                        (if (neg? dy) "top" "bottom"))]
+        {:anchor-x (:x direction-screen)
+         :anchor-y (:y direction-screen)
+         :preferred preferred}))))
 
 (defn show-hover-tooltip! [hover-info-state info event]
-  (when-let [anchor (hover-anchor event)]
-    (reset! hover-info-state (merge info anchor))))
+  (when-let [anchor (hover-anchor event info)]
+    (reset! hover-info-state (merge info anchor {:positioned false}))))
 
 (defn hide-hover-tooltip! [hover-info-state]
   (reset! hover-info-state nil))
 
-(defn hover-tooltip-component [hover-info-state]
-  (when-let [{:keys [title meta x y align placement]} @hover-info-state]
+(defn position-hover-tooltip! [hover-info-state node]
+  (when (and node @hover-info-state (not (:positioned @hover-info-state)))
+    (let [{:keys [anchor-x anchor-y preferred]} @hover-info-state
+          positioned (log-core-call "placeFloatingTooltip"
+                                    {:anchorX anchor-x
+                                     :anchorY anchor-y
+                                     :tooltipWidth (.-offsetWidth node)
+                                     :tooltipHeight (.-offsetHeight node)
+                                     :viewportWidth (.-innerWidth js/window)
+                                     :viewportHeight (.-innerHeight js/window)
+                                     :preferred preferred
+                                     :margin 12
+                                     :gap 10})]
+      (when positioned
+        (swap! hover-info-state merge positioned {:positioned true})))))
+
+(defn hover-tooltip-content [hover-info-state]
+  (when-let [{:keys [title meta x y anchor-x anchor-y positioned placement]} @hover-info-state]
     [:div {:class (str "nautilus-log-hover-tooltip"
-                       " nautilus-log-hover-tooltip--" align
-                       " nautilus-log-hover-tooltip--" placement)
+                       (when positioned " nautilus-log-hover-tooltip--positioned")
+                       (when placement (str " nautilus-log-hover-tooltip--" placement)))
            :role "tooltip"
-           :style {:left (str x "px") :top (str y "px")}}
+           :ref #(position-hover-tooltip! hover-info-state %)
+           :style {:left (str (or x anchor-x) "px")
+                   :top (str (or y anchor-y) "px")}}
      [:strong {:class "nautilus-log-hover-tooltip-title"} title]
      [:span {:class "nautilus-log-hover-tooltip-meta"} meta]]))
+
+(defn hover-tooltip-component [hover-info-state]
+  (when @hover-info-state
+    (let [react-dom (.-ReactDOM js/window)
+          create-portal (when react-dom (.-createPortal react-dom))]
+      (if create-portal
+        (.call create-portal react-dom
+               (r/as-element [hover-tooltip-content hover-info-state])
+               (.-body js/document))
+        [hover-tooltip-content hover-info-state]))))
 
 (defn rm-prog-from-block-if-done [uid]
   (let [current (get-block-str-naked uid)
@@ -996,7 +1031,7 @@
         first-bound (if (<= first-bound start-min) (+ first-bound 60) first-bound)]
     (range first-bound end-min 60)))
 
-(defn event-slice-component [event index legend-rect inner-radius daily-page? center settings now-time-atom conflict? hover-info-state copy]
+(defn event-slice-component [event index legend-rect inner-radius daily-page? center settings now-time-atom conflict? hover-enabled? hover-info-state copy]
   (let [{:keys [bg-color done click-to-progress meeting? expired? past-status current?]} (calculate-slice-params event index daily-page? now-time-atom)
         legend-color (cond
                        (= "completed" past-status) "var(--nautilus-log-completed)"
@@ -1008,8 +1043,10 @@
         progress (:progress event)
         start-min (:start event)
         end-min (:end event)
-        kind-label (get-in copy [:tooltips (if meeting? :event :task)])
-        tooltip-info (timeline-tooltip-info description kind-label start-min end-min)
+        kind-label (when hover-enabled? (get-in copy [:tooltips (if meeting? :event :task)]))
+        tooltip-info (when hover-enabled?
+                       (merge (timeline-tooltip-info description kind-label start-min end-min)
+                              (timeline-tooltip-geometry start-min end-min center)))
         boundaries (get-hour-boundaries start-min end-min)
         segments (loop [curr start-min
                         bounds boundaries
@@ -1019,7 +1056,8 @@
                        (conj segs [curr end-min])
                        segs)
                      (recur (first bounds) (rest bounds) (conj segs [curr (first bounds)]))))]
-    (into [:g {:class (str "nautilus-log-event-slice-group"
+    (into [:g (merge {:class (str "nautilus-log-event-slice-group"
+                            (when hover-enabled? " nautilus-log-event-slice-group--interactive")
                             (case past-status
                               "completed" " nautilus-log-past--completed"
                               "event" " nautilus-log-past--event"
@@ -1027,15 +1065,16 @@
                             (when conflict? " nautilus-log-event-conflict")
                             (when current? " nautilus-log-current-task"))
                     :data-past-status past-status
-                    :aria-current (when current? "true")
-                    :aria-label (:aria-label tooltip-info)
-                    :role "img"
-                    :tab-index 0
-                    :focusable "true"
-                    :on-mouse-enter #(show-hover-tooltip! hover-info-state tooltip-info %)
-                    :on-mouse-leave #(hide-hover-tooltip! hover-info-state)
-                    :on-focus #(show-hover-tooltip! hover-info-state tooltip-info %)
-                    :on-blur #(hide-hover-tooltip! hover-info-state)}]
+                    :aria-current (when current? "true")}
+                   (when hover-enabled?
+                     {:aria-label (:aria-label tooltip-info)
+                      :role "img"
+                      :tab-index 0
+                      :focusable "true"
+                      :on-mouse-enter #(show-hover-tooltip! hover-info-state tooltip-info %)
+                      :on-mouse-leave #(hide-hover-tooltip! hover-info-state)
+                      :on-focus #(show-hover-tooltip! hover-info-state tooltip-info %)
+                      :on-blur #(hide-hover-tooltip! hover-info-state)}))]
           (map-indexed
            (fn [idx [s e]]
              (let [start-angle (min->angle s)
@@ -1067,9 +1106,9 @@
 
 (defn events->slices
   "Returns svg vector of all slice components + list of legend rectangles"
-  ([events daily-page-atom? center settings now-time-atom hover-info-state copy]
-   (events->slices events daily-page-atom? center settings now-time-atom hover-info-state copy []))
-   ([events daily-page-atom? center settings now-time-atom hover-info-state copy init-rects]
+  ([events daily-page-atom? center settings now-time-atom hover-enabled? hover-info-state copy]
+   (events->slices events daily-page-atom? center settings now-time-atom hover-enabled? hover-info-state copy []))
+  ([events daily-page-atom? center settings now-time-atom hover-enabled? hover-info-state copy init-rects]
    (let [events (vec (filter #(not= true (:freetime %)) events))
          track-map (label-track-map events)
          conflict-uids (set (or (log-core-call "overlappingFixedEventUids" {:events events}) []))]
@@ -1092,7 +1131,7 @@
         (recur (inc i) (rest events) (conj rects new-rect)
                (conj all-slice-components
                      (event-slice-component event i new-rect snail-inner-radius @daily-page-atom? center settings now-time-atom
-                                            (contains? conflict-uids (:uid event)) hover-info-state copy))))
+                                            (contains? conflict-uids (:uid event)) hover-enabled? hover-info-state copy))))
       [all-slice-components rects])))))
 
 (defn events->new-dimensions
@@ -1165,13 +1204,14 @@
           (str (minutes->time (:start event)) "–" (minutes->time (:end event)))]
          [:span {:class "nautilus-log-compact-title"} (:description event)]])]]))
 
-(defn available-slot-tooltip-info [slot copy]
+(defn available-slot-tooltip-info [slot copy center]
   (let [slot-label (get-in copy [:tooltips (if (:availableNow slot) :availableNow :available)])
         time-range (str (minutes->time (:start slot)) "–" (minutes->time (:end slot)))
         duration (duration-label (:duration slot))]
-    {:title slot-label
-     :meta (str time-range " · " duration)
-     :aria-label (str slot-label ". " time-range ". " duration)}))
+    (merge {:title slot-label
+            :meta (str time-range " · " duration)
+            :aria-label (str slot-label ". " time-range ". " duration)}
+           (timeline-tooltip-geometry (:start slot) (:end slot) center))))
 
 (defn available-slot-component [events daily-page? playback? now-time-atom inner-radius center settings hover-info-state copy]
   (let [slots (or (log-core-call "availableSlotGroups"
@@ -1183,7 +1223,7 @@
                   [])]
     [:g {:class "nautilus-log-available-slots"}
      (for [slot slots
-           :let [tooltip-info (available-slot-tooltip-info slot copy)]]
+           :let [tooltip-info (available-slot-tooltip-info slot copy center)]]
        ^{:key (:key slot)}
        [:g {:class (str "nautilus-log-available-slot"
                         (when (:availableNow slot) " nautilus-log-available-slot--now"))
@@ -1218,9 +1258,10 @@
           [(/ old-width 2) old-width (/ old-height 2) old-height]
           (events->new-dimensions all-events-for-dim {:center-x (/ old-width 2) :center-y (/ old-height 2)} settings))
         center {:center-x center-x :center-y center-y}
-        [all-slice-components rects] (events->slices events daily-page-atom? center settings now-time-atom hover-info-state copy)
+        hover-enabled? (not compact?)
+        [all-slice-components rects] (events->slices events daily-page-atom? center settings now-time-atom hover-enabled? hover-info-state copy)
         done-slices-and-rects (when @show-done-atom?
-                                (events->slices done-todos daily-page-atom? center settings now-time-atom hover-info-state copy rects))
+                                (events->slices done-todos daily-page-atom? center settings now-time-atom hover-enabled? hover-info-state copy rects))
         done-slice-components (first done-slices-and-rects)
         rects (or (second done-slices-and-rects) rects)
         now-visible? (and (or @daily-page-atom? @playback-state-atom)
@@ -1243,7 +1284,8 @@
       (when @show-done-atom? done-slice-components)
       all-slice-components         ;; zobrazení všech událostí
       [snail-blueprint-component snail-template-color snail-inner-radius center settings @daily-page-atom? now-time-atom]
-      [available-slot-component events @daily-page-atom? @playback-state-atom now-time-atom snail-inner-radius center settings hover-info-state copy]
+      (when hover-enabled?
+        [available-slot-component events @daily-page-atom? @playback-state-atom now-time-atom snail-inner-radius center settings hover-info-state copy])
       (when now-visible?
         (let [visible-now @now-time-atom
               now-angle (min->angle visible-now)
@@ -1275,7 +1317,7 @@
           " Center-y: " (js/Math.round center-y)]                       
          [:circle {:cx (:center-x center) :cy (:center-y center)        
                    :r 200 :fill "none" :stroke "black" :stroke-width 1}]])]]
-     [hover-tooltip-component hover-info-state]
+     (when hover-enabled? [hover-tooltip-component hover-info-state])
      [compact-event-list all-events-for-dim copy compact-open-state]]))
 
 (defn add-start-after
@@ -1629,13 +1671,15 @@
 (defn compact-chart-width? [width]
   (boolean (log-core-call "isCompactChartWidth" width)))
 
-(defn observe-compact-width! [node compact-state resize-observer-state]
+(defn observe-compact-width! [node compact-state hover-info-state resize-observer-state]
   (when-let [current-observer @resize-observer-state]
     (.disconnect current-observer)
     (reset! resize-observer-state nil))
   (when node
     (let [update-width! (fn [width]
                           (let [next-state (compact-chart-width? width)]
+                            (when (and next-state @hover-info-state)
+                              (reset! hover-info-state nil))
                             (when (not= @compact-state next-state)
                               (reset! compact-state next-state))))]
       (update-width! (.-width (.getBoundingClientRect node)))
@@ -1673,7 +1717,7 @@
                compact-state (r/atom false)
                resize-observer-state (atom nil)
                container-ref (fn [node]
-                               (observe-compact-width! node compact-state resize-observer-state))
+                               (observe-compact-width! node compact-state hover-info-state resize-observer-state))
                clock-interval (js/setInterval #(when-not @playback-state-atom
                                                  (reset-now-time-atom now-time-atom)) 60000)
                daily-page-atom? (r/atom (daily-page? block-uid))

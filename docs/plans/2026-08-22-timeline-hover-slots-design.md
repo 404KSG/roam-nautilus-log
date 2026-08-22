@@ -22,22 +22,36 @@ under inspection.
 
 ## Tooltip
 
-One HTML tooltip is shared by the chart. It is positioned from the hovered or
-focused SVG group, stays within the visual container, ignores pointer events,
-and uses the chart's existing typography. Scheduled items show their title,
-type, range, and duration. Available slots show the slot label, range, and
-duration. English and Chinese labels come from the existing UI copy seam.
+One HTML tooltip is shared by the chart. In a wide view, its anchor sits just
+outside the spiral on the radial midpoint of the hovered or focused interval,
+instead of following the pointer across the chart. The measured tooltip is
+rendered through a body-level portal, prefers that outside direction, flips to
+the opposite side when needed, and finally shifts inside a 12px viewport safety
+margin. It therefore neither covers the interval being inspected nor clips at
+the bottom or right edge of a Roam workspace.
+
+Scheduled items show their title, type, range, and duration. Available slots
+show the slot label, range, and duration. English and Chinese labels come from
+the existing UI copy seam. The panel remains visually quiet: one compact dark
+surface, restrained shadow, and no arrow or decorative animation.
+
+At compact chart widths (520px and below), hover inspection is intentionally
+absent. Slice groups receive no hover/focus handlers, available-slot hit paths
+are not mounted, and no tooltip portal exists. The existing compact Overview
+and Schedule disclosures remain the only inspection surface.
 
 ## Performance And Safety
 
 The renderer derives slot groups from the `freetime` rows already returned by
 `fill-day`. Hovering performs no Roam reads or writes. The shared Reagent atom
-stores only the current tooltip payload and position. Background overlays and
-the now needle remain inert.
+stores only the current tooltip payload, radial anchor, and measured viewport
+position. Positioning is a dependency-free pure function covered by boundary
+tests. Background overlays and the now needle remain inert.
 
 ## Verification
 
 Tests cover current-minute clipping, hour-boundary segmentation, invalid and
-past slot removal, localization, non-interactive grid ownership, shared tooltip
-markup, and the absence of new graph readers. The full existing test and build
-suite must remain green.
+past slot removal, preferred placement, edge flipping, final viewport shifting,
+localization, non-interactive grid ownership, compact-mode suppression, shared
+tooltip markup, and the absence of new graph readers. The full existing test
+and build suite must remain green.
