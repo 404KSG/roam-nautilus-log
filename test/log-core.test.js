@@ -27,7 +27,48 @@ const {
   radialTooltipGeometry,
   placeFloatingTooltip,
   isCompactChartWidth,
+  parseDurationToken,
+  parseTimeRangeToken,
 } = require('../src/log-core');
+
+test('shared syntax accepts every documented task duration form', () => {
+  const cases = [
+    ['Write 30m', 30, 'Write'],
+    ['Write 30min', 30, 'Write'],
+    ['Write 1h', 60, 'Write'],
+    ['Write 1h30m', 90, 'Write'],
+  ];
+
+  for (const [text, minutes, cleanedText] of cases) {
+    assert.deepEqual(parseDurationToken({ text, fallback: 15 }), {
+      minutes,
+      token: text.slice(6),
+      cleanedText,
+    });
+  }
+  assert.deepEqual(parseDurationToken({ text: 'Write', fallback: 15 }), {
+    minutes: 15,
+    token: '',
+    cleanedText: 'Write',
+  });
+});
+
+test('shared time-range syntax returns semantic warning codes', () => {
+  assert.deepEqual(parseTimeRangeToken({ text: '23:00-01:00 Late' }), {
+    start: 1380,
+    end: 1440,
+    token: '23:00-01:00',
+    cleanedText: 'Late',
+    warningCode: 'overnight',
+  });
+  assert.deepEqual(parseTimeRangeToken({ text: '09:00-09:00 Invalid' }), {
+    start: 540,
+    end: 540,
+    token: '09:00-09:00',
+    cleanedText: 'Invalid',
+    warningCode: 'sameTime',
+  });
+});
 
 test('the chart background uses one grid sector per hour', () => {
   assert.deepEqual(hourlyGridSegments({ startMinutes: 300, endMinutes: 420 }), [

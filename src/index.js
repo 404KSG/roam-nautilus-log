@@ -6,7 +6,7 @@ import {
 } from "./entry-helpers";
 import * as logCore from "./log-core";
 import { createTimingCommands } from "./timing-commands";
-import { readAllEntries } from "./timing-roam";
+import { readAllEntries, readEntriesForTaskUids } from "./timing-roam";
 import { createTimingRuntime } from "./timing-runtime";
 import { createTimingTopbar } from "./timing-topbar";
 import "../extension.css";
@@ -44,25 +44,32 @@ let timingRuntime = null;
 let timingTopbar = null;
 let timingCommands = null;
 const rendererClockCacheMs = 15_000;
-let rendererClockCache = { entries: [], readAt: 0, valid: false };
+const rendererClockCache = new Map();
 
-function cacheRendererClockEntries(entries) {
-  if (!Array.isArray(entries)) return rendererClockCache.entries;
-  rendererClockCache = { entries, readAt: Date.now(), valid: true };
+function rendererClockCacheKey(taskUids = []) {
+  return [...new Set((Array.isArray(taskUids) ? taskUids : []).filter(Boolean))].sort().join('\u0000');
+}
+
+function cacheRendererClockEntries(entries, key = '') {
+  const previous = rendererClockCache.get(key);
+  if (!Array.isArray(entries)) return previous?.entries || [];
+  rendererClockCache.set(key, { entries, readAt: Date.now() });
   return entries;
 }
 
-function rendererClockEntries() {
+function rendererClockEntries(taskUids = []) {
   const runtimeEntries = timingRuntime?.getSnapshot?.()?.entries;
-  if (Array.isArray(runtimeEntries)) return cacheRendererClockEntries(runtimeEntries);
-  if (rendererClockCache.valid && Date.now() - rendererClockCache.readAt < rendererClockCacheMs) {
-    return rendererClockCache.entries;
+  if (Array.isArray(runtimeEntries)) return runtimeEntries;
+  const key = rendererClockCacheKey(taskUids);
+  const cached = rendererClockCache.get(key);
+  if (cached && Date.now() - cached.readAt < rendererClockCacheMs) {
+    return cached.entries;
   }
   try {
-    return cacheRendererClockEntries(readAllEntries());
+    return cacheRendererClockEntries(readEntriesForTaskUids(taskUids), key);
   } catch (error) {
     console.debug("[Nautilus Log] CLOCK render snapshot unavailable", error);
-    return rendererClockCache.valid ? rendererClockCache.entries : [];
+    return cached?.entries || [];
   }
 }
 
@@ -79,9 +86,9 @@ function dailyPageBounds(pageTitle) {
   }
 }
 
-function getClockRenderContext(pageTitle) {
+function getClockRenderContext(pageTitle, taskUids = []) {
   return {
-    entries: rendererClockEntries(),
+    entries: rendererClockEntries(taskUids),
     ...dailyPageBounds(pageTitle),
   };
 }
@@ -190,7 +197,7 @@ async function stopTiming({ closeActive = false } = {}) {
   if (!timingRuntime) return true;
   if (closeActive) await timingRuntime.disable();
   else timingRuntime.destroy();
-  cacheRendererClockEntries(timingRuntime.getSnapshot?.()?.entries);
+  rendererClockCache.clear();
   timingCommands?.destroy();
   timingTopbar?.destroy();
   timingRuntime = null;

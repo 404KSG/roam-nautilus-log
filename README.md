@@ -30,14 +30,15 @@ today's Daily Note into a living time plan:
 2. **Timebox intentions.** Order flexible TODOs and give each one an estimate.
 3. **Review reality.** Optionally record Actual time and improve future estimates.
 
-The scheduler is deterministic: fixed events claim their ranges first, then complete
+The scheduler is deterministic: fixed events claim their ranges first, then whole
 tasks fill suitable gaps from the current moment. Unfinished work moves forward
 without changing priority. Anything that still cannot fit appears in **Today won't
 fit** instead of disappearing. No AI estimates and no black-box scheduling.
 
 ## Quick start
 
-1. Install **Nautilus Log** from Roam Depot.
+1. During Depot review, install the [Roam Depot preview PR](https://github.com/Roam-Research/roam-depot/pull/1428)
+   with ShortHand `404KSG+roam-nautilus-log+1428`.
 2. On today's Daily Note, type `;;` and choose **Nautilus Log**.
 3. Add events and TODOs as direct children of the component.
 4. Order the tasks, add rough durations, and adjust until the day fits.
@@ -49,8 +50,8 @@ fit** instead of disappearing. No AI estimates and no black-box scheduling.
 11:45-12:30 Lunch
 ```
 
-Durations use minutes: `30m`, `90m`, or `30min`. Untimed tasks use the configured
-default duration.
+Durations support `30m`, `30min`, `1h`, and `1h30m`. Untimed tasks use the
+configured default duration.
 
 ## Execution Layer—when you want it
 

@@ -34,7 +34,8 @@ Daily Note 变成一份动态时间计划：
 
 ## 快速开始
 
-1. 从 Roam Depot 安装 **Nautilus Log**。
+1. Depot 审核期间，通过 [Roam Depot 预览 PR](https://github.com/Roam-Research/roam-depot/pull/1428)
+   使用 ShortHand `404KSG+roam-nautilus-log+1428` 安装。
 2. 在今天的 Daily Note 输入 `;;`，选择 **Nautilus Log**。
 3. 把事件和 TODO 写成组件的直接子级。
 4. 排列任务、填写粗略时长，并调整到一天能够容纳。
@@ -46,7 +47,7 @@ Daily Note 变成一份动态时间计划：
 11:45-12:30 Lunch
 ```
 
-预计时长使用分钟：`30m`、`90m` 或 `30min`。没有时长的任务使用设置中的默认值。
+预计时长支持 `30m`、`30min`、`1h` 和 `1h30m`。没有时长的任务使用设置中的默认值。
 
 ## 需要时再开启执行层
 

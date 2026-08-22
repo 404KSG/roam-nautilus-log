@@ -12,6 +12,7 @@ const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
 const readmeZh = fs.readFileSync(path.join(__dirname, '..', 'README.zh-CN.md'), 'utf8');
 const changelog = fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'utf8');
 const timingTopbar = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-topbar.js'), 'utf8');
+const timingCore = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-core.js'), 'utf8');
 const timingRuntime = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-runtime.js'), 'utf8');
 const timingCommands = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-commands.js'), 'utf8');
 
@@ -90,6 +91,8 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested L
   assert.match(component, /log-core-call "uiCopy"/);
   assert.match(component, /log-core-call "capacityMetrics"/);
   assert.match(component, /log-core-call "burningCapacityBucket"/);
+  assert.match(component, /log-core-call "parseDurationToken"/);
+  assert.match(component, /log-core-call "parseTimeRangeToken"/);
   assert.match(component, /nautilus-log:settings-changed/);
   assert.match(component, /\.addEventListener/);
   assert.match(component, /\.removeEventListener/);
@@ -137,6 +140,15 @@ test('renderer install polling does not invalidate an unchanged chart', () => {
   assert.doesNotMatch(pollBody, /#\(reset! \*running\? \(is-running\?\)\)/);
 });
 
+test('a mounted chart recomputes Daily Note ownership after midnight', () => {
+  const clockStart = component.indexOf('daily-page-atom? (r/atom (daily-page? block-uid))');
+  const clockEnd = component.indexOf('page-title-val', clockStart);
+  const clockBody = component.slice(clockStart, clockEnd);
+  assert.match(clockBody, /next-daily-page-state/);
+  assert.match(clockBody, /daily-page\? block-uid/);
+  assert.match(clockBody, /reset! daily-page-atom\?/);
+});
+
 test('Log scaffolding is isolated and unload is graph-safe', () => {
   assert.match(entry, /Nautilus Log/);
   assert.match(entry, /roam-render-Nautilus-Log-cljs/);
@@ -157,8 +169,8 @@ test('Actual Time Tracking is opt-in and owns no disabled topbar interaction', (
   assert.match(timingTopbar, /nautilus-log-timing__identity-divider/);
   assert.match(timingTopbar, /identity\.addEventListener\('click',[\s\S]*runtime\.locate\(\)/);
   assert.doesNotMatch(timingTopbar, /iconButton\('locate'/);
-  assert.match(timingTopbar, /iconButton\('confirm', 'Complete task'/);
-  assert.match(timingTopbar, /iconButton\('trash', 'Delete current CLOCK'/);
+  assert.match(timingTopbar, /iconButton\('confirm', text\.actions\.complete/);
+  assert.match(timingTopbar, /iconButton\('trash', text\.actions\.deleteClock/);
   assert.match(timingTopbar, /isForgottenClock/);
   assert.doesNotMatch(timingTopbar, /Dashboard|Activity/);
   assert.match(timingCommands, /const palette = extensionAPI\?\.ui\?\.commandPalette/);
@@ -166,7 +178,7 @@ test('Actual Time Tracking is opt-in and owns no disabled topbar interaction', (
   assert.match(timingCommands, /const contextMenu = window\.roamAlphaAPI\?\.ui\?\.blockContextMenu/);
   assert.match(timingCommands, /contextMenu\.addCommand/);
   assert.match(timingCommands, /Nautilus Log: 2\. Clock out Timing Line/);
-  assert.match(timingRuntime, /await closeEntriesAt\(before, instant\);[\s\S]*await createRunningClock\(taskUid, instant\);/);
+  assert.match(timingRuntime, /await closeEntriesAt\(before, instant\);[\s\S]*await createRunningClock\(taskUid, instant, taskString\);/);
   assert.match(timingRuntime, /deleteCurrentClock/);
 });
 
@@ -204,6 +216,14 @@ test('execution actions do not imitate a blocked application while a graph write
   assert.doesNotMatch(css, /\.nautilus-log-timing__icon-button:disabled\s*\{[^}]*cursor:\s*wait;/s);
 });
 
+test('Pomodoro restoration is pure and stale state is cleared through the awaited lifecycle', () => {
+  const restoreStart = timingRuntime.indexOf('function currentPomodoro');
+  const restoreEnd = timingRuntime.indexOf('export function createTimingRuntime', restoreStart);
+  const restoreBody = timingRuntime.slice(restoreStart, restoreEnd);
+  assert.doesNotMatch(restoreBody, /settings\.set/);
+  assert.match(timingRuntime, /if \(!snapshot\.activeWork\.focused[\s\S]*await setPomodoro\(null\)/);
+});
+
 test('execution popover exposes a lightweight daily Review without another graph reader', () => {
   assert.match(timingTopbar, /\['timing', 'plan', 'review'\]/);
   assert.match(timingTopbar, /tabs\.setAttribute\('role', 'tablist'\)/);
@@ -222,12 +242,12 @@ test('execution popover exposes a lightweight daily Review without another graph
 
 test('execution panel exposes cached capacity and deterministic Plan sections', () => {
   assert.match(timingTopbar, /nautilus-log-timing__capacity/);
-  assert.match(timingTopbar, /Available/);
-  assert.match(timingTopbar, /Remaining/);
-  assert.match(timingTopbar, /Overload/);
-  assert.match(timingTopbar, /No fitting slot/);
-  assert.match(timingTopbar, /Scheduled today/);
-  assert.match(timingTopbar, /Unscheduled today/);
+  assert.match(timingCore, /available: 'Available'/);
+  assert.match(timingCore, /remaining: 'Remaining'/);
+  assert.match(timingCore, /overload: 'Overload'/);
+  assert.match(timingCore, /noSlot: 'No fitting slot'/);
+  assert.match(timingCore, /scheduled: 'Scheduled today'/);
+  assert.match(timingCore, /unscheduled: 'Unscheduled today'/);
   assert.match(timingTopbar, /aria-expanded/);
   assert.match(timingTopbar, /execution\?\.scheduledTasks/);
   assert.match(timingTopbar, /execution\?\.overflowTasks/);

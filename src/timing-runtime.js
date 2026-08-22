@@ -11,6 +11,7 @@ import {
   openTaskInRightSidebar,
   openPrimaryPlan,
   readAllEntries,
+  readEntriesForTaskUids,
   readBlockString,
   readPrimaryPlan,
   showToast,
@@ -32,9 +33,9 @@ function executionProjection(planSnapshot, currentNow, extensionAPI) {
     ...task,
     todo: true,
     done: false,
-    duration: Number.isFinite(Number(task.remainingMinutes))
-      ? Number(task.remainingMinutes)
-      : Number(task.plannedMinutes) || 0,
+    // The shared scheduler owns progress reduction. Passing remainingMinutes
+    // here would apply the same progress a second time.
+    duration: Number(task.plannedMinutes) || 0,
   }));
   const fixedEvents = planSnapshot.fixedEvents || [];
   return {
@@ -60,10 +61,7 @@ function scheduleNextTask(callback) {
 
 function currentPomodoro(extensionAPI, focused) {
   const saved = extensionAPI.settings.get(POMODORO_STATE_KEY);
-  if (!focused) {
-    if (saved) extensionAPI.settings.set(POMODORO_STATE_KEY, null);
-    return null;
-  }
+  if (!focused) return null;
   if (saved && Number.isFinite(Number(saved.startedAt))) return { startedAt: Number(saved.startedAt) };
   return { startedAt: focused.start.getTime() };
 }
@@ -119,7 +117,6 @@ export function createTimingRuntime({
           execution: executionProjection(sourcePlanSnapshot, currentNow, extensionAPI),
         }
         : sourcePlanSnapshot;
-      const entries = suppliedEntries === undefined ? readAllEntries() : suppliedEntries;
       const reviewTasks = planSnapshot?.reviewTasks || (planSnapshot?.plan
         ? timingCore.projectReviewTasks(
           planSnapshot.rows,
@@ -127,6 +124,15 @@ export function createTimingRuntime({
           Number(extensionAPI.settings.get('todo-duration')) || 15,
         )
         : []);
+      const relevantTaskUids = [
+        ...reviewTasks.map((task) => task.uid),
+        ...snapshot.entries
+          .filter((entry) => entry.running || snapshot.activeWork?.items?.some((item) => item.taskUid === entry.taskUid))
+          .map((entry) => entry.taskUid),
+      ];
+      const entries = suppliedEntries === undefined
+        ? readEntriesForTaskUids(relevantTaskUids)
+        : suppliedEntries;
       const dailyReview = timingCore.buildDailyReview({ tasks: reviewTasks, entries, now: currentNow });
       const recentRetention = extensionAPI.settings.get('recent-retention-minutes') ?? 45;
       const activeWork = timingCore.buildActiveWork(entries, currentNow, recentRetention);
@@ -255,28 +261,34 @@ export function createTimingRuntime({
     return entries.map((entry) => updated.get(entry.clockUid) || entry);
   };
 
-  const closeDoneClocks = async (entries = readAllEntries()) => {
+  const closeDoneClocks = async (entries) => {
     const doneRunning = entries.filter((entry) => entry.running && entry.status === 'DONE');
-    if (doneRunning.length === 0) return false;
-    await closeEntriesAt(doneRunning, now());
-    const closedUids = new Set(doneRunning.map((entry) => entry.clockUid));
-    const remainingEntries = entries.filter((entry) => !closedUids.has(entry.clockUid));
-    if (!timingCore.chooseFocusedEntry(remainingEntries)) await setPomodoro(null);
-    return true;
+    if (doneRunning.length === 0) return entries;
+    const updatedEntries = await closeEntriesAt(entries, now());
+    if (!timingCore.chooseFocusedEntry(updatedEntries)) await setPomodoro(null);
+    return updatedEntries;
   };
 
-  const reconcileLegacyOverlap = async () => {
-    const entries = readAllEntries();
+  const reconcileLegacyOverlap = async (entries) => {
     const running = entries.filter((entry) => entry.running).sort((left, right) => right.start - left.start);
-    if (running.length <= 1) return;
+    if (running.length <= 1) return entries;
     const focused = running[0];
+    const updates = new Map();
     for (const stale of running.slice(1)) {
       await updateGraphBlock(stale.clockUid, timingCore.formatClockLine(stale.start, focused.start));
+      updates.set(stale.clockUid, {
+        ...stale,
+        end: new Date(focused.start),
+        running: false,
+        minutes: Math.max(0, Math.floor((focused.start - stale.start) / 60000)),
+      });
     }
-    const remaining = readAllEntries().filter((entry) => entry.running);
+    const reconciled = entries.map((entry) => updates.get(entry.clockUid) || entry);
+    const remaining = reconciled.filter((entry) => entry.running);
     if (remaining.length !== 1 || remaining[0].clockUid !== focused.clockUid) {
       throw new Error('Legacy overlapping CLOCK records could not be reconciled.');
     }
+    return reconciled;
   };
 
   const startTask = (taskUid) => {
@@ -295,19 +307,22 @@ export function createTimingRuntime({
       if (timingCore.taskStatus(taskString) !== 'TODO') {
         throw new Error('Only an unfinished TODO can own the Timing Line.');
       }
-      const before = readAllEntries();
+      const before = snapshot.entries;
       const focused = timingCore.chooseFocusedEntry(before);
       const instant = now();
       if (focused?.taskUid === taskUid) {
         return refresh({ planSnapshot: snapshot.planSnapshot, entries: before });
       }
-      await closeEntriesAt(before, instant);
-      const created = await createRunningClock(taskUid, instant);
+      const closedEntries = await closeEntriesAt(before, instant);
+      const created = await createRunningClock(taskUid, instant, taskString);
       await setPomodoro(timingCore.nextPomodoroState(snapshot.pomodoro, {
         action: focused ? 'switch' : 'start',
         nowMs: instant.getTime(),
       }));
-      return refresh({ planSnapshot: snapshot.planSnapshot, entries: created.entries });
+      return refresh({
+        planSnapshot: snapshot.planSnapshot,
+        entries: [created.entry, ...closedEntries.filter((entry) => entry.clockUid !== created.entry.clockUid)],
+      });
     }, { deferStart: hasSidebarIntent });
   };
 
@@ -332,7 +347,7 @@ export function createTimingRuntime({
 
   const finishTask = (taskUid) => enqueue(async () => {
     const instant = now();
-    const entries = readAllEntries();
+    const entries = snapshot.entries;
     const ownedRunning = entries.filter((entry) => entry.running && entry.taskUid === taskUid);
     await closeEntriesAt(ownedRunning, instant);
     await completeTask(taskUid);
@@ -341,7 +356,7 @@ export function createTimingRuntime({
   });
 
   const deleteCurrentClock = (taskUid) => enqueue(async () => {
-    const focused = timingCore.chooseFocusedEntry(readAllEntries());
+    const focused = timingCore.chooseFocusedEntry(snapshot.entries);
     if (!focused || focused.taskUid !== taskUid) {
       throw new Error('Only the current Timing CLOCK can be deleted.');
     }
@@ -356,9 +371,13 @@ export function createTimingRuntime({
       showToast(message, 'danger');
       throw new Error(message);
     }
-    await reconcileLegacyOverlap();
-    await closeDoneClocks();
-    refresh();
+    let initialEntries = readAllEntries();
+    initialEntries = await reconcileLegacyOverlap(initialEntries);
+    initialEntries = await closeDoneClocks(initialEntries);
+    refresh({ entries: initialEntries });
+    if (!snapshot.activeWork.focused && extensionAPI.settings.get(POMODORO_STATE_KEY)) {
+      await setPomodoro(null);
+    }
     if (extensionAPI.settings.get('timing-line-sidebar') !== false) {
       cancelSidebarWarmup = scheduleMutationStart(() => {
         cancelSidebarWarmup = null;
@@ -374,8 +393,8 @@ export function createTimingRuntime({
         void requestRefresh().then((next) => {
           if (next.entries.some((entry) => entry.running && entry.status === 'DONE')) {
             enqueue(async () => {
-              await closeDoneClocks(next.entries);
-              return refresh();
+              const entries = await closeDoneClocks(next.entries);
+              return refresh({ entries });
             }).catch((error) => console.error('[Nautilus Log] DONE clock reconciliation failed', error));
           }
         });
@@ -387,7 +406,7 @@ export function createTimingRuntime({
   };
 
   const disable = () => enqueue(async () => {
-    const entries = readAllEntries();
+    const entries = snapshot.entries;
     await closeEntriesAt(entries, now());
     await setPomodoro(null);
     refresh();

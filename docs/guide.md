@@ -16,7 +16,7 @@ Their Roam block order is the task priority.
 
 - A time range is a fixed event.
 - An unfinished TODO is a flexible task.
-- Durations use minutes: `30m`, `90m`, or `30min`.
+- Durations support `30m`, `30min`, `1h`, and `1h30m`.
 - Untimed tasks use **Default Todo Duration**.
 - **Urgent Trigger Word** changes a task's color, not its scheduling order.
 
@@ -56,6 +56,16 @@ small flame marks whether the current minute is consuming Available or Event tim
 - Hatched past slice: elapsed time without a recorded item
 
 Past gaps are factual schedule data, not a judgment that time was wasted.
+
+## Chart controls
+
+- **Eye:** show or hide completed items.
+- **Play:** replay the configured day without changing Roam blocks.
+- **Collapse:** hide this chart instance while keeping its plan blocks visible.
+
+Hover or keyboard-focus a task/event slice to see its exact range and duration.
+Future blank slots show the same preview on wide charts. Compact sidebar charts omit
+hover tooltips and keep the Schedule section folded to avoid clipping and visual noise.
 
 ## Execution Layer
 
@@ -144,5 +154,6 @@ Actual time is stored as compatible Org-style graph data:
 Disable the separate Roam Logbook extension before enabling Actual Time Tracking;
 Nautilus Log refuses to start a second CLOCK writer. Multiple charts may exist on a
 page, but only the first chart on today's Daily Note becomes the execution panel's
-Primary Plan. Sidebar, breadcrumb, and collapsed replicas skip expensive chart
-rendering. Unloading the extension does not rewrite or delete user blocks.
+Primary Plan. Breadcrumb and collapsed-path replicas skip expensive chart rendering;
+right-sidebar views use the compact chart with a folded Schedule section. Unloading
+the extension does not rewrite or delete user blocks.

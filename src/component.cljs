@@ -305,13 +305,13 @@
         (js->clj (.call function nil (clj->js value)) :keywordize-keys true)))
     (catch :default _e nil)))
 
-(defn clock-render-context [page-title]
+(defn clock-render-context [page-title task-uids]
   "Reads one cached CLOCK snapshot for the displayed daily page. The entry
    bridge owns graph access so rendering multiple tasks does not repeat the
    global LOGBOOK query."
   (try
     (if-let [reader (some-> js/window .-nautilusLogExtensionData .-getClockRenderContext)]
-      (js->clj (.call reader nil page-title) :keywordize-keys true)
+      (js->clj (.call reader nil page-title (clj->js task-uids)) :keywordize-keys true)
       {:entries []})
     (catch :default _e {:entries []})))
 
@@ -542,35 +542,23 @@
         [h m] [(mod new-hours 24) (mod new-mins 60)]]
     [(+ m (* 60 h)) (or am? pm?)]))
 
-(defn parse-time-range [s]
-  (let [range-format #"(?:\d{1,2}(?::\d{1,2})?(?:\s*(?:\s?AM|\s?PM|\s?am|\s?pm))?)\s*(?:-|–|až|to)\s*(?:\d{1,2}(?::\d{1,2})?(?:\s*(?:\s?AM|\s?PM|\s?am|\s?pm))?)"
-        range-str (re-find range-format s)]
-    (if range-str
-      (let [cleaned-str (-> (str/replace s range-str "")
-                            (str/replace #"\s\s" " "))
-            [_ from-str to-str] (re-find #"(.*)(?:-|–|až|to)(.*)" range-str)
-            [to-min h12] (from-1224->min to-str nil)
-            [from-min _] (from-1224->min from-str h12)]
-        {:range (cond
-                  (> to-min from-min) [from-min to-min]
-                  (= to-min 0) [from-min 1440]
-                  (< to-min from-min) [from-min 1440]
-                  :else [from-min from-min])
-         :warning (cond
-                    (and (< to-min from-min) (not= to-min 0)) "跨日事件仅显示至 24:00"
-                    (= to-min from-min) "开始时间与结束时间不能相同"
-                    :else nil)
-         :cleaned-str cleaned-str})
-      {:range nil :warning nil :cleaned-str s})))
+(defn parse-time-range [s settings]
+  (if-let [parsed (log-core-call "parseTimeRangeToken" {:text s})]
+    (let [warnings (:warnings (log-core-call "uiCopy" (:language settings)))
+          warning (case (:warningCode parsed)
+                    "overnight" (:overnight warnings)
+                    "sameTime" (:sameTime warnings)
+                    nil)]
+      {:range [(:start parsed) (:end parsed)]
+       :warning warning
+       :cleaned-str (:cleanedText parsed)})
+    {:range nil :warning nil :cleaned-str s}))
 
 (defn parse-duration [s settings]
-  (let [duration-format #"(\d{1,3})(min|m)"]
-    (if-let [duration-match (re-find duration-format s)]
-      (let [duration-str (first duration-match)
-            cleaned-str (str/replace s duration-str "")]
-        {:duration (int (second duration-match))
-         :cleaned-str cleaned-str})
-      {:duration (:default-duration settings) :cleaned-str s})))
+  (if-let [parsed (log-core-call "parseDurationToken"
+                                 {:text s :fallback (:default-duration settings)})]
+    {:duration (:minutes parsed) :cleaned-str (:cleanedText parsed)}
+    {:duration (:default-duration settings) :cleaned-str s}))
 
 (defn parse-progress [s]
   (let [progress-format #"(\sd)(\d{1,3})(\%)"]
@@ -649,7 +637,7 @@
   (let [s (:s block-map)
         cleaned-str (parse-URLs s) ;; remove URLs – it has to start with this, because URLs can contain other markers
         {:keys [custom-color cleaned-str]} (parse-custom-color-1 cleaned-str settings)
-        {:keys [range warning cleaned-str]} (parse-time-range cleaned-str)
+        {:keys [range warning cleaned-str]} (parse-time-range cleaned-str settings)
         {:keys [duration cleaned-str]} (parse-duration cleaned-str settings)
         {:keys [progress cleaned-str]} (parse-progress cleaned-str)
         {:keys [done-at cleaned-str]} (parse-done-time cleaned-str)
@@ -1721,9 +1709,15 @@
                resize-observer-state (atom nil)
                container-ref (fn [node]
                                (observe-compact-width! node compact-state hover-info-state resize-observer-state))
-               clock-interval (js/setInterval #(when-not @playback-state-atom
-                                                 (reset-now-time-atom now-time-atom)) 60000)
                daily-page-atom? (r/atom (daily-page? block-uid))
+               clock-interval (js/setInterval
+                               (fn []
+                                 (when-not @playback-state-atom
+                                   (reset-now-time-atom now-time-atom))
+                                 (let [next-daily-page-state (daily-page? block-uid)]
+                                   (when (not= @daily-page-atom? next-daily-page-state)
+                                     (reset! daily-page-atom? next-daily-page-state))))
+                               60000)
                page-title-val (page-title block-uid)
                *get-children-atom (get-children-pull block-uid)
                *children (r/track eval-state *get-children-atom)
@@ -1734,7 +1728,7 @@
                                                         (filter #(not= "" (:block/string %)))
                                                         (sort-by :block/order))
                                      mapped (mapv #(hash-map :s (str-with-resolved-block-refs %) :uid (:block/uid %)) children-list)
-                                     clock-context (clock-render-context page-title-val)
+                                     clock-context (clock-render-context page-title-val (mapv :uid mapped))
                                      parsed (mapv #(parse-row-params % settings clock-context) mapped)
                                      filtered (filterv #(not= "" (:description %)) parsed)]
                                  (let [dones (filterv #(or (:done-at %) (and (:meeting %) (:done %))) filtered)

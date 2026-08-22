@@ -9,6 +9,8 @@
 
 const START_HOURS = Object.freeze([5, 6, 7, 8]);
 const END_HOURS = Object.freeze([18, 19, 20, 21, 22, 23, 24]);
+const DURATION_TOKEN_RE = /(?:^|\s)(\d+h(?:\d+(?:min|m))?|\d+(?:min|m))(?=\s|$)/i;
+const TIME_RANGE_TOKEN_RE = /(?:^|\s)(\d{1,2}(?::\d{1,2})?(?:\s*(?:am|pm))?\s*(?:-|–|až|to)\s*\d{1,2}(?::\d{1,2})?(?:\s*(?:am|pm))?)(?=\s|$)/i;
 
 function asNumber(value) {
   if (value === '' || value === null || value === undefined) return NaN;
@@ -26,6 +28,69 @@ function asTimestamp(value) {
   if (typeof value !== 'string') return NaN;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : NaN;
+}
+
+function cleanParsedText(text, token) {
+  if (!token) return String(text ?? '');
+  return String(text ?? '').replace(token, '').replace(/\s+/g, ' ').trim();
+}
+
+function parseDurationToken({ text = '', fallback = 15 } = {}) {
+  const source = String(text ?? '');
+  const match = DURATION_TOKEN_RE.exec(source);
+  if (!match) {
+    return {
+      minutes: Math.max(0, Math.round(asNumber(fallback) || 0)),
+      token: '',
+      cleanedText: source,
+    };
+  }
+  const token = match[1];
+  const hours = Number(/(\d+)h/i.exec(token)?.[1] || 0);
+  const minutes = Number(/(\d+)(?:min|m)/i.exec(token)?.[1] || 0);
+  return {
+    minutes: hours * 60 + minutes,
+    token,
+    cleanedText: cleanParsedText(source, token),
+  };
+}
+
+function clockTokenMinutes(value, inheritedPeriod = null) {
+  const match = /^\s*(\d{1,2})(?::(\d{1,2}))?\s*(am|pm)?\s*$/i.exec(String(value ?? ''));
+  if (!match) return null;
+  let hour = Number(match[1]);
+  const minute = Number(match[2] || 0);
+  const explicitPeriod = match[3]?.toLowerCase() || null;
+  const period = explicitPeriod || inheritedPeriod;
+  if (minute > 59) return null;
+  if (period) {
+    if (hour < 1 || hour > 12) return null;
+    hour = hour % 12 + (period === 'pm' ? 12 : 0);
+  } else if (hour > 23) return null;
+  return { minutes: hour * 60 + minute, explicitPeriod };
+}
+
+function parseTimeRangeToken({ text = '' } = {}) {
+  const source = String(text ?? '');
+  const token = TIME_RANGE_TOKEN_RE.exec(source)?.[1];
+  if (!token) return null;
+  const parts = token.split(/\s*(?:-|–|až|to)\s*/i);
+  if (parts.length !== 2) return null;
+  const end = clockTokenMinutes(parts[1]);
+  const start = clockTokenMinutes(parts[0], end?.explicitPeriod || null);
+  if (!start || !end) return null;
+  const warningCode = end.minutes < start.minutes && end.minutes !== 0
+    ? 'overnight'
+    : end.minutes === start.minutes ? 'sameTime' : '';
+  return {
+    start: start.minutes,
+    end: end.minutes > start.minutes
+      ? end.minutes
+      : (end.minutes === start.minutes ? start.minutes : 1440),
+    token,
+    cleanedText: cleanParsedText(source, token),
+    warningCode,
+  };
 }
 
 function normalizeHour(value, options, fallback) {
@@ -1199,6 +1264,8 @@ module.exports = {
   START_HOURS,
   END_HOURS,
   normalizeScheduleSettings,
+  parseDurationToken,
+  parseTimeRangeToken,
   resolveRendererSettings,
   hourlyGridSegments,
   pastTimelineSegments,

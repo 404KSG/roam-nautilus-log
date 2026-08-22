@@ -6,12 +6,64 @@
  * Plan selection, and duration labels cannot drift apart.
  */
 
+const logCore = require('./log-core');
+
 const TODO_RE = /\{\{\[\[(TODO|DONE)\]\]\}\}|\{\{(TODO|DONE)\}\}/i;
 const CLOCK_RE = /^\s*:?CLOCK:{1,2}\s*\[([^\]]+)\](?:\s*--\s*\[([^\]]+)\])?(?:\s*=>\s*(\d+:[0-5]\d))?\s*$/i;
-const TIME_RANGE_RE = /(?:^|\s)\d{1,2}(?::\d{1,2})?(?:\s*(?:am|pm))?\s*(?:-|–|až|to)\s*\d{1,2}(?::\d{1,2})?(?:\s*(?:am|pm))?(?=\s|$)/i;
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const ACTIVE_WORK_WINDOW_MINUTES = 45;
 const FORGOTTEN_CLOCK_MINUTES = 120;
+
+const EXECUTION_COPY = Object.freeze({
+  en: {
+    tabs: { timing: 'Timing', plan: 'Plan', review: 'Review' },
+    identity: { locate: 'Locate Primary Nautilus', views: 'Nautilus execution views', panel: 'Nautilus Log execution panel' },
+    actions: {
+      clockIn: 'Clock In', clockOut: 'Clock Out', complete: 'Complete task', deleteClock: 'Delete current CLOCK',
+      confirmDelete: 'Click again to delete current CLOCK', openPanel: 'Open Nautilus Log execution panel',
+    },
+    capacity: { label: 'Today capacity', available: 'Available', remaining: 'Remaining', overload: 'Overload', noSlot: 'No fitting slot' },
+    plan: { scheduled: 'Scheduled today', unscheduled: 'Unscheduled today', today: 'Today' },
+    timing: { timing: 'Timing', actual: 'Actual', planned: 'Planned', remaining: 'Remaining', recent: 'Recent', left: 'left', check: 'Check CLOCK' },
+    review: {
+      summary: 'Today review summary', completed: 'Completed', compared: 'Compared', actual: 'Actual',
+      planned: 'Planned', variance: 'Variance', live: 'Live', paused: 'Paused', notTracked: 'Not tracked', notStarted: 'Not started',
+    },
+    empty: {
+      noActive: 'No active work. Open Plan to start a task.',
+      noLog: 'No Nautilus Log was found on today’s Daily Note.',
+      noPlanTasks: 'The Primary Plan has no unfinished direct-child tasks.',
+      noReviewTasks: 'The Primary Plan has no direct-child tasks to review.',
+    },
+    trigger: { thread: 'Thread', threads: 'Threads', check: 'Check CLOCK' },
+  },
+  zh: {
+    tabs: { timing: '计时', plan: '计划', review: '复盘' },
+    identity: { locate: '定位主 Nautilus', views: 'Nautilus 执行视图', panel: 'Nautilus Log 执行面板' },
+    actions: {
+      clockIn: '开始计时', clockOut: '结束计时', complete: '完成任务', deleteClock: '删除当前 CLOCK',
+      confirmDelete: '再次点击以删除当前 CLOCK', openPanel: '打开 Nautilus Log 执行面板',
+    },
+    capacity: { label: '今日容量', available: '可安排', remaining: '余量', overload: '超载', noSlot: '没有连续空档' },
+    plan: { scheduled: '今日已安排', unscheduled: '今日未排入', today: '今天' },
+    timing: { timing: '计时', actual: '实际', planned: '预计', remaining: '剩余', recent: '最近', left: '后移出', check: '检查 CLOCK' },
+    review: {
+      summary: '今日复盘摘要', completed: '已完成', compared: '已对比', actual: '实际',
+      planned: '预计', variance: '偏差', live: '进行中', paused: '已暂停', notTracked: '未计时', notStarted: '未开始',
+    },
+    empty: {
+      noActive: '当前没有计时任务。打开“计划”开始一项任务。',
+      noLog: '今天的 Daily Note 中没有找到 Nautilus Log。',
+      noPlanTasks: '主计划中没有未完成的直接子任务。',
+      noReviewTasks: '主计划中没有可复盘的直接子任务。',
+    },
+    trigger: { thread: '项任务', threads: '项任务', check: '检查 CLOCK' },
+  },
+});
+
+function executionCopy(language = 'en') {
+  return language === 'zh' ? EXECUTION_COPY.zh : EXECUTION_COPY.en;
+}
 
 const pad = (value) => String(value).padStart(2, '0');
 const asTime = (value) => {
@@ -89,25 +141,21 @@ function taskStatus(string) {
 
 function taskTitle(string) {
   if (typeof string !== 'string') return '(untitled)';
-  const cleaned = string
+  const withoutMarkup = string
     .replace(TODO_RE, '')
     .replace(/\{\{\[\[?[^}]*\}\}/g, '')
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/#?\[\[([^\]]+)\]\]/g, '$1')
     .replace(/\(\([a-zA-Z0-9_-]{6,}\)\)/g, '')
-    .replace(/\s+d\d{1,3}%/gi, '')
-    .replace(/\s+(?:\d+h)?\d+m\s*$/i, '')
+    .replace(/\s+d\d{1,3}%/gi, '');
+  const cleaned = logCore.parseDurationToken({ text: withoutMarkup, fallback: 0 }).cleanedText
     .replace(/\s+/g, ' ')
     .trim();
   return cleaned || '(untitled)';
 }
 
 function plannedMinutes(string, fallback = 15) {
-  if (typeof string !== 'string') return fallback;
-  const compact = string.match(/(?:^|\s)(?:(\d+)h)?(?:(\d+)m)(?=\s|$)/i);
-  if (compact) return Number(compact[1] || 0) * 60 + Number(compact[2] || 0);
-  const hours = string.match(/(?:^|\s)(\d+)h(?=\s|$)/i);
-  return hours ? Number(hours[1]) * 60 : fallback;
+  return logCore.parseDurationToken({ text: string, fallback }).minutes;
 }
 
 function taskProgress(string) {
@@ -116,43 +164,17 @@ function taskProgress(string) {
   return match ? Math.min(100, Number(match[1]) || 0) : 0;
 }
 
-function clockMinutes(value, inheritedPeriod = null) {
-  if (typeof value !== 'string') return null;
-  const match = /^\s*(\d{1,2})(?::(\d{1,2}))?\s*(am|pm)?\s*$/i.exec(value);
-  if (!match) return null;
-  let hour = Number(match[1]);
-  const minute = Number(match[2] || 0);
-  const explicitPeriod = match[3]?.toLowerCase() || null;
-  const period = explicitPeriod || inheritedPeriod;
-  if (minute < 0 || minute > 59) return null;
-  if (period) {
-    if (hour < 1 || hour > 12) return null;
-    hour = hour % 12 + (period === 'pm' ? 12 : 0);
-  } else if (hour < 0 || hour > 23) {
-    return null;
-  }
-  return { minutes: hour * 60 + minute, explicitPeriod };
-}
-
 function parseTimeRangeMinutes(string) {
-  if (typeof string !== 'string') return null;
-  const rangeText = string.match(TIME_RANGE_RE)?.[0];
-  if (!rangeText) return null;
-  const parts = rangeText.split(/\s*(?:-|–|až|to)\s*/i);
-  if (parts.length !== 2) return null;
-  const end = clockMinutes(parts[1]);
-  const start = clockMinutes(parts[0], end?.explicitPeriod || null);
-  if (!start || !end) return null;
-  const endMinutes = end.minutes > start.minutes
-    ? end.minutes
-    : (end.minutes === 0 || end.minutes < start.minutes ? 1440 : end.minutes);
+  const parsed = logCore.parseTimeRangeToken({ text: string });
+  if (!parsed) return null;
   return {
-    start: start.minutes,
-    end: endMinutes,
-    text: rangeText,
-    warning: end.minutes < start.minutes && end.minutes !== 0
+    start: parsed.start,
+    end: parsed.end,
+    text: parsed.token,
+    warning: parsed.warningCode === 'overnight'
       ? 'Overnight events display only through 24:00'
-      : (end.minutes === start.minutes ? 'Start and end times cannot be the same' : ''),
+      : (parsed.warningCode === 'sameTime' ? 'Start and end times cannot be the same' : ''),
+    warningCode: parsed.warningCode,
   };
 }
 
@@ -192,7 +214,7 @@ function selectPrimaryPlan(rows = [], pageUid, matcher = isNautilusComponent) {
 
 function projectDirectTasks(rows = [], planUid, fallbackMinutes = 15) {
   return (Array.isArray(rows) ? rows : [])
-    .filter((row) => row?.parentUid === planUid && taskStatus(row.string) && !TIME_RANGE_RE.test(row.string))
+    .filter((row) => row?.parentUid === planUid && taskStatus(row.string) && !parseTimeRangeMinutes(row.string))
     .sort(compareTreeOrder)
     .map((row) => {
       const planned = plannedMinutes(row.string, fallbackMinutes);
@@ -368,14 +390,15 @@ function compactMinutes(minutes) {
   return rest ? `${hours}h${rest}m` : `${hours}h`;
 }
 
-function durationMetadata({ taskUid, plannedMinutes: planned = 15, entries = [], now = new Date() } = {}) {
+function durationMetadata({ taskUid, plannedMinutes: planned = 15, entries = [], now = new Date(), language = 'en' } = {}) {
   const actual = actualMinutesToday(taskUid, entries, now);
   const normalizedPlanned = Math.max(0, Number(planned) || 0);
+  const copy = executionCopy(language).timing;
   return {
-    primaryLabel: actual > 0 ? `Actual ${compactMinutes(actual)}` : `Planned ${compactMinutes(normalizedPlanned)}`,
+    primaryLabel: actual > 0 ? `${copy.actual} ${compactMinutes(actual)}` : `${copy.planned} ${compactMinutes(normalizedPlanned)}`,
     detailLabel: actual > 0
-      ? `Actual ${compactMinutes(actual)} · Planned ${compactMinutes(normalizedPlanned)}`
-      : `Planned ${compactMinutes(normalizedPlanned)}`,
+      ? `${copy.actual} ${compactMinutes(actual)} · ${copy.planned} ${compactMinutes(normalizedPlanned)}`
+      : `${copy.planned} ${compactMinutes(normalizedPlanned)}`,
     actualMinutes: actual,
     plannedMinutes: normalizedPlanned,
   };
@@ -442,6 +465,7 @@ module.exports = {
   chooseFocusedEntry,
   compactMinutes,
   durationMetadata,
+  executionCopy,
   executionStructureKey,
   formatClockLine,
   formatElapsed,

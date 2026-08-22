@@ -41,6 +41,19 @@ const ENTRIES_QUERY = `[:find ?clock-uid ?clock-string ?drawer-string ?task-uid 
   [(get-else $ ?t :block/page "") ?p]
   [(get-else $ ?p :node/title "") ?page-title]]`;
 
+const TASK_ENTRIES_QUERY = `[:find ?clock-uid ?clock-string ?drawer-string ?task-uid ?task-string ?page-title
+  :in $ [?task-uid ...] [?drawer-string ...]
+  :where
+  [?t :block/uid ?task-uid]
+  [?t :block/children ?d]
+  [?d :block/string ?drawer-string]
+  [?d :block/children ?c]
+  [?c :block/uid ?clock-uid]
+  [?c :block/string ?clock-string]
+  [(get-else $ ?t :block/string "") ?task-string]
+  [(get-else $ ?t :block/page "") ?p]
+  [(get-else $ ?p :node/title "") ?page-title]]`;
+
 function api() {
   return typeof window !== 'undefined' ? window.roamAlphaAPI : null;
 }
@@ -201,8 +214,8 @@ export function readPrimaryPlan(date = new Date(), fallbackMinutes = 15) {
   };
 }
 
-export function readAllEntries() {
-  return query(ENTRIES_QUERY, DRAWER_QUERY_STRINGS)
+function normalizeEntryRows(rows) {
+  return rows
     .map(([clockUid, clockString, drawerString, taskUid, taskString, pageTitle]) => {
       if (!DRAWER_RE.test(String(drawerString || ''))) return null;
       const parsed = timingCore.parseClockLine(clockString);
@@ -219,6 +232,16 @@ export function readAllEntries() {
     })
     .filter(Boolean)
     .sort((left, right) => right.start.getTime() - left.start.getTime());
+}
+
+export function readAllEntries() {
+  return normalizeEntryRows(query(ENTRIES_QUERY, DRAWER_QUERY_STRINGS));
+}
+
+export function readEntriesForTaskUids(taskUids = []) {
+  const uids = [...new Set((Array.isArray(taskUids) ? taskUids : []).filter(Boolean))];
+  if (uids.length === 0) return [];
+  return normalizeEntryRows(query(TASK_ENTRIES_QUERY, uids, DRAWER_QUERY_STRINGS));
 }
 
 export function readBlockString(uid) {
@@ -294,7 +317,7 @@ export async function ensureDrawer(taskUid) {
   return uid;
 }
 
-export async function createRunningClock(taskUid, now) {
+export async function createRunningClock(taskUid, now, knownTaskString = '') {
   const drawerUid = await ensureDrawer(taskUid);
   const clockUid = await createGraphBlock({
     parentUid: drawerUid,
@@ -302,10 +325,20 @@ export async function createRunningClock(taskUid, now) {
     string: timingCore.formatClockLine(now),
     open: false,
   });
-  const entries = readAllEntries();
-  const confirmed = entries.find((entry) => entry.clockUid === clockUid && entry.running);
-  if (!confirmed) throw new Error('Clock In could not be confirmed.');
-  return { entry: confirmed, entries };
+  const parsed = timingCore.parseClockLine(readBlockString(clockUid));
+  if (!parsed?.running) throw new Error('Clock In could not be confirmed.');
+  const taskString = knownTaskString || readBlockString(taskUid) || '';
+  return {
+    entry: {
+      ...parsed,
+      clockUid,
+      taskUid,
+      taskString,
+      title: timingCore.taskTitle(taskString),
+      status: timingCore.taskStatus(taskString),
+      pageTitle: '',
+    },
+  };
 }
 
 export async function closeClock(entry, now) {

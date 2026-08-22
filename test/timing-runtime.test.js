@@ -3,12 +3,16 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-function graphMock({ trace = [] } = {}) {
+function graphMock({
+  trace = [],
+  taskAString = '{{[[TODO]]}} Alpha 30m',
+  taskBString = '{{[[TODO]]}} Beta 45m',
+} = {}) {
   let generated = 0;
   const blocks = new Map([
     ['plan', { uid: 'plan', string: '[[Nautilus Log]] {{[[roam/render]]:((roam-render-Nautilus-Log-cljs))}}', parentUid: 'page', order: 0 }],
-    ['task-a', { uid: 'task-a', string: '{{[[TODO]]}} Alpha 30m', parentUid: 'plan', order: 0 }],
-    ['task-b', { uid: 'task-b', string: '{{[[TODO]]}} Beta 45m', parentUid: 'plan', order: 1 }],
+    ['task-a', { uid: 'task-a', string: taskAString, parentUid: 'plan', order: 0 }],
+    ['task-b', { uid: 'task-b', string: taskBString, parentUid: 'plan', order: 1 }],
     ['event', { uid: 'event', string: '11:00-12:00 Fixed event', parentUid: 'plan', order: 2 }],
   ]);
 
@@ -23,6 +27,19 @@ function graphMock({ trace = [] } = {}) {
         .filter((block) => ['plan', 'task-a', 'task-b', 'event'].includes(block.uid))
         .map((block) => [['page', block.uid, block.string, block.order, block.parentUid]])
         .flat();
+    }
+    if (query.includes('?clock-uid ?clock-string') && query.includes('[?task-uid ...]')) {
+      trace.push('query:scoped-entries');
+      const requested = new Set(args[0] || []);
+      const rows = [];
+      for (const clock of blocks.values()) {
+        if (!/^CLOCK:/.test(clock.string)) continue;
+        const drawer = blocks.get(clock.parentUid);
+        const task = blocks.get(drawer.parentUid);
+        if (!requested.has(task.uid)) continue;
+        rows.push([clock.uid, clock.string, drawer.string, task.uid, task.string, 'August 22nd, 2026']);
+      }
+      return rows;
     }
     if (query.includes('?clock-uid ?clock-string')) {
       trace.push('query:entries');
@@ -77,6 +94,49 @@ function graphMock({ trace = [] } = {}) {
 
   return { roam, blocks, trace };
 }
+
+test('execution capacity applies task progress exactly once', async (t) => {
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#progress-${Date.now()}`;
+  const extension = await import(moduleUrl);
+  const { roam } = graphMock({
+    taskAString: '{{[[TODO]]}} Alpha 60m d50%',
+    taskBString: '{{[[DONE]]}} Beta 45m',
+  });
+  const settings = new Map([
+    ['todo-duration', 15],
+    ['workday-start', 5],
+    ['workday-end', 21],
+    ['timing-line-sidebar', false],
+    ['recent-retention-minutes', 45],
+  ]);
+  global.window = {
+    roamAlphaAPI: roam,
+    setInterval: () => 99,
+    clearInterval: () => {},
+    setTimeout,
+    clearTimeout,
+  };
+  const extensionAPI = {
+    settings: {
+      get: (key) => settings.get(key),
+      set: async (key, value) => settings.set(key, value),
+    },
+  };
+
+  const runtime = extension.createTimingRuntime({
+    extensionAPI,
+    now: () => new Date(2026, 7, 22, 10, 0),
+  });
+  await runtime.initialize();
+  t.after(() => {
+    runtime.destroy();
+    delete global.window;
+  });
+
+  assert.equal(runtime.getSnapshot().planSnapshot.execution.demandMinutes, 30);
+  assert.equal(runtime.getSnapshot().planSnapshot.execution.scheduledTasks[0].duration, 30);
+});
 
 test('runtime serializes close-before-switch and close-before-complete', async (t) => {
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
@@ -149,6 +209,10 @@ test('runtime serializes close-before-switch and close-before-complete', async (
     runtime.getSnapshot().dailyReview.rows.map(({ uid, state }) => [uid, state]),
     [['task-a', 'not-started'], ['task-b', 'not-started']],
   );
+  trace.length = 0;
+  runtime.refresh();
+  assert.equal(trace.filter((entry) => entry === 'query:entries').length, 0);
+  assert.equal(trace.filter((entry) => entry === 'query:scoped-entries').length, 1);
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(trace.includes('sidebar:getWindows'), true, 'startup should warm the sidebar cache read-only');
   assert.equal(trace.includes('sidebar:open'), false, 'cache warmup must not open the sidebar');
@@ -184,8 +248,8 @@ test('runtime serializes close-before-switch and close-before-complete', async (
   );
   assert.equal(
     trace.filter((entry) => entry === 'query:entries').length,
-    2,
-    'Clock In should reuse its confirmation snapshot instead of issuing a third CLOCK query',
+    0,
+    'Clock In should mutate the cached CLOCK set and confirm only the created block',
   );
   assert.deepEqual(sidebarWindows, [{ type: 'block', 'block-uid': 'task-a', order: 0 }]);
   const firstClock = [...blocks.values()].find((block) => block.parentUid.startsWith('clock-') && /^CLOCK:/.test(block.string));
@@ -199,8 +263,8 @@ test('runtime serializes close-before-switch and close-before-complete', async (
   await runtime.startTask('task-b');
   assert.equal(
     trace.filter((entry) => entry === 'query:entries').length,
-    2,
-    'a focus switch should scan all CLOCK entries only for preflight and final creation confirmation',
+    0,
+    'a focus switch should not scan unrelated LOGBOOK history',
   );
   assert.match(firstClock.uid && blocks.get(firstClock.uid).string, /--\[2026-08-22 Sat 10:10\] => 0:10$/);
   const running = [...blocks.values()].filter((block) => /^CLOCK:/.test(block.string) && !block.string.includes('--'));

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — Nautilus Log v1
+## 1.0.0 — 2026-08-22
 
 ### Added
 
@@ -61,6 +61,20 @@
 
 ### Fixed
 
+- Planned progress is now applied exactly once in both the spiral and Execution
+  Layer, so a `60m d50%` task consistently occupies 30 minutes.
+- The renderer and Execution Layer now share one tested parser for `30m`, `30min`,
+  `1h`, `1h30m`, and fixed time ranges, including localized warning codes.
+- Routine CLOCK refreshes now query only Primary Plan, focused, and Recent task UIDs;
+  the full LOGBOOK scan is reserved for startup compatibility reconciliation.
+- Clock In and task switching mutate cached CLOCK state and confirm only the changed
+  block instead of scanning unrelated graph history.
+- Pomodoro restoration no longer performs an unawaited settings write, eliminating
+  stale-clear races during rapid task changes.
+- Mounted charts recompute whether they represent today's Daily Note after midnight.
+- The Execution Layer now follows the English/Chinese language setting, including
+  tabs, capacity, task metadata, Review states, controls, and accessibility labels.
+
 - Wide-layout timeline tooltips now anchor outside the spiral, measure before
   appearing, escape chart clipping through a body-level portal, and flip or
   shift within the browser viewport; compact layouts mount no hover surface.
@@ -83,7 +97,8 @@
 - Flexible task titles and connector lines now use one semantic blue while
   adjacent task slices retain their subtle fill variations.
 - Unload no longer rewrites or deletes graph content.
-- Right-sidebar renders avoid chart work and reserve no visible space.
+- Right-sidebar renders use a compact chart with folded schedule details; breadcrumb
+  and collapsed-path replicas avoid chart work and reserve no visible space.
 - Template and code scaffolding updates are idempotent and Log-only.
 - Render scaffolding is created sequentially so delayed Roam writes cannot race
   ahead of their parent blocks.

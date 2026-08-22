@@ -11,9 +11,9 @@
   "license": "MIT",
   "author": "404KSG",
   "devDependencies": {
-    "css-loader": "^6.7.3",
+    "css-loader": "^6.11.0",
     "text-loader": "^0.0.1",
-    "webpack": "^5.89.0",
+    "webpack": "^5.109.2",
     "webpack-cli": "^4.10.0"
   }
 }

@@ -42,6 +42,24 @@ test('Plan is a flat ordered projection of unfinished direct children', () => {
   );
 });
 
+test('execution projections share the renderer duration syntax', () => {
+  assert.equal(timing.plannedMinutes('{{[[TODO]]}} A 30m'), 30);
+  assert.equal(timing.plannedMinutes('{{[[TODO]]}} B 30min'), 30);
+  assert.equal(timing.plannedMinutes('{{[[TODO]]}} C 1h'), 60);
+  assert.equal(timing.plannedMinutes('{{[[TODO]]}} D 1h30m'), 90);
+
+  const rows = [
+    ['a', '{{[[TODO]]}} Alpha 30m'],
+    ['b', '{{[[TODO]]}} Beta 30min'],
+    ['c', '{{[[TODO]]}} Gamma 1h'],
+    ['d', '{{[[TODO]]}} Delta 1h30m'],
+  ].map(([uid, string], order) => ({ uid, parentUid: 'plan', order, string }));
+  assert.deepEqual(
+    timing.projectPlan(rows, 'plan').map(({ title }) => title),
+    ['Alpha', 'Beta', 'Gamma', 'Delta'],
+  );
+});
+
 test('Plan projection preserves progress and fixed-event ranges for the shared scheduler', () => {
   const rows = [
     { uid: 'morning', parentUid: 'plan', order: 0, string: '05:00-06:00 Morning routine' },
@@ -251,4 +269,11 @@ test('execution surface structure ignores one-second ticks but detects real row 
     timing.executionStructureKey({ ...base, revision: 4 }, 'plan'),
     timing.executionStructureKey({ ...base, revision: 5 }, 'plan'),
   );
+});
+
+test('execution surface copy follows the extension language', () => {
+  assert.equal(timing.executionCopy('en').tabs.plan, 'Plan');
+  assert.equal(timing.executionCopy('zh').tabs.plan, '计划');
+  assert.equal(timing.executionCopy('zh').capacity.available, '可安排');
+  assert.equal(timing.executionCopy('en').empty.noActive, 'No active work. Open Plan to start a task.');
 });

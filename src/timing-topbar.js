@@ -61,14 +61,17 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
   let triggerMode = null;
   let deleteConfirmation = null;
   let unscheduledExpanded = false;
+  let settingsListener = null;
+
+  const ui = () => timingCore.executionCopy(extensionAPI.settings.get('language') || 'en');
 
   const clearDeleteConfirmation = () => {
     if (!deleteConfirmation) return;
     window.clearTimeout(deleteConfirmation.timer);
     const button = deleteConfirmation.button;
     button?.classList.remove('is-confirming');
-    button?.setAttribute('aria-label', 'Delete current CLOCK');
-    if (button) button.title = 'Delete current CLOCK';
+    button?.setAttribute('aria-label', ui().actions.deleteClock);
+    if (button) button.title = ui().actions.deleteClock;
     deleteConfirmation = null;
   };
 
@@ -106,6 +109,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     planStart = null,
     planEnd = null,
   } = {}) => {
+    const text = ui();
     const row = element('div', 'nautilus-log-timing__row');
     row.dataset.taskUid = task.uid;
     if (planState) row.classList.add(`is-${planState}`);
@@ -129,26 +133,27 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       plannedMinutes: task.plannedMinutes,
       entries: state.entries,
       now: state.now,
+      language: extensionAPI.settings.get('language') || 'en',
     });
     const recentRemaining = recent && entry?.end
       ? Math.max(0, Math.ceil((Number(state.activeWork?.windowMinutes || 0) * 60000 - (state.now - entry.end)) / 60000))
       : null;
     const timingText = focused
-      ? `Timing ${timingCore.formatElapsed(state.now - state.activeWork.focused.start)} · ${duration.detailLabel}`
+      ? `${text.timing.timing} ${timingCore.formatElapsed(state.now - state.activeWork.focused.start)} · ${duration.detailLabel}`
       : '';
     const remainingPlanMinutes = Math.max(0, Number(task.remainingMinutes) || 0);
     const planDurationText = remainingPlanMinutes > 0 && remainingPlanMinutes < task.plannedMinutes
-      ? `Remaining ${timingCore.compactMinutes(remainingPlanMinutes)} · Planned ${timingCore.compactMinutes(task.plannedMinutes)}`
-      : `Planned ${timingCore.compactMinutes(task.plannedMinutes)}`;
+      ? `${text.timing.remaining} ${timingCore.compactMinutes(remainingPlanMinutes)} · ${text.timing.planned} ${timingCore.compactMinutes(task.plannedMinutes)}`
+      : `${text.timing.planned} ${timingCore.compactMinutes(task.plannedMinutes)}`;
     let metaText = duration.detailLabel;
     if (planState === 'scheduled') {
-      metaText = `Today ${formatPlanClock(planStart)}–${formatPlanClock(planEnd)} · ${planDurationText}`;
+      metaText = `${text.plan.today} ${formatPlanClock(planStart)}–${formatPlanClock(planEnd)} · ${planDurationText}`;
     } else if (planState === 'unscheduled') {
-      metaText = `Unscheduled today · ${planDurationText}`;
+      metaText = `${text.plan.unscheduled} · ${planDurationText}`;
     } else if (focused) {
-      metaText = `${forgotten ? 'Check CLOCK · ' : ''}${timingText}`;
+      metaText = `${forgotten ? `${text.timing.check} · ` : ''}${timingText}`;
     } else if (recent) {
-      metaText = `Recent · ${timingCore.compactMinutes(recentRemaining)} left · ${duration.detailLabel}`;
+      metaText = `${text.timing.recent} · ${timingCore.compactMinutes(recentRemaining)} ${text.timing.left} · ${duration.detailLabel}`;
     }
     const liveMeta = focused && !planState;
     const meta = element('div', `nautilus-log-timing__row-meta${liveMeta ? ' is-live' : ''}${forgotten ? ' is-warning' : ''}`, metaText);
@@ -156,16 +161,16 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     row.append(copy);
 
     const actions = element('div', 'nautilus-log-timing__row-actions');
-    const timingAction = iconButton(focused ? 'log-out' : 'play', focused ? 'Clock Out' : 'Clock In', () => {
+    const timingAction = iconButton(focused ? 'log-out' : 'play', focused ? text.actions.clockOut : text.actions.clockIn, () => {
       runAction(() => focused ? runtime.stopTask() : runtime.startTask(task.uid));
     });
-    const completeAction = iconButton('confirm', 'Complete task', () => runAction(() => runtime.completeTask(task.uid)));
+    const completeAction = iconButton('confirm', text.actions.complete, () => runAction(() => runtime.completeTask(task.uid)));
     completeAction.classList.add('is-complete');
     timingAction.disabled = state.status === 'working';
     completeAction.disabled = state.status === 'working';
     actions.append(timingAction, completeAction);
     if (focused) {
-      const deleteAction = iconButton('trash', 'Delete current CLOCK', () => {
+      const deleteAction = iconButton('trash', text.actions.deleteClock, () => {
         const clockUid = state.activeWork?.focused?.clockUid;
         if (!clockUid) return;
         if (deleteConfirmation?.clockUid === clockUid) {
@@ -176,8 +181,8 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
         }
         clearDeleteConfirmation();
         deleteAction.classList.add('is-confirming');
-        deleteAction.title = 'Click again to delete current CLOCK';
-        deleteAction.setAttribute('aria-label', 'Click again to delete current CLOCK');
+        deleteAction.title = text.actions.confirmDelete;
+        deleteAction.setAttribute('aria-label', text.actions.confirmDelete);
         deleteConfirmation = {
           button: deleteAction,
           clockUid,
@@ -204,21 +209,22 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
   );
 
   const capacityStrip = (execution) => {
+    const text = ui().capacity;
     // Use a neutral div instead of section so Roam themes cannot accidentally
     // apply editorial/serif section typography to this compact UI strip.
     const strip = element('div', 'nautilus-log-timing__capacity');
-    strip.setAttribute('aria-label', 'Today capacity');
+    strip.setAttribute('aria-label', text.label);
     const available = element('span', 'nautilus-log-timing__capacity-metric');
-    available.append('Available ', element('strong', '', timingCore.compactMinutes(execution.availableMinutes || 0)));
-    let statusLabel = 'Remaining';
+    available.append(`${text.available} `, element('strong', '', timingCore.compactMinutes(execution.availableMinutes || 0)));
+    let statusLabel = text.remaining;
     let statusMinutes = execution.slackMinutes || 0;
     let warning = false;
     if (execution.overloadMinutes > 0) {
-      statusLabel = 'Overload';
+      statusLabel = text.overload;
       statusMinutes = execution.overloadMinutes;
       warning = true;
     } else if (execution.unplacedMinutes > 0) {
-      statusLabel = 'No fitting slot';
+      statusLabel = text.noSlot;
       statusMinutes = execution.unplacedMinutes;
       warning = true;
     }
@@ -259,13 +265,14 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
   };
 
   const reviewSummary = (summary = {}) => {
+    const text = ui().review;
     const section = element('section', 'nautilus-log-timing__review-summary');
-    section.setAttribute('aria-label', 'Today review summary');
+    section.setAttribute('aria-label', text.summary);
     const counts = element('div', 'nautilus-log-timing__review-counts');
     const completed = element('span', 'nautilus-log-timing__review-count');
-    completed.append('Completed ', element('strong', '', `${summary.completedCount || 0}/${summary.totalCount || 0}`));
+    completed.append(`${text.completed} `, element('strong', '', `${summary.completedCount || 0}/${summary.totalCount || 0}`));
     const compared = element('span', 'nautilus-log-timing__review-count');
-    compared.append('Compared ', element('strong', '', String(summary.comparedCount || 0)));
+    compared.append(`${text.compared} `, element('strong', '', String(summary.comparedCount || 0)));
     counts.append(completed, compared);
 
     const totals = element('div', 'nautilus-log-timing__review-totals');
@@ -277,21 +284,22 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     const variance = Number(summary.varianceMinutes) || 0;
     const comparable = Number(summary.comparedCount) > 0;
     totals.append(
-      metric('Planned', comparable ? timingCore.compactMinutes(summary.plannedMinutes || 0) : '—'),
-      metric('Actual', comparable ? timingCore.compactMinutes(summary.actualMinutes || 0) : '—'),
-      metric('Variance', comparable ? signedMinutes(variance) : '—', comparable && variance > 0 ? 'is-over' : ''),
+      metric(text.planned, comparable ? timingCore.compactMinutes(summary.plannedMinutes || 0) : '—'),
+      metric(text.actual, comparable ? timingCore.compactMinutes(summary.actualMinutes || 0) : '—'),
+      metric(text.variance, comparable ? signedMinutes(variance) : '—', comparable && variance > 0 ? 'is-over' : ''),
     );
     section.append(counts, totals);
     return section;
   };
 
   const reviewRow = (task) => {
+    const text = ui().review;
     const stateLabels = {
-      compared: 'Compared',
-      live: 'Live',
-      paused: 'Paused',
-      'not-tracked': 'Not tracked',
-      'not-started': 'Not started',
+      compared: text.compared,
+      live: text.live,
+      paused: text.paused,
+      'not-tracked': text.notTracked,
+      'not-started': text.notStarted,
     };
     const row = element('div', `nautilus-log-timing__review-row is-${task.state}`);
     row.dataset.taskUid = task.uid;
@@ -306,10 +314,10 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     heading.append(title, element('span', 'nautilus-log-timing__review-state', stateLabels[task.state] || task.state));
 
     const metrics = element('div', 'nautilus-log-timing__review-row-metrics');
-    metrics.append(element('span', '', `Planned ${timingCore.compactMinutes(task.plannedMinutes)}`));
+    metrics.append(element('span', '', `${text.planned} ${timingCore.compactMinutes(task.plannedMinutes)}`));
     const actualLabel = task.state === 'not-tracked' || task.state === 'not-started'
-      ? 'Actual —'
-      : `Actual ${timingCore.compactMinutes(task.actualMinutes)}`;
+      ? `${text.actual} —`
+      : `${text.actual} ${timingCore.compactMinutes(task.actualMinutes)}`;
     const actual = element('span', 'nautilus-log-timing__review-actual', actualLabel);
     if (task.state === 'live') actual.dataset.reviewLiveActual = task.uid;
     metrics.append(actual);
@@ -340,8 +348,9 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
         plannedMinutes: task.plannedMinutes,
         entries: state.entries,
         now: state.now,
+        language: extensionAPI.settings.get('language') || 'en',
       });
-      actual.textContent = `Actual ${timingCore.compactMinutes(duration.actualMinutes)}`;
+      actual.textContent = `${ui().review.actual} ${timingCore.compactMinutes(duration.actualMinutes)}`;
       return;
     }
     const row = [...popover.querySelectorAll('.nautilus-log-timing__row')]
@@ -354,12 +363,14 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       plannedMinutes: task.plannedMinutes,
       entries: state.entries,
       now: state.now,
+      language: extensionAPI.settings.get('language') || 'en',
     });
     const forgottenMinutes = extensionAPI.settings.get('forgotten-timer-minutes') ?? 120;
     const forgotten = timingCore.isForgottenClock(focused, state.now, forgottenMinutes);
     row.classList.toggle('is-forgotten', forgotten);
     meta.classList.toggle('is-warning', forgotten);
-    meta.textContent = `${forgotten ? 'Check CLOCK · ' : ''}Timing ${timingCore.formatElapsed(state.now - focused.start)} · ${duration.detailLabel}`;
+    const text = ui().timing;
+    meta.textContent = `${forgotten ? `${text.check} · ` : ''}${text.timing} ${timingCore.formatElapsed(state.now - focused.start)} · ${duration.detailLabel}`;
   };
 
   const syncActionAvailability = () => {
@@ -371,6 +382,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
 
   const renderPopover = ({ force = false } = {}) => {
     if (!popover) return;
+    const text = ui();
     if (!force && state.status === 'working' && lastPopoverKey !== null) {
       // A queued graph mutation changes only button availability. Rebuilding
       // every task row here competes with Roam's native sidebar first paint;
@@ -391,8 +403,8 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     const headerMain = element('div', 'nautilus-log-timing__popover-header-main');
     const identity = element('button', 'nautilus-log-timing__identity');
     identity.type = 'button';
-    identity.title = 'Locate Primary Nautilus';
-    identity.setAttribute('aria-label', 'Locate Primary Nautilus');
+    identity.title = text.identity.locate;
+    identity.setAttribute('aria-label', text.identity.locate);
     const identityHint = icon('chevron-right');
     identityHint.classList.add('nautilus-log-timing__identity-hint');
     identity.append(icon('unresolve'), element('span', 'nautilus-log-timing__identity-name', 'Nautilus'), identityHint);
@@ -404,13 +416,9 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     identityDivider.setAttribute('aria-hidden', 'true');
     const tabs = element('div', 'nautilus-log-timing__tabs');
     tabs.setAttribute('role', 'tablist');
-    tabs.setAttribute('aria-label', 'Nautilus execution views');
+    tabs.setAttribute('aria-label', text.identity.views);
     ['timing', 'plan', 'review'].forEach((name) => {
-      const button = element('button', `nautilus-log-timing__tab${view === name ? ' is-active' : ''}`, {
-        timing: 'Timing',
-        plan: 'Plan',
-        review: 'Review',
-      }[name]);
+      const button = element('button', `nautilus-log-timing__tab${view === name ? ' is-active' : ''}`, text.tabs[name]);
       button.type = 'button';
       button.setAttribute('role', 'tab');
       button.setAttribute('aria-selected', String(view === name));
@@ -440,7 +448,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       if (focused) list.append(taskRow(activeTask(focused), { entry: focused }));
       (state.activeWork?.recent || []).forEach((entry) => list.append(taskRow(activeTask(entry), { recent: true, entry })));
       if (!focused && !(state.activeWork?.recent || []).length) {
-        list.append(element('div', 'nautilus-log-timing__empty', 'No active work. Open Plan to start a task.'));
+        list.append(element('div', 'nautilus-log-timing__empty', text.empty.noActive));
       }
     } else if (view === 'plan') {
       const tasks = state.planSnapshot?.tasks || [];
@@ -449,7 +457,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       const unscheduled = execution?.overflowTasks || [];
       if (tasks.length && execution) {
         const scheduledSection = element('section', 'nautilus-log-timing__plan-section is-scheduled');
-        scheduledSection.append(planSectionHeader({ label: 'Scheduled today', tasks: scheduled }));
+        scheduledSection.append(planSectionHeader({ label: text.plan.scheduled, tasks: scheduled }));
         scheduled.forEach((task) => scheduledSection.append(taskRow(task, {
           planState: 'scheduled',
           planStart: task.start,
@@ -460,7 +468,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
         if (unscheduled.length) {
           const unscheduledSection = element('section', 'nautilus-log-timing__plan-section is-unscheduled');
           const disclosure = planSectionHeader({
-            label: 'Unscheduled today',
+            label: text.plan.unscheduled,
             tasks: unscheduled,
             collapsible: true,
             expanded: unscheduledExpanded,
@@ -479,9 +487,9 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
         tasks.forEach((task) => list.append(taskRow(task)));
       }
       if (!state.planSnapshot?.plan) {
-        list.append(element('div', 'nautilus-log-timing__empty', 'No Nautilus Log was found on today’s Daily Note.'));
+        list.append(element('div', 'nautilus-log-timing__empty', text.empty.noLog));
       } else if (!tasks.length) {
-        list.append(element('div', 'nautilus-log-timing__empty', 'The Primary Plan has no unfinished direct-child tasks.'));
+        list.append(element('div', 'nautilus-log-timing__empty', text.empty.noPlanTasks));
       }
     } else if (view === 'review') {
       const review = state.dailyReview || timingCore.buildDailyReview();
@@ -489,9 +497,9 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       if (state.planSnapshot?.plan && review.rows.length) popover.append(reviewSummary(review.summary));
       review.rows.forEach((task) => list.append(reviewRow(task)));
       if (!state.planSnapshot?.plan) {
-        list.append(element('div', 'nautilus-log-timing__empty', 'No Nautilus Log was found on today’s Daily Note.'));
+        list.append(element('div', 'nautilus-log-timing__empty', text.empty.noLog));
       } else if (!review.rows.length) {
-        list.append(element('div', 'nautilus-log-timing__empty', 'The Primary Plan has no direct-child tasks to review.'));
+        list.append(element('div', 'nautilus-log-timing__empty', text.empty.noReviewTasks));
       }
     }
     popover.append(list);
@@ -520,7 +528,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     popover = element('div', 'nautilus-log-timing__popover');
     popover.id = POPOVER_ID;
     popover.setAttribute('role', 'dialog');
-    popover.setAttribute('aria-label', 'Nautilus Log execution panel');
+    popover.setAttribute('aria-label', ui().identity.panel);
     document.body.append(popover);
     syncPopoverTypography();
     trigger.setAttribute('aria-expanded', 'true');
@@ -553,6 +561,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
 
   const renderTrigger = () => {
     if (!trigger) return;
+    const text = ui();
     const focused = state.activeWork?.focused;
     if (!focused) {
       if (triggerMode !== 'idle') {
@@ -560,7 +569,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
         triggerMode = 'idle';
       }
       trigger.classList.remove('is-active', 'is-overdue', 'is-forgotten');
-      trigger.setAttribute('aria-label', 'Open Nautilus Log execution panel');
+      trigger.setAttribute('aria-label', text.actions.openPanel);
       trigger.title = 'Nautilus Log';
     } else {
       const elapsed = timingCore.formatElapsed(state.now - focused.start);
@@ -584,9 +593,9 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       trigger.classList.toggle('is-overdue', pomodoroElapsed >= pomodoroMinutes * 60000);
       trigger.classList.toggle('is-forgotten', forgotten);
       trigger.querySelector('.nautilus-log-timing__elapsed').textContent = elapsed;
-      trigger.querySelector('.nautilus-log-timing__threads').textContent = `${count} Thread${count === 1 ? '' : 's'}`;
-      trigger.setAttribute('aria-label', `${forgotten ? 'Check CLOCK, ' : ''}${elapsed}, ${count} active thread${count === 1 ? '' : 's'}`);
-      trigger.title = `${forgotten ? 'Check CLOCK · ' : ''}${focused.title}`;
+      trigger.querySelector('.nautilus-log-timing__threads').textContent = `${count} ${count === 1 ? text.trigger.thread : text.trigger.threads}`;
+      trigger.setAttribute('aria-label', `${forgotten ? `${text.trigger.check}, ` : ''}${elapsed}, ${count} ${count === 1 ? text.trigger.thread : text.trigger.threads}`);
+      trigger.title = `${forgotten ? `${text.trigger.check} · ` : ''}${focused.title}`;
     }
   };
 
@@ -646,6 +655,11 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
   const initialize = () => {
     ensureMounted();
     watchTopbar();
+    settingsListener = () => {
+      renderTrigger();
+      if (popover) renderPopover({ force: true });
+    };
+    window.addEventListener('nautilus-log:settings-changed', settingsListener);
     unsubscribe = runtime.subscribe((next) => {
       state = next;
       ensureMounted();
@@ -660,6 +674,8 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     closePopover();
     unsubscribe?.();
     unsubscribe = null;
+    if (settingsListener) window.removeEventListener('nautilus-log:settings-changed', settingsListener);
+    settingsListener = null;
     resetObservers();
     cancelDeferredRefresh();
     clearDeleteConfirmation();
