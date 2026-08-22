@@ -209,6 +209,73 @@ function pastUnplannedSegments({
     .filter((segment) => segment.end > segment.start));
 }
 
+function splitIntervalAtHourBoundaries(start, end) {
+  const segments = [];
+  let cursor = start;
+  while (cursor < end) {
+    const nextHour = (Math.floor(cursor / 60) + 1) * 60;
+    const segmentEnd = Math.min(end, nextHour);
+    segments.push({ start: cursor, end: segmentEnd });
+    cursor = segmentEnd;
+  }
+  return segments;
+}
+
+/**
+ * Convert the synthetic free-time rows produced by `fill-day` into logical
+ * hover targets. A logical slot may span several spiral hour cells, but it
+ * remains one accessible target and one tooltip.
+ */
+function availableSlotGroups({
+  events = [],
+  startMinutes,
+  endMinutes,
+  nowMinutes,
+  clampToNow = false,
+} = {}) {
+  const start = asNumber(startMinutes);
+  const end = asNumber(endMinutes);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return [];
+
+  const rawNow = asNumber(nowMinutes);
+  const cursor = clampToNow
+    ? effectiveNow({ startMinutes: start, endMinutes: end, nowMinutes })
+    : start;
+  const freeIntervals = mergeIntervals(
+    (Array.isArray(events) ? events : [])
+      .filter((event) => event && event.freetime === true)
+      .map((event) => {
+        const slotStart = asNumber(event.start);
+        const slotEnd = asNumber(event.end);
+        if (!Number.isFinite(slotStart) || !Number.isFinite(slotEnd) || slotEnd <= slotStart) {
+          return null;
+        }
+        const clippedStart = clamp(slotStart, start, end);
+        const clippedEnd = clamp(slotEnd, start, end);
+        return clippedEnd > clippedStart ? [clippedStart, clippedEnd] : null;
+      })
+      .filter(Boolean),
+  );
+
+  return freeIntervals
+    .map(([slotStart, slotEnd]) => {
+      const visibleStart = clampToNow ? Math.max(slotStart, cursor) : slotStart;
+      if (slotEnd <= visibleStart) return null;
+      return {
+        key: `slot:${visibleStart}:${slotEnd}`,
+        start: visibleStart,
+        end: slotEnd,
+        duration: slotEnd - visibleStart,
+        availableNow: clampToNow
+          && Number.isFinite(rawNow)
+          && rawNow >= slotStart
+          && rawNow < slotEnd,
+        segments: splitIntervalAtHourBoundaries(visibleStart, slotEnd),
+      };
+    })
+    .filter(Boolean);
+}
+
 /** Classify only recorded elapsed states that remain meaningful after reflow. */
 function pastItemStatus({ event, nowMinutes, dailyPage = false } = {}) {
   if (dailyPage !== true || !event) return null;
@@ -611,6 +678,12 @@ const UI_COPY = {
       item: 'item',
       items: 'items',
     },
+    tooltips: {
+      task: 'Task',
+      event: 'Event',
+      available: 'Available slot',
+      availableNow: 'Available now',
+    },
     warnings: {
       overnight: 'Overnight events display only through 24:00',
       sameTime: 'Start and end times cannot be the same',
@@ -643,6 +716,12 @@ const UI_COPY = {
       schedule: '时间安排',
       item: '项',
       items: '项',
+    },
+    tooltips: {
+      task: '任务',
+      event: '事件',
+      available: '可用空档',
+      availableNow: '当前可用',
     },
     warnings: {
       overnight: '跨日事件仅显示至 24:00',
@@ -1028,6 +1107,7 @@ module.exports = {
   hourlyGridSegments,
   pastTimelineSegments,
   pastUnplannedSegments,
+  availableSlotGroups,
   pastItemStatus,
   spiralCellInnerHour,
   overlappingFixedEventUids,

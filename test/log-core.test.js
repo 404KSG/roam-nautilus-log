@@ -7,6 +7,7 @@ const {
   hourlyGridSegments,
   pastTimelineSegments,
   pastUnplannedSegments,
+  availableSlotGroups,
   pastItemStatus,
   spiralCellInnerHour,
   overlappingFixedEventUids,
@@ -98,6 +99,75 @@ test('past unplanned segments follow spiral hour-cell boundaries', () => {
   );
 });
 
+test('available slots start at now and stay grouped across spiral hour cells', () => {
+  assert.deepEqual(
+    availableSlotGroups({
+      events: [
+        { freetime: true, start: 540, end: 615 },
+        { freetime: true, start: 660, end: 720 },
+        { todo: true, start: 615, end: 660 },
+      ],
+      startMinutes: 300,
+      endMinutes: 1260,
+      nowMinutes: 572,
+      clampToNow: true,
+    }),
+    [
+      {
+        key: 'slot:572:615',
+        start: 572,
+        end: 615,
+        duration: 43,
+        availableNow: true,
+        segments: [{ start: 572, end: 600 }, { start: 600, end: 615 }],
+      },
+      {
+        key: 'slot:660:720',
+        start: 660,
+        end: 720,
+        duration: 60,
+        availableNow: false,
+        segments: [{ start: 660, end: 720 }],
+      },
+    ],
+  );
+});
+
+test('available slots retain full preview ranges and discard invalid intervals', () => {
+  assert.deepEqual(
+    availableSlotGroups({
+      events: [
+        { freetime: true, start: 280, end: 330 },
+        { freetime: true, start: 390, end: 390 },
+        { freetime: true, start: 480, end: 450 },
+        { meeting: true, start: 330, end: 390 },
+      ],
+      startMinutes: 300,
+      endMinutes: 600,
+      nowMinutes: 500,
+      clampToNow: false,
+    }),
+    [{
+      key: 'slot:300:330',
+      start: 300,
+      end: 330,
+      duration: 30,
+      availableNow: false,
+      segments: [{ start: 300, end: 330 }],
+    }],
+  );
+  assert.deepEqual(
+    availableSlotGroups({
+      events: [{ freetime: true, start: 300, end: 420 }],
+      startMinutes: 300,
+      endMinutes: 420,
+      nowMinutes: 500,
+      clampToNow: true,
+    }),
+    [],
+  );
+});
+
 test('past item status keeps only completed work and elapsed events', () => {
   const common = { start: 510, end: 570 };
   assert.equal(
@@ -177,6 +247,18 @@ test('English UI settings localize all extension-owned status labels', () => {
     schedule: 'Schedule',
     item: 'item',
     items: 'items',
+  });
+  assert.deepEqual(copy.tooltips, {
+    task: 'Task',
+    event: 'Event',
+    available: 'Available slot',
+    availableNow: 'Available now',
+  });
+  assert.deepEqual(uiCopy('zh').tooltips, {
+    task: '任务',
+    event: '事件',
+    available: '可用空档',
+    availableNow: '当前可用',
   });
   assert.deepEqual(
     capacityMetrics({

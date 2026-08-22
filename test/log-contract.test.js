@@ -82,6 +82,7 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested L
   assert.match(component, /log-core-call "hourlyGridSegments"/);
   assert.match(component, /log-core-call "pastTimelineSegments"/);
   assert.match(component, /log-core-call "pastUnplannedSegments"/);
+  assert.match(component, /log-core-call "availableSlotGroups"/);
   assert.match(component, /log-core-call "pastItemStatus"/);
   assert.match(component, /log-core-call "spiralCellInnerHour"/);
   assert.match(component, /log-core-call "overlappingFixedEventUids"/);
@@ -94,6 +95,25 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested L
   assert.match(component, /\.removeEventListener/);
   assert.match(entry, /window\.nautilusLogCore = logCore/);
   assert.doesNotMatch(component, /\(abs \(- done-at duration\)\)/);
+});
+
+test('the spiral exposes slice and available-slot hover targets above an inert grid', () => {
+  const gridStart = component.indexOf('(defn snail-blueprint-component');
+  const gridEnd = component.indexOf('(defn central-label-component', gridStart);
+  const gridComponent = component.slice(gridStart, gridEnd);
+  const connectorStart = component.indexOf('(defn bent-line-component');
+  const connectorEnd = component.indexOf('(defn calculate-coordinates', connectorStart);
+  const connectorComponent = component.slice(connectorStart, connectorEnd);
+
+  assert.match(gridComponent, /\[:g \{:class "nautilus-log-grid" :aria-hidden "true"\}/);
+  assert.doesNotMatch(connectorComponent, /nautilus-log-grid/);
+  assert.match(component, /nautilus-log-available-slot-hit/);
+  assert.match(component, /nautilus-log-hover-tooltip/);
+  assert.match(component, /:on-mouse-enter/);
+  assert.match(component, /:on-focus/);
+  assert.match(css, /\.nautilus-log-grid\s*\{[^}]*pointer-events:\s*none;/s);
+  assert.match(css, /\.nautilus-log-available-slot-hit/);
+  assert.match(css, /\.nautilus-log-hover-tooltip\s*\{[^}]*pointer-events:\s*none;/s);
 });
 
 test('renderer install polling does not invalidate an unchanged chart', () => {

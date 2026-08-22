@@ -55,9 +55,14 @@
   Remaining, Overload, or No-fitting-slot result visible across all three tabs.
 - Plan now separates deterministically scheduled work from a folded Unscheduled
   today section, including projected time ranges and section duration totals.
+- Direct slice and keyboard focus now reveal one compact tooltip with the item
+  type, exact time range, and duration; future blank regions expose equivalent
+  Available slot information without adding persistent chart labels.
 
 ### Fixed
 
+- The decorative spiral grid no longer intercepts pointer events, so hovering
+  the actual task or event slice behaves the same as hovering its outer label.
 - Expanding or folding Unscheduled today no longer makes the focused Plan row
   alternate between its projected interval and the live Timing label.
 - Execution-panel capacity metrics now keep the normal UI typeface across Roam
