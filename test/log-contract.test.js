@@ -190,6 +190,23 @@ test('execution popover exposes a lightweight daily Review without another graph
   assert.doesNotMatch(timingTopbar, /readAllEntries|readPrimaryPlan/);
 });
 
+test('execution panel exposes cached capacity and deterministic Plan sections', () => {
+  assert.match(timingTopbar, /nautilus-log-timing__capacity/);
+  assert.match(timingTopbar, /Available/);
+  assert.match(timingTopbar, /Remaining/);
+  assert.match(timingTopbar, /Overload/);
+  assert.match(timingTopbar, /No fitting slot/);
+  assert.match(timingTopbar, /Scheduled today/);
+  assert.match(timingTopbar, /Unscheduled today/);
+  assert.match(timingTopbar, /aria-expanded/);
+  assert.match(timingTopbar, /execution\?\.scheduledTasks/);
+  assert.match(timingTopbar, /execution\?\.overflowTasks/);
+  assert.match(css, /\.nautilus-log-timing__capacity/);
+  assert.match(css, /\.nautilus-log-timing__plan-heading/);
+  assert.match(css, /\.nautilus-log-timing__row\.is-unscheduled/);
+  assert.doesNotMatch(timingTopbar, /readAllEntries|readPrimaryPlan/);
+});
+
 test('execution lists stay scrollable without visible scrollbar chrome', () => {
   assert.match(css, /\.nautilus-log-timing__list\s*\{[^}]*overflow:\s*auto;[^}]*scrollbar-width:\s*none;[^}]*-ms-overflow-style:\s*none;/s);
   assert.match(css, /\.nautilus-log-timing__list::-webkit-scrollbar\s*\{[^}]*display:\s*none;[^}]*width:\s*0;[^}]*height:\s*0;/s);

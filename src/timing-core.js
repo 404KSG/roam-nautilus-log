@@ -95,6 +95,7 @@ function taskTitle(string) {
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/#?\[\[([^\]]+)\]\]/g, '$1')
     .replace(/\(\([a-zA-Z0-9_-]{6,}\)\)/g, '')
+    .replace(/\s+d\d{1,3}%/gi, '')
     .replace(/\s+(?:\d+h)?\d+m\s*$/i, '')
     .replace(/\s+/g, ' ')
     .trim();
@@ -107,6 +108,52 @@ function plannedMinutes(string, fallback = 15) {
   if (compact) return Number(compact[1] || 0) * 60 + Number(compact[2] || 0);
   const hours = string.match(/(?:^|\s)(\d+)h(?=\s|$)/i);
   return hours ? Number(hours[1]) * 60 : fallback;
+}
+
+function taskProgress(string) {
+  if (typeof string !== 'string') return 0;
+  const match = /(?:^|\s)d(\d{1,3})%(?=\s|$)/i.exec(string);
+  return match ? Math.min(100, Number(match[1]) || 0) : 0;
+}
+
+function clockMinutes(value, inheritedPeriod = null) {
+  if (typeof value !== 'string') return null;
+  const match = /^\s*(\d{1,2})(?::(\d{1,2}))?\s*(am|pm)?\s*$/i.exec(value);
+  if (!match) return null;
+  let hour = Number(match[1]);
+  const minute = Number(match[2] || 0);
+  const explicitPeriod = match[3]?.toLowerCase() || null;
+  const period = explicitPeriod || inheritedPeriod;
+  if (minute < 0 || minute > 59) return null;
+  if (period) {
+    if (hour < 1 || hour > 12) return null;
+    hour = hour % 12 + (period === 'pm' ? 12 : 0);
+  } else if (hour < 0 || hour > 23) {
+    return null;
+  }
+  return { minutes: hour * 60 + minute, explicitPeriod };
+}
+
+function parseTimeRangeMinutes(string) {
+  if (typeof string !== 'string') return null;
+  const rangeText = string.match(TIME_RANGE_RE)?.[0];
+  if (!rangeText) return null;
+  const parts = rangeText.split(/\s*(?:-|–|až|to)\s*/i);
+  if (parts.length !== 2) return null;
+  const end = clockMinutes(parts[1]);
+  const start = clockMinutes(parts[0], end?.explicitPeriod || null);
+  if (!start || !end) return null;
+  const endMinutes = end.minutes > start.minutes
+    ? end.minutes
+    : (end.minutes === 0 || end.minutes < start.minutes ? 1440 : end.minutes);
+  return {
+    start: start.minutes,
+    end: endMinutes,
+    text: rangeText,
+    warning: end.minutes < start.minutes && end.minutes !== 0
+      ? 'Overnight events display only through 24:00'
+      : (end.minutes === start.minutes ? 'Start and end times cannot be the same' : ''),
+  };
 }
 
 function compareTreeOrder(left, right) {
@@ -147,14 +194,20 @@ function projectDirectTasks(rows = [], planUid, fallbackMinutes = 15) {
   return (Array.isArray(rows) ? rows : [])
     .filter((row) => row?.parentUid === planUid && taskStatus(row.string) && !TIME_RANGE_RE.test(row.string))
     .sort(compareTreeOrder)
-    .map((row) => ({
-      uid: row.uid,
-      string: row.string,
-      order: row.order,
-      status: taskStatus(row.string),
-      title: taskTitle(row.string),
-      plannedMinutes: plannedMinutes(row.string, fallbackMinutes),
-    }));
+    .map((row) => {
+      const planned = plannedMinutes(row.string, fallbackMinutes);
+      const progress = taskProgress(row.string);
+      return {
+        uid: row.uid,
+        string: row.string,
+        order: row.order,
+        status: taskStatus(row.string),
+        title: taskTitle(row.string),
+        plannedMinutes: planned,
+        progress,
+        remainingMinutes: Math.max(0, Math.round(planned * (1 - progress / 100))),
+      };
+    });
 }
 
 function projectPlan(rows = [], planUid, fallbackMinutes = 15) {
@@ -165,6 +218,29 @@ function projectPlan(rows = [], planUid, fallbackMinutes = 15) {
 
 function projectReviewTasks(rows = [], planUid, fallbackMinutes = 15) {
   return projectDirectTasks(rows, planUid, fallbackMinutes);
+}
+
+function projectFixedEvents(rows = [], planUid) {
+  return (Array.isArray(rows) ? rows : [])
+    .filter((row) => row?.parentUid === planUid)
+    .sort(compareTreeOrder)
+    .map((row) => {
+      const range = parseTimeRangeMinutes(row.string);
+      if (!range) return null;
+      return {
+        uid: row.uid,
+        string: row.string,
+        order: row.order,
+        title: taskTitle(row.string.replace(range.text, '')),
+        start: range.start,
+        end: range.end,
+        meeting: true,
+        fixed: true,
+        done: taskStatus(row.string) === 'DONE',
+        warning: range.warning,
+      };
+    })
+    .filter(Boolean);
 }
 
 function chooseFocusedEntry(entries = []) {
@@ -374,8 +450,11 @@ module.exports = {
   nextPomodoroState,
   parseClockLine,
   plannedMinutes,
+  taskProgress,
+  parseTimeRangeMinutes,
   projectPlan,
   projectReviewTasks,
+  projectFixedEvents,
   selectPrimaryPlan,
   taskStatus,
   taskTitle,

@@ -179,6 +179,7 @@ export function readPrimaryPlan(date = new Date(), fallbackMinutes = 15) {
     rows: [],
     tasks: [],
     reviewTasks: [],
+    fixedEvents: [],
   };
   const normalized = rows.map(([pageUid, uid, string, order, parentUid]) => ({
     pageUid,
@@ -196,6 +197,7 @@ export function readPrimaryPlan(date = new Date(), fallbackMinutes = 15) {
     rows: normalized,
     tasks: plan ? timingCore.projectPlan(normalized, plan.uid, fallbackMinutes) : [],
     reviewTasks: plan ? timingCore.projectReviewTasks(normalized, plan.uid, fallbackMinutes) : [],
+    fixedEvents: plan ? timingCore.projectFixedEvents(normalized, plan.uid) : [],
   };
 }
 

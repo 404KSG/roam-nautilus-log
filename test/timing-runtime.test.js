@@ -9,6 +9,7 @@ function graphMock({ trace = [] } = {}) {
     ['plan', { uid: 'plan', string: '[[Nautilus Log]] {{[[roam/render]]:((roam-render-Nautilus-Log-cljs))}}', parentUid: 'page', order: 0 }],
     ['task-a', { uid: 'task-a', string: '{{[[TODO]]}} Alpha 30m', parentUid: 'plan', order: 0 }],
     ['task-b', { uid: 'task-b', string: '{{[[TODO]]}} Beta 45m', parentUid: 'plan', order: 1 }],
+    ['event', { uid: 'event', string: '11:00-12:00 Fixed event', parentUid: 'plan', order: 2 }],
   ]);
 
   const children = (uid) => [...blocks.values()]
@@ -19,7 +20,7 @@ function graphMock({ trace = [] } = {}) {
     if (query.includes('?page-uid ?uid ?string ?order ?parent-uid')) {
       trace.push('query:plan');
       return [...blocks.values()]
-        .filter((block) => ['plan', 'task-a', 'task-b'].includes(block.uid))
+        .filter((block) => ['plan', 'task-a', 'task-b', 'event'].includes(block.uid))
         .map((block) => [['page', block.uid, block.string, block.order, block.parentUid]])
         .flat();
     }
@@ -136,6 +137,14 @@ test('runtime serializes close-before-switch and close-before-complete', async (
   const runtime = extension.createTimingRuntime({ extensionAPI, now: () => new Date(current) });
   await runtime.initialize();
   assert.deepEqual(runtime.getSnapshot().planSnapshot.tasks.map(({ uid }) => uid), ['task-a', 'task-b']);
+  assert.equal(runtime.getSnapshot().planSnapshot.execution.availableMinutes, 600);
+  assert.deepEqual(
+    runtime.getSnapshot().planSnapshot.execution.scheduledTasks.map(({ uid, start, end }) => ({ uid, start, end })),
+    [
+      { uid: 'task-a', start: 600, end: 630 },
+      { uid: 'task-b', start: 720, end: 765 },
+    ],
+  );
   assert.deepEqual(
     runtime.getSnapshot().dailyReview.rows.map(({ uid, state }) => [uid, state]),
     [['task-a', 'not-started'], ['task-b', 'not-started']],

@@ -928,6 +928,40 @@
   padding: 9px 12px;
 }
 
+.nautilus-log-timing__capacity {
+  align-items: center;
+  background: rgba(111, 120, 132, 0.025);
+  border-bottom: 1px solid rgba(117, 126, 140, 0.12);
+  color: #858e9b;
+  display: flex;
+  font-size: 11px;
+  gap: 16px;
+  justify-content: space-between;
+  min-height: 32px;
+  padding: 6px 14px;
+}
+
+.nautilus-log-timing__capacity-metric {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nautilus-log-timing__capacity-metric strong {
+  color: #4e5764;
+  font-weight: 650;
+}
+
+.nautilus-log-timing__capacity-metric:last-child {
+  text-align: right;
+}
+
+.nautilus-log-timing__capacity-metric.is-warning,
+.nautilus-log-timing__capacity-metric.is-warning strong {
+  color: #ad690f;
+}
+
 .nautilus-log-timing__review-summary {
   border-bottom: 1px solid rgba(117, 126, 140, 0.14);
   padding: 10px 14px 9px;
@@ -1039,7 +1073,7 @@
 }
 
 .nautilus-log-timing__list {
-  max-height: min(500px, calc(100vh - 126px));
+  max-height: min(468px, calc(100vh - 158px));
   overflow: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -1053,7 +1087,70 @@
 }
 
 .nautilus-log-timing__list.is-review {
-  max-height: min(430px, calc(100vh - 190px));
+  max-height: min(398px, calc(100vh - 222px));
+}
+
+.nautilus-log-timing__list.is-plan {
+  padding-top: 2px;
+}
+
+.nautilus-log-timing__plan-section + .nautilus-log-timing__plan-section {
+  border-top: 1px solid rgba(117, 126, 140, 0.11);
+  margin-top: 2px;
+  padding-top: 2px;
+}
+
+.nautilus-log-timing__plan-heading {
+  align-items: center;
+  color: #8a929f;
+  display: flex;
+  font-size: 10px;
+  font-weight: 650;
+  justify-content: space-between;
+  letter-spacing: 0.055em;
+  min-height: 30px;
+  padding: 6px 10px 4px;
+  text-transform: uppercase;
+}
+
+button.nautilus-log-timing__plan-heading {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+button.nautilus-log-timing__plan-heading:hover,
+button.nautilus-log-timing__plan-heading:focus-visible {
+  background: rgba(111, 120, 132, 0.055);
+  outline: none;
+}
+
+.nautilus-log-timing__plan-label {
+  align-items: center;
+  display: inline-flex;
+  gap: 3px;
+  min-width: 0;
+}
+
+.nautilus-log-timing__plan-label .bp3-icon {
+  font-size: 11px;
+  margin-left: -3px;
+}
+
+.nautilus-log-timing__plan-total {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.nautilus-log-timing__plan-section.is-unscheduled .nautilus-log-timing__plan-heading,
+.nautilus-log-timing__plan-section.is-unscheduled .nautilus-log-timing__plan-total {
+  color: #ad690f;
 }
 
 .nautilus-log-timing__row {
@@ -1079,6 +1176,14 @@
 .nautilus-log-timing__row.is-forgotten {
   background: rgba(206, 129, 31, 0.075);
   border-color: rgba(206, 129, 31, 0.3);
+}
+
+.nautilus-log-timing__row.is-unscheduled {
+  box-shadow: inset 2px 0 0 rgba(206, 129, 31, 0.38);
+}
+
+.nautilus-log-timing__row.is-unscheduled .nautilus-log-timing__row-meta {
+  color: #9f6a23;
 }
 
 .nautilus-log-timing__row-copy {
@@ -1159,6 +1264,30 @@
 .bp3-dark .nautilus-log-timing__review-row.is-live .nautilus-log-timing__review-state,
 .dark .nautilus-log-timing__review-row.is-live .nautilus-log-timing__review-state {
   color: #66c7e8;
+}
+
+.bp3-dark .nautilus-log-timing__capacity,
+.dark .nautilus-log-timing__capacity {
+  background: rgba(255, 255, 255, 0.018);
+  border-bottom-color: rgba(223, 228, 235, 0.09);
+}
+
+.bp3-dark .nautilus-log-timing__capacity-metric strong,
+.dark .nautilus-log-timing__capacity-metric strong {
+  color: #d6dbe2;
+}
+
+.bp3-dark .nautilus-log-timing__capacity-metric.is-warning,
+.bp3-dark .nautilus-log-timing__capacity-metric.is-warning strong,
+.dark .nautilus-log-timing__capacity-metric.is-warning,
+.dark .nautilus-log-timing__capacity-metric.is-warning strong,
+.bp3-dark .nautilus-log-timing__plan-section.is-unscheduled .nautilus-log-timing__plan-heading,
+.bp3-dark .nautilus-log-timing__plan-section.is-unscheduled .nautilus-log-timing__plan-total,
+.dark .nautilus-log-timing__plan-section.is-unscheduled .nautilus-log-timing__plan-heading,
+.dark .nautilus-log-timing__plan-section.is-unscheduled .nautilus-log-timing__plan-total,
+.bp3-dark .nautilus-log-timing__row.is-unscheduled .nautilus-log-timing__row-meta,
+.dark .nautilus-log-timing__row.is-unscheduled .nautilus-log-timing__row-meta {
+  color: #d89a46;
 }
 
 /* Preserve the complete three-view switcher in unusually narrow Roam

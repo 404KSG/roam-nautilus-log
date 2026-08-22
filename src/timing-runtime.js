@@ -1,4 +1,5 @@
 import * as timingCore from './timing-core';
+import * as logCore from './log-core';
 import {
   closeClock,
   completeTask,
@@ -19,6 +20,37 @@ import {
 
 const POMODORO_STATE_KEY = 'actual-time-pomodoro-state';
 const REFRESH_INTERVAL_MS = 15_000;
+
+function executionProjection(planSnapshot, currentNow, extensionAPI) {
+  if (!planSnapshot?.plan) return null;
+  const schedule = logCore.normalizeScheduleSettings({
+    workdayStart: extensionAPI.settings.get('workday-start') ?? 5,
+    workdayEnd: extensionAPI.settings.get('workday-end') ?? 21,
+  });
+  const nowMinutes = currentNow.getHours() * 60 + currentNow.getMinutes();
+  const pendingTasks = (planSnapshot.tasks || []).map((task) => ({
+    ...task,
+    todo: true,
+    done: false,
+    duration: Number.isFinite(Number(task.remainingMinutes))
+      ? Number(task.remainingMinutes)
+      : Number(task.plannedMinutes) || 0,
+  }));
+  const fixedEvents = planSnapshot.fixedEvents || [];
+  return {
+    ...logCore.calculateCapacity({
+      startMinutes: schedule.startMinutes,
+      endMinutes: schedule.endMinutes,
+      nowMinutes,
+      fixedEvents,
+      allFixedEvents: fixedEvents,
+      pendingTasks,
+    }),
+    nowMinutes,
+    startMinutes: schedule.startMinutes,
+    endMinutes: schedule.endMinutes,
+  };
+}
 
 function scheduleNextTask(callback) {
   const host = typeof window !== 'undefined' ? window : globalThis;
@@ -78,9 +110,15 @@ export function createTimingRuntime({
     if (destroyed) return snapshot;
     try {
       const currentNow = now();
-      const planSnapshot = suppliedPlanSnapshot === undefined
+      const sourcePlanSnapshot = suppliedPlanSnapshot === undefined
         ? readPrimaryPlan(currentNow, Number(extensionAPI.settings.get('todo-duration')) || 15)
         : suppliedPlanSnapshot;
+      const planSnapshot = sourcePlanSnapshot
+        ? {
+          ...sourcePlanSnapshot,
+          execution: executionProjection(sourcePlanSnapshot, currentNow, extensionAPI),
+        }
+        : sourcePlanSnapshot;
       const entries = suppliedEntries === undefined ? readAllEntries() : suppliedEntries;
       const reviewTasks = planSnapshot?.reviewTasks || (planSnapshot?.plan
         ? timingCore.projectReviewTasks(

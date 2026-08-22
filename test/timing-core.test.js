@@ -42,6 +42,32 @@ test('Plan is a flat ordered projection of unfinished direct children', () => {
   );
 });
 
+test('Plan projection preserves progress and fixed-event ranges for the shared scheduler', () => {
+  const rows = [
+    { uid: 'morning', parentUid: 'plan', order: 0, string: '05:00-06:00 Morning routine' },
+    { uid: 'overnight', parentUid: 'plan', order: 1, string: '23:00-00:00 Late event' },
+    { uid: 'task', parentUid: 'plan', order: 2, string: '{{[[TODO]]}} Draft 60m d50%' },
+  ];
+
+  assert.deepEqual(
+    timing.projectPlan(rows, 'plan').map(({ uid, title, plannedMinutes, progress, remainingMinutes }) => ({
+      uid,
+      title,
+      plannedMinutes,
+      progress,
+      remainingMinutes,
+    })),
+    [{ uid: 'task', title: 'Draft', plannedMinutes: 60, progress: 50, remainingMinutes: 30 }],
+  );
+  assert.deepEqual(
+    timing.projectFixedEvents(rows, 'plan').map(({ uid, start, end }) => ({ uid, start, end })),
+    [
+      { uid: 'morning', start: 300, end: 360 },
+      { uid: 'overnight', start: 1380, end: 1440 },
+    ],
+  );
+});
+
 test('Review projects ordered direct-child TODO and DONE tasks without fixed events or nested tasks', () => {
   const rows = [
     { uid: 'event', parentUid: 'plan', order: 0, string: '10:00-11:00 Meeting' },

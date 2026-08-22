@@ -523,6 +523,10 @@ test('capacity reports overflow instead of silently dropping tasks', () => {
   assert.equal(result.demandMinutes, 75);
   assert.equal(result.overloadMinutes, 15);
   assert.equal(result.unplacedMinutes, 30);
+  assert.deepEqual(
+    result.scheduledTasks.map(({ uid, start, end }) => ({ uid, start, end })),
+    [{ uid: 'a', start: 300, end: 345 }],
+  );
   assert.deepEqual(result.overflowTasks.map((task) => task.uid), ['b']);
 });
 

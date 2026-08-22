@@ -568,6 +568,7 @@ function calculateCapacity({
       nowMinutes,
       fixedEvents,
     }),
+    scheduledTasks: plan.scheduledTasks,
     overflowTasks: plan.overflowTasks,
   };
 }

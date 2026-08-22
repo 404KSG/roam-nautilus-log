@@ -51,6 +51,10 @@
 - A lightweight daily Review tab lists all Primary Plan tasks, distinguishes
   live/paused/untracked states, and compares Planned with Actual only for the
   completed tasks that have same-day CLOCK history.
+- A compact execution-panel capacity strip keeps Available plus the current
+  Remaining, Overload, or No-fitting-slot result visible across all three tabs.
+- Plan now separates deterministically scheduled work from a folded Unscheduled
+  today section, including projected time ranges and section duration totals.
 
 ### Fixed
 
