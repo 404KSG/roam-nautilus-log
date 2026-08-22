@@ -47,7 +47,56 @@ function api() {
 
 const sidebarOperationQueues = new WeakMap();
 const knownSidebarWindows = new WeakMap();
+const sidebarWindowCacheRevisions = new WeakMap();
+const SIDEBAR_WINDOW_CACHE_TTL_MS = 45 * 60 * 1000;
 let latestSidebarIntent = 0;
+
+function sidebarWindowCache(sidebar) {
+  let cache = knownSidebarWindows.get(sidebar);
+  if (!cache) {
+    cache = new Map();
+    knownSidebarWindows.set(sidebar, cache);
+  }
+  return cache;
+}
+
+function sidebarWindowCacheRevision(sidebar) {
+  return sidebarWindowCacheRevisions.get(sidebar) || 0;
+}
+
+function bumpSidebarWindowCacheRevision(sidebar) {
+  sidebarWindowCacheRevisions.set(sidebar, sidebarWindowCacheRevision(sidebar) + 1);
+}
+
+function rememberSidebarWindows(sidebar, windows) {
+  if (!Array.isArray(windows)) return;
+  const cache = sidebarWindowCache(sidebar);
+  cache.clear();
+  const rememberedAt = Date.now();
+  for (const entry of windows) {
+    const uid = entry?.['block-uid'];
+    if (entry?.type === 'block' && typeof uid === 'string' && uid) cache.set(uid, rememberedAt);
+  }
+  bumpSidebarWindowCacheRevision(sidebar);
+}
+
+function rememberSidebarWindow(sidebar, uid) {
+  sidebarWindowCache(sidebar).set(uid, Date.now());
+  bumpSidebarWindowCacheRevision(sidebar);
+}
+
+function forgetSidebarWindow(sidebar, uid) {
+  if (sidebarWindowCache(sidebar).delete(uid)) bumpSidebarWindowCacheRevision(sidebar);
+}
+
+function hasRecentlyKnownSidebarWindow(sidebar, uid) {
+  const knownAt = sidebarWindowCache(sidebar).get(uid);
+  if (!Number.isFinite(knownAt) || Date.now() - knownAt > SIDEBAR_WINDOW_CACHE_TTL_MS) {
+    forgetSidebarWindow(sidebar, uid);
+    return false;
+  }
+  return true;
+}
 
 function blockSidebarWindow(uid, order) {
   const value = { type: 'block', 'block-uid': uid };
@@ -243,9 +292,10 @@ export async function createRunningClock(taskUid, now) {
     string: timingCore.formatClockLine(now),
     open: false,
   });
-  const confirmed = readAllEntries().find((entry) => entry.clockUid === clockUid && entry.running);
+  const entries = readAllEntries();
+  const confirmed = entries.find((entry) => entry.clockUid === clockUid && entry.running);
   if (!confirmed) throw new Error('Clock In could not be confirmed.');
-  return confirmed;
+  return { entry: confirmed, entries };
 }
 
 export async function closeClock(entry, now) {
@@ -295,6 +345,34 @@ export async function openTaskInMainWindow(taskUid) {
 }
 
 /**
+ * Warm the sidebar-window hint after startup without opening or mutating it.
+ * A revision guard prevents a slow warmup read from overwriting a newer click.
+ */
+export function warmRightSidebarWindowCache() {
+  const sidebar = api()?.ui?.rightSidebar;
+  if (typeof sidebar?.getWindows !== 'function') {
+    return Promise.resolve({ ok: false, reason: 'unavailable' });
+  }
+  const startingRevision = sidebarWindowCacheRevision(sidebar);
+  let windows;
+  try { windows = sidebar.getWindows(); }
+  catch (error) {
+    return Promise.resolve({ ok: false, reason: 'read-failed', error });
+  }
+  return Promise.resolve(windows).then(
+    (resolved) => {
+      if (!Array.isArray(resolved)) return { ok: false, reason: 'malformed-read' };
+      if (sidebarWindowCacheRevision(sidebar) !== startingRevision) {
+        return { ok: false, reason: 'stale-read' };
+      }
+      rememberSidebarWindows(sidebar, resolved);
+      return { ok: true, count: sidebarWindowCache(sidebar).size };
+    },
+    (error) => ({ ok: false, reason: 'read-failed', error }),
+  );
+}
+
+/**
  * Open or move the selected Timing Line to order 0 in Roam's native sidebar.
  *
  * Roam remains authoritative: the current window list is read on every queued
@@ -320,7 +398,7 @@ export function frontBlockInRightSidebar(taskUid) {
     catch (_error) { return Promise.resolve(); }
   })();
 
-  const known = knownSidebarWindows.get(sidebar)?.has(taskUid) === true;
+  const known = hasRecentlyKnownSidebarWindow(sidebar, taskUid);
   let previewPromise = null;
   if (known && typeof sidebar.setWindowOrder === 'function') {
     // Previously confirmed windows can be revealed immediately. The queued
@@ -352,6 +430,7 @@ export function frontBlockInRightSidebar(taskUid) {
       }
     }
     if (!isCurrent()) return { ok: false, skipped: true, reason: 'superseded' };
+    if (Array.isArray(windows)) rememberSidebarWindows(sidebar, windows);
 
     const existing = Array.isArray(windows) && windows.find((entry) => (
       entry?.type === 'block' && entry?.['block-uid'] === taskUid
@@ -373,12 +452,7 @@ export function frontBlockInRightSidebar(taskUid) {
       if (typeof sidebar.expandWindow === 'function') {
         await sidebar.expandWindow({ window: blockSidebarWindow(taskUid) });
       }
-      let known = knownSidebarWindows.get(sidebar);
-      if (!known) {
-        known = new Set();
-        knownSidebarWindows.set(sidebar, known);
-      }
-      known.add(taskUid);
+      rememberSidebarWindow(sidebar, taskUid);
       return { ok: true, deduped: true, reordered: typeof sidebar.setWindowOrder === 'function' };
     }
 
@@ -386,17 +460,17 @@ export function frontBlockInRightSidebar(taskUid) {
       const previewed = await previewPromise;
       if (!isCurrent()) return { ok: false, skipped: true, reason: 'superseded' };
       if (previewed) return { ok: true, deduped: true, reordered: true, previewed: true };
-      knownSidebarWindows.get(sidebar)?.delete(taskUid);
+      forgetSidebarWindow(sidebar, taskUid);
     }
 
-    if (!Array.isArray(windows) && knownSidebarWindows.get(sidebar)?.has(taskUid)) {
+    if (!Array.isArray(windows) && hasRecentlyKnownSidebarWindow(sidebar, taskUid)) {
       if (typeof sidebar.setWindowOrder === 'function') {
         try {
           await sidebar.setWindowOrder({ window: blockSidebarWindow(taskUid, 0) });
           await sidebar.expandWindow?.({ window: blockSidebarWindow(taskUid) });
           return { ok: true, deduped: true, reordered: true };
         } catch (_error) {
-          knownSidebarWindows.get(sidebar)?.delete(taskUid);
+          forgetSidebarWindow(sidebar, taskUid);
         }
       } else {
         return { ok: true, deduped: true };
@@ -406,12 +480,7 @@ export function frontBlockInRightSidebar(taskUid) {
     await openRequest;
     if (!isCurrent()) return { ok: false, skipped: true, reason: 'superseded' };
     await sidebar.addWindow({ window: blockSidebarWindow(taskUid, 0) });
-    let known = knownSidebarWindows.get(sidebar);
-    if (!known) {
-      known = new Set();
-      knownSidebarWindows.set(sidebar, known);
-    }
-    known.add(taskUid);
+    rememberSidebarWindow(sidebar, taskUid);
     return { ok: true, added: true };
   }).catch((error) => ({
     ok: false,

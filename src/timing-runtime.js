@@ -14,10 +14,17 @@ import {
   readPrimaryPlan,
   showToast,
   updateGraphBlock,
+  warmRightSidebarWindowCache,
 } from './timing-roam';
 
 const POMODORO_STATE_KEY = 'actual-time-pomodoro-state';
 const REFRESH_INTERVAL_MS = 15_000;
+
+function scheduleNextTask(callback) {
+  const host = typeof window !== 'undefined' ? window : globalThis;
+  const timer = host.setTimeout(callback, 0);
+  return () => host.clearTimeout(timer);
+}
 
 function currentPomodoro(extensionAPI, focused) {
   const saved = extensionAPI.settings.get(POMODORO_STATE_KEY);
@@ -29,14 +36,20 @@ function currentPomodoro(extensionAPI, focused) {
   return { startedAt: focused.start.getTime() };
 }
 
-export function createTimingRuntime({ extensionAPI, now = () => new Date() }) {
+export function createTimingRuntime({
+  extensionAPI,
+  now = () => new Date(),
+  scheduleMutationStart = scheduleNextTask,
+}) {
   let destroyed = false;
   let ticker = null;
+  let cancelSidebarWarmup = null;
   let refreshHandle = null;
   let refreshHandleKind = null;
   let refreshPromise = null;
   let resolveRefresh = null;
   let mutationQueue = Promise.resolve();
+  const pendingMutationStarts = new Set();
   let snapshot = {
     revision: 0,
     status: 'loading',
@@ -60,11 +73,13 @@ export function createTimingRuntime({ extensionAPI, now = () => new Date() }) {
     await extensionAPI.settings.set(POMODORO_STATE_KEY, value);
   };
 
-  const refresh = ({ notice = '' } = {}) => {
+  const refresh = ({ notice = '', planSnapshot: suppliedPlanSnapshot, entries: suppliedEntries } = {}) => {
     if (destroyed) return snapshot;
     try {
-      const planSnapshot = readPrimaryPlan(now(), Number(extensionAPI.settings.get('todo-duration')) || 15);
-      const entries = readAllEntries();
+      const planSnapshot = suppliedPlanSnapshot === undefined
+        ? readPrimaryPlan(now(), Number(extensionAPI.settings.get('todo-duration')) || 15)
+        : suppliedPlanSnapshot;
+      const entries = suppliedEntries === undefined ? readAllEntries() : suppliedEntries;
       const recentRetention = extensionAPI.settings.get('recent-retention-minutes') ?? 45;
       const activeWork = timingCore.buildActiveWork(entries, now(), recentRetention);
       const pomodoro = currentPomodoro(extensionAPI, activeWork.focused);
@@ -119,8 +134,37 @@ export function createTimingRuntime({ extensionAPI, now = () => new Date() }) {
     return refreshPromise;
   };
 
-  const enqueue = (operation) => {
+  const waitForMutationStart = () => new Promise((resolve, reject) => {
+    let settled = false;
+    let cancelScheduled = null;
+    const finish = (callback) => {
+      if (settled) return;
+      settled = true;
+      pendingMutationStarts.delete(pending);
+      callback();
+    };
+    const pending = {
+      cancel() {
+        if (settled) return;
+        try { cancelScheduled?.(); } catch (_error) { /* Host cancellation is best effort. */ }
+        finish(() => resolve(false));
+      },
+    };
+    pendingMutationStarts.add(pending);
+    try {
+      cancelScheduled = scheduleMutationStart(() => finish(() => resolve(true)));
+      if (typeof cancelScheduled !== 'function') cancelScheduled = null;
+    } catch (error) {
+      finish(() => reject(error));
+    }
+  });
+
+  const enqueue = (operation, { deferStart = false } = {}) => {
     const run = mutationQueue.then(async () => {
+      if (deferStart) {
+        const scheduled = await waitForMutationStart();
+        if (!scheduled) throw new Error('Actual Time Tracking is no longer active.');
+      }
       if (destroyed) throw new Error('Actual Time Tracking is no longer active.');
       snapshot = { ...snapshot, revision: snapshot.revision + 1, status: 'working', notice: '' };
       publish();
@@ -168,7 +212,8 @@ export function createTimingRuntime({ extensionAPI, now = () => new Date() }) {
     // trusted Plan-row UID before graph validation and CLOCK confirmation.
     // This mirrors native Roam Logbook: the graph mutation remains the sole
     // authority, but the selected task starts rendering immediately.
-    if (extensionAPI.settings.get('timing-line-sidebar') !== false) {
+    const hasSidebarIntent = extensionAPI.settings.get('timing-line-sidebar') !== false;
+    if (hasSidebarIntent) {
       void frontBlockInRightSidebar(taskUid).then((result) => {
         if (!result?.ok && !result?.skipped) showToast(result?.message || 'The task started, but Roam could not show it at the top of the right sidebar.');
       });
@@ -182,16 +227,16 @@ export function createTimingRuntime({ extensionAPI, now = () => new Date() }) {
       const focused = timingCore.chooseFocusedEntry(before);
       const instant = now();
       if (focused?.taskUid === taskUid) {
-        return refresh();
+        return refresh({ planSnapshot: snapshot.planSnapshot, entries: before });
       }
       await closeEntriesAt(before, instant);
-      await createRunningClock(taskUid, instant);
+      const created = await createRunningClock(taskUid, instant);
       await setPomodoro(timingCore.nextPomodoroState(snapshot.pomodoro, {
         action: focused ? 'switch' : 'start',
         nowMs: instant.getTime(),
       }));
-      return refresh();
-    });
+      return refresh({ planSnapshot: snapshot.planSnapshot, entries: created.entries });
+    }, { deferStart: hasSidebarIntent });
   };
 
   const stopTask = () => enqueue(async () => {
@@ -235,6 +280,12 @@ export function createTimingRuntime({ extensionAPI, now = () => new Date() }) {
     await reconcileLegacyOverlap();
     await closeDoneClocks();
     refresh();
+    if (extensionAPI.settings.get('timing-line-sidebar') !== false) {
+      cancelSidebarWarmup = scheduleMutationStart(() => {
+        cancelSidebarWarmup = null;
+        if (!destroyed) void warmRightSidebarWindowCache();
+      });
+    }
     let lastGraphRefresh = Date.now();
     ticker = window.setInterval(() => {
       if (destroyed) return;
@@ -270,6 +321,9 @@ export function createTimingRuntime({ extensionAPI, now = () => new Date() }) {
     destroyed = true;
     if (ticker !== null) window.clearInterval(ticker);
     ticker = null;
+    cancelSidebarWarmup?.();
+    cancelSidebarWarmup = null;
+    for (const pending of [...pendingMutationStarts]) pending.cancel();
     if (refreshHandle !== null) {
       if (refreshHandleKind === 'idle') window.cancelIdleCallback?.(refreshHandle);
       else window.clearTimeout(refreshHandle);

@@ -66,3 +66,7 @@
   together on the supporting capacity row.
 - Clock In starts native sidebar navigation before graph validation; confirmed
   windows preview immediately while an authoritative queued pass preserves dedupe.
+- Clock In now gives Roam's native sidebar a browser task to paint before any
+  synchronous graph validation, warms the sidebar-window cache read-only after
+  startup, and reuses the confirmed CLOCK/Primary Plan snapshots instead of
+  rescanning the full Daily Note at the end of the click path.

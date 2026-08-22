@@ -17,12 +17,14 @@ function graphMock({ trace = [] } = {}) {
 
   function q(query, ...args) {
     if (query.includes('?page-uid ?uid ?string ?order ?parent-uid')) {
+      trace.push('query:plan');
       return [...blocks.values()]
         .filter((block) => ['plan', 'task-a', 'task-b'].includes(block.uid))
         .map((block) => [['page', block.uid, block.string, block.order, block.parentUid]])
         .flat();
     }
     if (query.includes('?clock-uid ?clock-string')) {
+      trace.push('query:entries');
       const rows = [];
       for (const clock of blocks.values()) {
         if (!/^CLOCK:/.test(clock.string)) continue;
@@ -33,6 +35,7 @@ function graphMock({ trace = [] } = {}) {
       return rows;
     }
     if (query.includes(':find ?uid ?string ?order')) {
+      trace.push(`query:children:${args[0] || ''}`);
       const parent = args[0];
       return children(parent).map((block) => [block.uid, block.string, block.order]);
     }
@@ -99,7 +102,10 @@ test('runtime serializes close-before-switch and close-before-complete', async (
             trace.push('sidebar:getWindows');
             return sidebarWindows.slice();
           },
-          addWindow: async ({ window }) => sidebarWindows.push(window),
+          addWindow: async ({ window }) => {
+            trace.push(`sidebar:addWindow:${window?.['block-uid'] || ''}`);
+            sidebarWindows.push(window);
+          },
           setWindowOrder: async () => {},
           expandWindow: async () => {},
         },
@@ -121,6 +127,9 @@ test('runtime serializes close-before-switch and close-before-complete', async (
   const runtime = extension.createTimingRuntime({ extensionAPI, now: () => new Date(current) });
   await runtime.initialize();
   assert.deepEqual(runtime.getSnapshot().planSnapshot.tasks.map(({ uid }) => uid), ['task-a', 'task-b']);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(trace.includes('sidebar:getWindows'), true, 'startup should warm the sidebar cache read-only');
+  assert.equal(trace.includes('sidebar:open'), false, 'cache warmup must not open the sidebar');
 
   trace.length = 0;
   const firstStart = runtime.startTask('task-a');
@@ -128,6 +137,20 @@ test('runtime serializes close-before-switch and close-before-complete', async (
   assert.equal(trace.includes('pull:task-a'), false);
   await firstStart;
   await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.ok(
+    trace.indexOf('sidebar:addWindow:task-a') < trace.indexOf('pull:task-a'),
+    'the native sidebar must become visible before synchronous graph validation starts',
+  );
+  assert.equal(
+    trace.filter((entry) => entry === 'query:plan').length,
+    0,
+    'Clock In should reuse the cached Primary Plan instead of rereading the whole Daily Note',
+  );
+  assert.equal(
+    trace.filter((entry) => entry === 'query:entries').length,
+    2,
+    'Clock In should reuse its confirmation snapshot instead of issuing a third CLOCK query',
+  );
   assert.deepEqual(sidebarWindows, [{ type: 'block', 'block-uid': 'task-a', order: 0 }]);
   const firstClock = [...blocks.values()].find((block) => block.parentUid.startsWith('clock-') && /^CLOCK:/.test(block.string));
   assert.match(firstClock.string, /^CLOCK: \[2026-08-22 Sat 10:00\]$/);
