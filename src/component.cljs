@@ -813,8 +813,8 @@
                      :y (+ center-y 13)
                      :class "nautilus-flow-center-now"
                      :fill "var(--nautilus-flow-text-sub)"
-                     :font-weight "500"
-                     :font-size (str (* font-size 0.7)))
+                     :font-weight "600"
+                     :font-size (str (* font-size 0.82)))
         center-now-label])]))
 
 (defn calculate-slice-params [event index daily-page? now-time-atom]

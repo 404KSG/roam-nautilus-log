@@ -11,6 +11,7 @@
   --nautilus-flow-event: #c58a00;
   --nautilus-flow-task: #0899c8;
   --nautilus-flow-control-icon: #888;
+  --nautilus-flow-now: #d44b4b;
 }
 
 .bp3-dark,
@@ -24,6 +25,7 @@
   --nautilus-flow-event: #f2c14e;
   --nautilus-flow-task: #47b8df;
   --nautilus-flow-control-icon: #aaa;
+  --nautilus-flow-now: #ff8b78;
 }
 
 .nautilus-flow-container {
@@ -158,10 +160,10 @@
   flex: 0 0 auto;
   width: 16px;
   height: 16px;
+  align-self: center;
   color: var(--nautilus-flow-control-icon);
   fill: none;
   stroke: currentColor;
-  vertical-align: -3px;
 }
 
 .nautilus-flow-burning-summary {
@@ -175,6 +177,7 @@
 }
 
 .nautilus-flow-center-now {
+  fill: var(--nautilus-flow-now);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.1px;
 }

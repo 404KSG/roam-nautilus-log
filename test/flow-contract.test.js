@@ -137,6 +137,8 @@ test('Flow marks the active capacity bucket with an accessible static flame', ()
   assert.doesNotMatch(component, /🔥/);
   assert.doesNotMatch(css, /--nautilus-flow-burning:/);
   assert.match(css, /\.nautilus-flow-burning-icon\s*\{[^}]*color:\s*var\(--nautilus-flow-control-icon\);/s);
+  assert.match(css, /\.nautilus-flow-burning-icon\s*\{[^}]*align-self:\s*center;/s);
+  assert.doesNotMatch(css, /\.nautilus-flow-burning-icon\s*\{[^}]*vertical-align:\s*-3px;/s);
 });
 
 test('Flow replaces the center year with an in-range 24-hour now value', () => {
@@ -151,7 +153,9 @@ test('Flow replaces the center year with an in-range 24-hour now value', () => {
   assert.doesNotMatch(component, /needle-label-radius/);
   assert.doesNotMatch(css, /nautilus-flow-now-label/);
   assert.doesNotMatch(css, /--nautilus-flow-now-label-bg:/);
-  assert.match(css, /\.nautilus-flow-center-now\s*\{[^}]*font-variant-numeric:\s*tabular-nums;/s);
+  assert.match(component, /:font-size \(str \(\* font-size 0\.82\)\)/);
+  assert.match(css, /--nautilus-flow-now:/);
+  assert.match(css, /\.nautilus-flow-center-now\s*\{[^}]*fill:\s*var\(--nautilus-flow-now\);[^}]*font-variant-numeric:\s*tabular-nums;/s);
 });
 
 test('Flow feature-detects ResizeObserver with syntax supported by Roam SCI', () => {
