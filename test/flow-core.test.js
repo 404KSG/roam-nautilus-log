@@ -6,6 +6,8 @@ const {
   resolveRendererSettings,
   hourlyGridSegments,
   pastTimelineSegments,
+  pastUnplannedSegments,
+  pastItemStatus,
   spiralCellInnerHour,
   overlappingFixedEventUids,
   isCurrentPlannedTask,
@@ -50,6 +52,73 @@ test('past timeline segments respect workday bounds', () => {
     [{ start: 300, end: 360 }, { start: 360, end: 420 }],
   );
   assert.deepEqual(pastTimelineSegments({ startMinutes: 420, endMinutes: 300, nowMinutes: 360 }), []);
+});
+
+test('past unplanned segments subtract real work and ignore generated free-time placeholders', () => {
+  assert.deepEqual(
+    pastUnplannedSegments({
+      startMinutes: 300,
+      endMinutes: 600,
+      nowMinutes: 500,
+      occupiedEvents: [
+        { uid: 'meeting', meeting: true, start: 330, end: 380 },
+        { uid: 'overlap', todo: true, start: 370, end: 390 },
+        { freetime: true, start: 390, end: 420 },
+        { uid: 'done', todo: true, done: true, start: 420, end: 450 },
+        { uid: 'current', todo: true, start: 470, end: 520 },
+      ],
+    }),
+    [
+      { start: 300, end: 330 },
+      { start: 390, end: 420 },
+      { start: 450, end: 470 },
+    ],
+  );
+});
+
+test('past unplanned segments follow spiral hour-cell boundaries', () => {
+  assert.deepEqual(
+    pastUnplannedSegments({
+      startMinutes: 300,
+      endMinutes: 600,
+      nowMinutes: 500,
+      occupiedEvents: [],
+    }),
+    [
+      { start: 300, end: 360 },
+      { start: 360, end: 420 },
+      { start: 420, end: 480 },
+      { start: 480, end: 500 },
+    ],
+  );
+  assert.deepEqual(
+    pastUnplannedSegments({ startMinutes: 300, endMinutes: 600, nowMinutes: 299 }),
+    [],
+  );
+});
+
+test('past item status separates completed work, missed plans, and elapsed events', () => {
+  const common = { start: 510, end: 570 };
+  assert.equal(
+    pastItemStatus({ event: { ...common, todo: true, done: true }, nowMinutes: 570, dailyPage: true }),
+    'completed',
+  );
+  assert.equal(
+    pastItemStatus({ event: { ...common, todo: true }, nowMinutes: 570, dailyPage: true }),
+    'missed',
+  );
+  assert.equal(
+    pastItemStatus({ event: { ...common, meeting: true }, nowMinutes: 570, dailyPage: true }),
+    'event',
+  );
+  assert.equal(
+    pastItemStatus({ event: { ...common, todo: true }, nowMinutes: 569, dailyPage: true }),
+    null,
+  );
+  assert.equal(
+    pastItemStatus({ event: { ...common, todo: true }, nowMinutes: 600, dailyPage: false }),
+    null,
+  );
 });
 
 test('paired clock hours occupy separate spiral cells', () => {

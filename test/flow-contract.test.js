@@ -45,6 +45,8 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested F
   assert.match(component, /flow-core-call "resolveRendererSettings"/);
   assert.match(component, /flow-core-call "hourlyGridSegments"/);
   assert.match(component, /flow-core-call "pastTimelineSegments"/);
+  assert.match(component, /flow-core-call "pastUnplannedSegments"/);
+  assert.match(component, /flow-core-call "pastItemStatus"/);
   assert.match(component, /flow-core-call "spiralCellInnerHour"/);
   assert.match(component, /flow-core-call "overlappingFixedEventUids"/);
   assert.match(component, /flow-core-call "isCurrentPlannedTask"/);
@@ -167,9 +169,25 @@ test('Flow shades elapsed time continuously behind slices and through the curren
   assert.match(component, /nautilus-flow-past-overlay/);
   assert.match(component, /flow-core-call "pastTimelineSegments"/);
   assert.match(component, /create-arc-path/);
-  assert.match(component, /\[past-time-overlay-component[^\n]+\]\)\s*\(when @show-done-atom\?/s);
+  assert.match(component, /\[past-time-overlay-component[^\n]+\]\)\s*\(when [\s\S]+\[past-unplanned-overlay-component[^\n]+\]\)\s*\(when @show-done-atom\?/s);
   assert.match(css, /--nautilus-flow-past-overlay:/);
   assert.match(css, /\.nautilus-flow-past-overlay\s*\{[^}]*fill:\s*var\(--nautilus-flow-past-overlay\);[^}]*pointer-events:\s*none;/s);
+});
+
+test('Flow separates completed, missed, and unplanned past time without calling it waste', () => {
+  assert.match(component, /past-unplanned-overlay-component/);
+  assert.match(component, /nautilus-flow-unplanned-pattern/);
+  assert.match(component, /nautilus-flow-past--completed/);
+  assert.match(component, /nautilus-flow-past--missed/);
+  assert.match(component, /nautilus-flow-past--event/);
+  assert.match(component, /:data-past-status past-status/);
+  assert.match(css, /--nautilus-flow-unplanned-stripe:/);
+  assert.match(css, /\.nautilus-flow-unplanned-stripe\s*\{[^}]*stroke:\s*var\(--nautilus-flow-unplanned-stripe\);/s);
+  assert.match(css, /\.nautilus-flow-past--completed \.nautilus-flow-slice\s*\{[^}]*fill:\s*var\(--nautilus-flow-completed-fill\);/s);
+  assert.match(css, /\.nautilus-flow-past--missed \.nautilus-flow-slice\s*\{[^}]*stroke:\s*var\(--nautilus-flow-warning\);[^}]*stroke-dasharray:/s);
+  assert.match(css, /\.nautilus-flow-past--event \.nautilus-flow-slice\s*\{[^}]*fill:\s*var\(--nautilus-flow-past-event-fill\);/s);
+  assert.doesNotMatch(component, /浪费|waste/i);
+  assert.doesNotMatch(css, /\.nautilus-flow-past \.nautilus-flow-slice/);
 });
 
 test('Flow clips paired morning and evening hours into independent spiral cells', () => {
@@ -204,8 +222,8 @@ test('Flow prefers horizontal label rails and keeps past leader lines legible', 
   assert.match(component, /:sortKey order-key/);
   assert.match(component, /:connector-knee-x/);
   assert.match(component, /:connector-rail-x/);
-  assert.doesNotMatch(css, /\.nautilus-flow-past\s*\{[^}]*opacity:/s);
-  assert.match(css, /\.nautilus-flow-past \.nautilus-flow-link-line\s*\{[^}]*opacity:\s*0\.[4-9]/s);
+  assert.doesNotMatch(css, /\.nautilus-flow-event-slice-group\s*\{[^}]*opacity:/s);
+  assert.match(css, /\.nautilus-flow-past--completed \.nautilus-flow-link-line\s*\{[^}]*opacity:\s*0\.[4-9]/s);
 });
 
 test('flexible task labels and connectors use one semantic blue', () => {

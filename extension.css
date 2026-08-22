@@ -15,6 +15,10 @@
   --nautilus-flow-control-icon: #888;
   --nautilus-flow-now: #d44b4b;
   --nautilus-flow-past-overlay: rgba(86, 101, 116, 0.08);
+  --nautilus-flow-unplanned-stripe: rgba(86, 101, 116, 0.34);
+  --nautilus-flow-completed: #77818c;
+  --nautilus-flow-completed-fill: rgba(86, 101, 116, 0.22);
+  --nautilus-flow-past-event-fill: rgba(252, 194, 0, 0.24);
 }
 
 .bp3-dark,
@@ -32,6 +36,10 @@
   --nautilus-flow-control-icon: #aaa;
   --nautilus-flow-now: #ff8b78;
   --nautilus-flow-past-overlay: rgba(255, 255, 255, 0.06);
+  --nautilus-flow-unplanned-stripe: rgba(255, 255, 255, 0.24);
+  --nautilus-flow-completed: #aeb8c2;
+  --nautilus-flow-completed-fill: rgba(199, 207, 214, 0.2);
+  --nautilus-flow-past-event-fill: rgba(242, 193, 78, 0.23);
 }
 
 .nautilus-flow-container {
@@ -416,13 +424,53 @@
   pointer-events: none;
 }
 
-.nautilus-flow-past .nautilus-flow-slice,
-.nautilus-flow-past .nautilus-flow-slice-group text {
-  opacity: 0.35;
+.nautilus-flow-unplanned-overlay {
+  pointer-events: none;
 }
 
-.nautilus-flow-past .nautilus-flow-link-line {
+.nautilus-flow-unplanned-stripe {
+  stroke: var(--nautilus-flow-unplanned-stripe);
+  stroke-width: 1.15px;
+}
+
+.nautilus-flow-grid-past .nautilus-flow-slice,
+.nautilus-flow-grid-past > text {
   opacity: 0.52;
+}
+
+.nautilus-flow-past--completed .nautilus-flow-slice {
+  fill: var(--nautilus-flow-completed-fill);
+}
+
+.nautilus-flow-past--completed .nautilus-flow-slice-group text {
+  opacity: 0.58;
+}
+
+.nautilus-flow-past--completed .nautilus-flow-link-line {
+  opacity: 0.54;
+}
+
+.nautilus-flow-past--missed .nautilus-flow-slice {
+  stroke: var(--nautilus-flow-warning);
+  stroke-width: 1.5px;
+  stroke-dasharray: 4 2;
+}
+
+.nautilus-flow-past--missed .nautilus-flow-slice-group text,
+.nautilus-flow-past--missed .nautilus-flow-link-line {
+  opacity: 0.72;
+}
+
+.nautilus-flow-past--event .nautilus-flow-slice {
+  fill: var(--nautilus-flow-past-event-fill);
+}
+
+.nautilus-flow-past--event .nautilus-flow-slice-group text {
+  opacity: 0.68;
+}
+
+.nautilus-flow-past--event .nautilus-flow-link-line {
+  opacity: 0.6;
 }
 
 .nautilus-flow-controls-top {

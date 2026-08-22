@@ -77,6 +77,10 @@
 
 (def meeting-fill-color "var(--nautilus-flow-event-fill)")
 
+(def completed-fill-color "var(--nautilus-flow-completed-fill)")
+
+(def past-event-fill-color "var(--nautilus-flow-past-event-fill)")
+
 ;; -------------- debug support ------------ 
 
 (def debug-state-atom (r/atom false))        
@@ -706,7 +710,7 @@
         dbg-radians-txt (if debug? (str "slc:" (round2 start-radians)  
                                         "–>" (round2 end-radians) "/ leg:" (round2 legend-radians)) "") 
         on-left? (or (<= legend-radians (- (/ pi 2))) (>= legend-radians (/ pi 2)))] 
-    [:g {:class (when past? "nautilus-flow-past")}
+    [:g {:class (when past? "nautilus-flow-grid-past")}
      [:defs
       [:pattern
        {:id "dot-pattern" :width "4" :height "4" :patternUnits "userSpaceOnUse"}
@@ -750,7 +754,7 @@
                 :style (when click-to-progress {:cursor "pointer"})
                 :on-click #(when click-to-progress (update-block-progress uid 10 now-time-atom))
                 :text-decoration (if done? "line-through" "none")
-                :fill (if-not done? legend-color (update-opacity-str bg-color "0.5"))}
+                :fill (if-not done? legend-color "var(--nautilus-flow-completed)")}
          (if debug? (str dbg-radians-txt)
              (or (flow-core-call "truncateTextToWidth"
                                  {:text text
@@ -789,6 +793,33 @@
                     (spiral-cell-inner-radius start settings inner-radius)
                     (outer-radius-at (mod (quot start 60) (count snail-blueprint-outer-radiuses)))
                     center)}])]))
+
+(defn past-unplanned-overlay-component [occupied-events inner-radius center settings now-time-atom pattern-id]
+  (let [segments (or (flow-core-call "pastUnplannedSegments"
+                                     {:startMinutes (:workday-start settings)
+                                      :endMinutes (:workday-end settings)
+                                      :nowMinutes @now-time-atom
+                                      :occupiedEvents occupied-events})
+                     [])]
+    [:g {:class "nautilus-flow-unplanned-overlay" :aria-hidden "true"}
+     [:defs
+      [:pattern {:id pattern-id
+                 :class "nautilus-flow-unplanned-pattern"
+                 :width "7"
+                 :height "7"
+                 :patternUnits "userSpaceOnUse"
+                 :patternTransform "rotate(45)"}
+       [:line {:class "nautilus-flow-unplanned-stripe"
+               :x1 "0" :y1 "0" :x2 "0" :y2 "7"}]]]
+     (for [{:keys [start end]} segments]
+       ^{:key (str "unplanned:" start ":" end)}
+       [:path {:d (create-arc-path
+                    (min->angle start)
+                    (min->angle end)
+                    (spiral-cell-inner-radius start settings inner-radius)
+                    (outer-radius-at (mod (quot start 60) (count snail-blueprint-outer-radiuses)))
+                    center)
+               :fill (str "url(#" pattern-id ")")}])]))
 
 
 (defn snail-blueprint-component [color inner-radius center settings daily-page? now-time-atom]
@@ -854,19 +885,26 @@
                                          {:event event
                                           :nowMinutes @now-time-atom
                                           :dailyPage daily-page?}))
+        past-status (flow-core-call "pastItemStatus"
+                                   {:event event
+                                    :nowMinutes @now-time-atom
+                                    :dailyPage daily-page?})
         todo-bg-color (or (:bg-color event) task-fill-color)
         meeting-color (or (:bg-color event) meeting-fill-color)]
     {:start-angle start-angle
      :end-angle end-angle
      :bg-color (cond
-                 meeting? (if (and daily-page? expired?) "rgba(128,128,128,0.1)" meeting-color)
-                 todo? (if done-at "rgba(128,128,128,0.1)" todo-bg-color)
+                 (= "completed" past-status) completed-fill-color
+                 (= "event" past-status) past-event-fill-color
+                 meeting? meeting-color
+                 todo? todo-bg-color
                  :else nil)
      :done done?
      :outer-radius outer-radius
      :progress progress
      :meeting? meeting?
      :expired? expired?
+     :past-status past-status
      :current? current?
      :click-to-progress click-to-progress}))
 
@@ -876,9 +914,10 @@
     (range first-bound end-min 60)))
 
 (defn event-slice-component [event index legend-rect inner-radius daily-page? center settings now-time-atom conflict?]
-  (let [{:keys [bg-color done click-to-progress meeting? expired? current?]} (calculate-slice-params event index daily-page? now-time-atom)
+  (let [{:keys [bg-color done click-to-progress meeting? expired? past-status current?]} (calculate-slice-params event index daily-page? now-time-atom)
         legend-color (cond
-                       (and meeting? (not expired?) (nil? (:bg-color event))) "var(--nautilus-flow-event)"
+                       (= "completed" past-status) "var(--nautilus-flow-completed)"
+                       (and meeting? (nil? (:bg-color event))) "var(--nautilus-flow-event)"
                        (and (:todo event) (not done) (nil? (:bg-color event))) task-legend-color
                        :else nil)
         description (:description event)
@@ -896,9 +935,14 @@
                        segs)
                      (recur (first bounds) (rest bounds) (conj segs [curr (first bounds)]))))]
     (into [:g {:class (str "nautilus-flow-event-slice-group"
-                            (when (and daily-page? (:end event) (<= (:end event) @now-time-atom)) " nautilus-flow-past")
+                            (case past-status
+                              "completed" " nautilus-flow-past--completed"
+                              "missed" " nautilus-flow-past--missed"
+                              "event" " nautilus-flow-past--event"
+                              "")
                             (when conflict? " nautilus-flow-event-conflict")
                             (when current? " nautilus-flow-current-task"))
+                    :data-past-status past-status
                     :aria-current (when current? "true")}]
           (map-indexed
            (fn [idx [s e]]
@@ -1029,11 +1073,13 @@
           (str (minutes->time (:start event)) "–" (minutes->time (:end event)))]
          [:span {:class "nautilus-flow-compact-title"} (:description event)]])]]))
 
-(defn show-events [events-state daily-page-atom? show-done-atom? playback-state-atom now-time-atom page-title dimensions settings compact? copy compact-open-state]
+(defn show-events [events-state daily-page-atom? show-done-atom? playback-state-atom now-time-atom page-title dimensions settings compact? copy compact-open-state block-uid]
   (let [[events done-todos] events-state
         old-width (js/Math.round (:width dimensions))
         old-height (js/Math.round (:height dimensions))
         all-events-for-dim (vec (if @show-done-atom? (concat events done-todos) events))
+        past-occupied-events (vec (concat events done-todos))
+        unplanned-pattern-id (str "nautilus-flow-unplanned-" block-uid)
         [center-x suggested-width center-y suggested-height]
         (if compact?
           [(/ old-width 2) old-width (/ old-height 2) old-height]
@@ -1059,6 +1105,8 @@
      [:g
       (when (or @daily-page-atom? @playback-state-atom)
         [past-time-overlay-component snail-inner-radius center settings now-time-atom])
+      (when (or @daily-page-atom? @playback-state-atom)
+        [past-unplanned-overlay-component past-occupied-events snail-inner-radius center settings now-time-atom unplanned-pattern-id])
       (when @show-done-atom? done-slice-components)
       all-slice-components         ;; zobrazení všech událostí
       [snail-blueprint-component snail-template-color snail-inner-radius center settings @daily-page-atom? now-time-atom]
@@ -1552,7 +1600,7 @@
                 (when @compact-state
                   [compact-overview-component capacity settings copy compact-overview-open-state])
                 [:div {:class "nautilus-flow-content"}
-                 [show-events events-state daily-page-atom? show-done-state playback-state-atom now-time-atom page-title-val dimensions settings @compact-state copy compact-list-open-state]
+                 [show-events events-state daily-page-atom? show-done-state playback-state-atom now-time-atom page-title-val dimensions settings @compact-state copy compact-list-open-state block-uid]
                  [overflow-panel capacity copy]
                  [schedule-warning-panel text-events copy]]])]))))
     (finally

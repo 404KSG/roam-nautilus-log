@@ -142,6 +142,78 @@ function pastTimelineSegments({ startMinutes, endMinutes, nowMinutes } = {}) {
 }
 
 /**
+ * Return elapsed intervals that have no recorded item occupying them.
+ *
+ * `fill-day` supplies synthetic free-time rows to the renderer; those are
+ * deliberately ignored here because they describe the absence of a plan.
+ * Gaps are split at hour boundaries so every result maps to exactly one
+ * spiral cell, including the partial current hour.
+ */
+function pastUnplannedSegments({
+  startMinutes,
+  endMinutes,
+  nowMinutes,
+  occupiedEvents = [],
+} = {}) {
+  const start = asNumber(startMinutes);
+  const end = asNumber(endMinutes);
+  const now = asNumber(nowMinutes);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start
+      || !Number.isFinite(now) || now <= start) {
+    return [];
+  }
+
+  const elapsedEnd = Math.min(end, now);
+  const occupied = mergeIntervals(
+    (Array.isArray(occupiedEvents) ? occupiedEvents : [])
+      .filter((event) => event && event.freetime !== true)
+      .map((event) => {
+        const eventStart = asNumber(event.start);
+        const eventEnd = asNumber(event.end);
+        if (!Number.isFinite(eventStart) || !Number.isFinite(eventEnd) || eventEnd <= eventStart) {
+          return null;
+        }
+        const clippedStart = clamp(eventStart, start, elapsedEnd);
+        const clippedEnd = clamp(eventEnd, start, elapsedEnd);
+        return clippedEnd > clippedStart ? [clippedStart, clippedEnd] : null;
+      })
+      .filter(Boolean),
+  );
+
+  const gaps = [];
+  let cursor = start;
+  for (const [occupiedStart, occupiedEnd] of occupied) {
+    if (occupiedStart > cursor) gaps.push([cursor, occupiedStart]);
+    cursor = Math.max(cursor, occupiedEnd);
+  }
+  if (cursor < elapsedEnd) gaps.push([cursor, elapsedEnd]);
+
+  const cells = pastTimelineSegments({ startMinutes: start, endMinutes: end, nowMinutes: elapsedEnd });
+  return gaps.flatMap(([gapStart, gapEnd]) => cells
+    .map((cell) => ({
+      start: Math.max(gapStart, cell.start),
+      end: Math.min(gapEnd, cell.end),
+    }))
+    .filter((segment) => segment.end > segment.start));
+}
+
+/**
+ * Classify an elapsed rendered item without assigning intent to blank time.
+ * "Missed" means a scheduled flexible task whose interval has passed; it
+ * does not mean every unplanned minute was wasted.
+ */
+function pastItemStatus({ event, nowMinutes, dailyPage = false } = {}) {
+  if (dailyPage !== true || !event) return null;
+  const end = asNumber(event.end);
+  const now = asNumber(nowMinutes);
+  if (!Number.isFinite(end) || !Number.isFinite(now) || end > now) return null;
+  if (event.done === true) return 'completed';
+  if (event.todo === true) return 'missed';
+  if (event.meeting === true) return 'event';
+  return null;
+}
+
+/**
  * Return the later hour that shares the same clock angle with this spiral
  * cell. The renderer uses that hour's outer radius as the current cell's inner
  * edge, so 05:00 can occupy the outer band without coloring an empty 17:00
@@ -866,6 +938,8 @@ module.exports = {
   resolveRendererSettings,
   hourlyGridSegments,
   pastTimelineSegments,
+  pastUnplannedSegments,
+  pastItemStatus,
   spiralCellInnerHour,
   overlappingFixedEventUids,
   isCurrentPlannedTask,
