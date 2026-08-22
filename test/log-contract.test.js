@@ -150,6 +150,11 @@ test('execution popover exposes a lightweight daily Review without another graph
   assert.doesNotMatch(timingTopbar, /readAllEntries|readPrimaryPlan/);
 });
 
+test('execution lists stay scrollable without visible scrollbar chrome', () => {
+  assert.match(css, /\.nautilus-log-timing__list\s*\{[^}]*overflow:\s*auto;[^}]*scrollbar-width:\s*none;[^}]*-ms-overflow-style:\s*none;/s);
+  assert.match(css, /\.nautilus-log-timing__list::-webkit-scrollbar\s*\{[^}]*display:\s*none;[^}]*width:\s*0;[^}]*height:\s*0;/s);
+});
+
 test('Log owns the previously tested controls and collapses without reserving chart space', () => {
   assert.match(component, /M3 9h18/);
   assert.match(component, /m9 13 3 3 3-3/);

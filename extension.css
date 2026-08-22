@@ -1041,7 +1041,15 @@
 .nautilus-log-timing__list {
   max-height: min(500px, calc(100vh - 126px));
   overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   padding: 6px;
+}
+
+.nautilus-log-timing__list::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .nautilus-log-timing__list.is-review {

@@ -52,6 +52,8 @@
 
 ### Fixed
 
+- Timing, Plan, and Review lists retain scrolling without exposing native
+  scrollbar chrome inside the execution popover.
 - Compact right-sidebar Overview metrics stay adjacent instead of being spread
   across the row; only the disclosure arrow remains right-aligned.
 - DONE blocks no longer cause identical Roam writes.
