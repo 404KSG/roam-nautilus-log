@@ -224,6 +224,8 @@ test('Log moves metrics and the legend into a folded Overview in narrow containe
   assert.match(css, /\.nautilus-log-compact-overview\s*\{[^}]*display:\s*none;/s);
   assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-log-compact-overview\s*\{[^}]*display:\s*block;/);
   assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-log-header--compact\s*\{[^}]*justify-content:\s*flex-end;/);
+  assert.match(css, /\.nautilus-log-compact-overview-summary\s*\{[^}]*justify-content:\s*flex-start;/s);
+  assert.match(css, /\.nautilus-log-compact-overview-summary::after\s*\{[^}]*margin-left:\s*auto;/s);
 });
 
 test('Log marks the active capacity bucket with an accessible static flame', () => {

@@ -52,6 +52,8 @@
 
 ### Fixed
 
+- Compact right-sidebar Overview metrics stay adjacent instead of being spread
+  across the row; only the disclosure arrow remains right-aligned.
 - DONE blocks no longer cause identical Roam writes.
 - Midnight-crossing events are clipped at 24:00 and shown in a warning panel.
 - Fragmented free time is distinguished from aggregate overload.

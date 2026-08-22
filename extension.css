@@ -296,6 +296,14 @@
   user-select: none;
 }
 
+.nautilus-log-compact-overview-summary {
+  justify-content: flex-start;
+}
+
+.nautilus-log-compact-overview-summary::after {
+  margin-left: auto;
+}
+
 .nautilus-log-compact-summary::-webkit-details-marker {
   display: none;
 }
