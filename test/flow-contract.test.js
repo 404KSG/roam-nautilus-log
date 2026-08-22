@@ -127,24 +127,31 @@ test('Flow moves metrics and the legend into a folded Overview in narrow contain
 test('Flow marks the active capacity bucket with an accessible static flame', () => {
   assert.match(component, /nautilus-flow-burning-icon/);
   assert.match(component, /viewBox "0 0 24 24"/);
+  assert.match(component, /:width "16"/);
+  assert.match(component, /:fill "none"/);
+  assert.match(component, /:stroke "currentColor"/);
   assert.match(component, /burningLabel/);
   assert.match(component, /burningBucket/);
   assert.match(component, /burningAvailable/);
   assert.match(component, /burningEvents/);
   assert.doesNotMatch(component, /🔥/);
-  assert.match(css, /--nautilus-flow-burning:/);
-  assert.match(css, /\.nautilus-flow-burning-icon[\s\S]*currentColor/);
+  assert.doesNotMatch(css, /--nautilus-flow-burning:/);
+  assert.match(css, /\.nautilus-flow-burning-icon\s*\{[^}]*color:\s*var\(--nautilus-flow-control-icon\);/s);
 });
 
-test('Flow renders a moving in-range 24-hour now label inside the spiral', () => {
+test('Flow replaces the center year with an in-range 24-hour now value', () => {
   assert.match(component, /nautilus-flow-now-needle/);
-  assert.match(component, /nautilus-flow-now-label/);
-  assert.match(component, /minutes->time visible-now/);
+  assert.match(component, /nautilus-flow-center-now/);
+  assert.match(component, /center-now-label/);
+  assert.match(component, /\(defn central-label-component \[\[first-row _\] center center-now-label\]/);
+  assert.match(component, /minutes->time @now-time-atom/);
   assert.match(component, /:workday-start settings/);
   assert.match(component, /:workday-end settings/);
-  assert.match(component, /nautilus-flow-now-label-bg/);
-  assert.match(css, /\.nautilus-flow-now-label/);
-  assert.match(css, /--nautilus-flow-now-label-bg:/);
+  assert.doesNotMatch(component, /nautilus-flow-now-label/);
+  assert.doesNotMatch(component, /needle-label-radius/);
+  assert.doesNotMatch(css, /nautilus-flow-now-label/);
+  assert.doesNotMatch(css, /--nautilus-flow-now-label-bg:/);
+  assert.match(css, /\.nautilus-flow-center-now\s*\{[^}]*font-variant-numeric:\s*tabular-nums;/s);
 });
 
 test('Flow feature-detects ResizeObserver with syntax supported by Roam SCI', () => {

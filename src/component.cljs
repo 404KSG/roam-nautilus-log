@@ -796,7 +796,7 @@
                  :x x :y y :fill color :font-size (- font-size 3)
                  :text-anchor "middle" :alignment-baseline "central"} "0"]))]))
 
-(defn central-label-component [[first-row second-row] center]
+(defn central-label-component [[first-row _] center center-now-label]
   (let [[center-x center-y] [(:center-x center) (:center-y center)]
         common-attr {:x center-x
                      :text-anchor "middle"
@@ -808,12 +808,14 @@
                    :font-weight "bold" 
                    :font-size (str (* font-size 0.85))) 
        first-row]
-     [:text (assoc common-attr 
-                   :y (+ center-y 13) 
-                   :fill "var(--nautilus-flow-text-sub)"
-                   :font-weight "500" 
-                   :font-size (str (* font-size 0.7))) 
-       second-row]]))
+     (when center-now-label
+       [:text (assoc common-attr
+                     :y (+ center-y 13)
+                     :class "nautilus-flow-center-now"
+                     :fill "var(--nautilus-flow-text-sub)"
+                     :font-weight "500"
+                     :font-size (str (* font-size 0.7)))
+        center-now-label])]))
 
 (defn calculate-slice-params [event index daily-page? now-time-atom]
   (let [outer-radius (outer-radius-at (mod (quot (int (:start event)) 60) (count snail-blueprint-outer-radiuses)))
@@ -1003,7 +1005,11 @@
         done-slices-and-rects (when @show-done-atom?
                                 (events->slices done-todos daily-page-atom? center settings now-time-atom rects))
         done-slice-components (first done-slices-and-rects)
-        rects (or (second done-slices-and-rects) rects)]
+        rects (or (second done-slices-and-rects) rects)
+        now-visible? (and (or @daily-page-atom? @playback-state-atom)
+                          (>= @now-time-atom (:workday-start settings))
+                          (< @now-time-atom (:workday-end settings)))
+        center-now-label (when now-visible? (minutes->time @now-time-atom))]
     [:div {:class (str "nautilus-flow-visual" (when compact? " nautilus-flow-visual--compact"))}
      [:svg {:viewBox (str "0 0 " suggested-width " " suggested-height)
            :width "100%"
@@ -1016,9 +1022,7 @@
       [snail-blueprint-component snail-template-color snail-inner-radius center settings @daily-page-atom? now-time-atom]
       (when @show-done-atom? done-slice-components)
       all-slice-components         ;; zobrazení všech událostí
-      (when (and (or @daily-page-atom? @playback-state-atom)
-                 (>= @now-time-atom (:workday-start settings))
-                 (< @now-time-atom (:workday-end settings)))
+      (when now-visible?
         (let [visible-now @now-time-atom
               now-angle (min->angle visible-now)
               now-rad (angle->rad now-angle)
@@ -1028,9 +1032,6 @@
               y1 (- (:center-y center) (* inner-r (js/Math.sin now-rad)))
               x2 (+ (:center-x center) (* (+ max-r 15) (js/Math.cos now-rad)))
               y2 (- (:center-y center) (* (+ max-r 15) (js/Math.sin now-rad)))
-              needle-label-radius (+ snail-inner-radius 17)
-              label-x (+ (:center-x center) (* needle-label-radius (js/Math.cos now-rad)))
-              label-y (- (:center-y center) (* needle-label-radius (js/Math.sin now-rad)))
               label (minutes->time visible-now)
               now-copy (get-in copy [:capacity :now])
               label-aria (str now-copy " " label)]
@@ -1040,21 +1041,8 @@
                    :stroke-width 2
                    :stroke-linecap "round"
                    :class "nautilus-flow-now-needle-line"
-                   :style {:filter "drop-shadow(0px 0px 4px rgba(233, 79, 79, 0.4))"}}]
-           [:g {:class "nautilus-flow-now-label" :aria-hidden "true"}
-            [:rect {:x (- label-x 19)
-                    :y (- label-y 9)
-                    :width 38
-                    :height 18
-                    :rx 5
-                    :class "nautilus-flow-now-label-bg"}]
-            [:text {:x label-x
-                    :y (+ label-y 0.5)
-                    :text-anchor "middle"
-                    :dominant-baseline "middle"
-                    :class "nautilus-flow-now-label-text"}
-             label]]]))
-      [central-label-component (split-and-trim page-title len-central-legend) center]
+                   :style {:filter "drop-shadow(0px 0px 4px rgba(233, 79, 79, 0.4))"}}]]))
+      [central-label-component (split-and-trim page-title len-central-legend) center center-now-label]
      
       (when @debug-state-atom ;; just for debug ⤵  #FIXME remove in production later
         [:g                                                             
@@ -1255,14 +1243,18 @@
 
 (defn burning-flame-icon [label]
   [:svg {:class "nautilus-flow-burning-icon"
-         :width "13"
-         :height "13"
+         :width "16"
+         :height "16"
          :viewBox "0 0 24 24"
-         :fill "currentColor"
+         :fill "none"
+         :stroke "currentColor"
+         :stroke-width "1.8"
+         :stroke-linecap "round"
+         :stroke-linejoin "round"
          :role "img"
          :aria-label label}
    [:title label]
-   [:path {:d "M13.2 2.4c.6 3.2 4.8 5.2 4.8 9.9a6 6 0 1 1-12 0c0-2.7 1.4-5.1 3.8-6.8-.1 2.1.5 3.4 1.8 4.4.7-2.6.7-4.7 1.6-7.5Zm-.7 9.4c-.8 1.2-2.4 2.1-2.4 4.1a3.3 3.3 0 0 0 6.6 0c0-1.5-1-2.7-2.2-3.7-.2 1.1-.7 1.8-1.5 2.4.1-1.1-.1-2-.5-2.8Z"}]])
+   [:path {:d "M12 22c4.4 0 8-3.1 8-7.5 0-3.3-1.8-5.8-4.4-8.2.2 2.7-1.5 4.2-2.8 4.9.4-4.1-1.3-7.1-4.6-9.2.3 3.8-1 6-2.6 8.2A7.4 7.4 0 0 0 4 14.5C4 18.9 7.6 22 12 22Z"}]])
 
 (defn metrics-component [metrics]
   (let [aria-label (str/join ", " (map #(str (:label %) " " (:value %)

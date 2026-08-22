@@ -10,10 +10,7 @@
   --nautilus-flow-warning: #c96c00;
   --nautilus-flow-event: #c58a00;
   --nautilus-flow-task: #0899c8;
-  --nautilus-flow-burning: #e45c3f;
-  --nautilus-flow-now-label-bg: rgba(255, 255, 255, 0.94);
-  --nautilus-flow-now-label-fg: #c63f3f;
-  --nautilus-flow-now-label-border: rgba(198, 63, 63, 0.34);
+  --nautilus-flow-control-icon: #888;
 }
 
 .bp3-dark,
@@ -26,10 +23,7 @@
   --nautilus-flow-warning: #f4b75d;
   --nautilus-flow-event: #f2c14e;
   --nautilus-flow-task: #47b8df;
-  --nautilus-flow-burning: #ff8a68;
-  --nautilus-flow-now-label-bg: rgba(47, 47, 47, 0.94);
-  --nautilus-flow-now-label-fg: #ff9b8a;
-  --nautilus-flow-now-label-border: rgba(255, 155, 138, 0.46);
+  --nautilus-flow-control-icon: #aaa;
 }
 
 .nautilus-flow-container {
@@ -162,11 +156,12 @@
 .nautilus-flow-burning-icon {
   display: inline-block;
   flex: 0 0 auto;
-  width: 13px;
-  height: 13px;
-  color: var(--nautilus-flow-burning);
-  fill: currentColor;
-  vertical-align: -2px;
+  width: 16px;
+  height: 16px;
+  color: var(--nautilus-flow-control-icon);
+  fill: none;
+  stroke: currentColor;
+  vertical-align: -3px;
 }
 
 .nautilus-flow-burning-summary {
@@ -175,21 +170,11 @@
   gap: 3px;
 }
 
-.nautilus-flow-now-needle,
-.nautilus-flow-now-label {
+.nautilus-flow-now-needle {
   pointer-events: none;
 }
 
-.nautilus-flow-now-label-bg {
-  fill: var(--nautilus-flow-now-label-bg);
-  stroke: var(--nautilus-flow-now-label-border);
-  stroke-width: 0.75;
-}
-
-.nautilus-flow-now-label-text {
-  fill: var(--nautilus-flow-now-label-fg);
-  font-size: 10px;
-  font-weight: 650;
+.nautilus-flow-center-now {
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.1px;
 }
@@ -443,7 +428,7 @@
   filter: none !important;
   text-shadow: none !important;
   transform: none;
-  color: #888;
+  color: var(--nautilus-flow-control-icon);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -458,11 +443,6 @@
   background-color: var(--nautilus-flow-hover) !important;
   color: #333;
   outline: none;
-}
-
-.bp3-dark .nautilus-flow-toggle-btn,
-.roam-app.rm-dark-theme .nautilus-flow-toggle-btn {
-  color: #aaa;
 }
 
 .bp3-dark .nautilus-flow-toggle-btn:hover,
