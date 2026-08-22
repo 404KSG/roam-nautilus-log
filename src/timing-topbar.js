@@ -138,7 +138,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     const timingAction = iconButton(focused ? 'log-out' : 'play', focused ? 'Clock Out' : 'Clock In', () => {
       runAction(() => focused ? runtime.stopTask() : runtime.startTask(task.uid));
     });
-    const completeAction = iconButton('resolve', 'Complete task', () => runAction(() => runtime.completeTask(task.uid)));
+    const completeAction = iconButton('tick-circle', 'Complete task', () => runAction(() => runtime.completeTask(task.uid)));
     completeAction.classList.add('is-complete');
     timingAction.disabled = state.status === 'working';
     completeAction.disabled = state.status === 'working';
