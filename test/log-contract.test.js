@@ -61,6 +61,10 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested L
   assert.match(component, /log-core-call "scheduleTasks"/);
   assert.match(component, /log-core-call "calculateCapacity"/);
   assert.match(component, /log-core-call "historicalDoneSlice"/);
+  assert.match(component, /log-core-call "completedTaskClockSummary"/);
+  assert.match(component, /:actualDuration actual-duration/);
+  assert.match(component, /:lastClockEnd last-clock-end/);
+  assert.match(entry, /getClockRenderContext/);
   assert.match(component, /log-core-call "truncateTextToWidth"/);
   assert.match(component, /log-core-call "placeExternalLabels"/);
   assert.match(component, /log-core-call "resolveRendererSettings"/);

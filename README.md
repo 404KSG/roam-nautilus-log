@@ -52,7 +52,7 @@ does not require it to draw the schedule.
 Actual Time Tracking defaults to **off**. While it is off, Nautilus Log does not
 mount a topbar trigger or panel, run a timing poller, register timer commands, or
 write `CLOCK:` records. Enabling it adds a compact execution layer without
-changing the spiral's estimated scheduling rules:
+changing unfinished tasks' Planned scheduling rules:
 
 - the first Nautilus Log component on today's Daily Note is the Primary Plan;
 - Plan shows only unfinished direct-child TODO blocks, in Roam order;
@@ -128,12 +128,15 @@ An event that crosses midnight is clipped at the selected day's `24:00`
 boundary and shown in a visible warning panel; Log does not silently schedule
 the next day's portion.
 
-When a completed task has an explicit `dHH:MM` completion marker, its historical
-slice ends at that time and starts by subtracting the original estimate. For
-example, a 60-minute task completed at 21:50 is shown as 20:50–21:50, regardless
-of when the previous task ended. A `DONE` item without `dHH:MM` produces no
-inferred historical interval; an untimed task uses the configured default
-duration.
+For a completed flexible task, the historical slice prefers the total Actual
+time from all valid closed `CLOCK:` records that overlap the displayed Daily
+Note date. Multiple sessions remain separate in `LOGBOOK::`, but the spiral
+condenses their total into one slice and never caps it at Planned. The slice ends
+at an explicit `dHH:MM` marker when present, otherwise at the latest closed
+CLOCK end. If no Actual exists, Log falls back to the original Planned duration
+and requires `dHH:MM` as its anchor. Without either anchor, it does not invent a
+historical interval. Cross-midnight CLOCK sessions contribute only the portion
+inside the displayed date.
 
 The legend is intentionally minimal: a red dot means **urgent**, yellow means
 **event**, and blue means **task**. The red line is the current-time pointer.
@@ -237,10 +240,12 @@ CLOCK 写入者时会拒绝启动。
 跨越午夜的固定事件会在当天 `24:00` 截断，并进入可见的时间范围提醒；Log 不会
 悄悄把次日部分排进今天。
 
-已完成任务如果带有明确的 `d小时:分钟` 完成时间标记，历史切片以该时间结束，
-并按任务原始预计时长倒推开始时间。例如，预计 60 分钟、21:50 完成的任务会显示为
-20:50–21:50，不会根据上一个任务的完成时间推断开始。没有 `d小时:分钟` 的 DONE
-事项不会制造推断出的历史区间；未填写时长的任务使用设置中的默认时长。
+弹性任务完成后，历史切片优先采用该 Daily Note 日期内所有有效且已关闭 `CLOCK:`
+记录的 Actual 总时长。多段计时仍分别保留在 `LOGBOOK::` 中，海螺图只把总时长合并成
+一段，而且 Actual 即使超过 Planned 也不会被截断。切片优先以明确的 `d小时:分钟`
+标记为结束点；没有该标记时，以当天最后一段 CLOCK 的结束时间为准。当天没有 Actual
+时才回退到原始 Planned 时长，并要求 `d小时:分钟` 作为锚点；两种结束锚点都没有时，
+不会凭空制造历史区间。跨午夜 CLOCK 只统计落在当前展示日期内的部分。
 
 图例保持简洁：红色圆点表示“紧急”，黄色表示“事件”，蓝色表示“任务”。
 红色细线代表当前时间，不额外加入 NOW 图标。今天已经过去的时间会降低视觉权重，

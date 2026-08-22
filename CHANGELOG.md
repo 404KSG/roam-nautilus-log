@@ -43,6 +43,9 @@
   In, global Clock Out, and Primary Plan navigation.
 - Optional native right-sidebar fronting for the current Timing Line, enabled by
   default whenever Actual Time Tracking is on.
+- Completed flexible tasks now condense all valid closed CLOCK sessions for the
+  displayed date into one completion-anchored Actual slice; Planned remains the
+  fallback, and cross-midnight sessions are clipped to the day.
 
 ### Fixed
 

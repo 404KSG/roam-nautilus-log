@@ -14,6 +14,7 @@ const {
   uiCopy,
   capacityMetrics,
   scheduleTasks,
+  completedTaskClockSummary,
   historicalDoneSlice,
   calculateCapacity,
   burningCapacityBucket,
@@ -272,6 +273,87 @@ test('historical DONE slices use explicit completion time minus the original est
   });
 
   assert.deepEqual(result, { start: 20 * 60 + 50, end: 21 * 60 + 50, duration: 60 });
+});
+
+test('completed task CLOCK summary condenses multiple closed sessions into one daily Actual total', () => {
+  const dayStartMs = new Date(2026, 7, 22, 0, 0).getTime();
+  const dayEndMs = new Date(2026, 7, 23, 0, 0).getTime();
+  const at = (hour, minute) => new Date(2026, 7, 22, hour, minute);
+
+  assert.deepEqual(
+    completedTaskClockSummary({
+      taskUid: 'task-a',
+      dayStartMs,
+      dayEndMs,
+      entries: [
+        { taskUid: 'task-a', start: at(9, 0), end: at(9, 20), running: false },
+        { taskUid: 'task-a', start: at(10, 30), end: at(10, 45), running: false },
+        { taskUid: 'task-a', start: at(11, 0), running: true },
+        { taskUid: 'task-b', start: at(8, 0), end: at(9, 0), running: false },
+      ],
+    }),
+    { actualMinutes: 35, sessionCount: 2, latestEndMinutes: 10 * 60 + 45 },
+  );
+});
+
+test('historical DONE slices prefer Actual and use the latest CLOCK end when no done marker exists', () => {
+  assert.deepEqual(
+    historicalDoneSlice({
+      done: true,
+      doneAt: null,
+      duration: 60,
+      actualDuration: 35,
+      lastClockEnd: 10 * 60 + 45,
+    }),
+    { start: 10 * 60 + 10, end: 10 * 60 + 45, duration: 35, durationSource: 'actual' },
+  );
+});
+
+test('completed task Actual clips cross-midnight sessions to the displayed day', () => {
+  const dayStartMs = new Date(2026, 7, 22, 0, 0).getTime();
+  const dayEndMs = new Date(2026, 7, 23, 0, 0).getTime();
+
+  assert.deepEqual(
+    completedTaskClockSummary({
+      taskUid: 'task-a',
+      dayStartMs,
+      dayEndMs,
+      entries: [
+        {
+          taskUid: 'task-a',
+          start: new Date(2026, 7, 21, 23, 50),
+          end: new Date(2026, 7, 22, 0, 20),
+          running: false,
+        },
+        {
+          taskUid: 'task-a',
+          start: new Date(2026, 7, 22, 23, 30),
+          end: new Date(2026, 7, 23, 0, 30),
+          running: false,
+        },
+        {
+          taskUid: 'task-a',
+          start: new Date(2026, 7, 21, 20, 0),
+          end: new Date(2026, 7, 21, 21, 0),
+          running: false,
+        },
+      ],
+    }),
+    { actualMinutes: 50, sessionCount: 2, latestEndMinutes: 24 * 60 },
+  );
+});
+
+test('completed task Actual may exceed Planned without being capped', () => {
+  assert.deepEqual(
+    historicalDoneSlice({
+      done: true,
+      doneAt: 12 * 60,
+      duration: 30,
+      actualDuration: 80,
+      lastClockEnd: 12 * 60,
+    }),
+    { start: 10 * 60 + 40, end: 12 * 60, duration: 80, durationSource: 'actual' },
+  );
 });
 
 test('historical DONE slices use the default estimate when no duration is present', () => {

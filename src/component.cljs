@@ -305,6 +305,16 @@
         (js->clj (.call function nil (clj->js value)) :keywordize-keys true)))
     (catch :default _e nil)))
 
+(defn clock-render-context [page-title]
+  "Reads one cached CLOCK snapshot for the displayed daily page. The entry
+   bridge owns graph access so rendering multiple tasks does not repeat the
+   global LOGBOOK query."
+  (try
+    (if-let [reader (some-> js/window .-nautilusLogExtensionData .-getClockRenderContext)]
+      (js->clj (.call reader nil page-title) :keywordize-keys true)
+      {:entries []})
+    (catch :default _e {:entries []})))
+
 (defn spiral-cell-inner-radius [start-minute settings fallback-inner-radius]
   (let [paired-hour (log-core-call "spiralCellInnerHour"
                                     {:startMinute start-minute
@@ -543,7 +553,7 @@
       (str/replace #"\s\s" " ")
       (str/trim)))
 
-(defn parse-row-params [block-map settings]
+(defn parse-row-params [block-map settings clock-context]
   (let [s (:s block-map)
         cleaned-str (parse-URLs s) ;; remove URLs – it has to start with this, because URLs can contain other markers
         {:keys [custom-color cleaned-str]} (parse-custom-color-1 cleaned-str settings)
@@ -552,21 +562,33 @@
         {:keys [progress cleaned-str]} (parse-progress cleaned-str)
         {:keys [done-at cleaned-str]} (parse-done-time cleaned-str)
         {:keys [done cleaned-str]} (parse-DONE cleaned-str)
-        ;; Completed work gets a historical slice only from its explicit
-        ;; completion marker.  The Log core derives its start by subtracting
-        ;; the original estimate; it must never use the preceding task's end.
+        ;; A flexible completed task uses one condensed Actual slice when the
+        ;; displayed day has valid closed CLOCK records. Fixed events retain
+        ;; their explicit range, and Planned remains the fallback.
+        actual-summary (when (and done (nil? range))
+                         (log-core-call "completedTaskClockSummary"
+                                        {:taskUid (:uid block-map)
+                                         :entries (:entries clock-context)
+                                         :dayStartMs (:dayStartMs clock-context)
+                                         :dayEndMs (:dayEndMs clock-context)}))
+        actual-duration (:actualMinutes actual-summary)
+        last-clock-end (:latestEndMinutes actual-summary)
         done-slice (log-core-call "historicalDoneSlice"
                                    {:done done
                                     :doneAt done-at
                                     :duration duration
-                                    :defaultDuration (:default-duration settings)})
+                                    :defaultDuration (:default-duration settings)
+                                    :actualDuration actual-duration
+                                    :lastClockEnd last-clock-end})
         description (parse-rest cleaned-str)
         event-type (if range :meeting :todo)]
     (when done
       (rm-prog-from-block-if-done (:uid block-map)))
     (-> {:description description
          :progress progress
-         :duration (int (* (/ (- 100 progress) 100) duration))
+         :duration (if (and done-slice (nil? range))
+                     (:duration done-slice)
+                     (int (* (/ (- 100 progress) 100) duration)))
          :uid (:uid block-map)
          ;; Fixed events keep their explicit range after completion so the
          ;; full-day event denominator remains stable. Flexible DONE tasks use
@@ -576,7 +598,11 @@
          :done done
          :warning warning
          :bg-color custom-color
-         :done-at (if done done-at nil)}
+         :done-at (if done (or done-at last-clock-end) nil)
+         :duration-source (:durationSource done-slice)
+         :actual-minutes (when (= "actual" (:durationSource done-slice)) actual-duration)
+         :clock-session-count (:sessionCount actual-summary)
+         :planned-duration duration}
         (assoc event-type true))))
 
 ;; --------------- fill day with events and todos ----------------------
@@ -1536,6 +1562,8 @@
                                (observe-compact-width! node compact-state resize-observer-state))
                clock-interval (js/setInterval #(when-not @playback-state-atom
                                                  (reset-now-time-atom now-time-atom)) 60000)
+               daily-page-atom? (r/atom (daily-page? block-uid))
+               page-title-val (page-title block-uid)
                *get-children-atom (get-children-pull block-uid)
                *children (r/track eval-state *get-children-atom)
                *text-events (r/track
@@ -1545,14 +1573,13 @@
                                                         (filter #(not= "" (:block/string %)))
                                                         (sort-by :block/order))
                                      mapped (mapv #(hash-map :s (str-with-resolved-block-refs %) :uid (:block/uid %)) children-list)
-                                     parsed (mapv #(parse-row-params % settings) mapped)
+                                     clock-context (clock-render-context page-title-val)
+                                     parsed (mapv #(parse-row-params % settings clock-context) mapped)
                                      filtered (filterv #(not= "" (:description %)) parsed)]
                                  (let [dones (filterv #(or (:done-at %) (and (:meeting %) (:done %))) filtered)
                                        pendings (filterv #(not (or (:done-at %) (and (:meeting %) (:done %)))) filtered)]
                                    [(add-start-after pendings) dones]))))
-               show-done-state (r/atom true)
-               daily-page-atom? (r/atom (daily-page? block-uid))
-               page-title-val (page-title block-uid)]
+               show-done-state (r/atom true)]
     (case @*running?
       nil [:div {:class "nautilus-log-loading"} [:strong "Loading Nautilus Log..."]]
       false [:div {:class "nautilus-log-not-installed"}

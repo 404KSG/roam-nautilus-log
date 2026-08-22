@@ -16,6 +16,18 @@ function asNumber(value) {
   return Number.isFinite(number) ? number : NaN;
 }
 
+function asTimestamp(value) {
+  if (value instanceof Date) {
+    const timestamp = value.getTime();
+    return Number.isFinite(timestamp) ? timestamp : NaN;
+  }
+  const numeric = asNumber(value);
+  if (Number.isFinite(numeric)) return numeric;
+  if (typeof value !== 'string') return NaN;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : NaN;
+}
+
 function normalizeHour(value, options, fallback) {
   const hour = asNumber(value);
   return options.includes(hour) ? hour : fallback;
@@ -431,15 +443,28 @@ function scheduleTasks({
  * applied).  Callers that parse a task can pass their configured default when
  * the task has no explicit estimate.
  */
-function historicalDoneSlice({ done, doneAt, duration, defaultDuration } = {}) {
-  if (done !== true || doneAt === null || doneAt === undefined) return null;
+function historicalDoneSlice({
+  done,
+  doneAt,
+  duration,
+  defaultDuration,
+  actualDuration,
+  lastClockEnd,
+} = {}) {
+  if (done !== true) return null;
 
-  const end = asNumber(doneAt);
+  const actual = asNumber(actualDuration);
+  const hasActual = Number.isFinite(actual) && actual > 0;
+  const explicitEnd = asNumber(doneAt);
+  const clockEnd = asNumber(lastClockEnd);
+  const end = Number.isFinite(explicitEnd) ? explicitEnd : hasActual ? clockEnd : NaN;
   const explicitDuration = asNumber(duration);
   const fallbackDuration = asNumber(defaultDuration);
-  const originalDuration = Number.isFinite(explicitDuration) && explicitDuration > 0
-    ? explicitDuration
-    : fallbackDuration;
+  const originalDuration = hasActual
+    ? actual
+    : Number.isFinite(explicitDuration) && explicitDuration > 0
+      ? explicitDuration
+      : fallbackDuration;
 
   if (!Number.isFinite(end) || !Number.isFinite(originalDuration) || originalDuration <= 0) {
     return null;
@@ -449,6 +474,42 @@ function historicalDoneSlice({ done, doneAt, duration, defaultDuration } = {}) {
     start: end - originalDuration,
     end,
     duration: originalDuration,
+    ...(hasActual ? { durationSource: 'actual' } : {}),
+  };
+}
+
+/**
+ * Condense one completed task's closed CLOCK intervals into a daily Actual
+ * total. Session positions remain authoritative in LOGBOOK; the spiral uses
+ * only this summary to render one completion-anchored historical slice.
+ */
+function completedTaskClockSummary({ taskUid, entries = [], dayStartMs, dayEndMs } = {}) {
+  const dayStart = asTimestamp(dayStartMs);
+  const dayEnd = asTimestamp(dayEndMs);
+  if (!taskUid || !Number.isFinite(dayStart) || !Number.isFinite(dayEnd) || dayEnd <= dayStart) {
+    return { actualMinutes: 0, sessionCount: 0, latestEndMinutes: null };
+  }
+
+  let actualMilliseconds = 0;
+  let sessionCount = 0;
+  let latestEnd = null;
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    if (entry?.taskUid !== taskUid || entry?.running === true) continue;
+    const start = asTimestamp(entry?.start);
+    const end = asTimestamp(entry?.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+    const clippedStart = Math.max(dayStart, start);
+    const clippedEnd = Math.min(dayEnd, end);
+    if (clippedEnd <= clippedStart) continue;
+    actualMilliseconds += clippedEnd - clippedStart;
+    sessionCount += 1;
+    latestEnd = latestEnd === null ? clippedEnd : Math.max(latestEnd, clippedEnd);
+  }
+
+  return {
+    actualMinutes: Math.floor(actualMilliseconds / 60000),
+    sessionCount,
+    latestEndMinutes: latestEnd === null ? null : Math.floor((latestEnd - dayStart) / 60000),
   };
 }
 
@@ -971,6 +1032,7 @@ module.exports = {
   overlappingFixedEventUids,
   isCurrentPlannedTask,
   scheduleTasks,
+  completedTaskClockSummary,
   historicalDoneSlice,
   calculateCapacity,
   burningCapacityBucket,

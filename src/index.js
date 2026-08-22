@@ -6,6 +6,7 @@ import {
 } from "./entry-helpers";
 import * as logCore from "./log-core";
 import { createTimingCommands } from "./timing-commands";
+import { readAllEntries } from "./timing-roam";
 import { createTimingRuntime } from "./timing-runtime";
 import { createTimingTopbar } from "./timing-topbar";
 import "../extension.css";
@@ -42,6 +43,48 @@ const executionDefaults = {
 let timingRuntime = null;
 let timingTopbar = null;
 let timingCommands = null;
+const rendererClockCacheMs = 15_000;
+let rendererClockCache = { entries: [], readAt: 0, valid: false };
+
+function cacheRendererClockEntries(entries) {
+  if (!Array.isArray(entries)) return rendererClockCache.entries;
+  rendererClockCache = { entries, readAt: Date.now(), valid: true };
+  return entries;
+}
+
+function rendererClockEntries() {
+  const runtimeEntries = timingRuntime?.getSnapshot?.()?.entries;
+  if (Array.isArray(runtimeEntries)) return cacheRendererClockEntries(runtimeEntries);
+  if (rendererClockCache.valid && Date.now() - rendererClockCache.readAt < rendererClockCacheMs) {
+    return rendererClockCache.entries;
+  }
+  try {
+    return cacheRendererClockEntries(readAllEntries());
+  } catch (error) {
+    console.debug("[Nautilus Log] CLOCK render snapshot unavailable", error);
+    return rendererClockCache.valid ? rendererClockCache.entries : [];
+  }
+}
+
+function dailyPageBounds(pageTitle) {
+  try {
+    const parsed = window.roamAlphaAPI?.util?.pageTitleToDate?.(pageTitle);
+    const date = parsed instanceof Date ? parsed : new Date(parsed);
+    if (!Number.isFinite(date.getTime())) return {};
+    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+    return { dayStartMs: dayStart.getTime(), dayEndMs: dayEnd.getTime() };
+  } catch (_error) {
+    return {};
+  }
+}
+
+function getClockRenderContext(pageTitle) {
+  return {
+    entries: rendererClockEntries(),
+    ...dailyPageBounds(pageTitle),
+  };
+}
 
 function settingValue(extensionAPI, key) {
   const value = extensionAPI.settings.get(key);
@@ -147,6 +190,7 @@ async function stopTiming({ closeActive = false } = {}) {
   if (!timingRuntime) return true;
   if (closeActive) await timingRuntime.disable();
   else timingRuntime.destroy();
+  cacheRendererClockEntries(timingRuntime.getSnapshot?.()?.entries);
   timingCommands?.destroy();
   timingTopbar?.destroy();
   timingRuntime = null;
@@ -401,6 +445,7 @@ async function onload({ extensionAPI }) {
     running: true,
     shouldSuppressRenderContext,
     isRightSidebarRenderContext,
+    getClockRenderContext,
   };
   await setDefaultSettings(extensionAPI);
   await migratePreviewDefaults(extensionAPI);
