@@ -76,7 +76,9 @@ changing the spiral's estimated scheduling rules:
   default; 0 disables it) that marks an unusually long open CLOCK in the
   topbar and Timing row without stopping or deleting it.
 
-The idle topbar entry uses Blueprint's native `unresolve` icon. The `locate` action
+The popover header identifies itself as **Nautilus Log** beside the same Blueprint
+`unresolve` icon, before the Timing and Plan tabs. The idle topbar entry uses that
+icon as well. The `locate` action
 opens the Primary Plan in Roam's main window. Task titles open in the main
 window; Shift+Click opens them in the right sidebar. The Command Palette exposes
 **Nautilus Log: Focus current block**, **Nautilus Log: Clock out Timing Line**,
@@ -199,7 +201,8 @@ Todo Trigger 仍然是可选工具：它可以在完成时追加时间戳，但 
 - 遗忘计时阈值是独立的数字设置，默认 120 分钟，填写 0 可关闭；达到阈值只在顶栏和
   Timing 行显示警告，不会自动停止或删除 CLOCK。
 
-空闲时使用 Blueprint 原生 `unresolve` 图标；`locate` 会把当天 Primary Plan 定位到主界面。
+弹窗头部会在 Timing / Plan 前以相同的 `unresolve` 图标和 **Nautilus Log** 名称明确标识
+插件来源；顶栏空闲入口也沿用该图标。`locate` 会把当天 Primary Plan 定位到主界面。
 点击任务标题在主界面打开，Shift+Click 在右侧边栏打开。命令面板提供“聚焦当前
 block”“Clock out Timing Line”和“定位 Primary Plan”三项操作，可在 **Roam Settings
 → Hotkeys** 自行绑定快捷键；插件不会安装可能冲突的全局按键监听。TODO 右键菜单也会

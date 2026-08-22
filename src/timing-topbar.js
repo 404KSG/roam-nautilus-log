@@ -210,6 +210,9 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     popover.replaceChildren();
 
     const header = element('div', 'nautilus-log-timing__popover-header');
+    const headerMain = element('div', 'nautilus-log-timing__popover-header-main');
+    const identity = element('div', 'nautilus-log-timing__identity');
+    identity.append(icon('unresolve'), element('span', 'nautilus-log-timing__identity-name', 'Nautilus Log'));
     const tabs = element('div', 'nautilus-log-timing__tabs');
     ['timing', 'plan'].forEach((name) => {
       const button = element('button', `nautilus-log-timing__tab${view === name ? ' is-active' : ''}`, name === 'timing' ? 'Timing' : 'Plan');
@@ -221,7 +224,8 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       });
       tabs.append(button);
     });
-    header.append(tabs);
+    headerMain.append(identity, tabs);
+    header.append(headerMain);
     header.append(iconButton('locate', 'Locate Primary Nautilus Log', () => {
       closePopover();
       runAction(() => runtime.locate());

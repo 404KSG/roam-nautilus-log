@@ -795,6 +795,34 @@
   padding: 6px 8px 6px 12px;
 }
 
+.nautilus-log-timing__popover-header-main {
+  align-items: center;
+  display: flex;
+  min-width: 0;
+}
+
+.nautilus-log-timing__identity {
+  align-items: center;
+  border-right: 1px solid rgba(117, 126, 140, 0.18);
+  color: #8a929f;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 5px;
+  margin-right: 8px;
+  padding-right: 10px;
+  white-space: nowrap;
+}
+
+.nautilus-log-timing__identity .bp3-icon {
+  font-size: 14px;
+}
+
+.nautilus-log-timing__identity-name {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
 .nautilus-log-timing__tabs {
   align-items: center;
   display: flex;
