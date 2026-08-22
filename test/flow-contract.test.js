@@ -45,6 +45,7 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested F
   assert.match(component, /flow-core-call "resolveRendererSettings"/);
   assert.match(component, /flow-core-call "hourlyGridSegments"/);
   assert.match(component, /flow-core-call "pastTimelineSegments"/);
+  assert.match(component, /flow-core-call "spiralCellInnerHour"/);
   assert.match(component, /flow-core-call "overlappingFixedEventUids"/);
   assert.match(component, /flow-core-call "uiCopy"/);
   assert.match(component, /flow-core-call "capacityMetrics"/);
@@ -168,6 +169,14 @@ test('Flow shades elapsed time continuously behind slices and through the curren
   assert.match(component, /\[past-time-overlay-component[^\n]+\]\)\s*\(when @show-done-atom\?/s);
   assert.match(css, /--nautilus-flow-past-overlay:/);
   assert.match(css, /\.nautilus-flow-past-overlay\s*\{[^}]*fill:\s*var\(--nautilus-flow-past-overlay\);[^}]*pointer-events:\s*none;/s);
+});
+
+test('Flow clips paired morning and evening hours into independent spiral cells', () => {
+  assert.match(component, /defn spiral-cell-inner-radius/);
+  assert.match(component, /flow-core-call "spiralCellInnerHour"/);
+  assert.match(component, /past-time-overlay-component[\s\S]*spiral-cell-inner-radius start settings inner-radius/);
+  assert.match(component, /snail-blueprint-component[\s\S]*spiral-cell-inner-radius start settings inner-radius/);
+  assert.match(component, /event-slice-component[\s\S]*spiral-cell-inner-radius s settings inner-radius/);
 });
 
 test('Flow gives normal fixed events one semantic yellow and marks real conflicts separately', () => {

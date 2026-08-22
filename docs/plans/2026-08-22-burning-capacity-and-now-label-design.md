@@ -48,6 +48,14 @@ actively focused.
   ranges and receive a dashed warning outline. Adjacent events whose end/start
   times merely touch are not conflicts. Color continues to mean only “fixed
   event”; the outline carries the separate conflict meaning.
+- Clock hours twelve hours apart share an angle but no longer share painted
+  space. When the later paired hour is inside the visible workday, its outer
+  radius becomes the earlier hour's inner boundary: 05:00 occupies the outer
+  band and 17:00 owns the inner cell. If 17:00 is empty, it therefore remains
+  unpainted instead of inheriting 05:00's event color. The same cell boundary
+  is used by the hour grid, fixed events, flexible tasks, completed slices, and
+  the past-time overlay so semantic colors and elapsed shading cannot leak
+  between paired morning/evening hours.
 
 ## Rendering and compatibility
 
@@ -62,9 +70,11 @@ a Roam graph.
 
 Core tests cover before-start, in-event, available, at/after event end,
 workday end, ignored completed/non-meeting events, and overlap boundaries.
-Core tests also cover partial-hour and bounded past-overlay segments. Contract
-tests additionally cover fixed-event conflict boundaries. Renderer contracts
-cover the bridge calls, localized outline flame SVG, compact summary, center
-time, removal of the needle badge/year, overlay/grid render order, one event
-fill token, conflict styling, and theme-aware CSS. `npm test` and
-`git diff --check` are the acceptance checks.
+Core tests also cover partial-hour and bounded past-overlay segments, plus the
+05:00/17:00 paired-cell boundary and the exclusive chart-end boundary.
+Contract tests additionally cover fixed-event conflict boundaries. Renderer
+contracts cover the bridge calls, localized outline flame SVG, compact
+summary, center time, removal of the needle badge/year, overlay/grid render
+order, shared cell clipping across every painted layer, one event fill token,
+conflict styling, and theme-aware CSS. `npm test` and `git diff --check` are the
+acceptance checks.

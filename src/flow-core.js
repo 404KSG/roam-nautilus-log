@@ -142,6 +142,21 @@ function pastTimelineSegments({ startMinutes, endMinutes, nowMinutes } = {}) {
 }
 
 /**
+ * Return the later hour that shares the same clock angle with this spiral
+ * cell. The renderer uses that hour's outer radius as the current cell's inner
+ * edge, so 05:00 can occupy the outer band without coloring an empty 17:00
+ * cell. A pair that starts at the chart end is outside the visible timeline.
+ */
+function spiralCellInnerHour({ startMinute, endMinutes } = {}) {
+  const start = asNumber(startMinute);
+  const end = asNumber(endMinutes);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start >= end) return null;
+
+  const pairedHour = Math.floor(start / 60) + 12;
+  return pairedHour * 60 < end ? pairedHour : null;
+}
+
+/**
  * Return the UIDs of unfinished fixed events whose half-open time ranges
  * overlap. Touching boundaries (for example 10:00–11:00 and 11:00–12:00) are
  * adjacent, not conflicting.
@@ -837,6 +852,7 @@ module.exports = {
   resolveRendererSettings,
   hourlyGridSegments,
   pastTimelineSegments,
+  spiralCellInnerHour,
   overlappingFixedEventUids,
   scheduleTasks,
   historicalDoneSlice,

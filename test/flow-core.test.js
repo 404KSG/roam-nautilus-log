@@ -6,6 +6,7 @@ const {
   resolveRendererSettings,
   hourlyGridSegments,
   pastTimelineSegments,
+  spiralCellInnerHour,
   overlappingFixedEventUids,
   uiCopy,
   capacityMetrics,
@@ -48,6 +49,14 @@ test('past timeline segments respect workday bounds', () => {
     [{ start: 300, end: 360 }, { start: 360, end: 420 }],
   );
   assert.deepEqual(pastTimelineSegments({ startMinutes: 420, endMinutes: 300, nowMinutes: 360 }), []);
+});
+
+test('paired clock hours occupy separate spiral cells', () => {
+  assert.equal(spiralCellInnerHour({ startMinute: 300, endMinutes: 1440 }), 17);
+  assert.equal(spiralCellInnerHour({ startMinute: 330, endMinutes: 1440 }), 17);
+  assert.equal(spiralCellInnerHour({ startMinute: 1020, endMinutes: 1440 }), null);
+  assert.equal(spiralCellInnerHour({ startMinute: 540, endMinutes: 1260 }), null);
+  assert.equal(spiralCellInnerHour({ startMinute: 300, endMinutes: 1020 }), null);
 });
 
 test('fixed event conflicts use half-open overlap boundaries', () => {

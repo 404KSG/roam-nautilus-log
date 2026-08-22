@@ -302,6 +302,14 @@
         (js->clj (.call function nil (clj->js value)) :keywordize-keys true)))
     (catch :default _e nil)))
 
+(defn spiral-cell-inner-radius [start-minute settings fallback-inner-radius]
+  (let [paired-hour (flow-core-call "spiralCellInnerHour"
+                                    {:startMinute start-minute
+                                     :endMinutes (:workday-end settings)})]
+    (if (number? paired-hour)
+      (max fallback-inner-radius (outer-radius-at paired-hour))
+      fallback-inner-radius)))
+
 (defn now-minutes []
   (let [now (new js/Date)]
     (+ (* (.getHours now) 60) (.getMinutes now))))
@@ -779,7 +787,7 @@
        [:path {:d (create-arc-path
                     (min->angle start)
                     (min->angle end)
-                    inner-radius
+                    (spiral-cell-inner-radius start settings inner-radius)
                     (outer-radius-at (mod (quot start 60) (count snail-blueprint-outer-radiuses)))
                     center)}])]))
 
@@ -794,7 +802,7 @@
     [:g
      (mapcat (fn [{:keys [start end label]}]
                [[slice
-                 [(min->angle start) (min->angle end) inner-radius
+                 [(min->angle start) (min->angle end) (spiral-cell-inner-radius start settings inner-radius)
                   (outer-radius-at (mod (quot start 60) (count snail-blueprint-outer-radiuses)))
                  center settings]
                  :border-color color
@@ -890,9 +898,10 @@
            (fn [idx [s e]]
              (let [start-angle (min->angle s)
                    end-angle (min->angle e)
+                   seg-inner-radius (spiral-cell-inner-radius s settings inner-radius)
                    seg-outer-radius (outer-radius-at (mod (quot (int s) 60) (count snail-blueprint-outer-radiuses)))]
                [slice
-                [start-angle end-angle inner-radius seg-outer-radius center settings]
+                [start-angle end-angle seg-inner-radius seg-outer-radius center settings]
                 :bg-color bg-color
                 :legend-color legend-color
                 :text (if (= idx 0) description nil)
