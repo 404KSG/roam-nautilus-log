@@ -7,6 +7,8 @@
 
 [English](./README.md) · **简体中文** · [使用指南](./docs/guide.zh-CN.md)
 
+![Nautilus Log 螺旋日计划、Timing、Plan、Review 与右侧边栏视图](./docs/assets/nautilus-log-overview.png)
+
 ## 看见完整的一天，而不只是一张清单
 
 待办清单告诉你“什么重要”，却不告诉你“今天是否放得下”。Nautilus Log 把今天的

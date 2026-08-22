@@ -8,6 +8,8 @@ the day gets away from you.
 
 **English** · [简体中文](./README.zh-CN.md) · [User guide](./docs/guide.md)
 
+![Nautilus Log visual day planner with Timing, Plan, Review, and right-sidebar views](./docs/assets/nautilus-log-overview.png)
+
 ## See the whole day, not just a list
 
 A to-do list tells you what matters, but not whether it fits. Nautilus Log turns
