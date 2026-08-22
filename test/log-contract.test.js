@@ -124,7 +124,7 @@ test('Actual Time Tracking is opt-in and owns no disabled topbar interaction', (
   assert.match(timingCommands, /palette\.addCommand/);
   assert.match(timingCommands, /const contextMenu = window\.roamAlphaAPI\?\.ui\?\.blockContextMenu/);
   assert.match(timingCommands, /contextMenu\.addCommand/);
-  assert.match(timingCommands, /Nautilus Log: Clock out Timing Line/);
+  assert.match(timingCommands, /Nautilus Log: 2\. Clock out Timing Line/);
   assert.match(timingRuntime, /await closeEntriesAt\(before, instant\);[\s\S]*await createRunningClock\(taskUid, instant\);/);
   assert.match(timingRuntime, /deleteCurrentClock/);
 });

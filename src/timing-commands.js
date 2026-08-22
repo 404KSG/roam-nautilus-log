@@ -2,9 +2,9 @@ import * as timingCore from './timing-core';
 import { getFocusedBlockUid, readBlockString, showToast } from './timing-roam';
 
 const PALETTE_LABELS = Object.freeze([
-  'Nautilus Log: Focus current block',
-  'Nautilus Log: Clock out Timing Line',
-  'Nautilus Log: Locate Primary Plan',
+  'Nautilus Log: 1. Focus current block',
+  'Nautilus Log: 2. Clock out Timing Line',
+  'Nautilus Log: 3. Locate Primary Plan',
 ]);
 const CONTEXT_CLOCK_IN = 'Nautilus Log: Clock in';
 const CONTEXT_CLOCK_OUT = 'Nautilus Log: Clock out';

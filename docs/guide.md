@@ -120,9 +120,9 @@ displayed day's boundary.
 
 The Command Palette exposes:
 
-- **Nautilus Log: Focus current block**
-- **Nautilus Log: Clock out Timing Line**
-- **Nautilus Log: Locate Primary Plan**
+- **Nautilus Log: 1. Focus current block**
+- **Nautilus Log: 2. Clock out Timing Line**
+- **Nautilus Log: 3. Locate Primary Plan**
 
 Bind them in **Roam Settings → Hotkeys**. TODO context menus also expose Clock In and
 Clock Out.

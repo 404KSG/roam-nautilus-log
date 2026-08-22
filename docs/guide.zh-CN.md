@@ -114,9 +114,9 @@ Todo Trigger 是可选工具。它追加的完成时间可以提供 `dHH:MM` 锚
 
 命令面板提供：
 
-- **Nautilus Log: Focus current block**
-- **Nautilus Log: Clock out Timing Line**
-- **Nautilus Log: Locate Primary Plan**
+- **Nautilus Log: 1. Focus current block**
+- **Nautilus Log: 2. Clock out Timing Line**
+- **Nautilus Log: 3. Locate Primary Plan**
 
 可以在 **Roam Settings → Hotkeys** 自行绑定；TODO 右键菜单也提供 Clock In 与 Clock Out。
 

@@ -41,16 +41,16 @@ test('timing commands are shortcut-ready, execute global Clock Out, and clean up
 
   commands.initialize();
   assert.deepEqual([...palette.keys()], [
-    'Nautilus Log: Focus current block',
-    'Nautilus Log: Clock out Timing Line',
-    'Nautilus Log: Locate Primary Plan',
+    'Nautilus Log: 1. Focus current block',
+    'Nautilus Log: 2. Clock out Timing Line',
+    'Nautilus Log: 3. Locate Primary Plan',
   ]);
   assert.equal([...palette.values()].every((command) => !('defaultHotkey' in command)), true);
   assert.deepEqual([...contexts.keys()], ['Nautilus Log: Clock in', 'Nautilus Log: Clock out']);
 
-  await palette.get('Nautilus Log: Focus current block').callback();
-  await palette.get('Nautilus Log: Clock out Timing Line').callback();
-  await palette.get('Nautilus Log: Locate Primary Plan').callback();
+  await palette.get('Nautilus Log: 1. Focus current block').callback();
+  await palette.get('Nautilus Log: 2. Clock out Timing Line').callback();
+  await palette.get('Nautilus Log: 3. Locate Primary Plan').callback();
   assert.deepEqual(calls, [['start', 'task-a'], ['stop'], ['locate']]);
 
   commands.destroy();
