@@ -506,13 +506,22 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     popover.style.top = `${Math.min(window.innerHeight - 120, rect.bottom + 8)}px`;
   };
 
+  const syncPopoverTypography = () => {
+    if (!popover || typeof window.getComputedStyle !== 'function') return;
+    const source = document.querySelector('.nautilus-log-metric')
+      || document.querySelector('.nautilus-log-container');
+    const fontFamily = source ? window.getComputedStyle(source).fontFamily : '';
+    if (fontFamily) popover.style.setProperty('--nl-exec-font-family', fontFamily);
+  };
+
   const openPopover = async () => {
     if (popover) return closePopover({ restoreFocus: true });
-    popover = element('section', 'nautilus-log-timing__popover');
+    popover = element('div', 'nautilus-log-timing__popover');
     popover.id = POPOVER_ID;
     popover.setAttribute('role', 'dialog');
     popover.setAttribute('aria-label', 'Nautilus Log execution panel');
     document.body.append(popover);
+    syncPopoverTypography();
     trigger.setAttribute('aria-expanded', 'true');
     renderPopover({ force: true });
     positionPopover();

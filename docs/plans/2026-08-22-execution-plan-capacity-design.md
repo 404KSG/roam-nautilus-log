@@ -32,7 +32,8 @@ The Plan view is divided into `Scheduled today` and `Unscheduled today`. Schedul
 ## Visual Contract
 
 - Use typography, spacing, borders, and neutral surfaces already present in the execution panel.
-- Capacity metrics explicitly inherit the execution-panel UI typeface so Roam themes cannot substitute editorial typography.
+- The execution panel samples the rendered chart metric typeface once when it opens, then uses that same family for its detached body-level popover.
+- Capacity metrics form one compact, left-aligned row instead of stretching to opposite edges.
 - Do not add filled metric cards, gradients, or shadows.
 - Scheduled rows remain neutral; the focused row keeps its existing pale-blue state.
 - Unscheduled status uses restrained amber metadata only; rows do not gain a left rail, outline, shadow, or disabled appearance.

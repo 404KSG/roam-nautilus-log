@@ -202,8 +202,15 @@ test('execution panel exposes cached capacity and deterministic Plan sections', 
   assert.match(timingTopbar, /execution\?\.scheduledTasks/);
   assert.match(timingTopbar, /execution\?\.overflowTasks/);
   assert.match(timingTopbar, /element\('div', 'nautilus-log-timing__capacity'\)/);
+  assert.match(timingTopbar, /document\.querySelector\('\.nautilus-log-metric'\)/);
+  assert.match(timingTopbar, /getComputedStyle\(source\)\.fontFamily/);
+  assert.match(timingTopbar, /--nl-exec-font-family/);
+  assert.match(timingTopbar, /element\('div', 'nautilus-log-timing__popover'\)/);
   assert.match(css, /\.nautilus-log-timing__capacity/);
   assert.match(css, /\.nautilus-log-timing__capacity\s*\{[^}]*font-family:\s*inherit;[^}]*font-style:\s*normal;/s);
+  assert.match(css, /\.nautilus-log-timing__popover\s*\{[^}]*font-family:\s*var\(--nl-exec-font-family,/s);
+  assert.match(css, /\.nautilus-log-timing__capacity\s*\{[^}]*justify-content:\s*flex-start;/s);
+  assert.doesNotMatch(css, /\.nautilus-log-timing__capacity-metric:last-child\s*\{[^}]*text-align:\s*right;/s);
   assert.match(css, /\.nautilus-log-timing__plan-heading/);
   assert.match(css, /\.nautilus-log-timing__row\.is-unscheduled \.nautilus-log-timing__row-meta/);
   assert.doesNotMatch(
