@@ -901,7 +901,7 @@
 }
 
 .nautilus-log-timing__icon-button:disabled {
-  cursor: wait;
+  cursor: default;
   opacity: 0.38;
 }
 

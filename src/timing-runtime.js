@@ -145,6 +145,19 @@ export function createTimingRuntime({
     return refreshPromise;
   };
 
+  const cancelScheduledRefresh = () => {
+    if (refreshHandle === null) return false;
+    if (refreshHandleKind === 'idle') window.cancelIdleCallback?.(refreshHandle);
+    else window.clearTimeout(refreshHandle);
+    refreshHandle = null;
+    refreshHandleKind = null;
+    const finish = resolveRefresh;
+    resolveRefresh = null;
+    refreshPromise = null;
+    finish?.(snapshot);
+    return true;
+  };
+
   const waitForMutationStart = () => new Promise((resolve, reject) => {
     let settled = false;
     let cancelScheduled = null;
@@ -172,6 +185,10 @@ export function createTimingRuntime({
 
   const enqueue = (operation, { deferStart = false } = {}) => {
     const run = mutationQueue.then(async () => {
+      // A scheduled graph refresh is lower priority than an explicit user
+      // mutation. Cancel it before it can compete with Clock Out on the main
+      // thread; the mutation schedules a fresh authoritative read afterward.
+      cancelScheduledRefresh();
       if (deferStart) {
         const scheduled = await waitForMutationStart();
         if (!scheduled) throw new Error('Actual Time Tracking is no longer active.');
@@ -191,16 +208,22 @@ export function createTimingRuntime({
   };
 
   const closeEntriesAt = async (entries, instant) => {
+    const updated = new Map();
     for (const entry of entries.filter((candidate) => candidate.running)) {
-      await closeClock(entry, instant);
+      const closed = await closeClock(entry, instant);
+      if (closed) updated.set(entry.clockUid, closed);
     }
+    if (updated.size === 0) return entries;
+    return entries.map((entry) => updated.get(entry.clockUid) || entry);
   };
 
   const closeDoneClocks = async (entries = readAllEntries()) => {
     const doneRunning = entries.filter((entry) => entry.running && entry.status === 'DONE');
     if (doneRunning.length === 0) return false;
     await closeEntriesAt(doneRunning, now());
-    if (!timingCore.chooseFocusedEntry(readAllEntries())) await setPomodoro(null);
+    const closedUids = new Set(doneRunning.map((entry) => entry.clockUid));
+    const remainingEntries = entries.filter((entry) => !closedUids.has(entry.clockUid));
+    if (!timingCore.chooseFocusedEntry(remainingEntries)) await setPomodoro(null);
     return true;
   };
 
@@ -251,15 +274,22 @@ export function createTimingRuntime({
   };
 
   const stopTask = () => enqueue(async () => {
-    const entries = readAllEntries();
+    // The visible Timing Line already carries one confirmed CLOCK UID. Close
+    // that exact block and update the cached Plan/entries projection first;
+    // an idle aggregate refresh then reconciles any external graph changes.
+    const entries = snapshot.entries;
     const running = entries.filter((entry) => entry.running);
     if (running.length === 0) {
       await setPomodoro(null);
-      return refresh();
+      const next = refresh({ planSnapshot: snapshot.planSnapshot, entries });
+      void requestRefresh();
+      return next;
     }
-    await closeEntriesAt(running, now());
+    const updatedEntries = await closeEntriesAt(entries, now());
     await setPomodoro(timingCore.nextPomodoroState(snapshot.pomodoro, { action: 'stop' }));
-    return refresh();
+    const next = refresh({ planSnapshot: snapshot.planSnapshot, entries: updatedEntries });
+    void requestRefresh();
+    return next;
   });
 
   const finishTask = (taskUid) => enqueue(async () => {
@@ -335,12 +365,7 @@ export function createTimingRuntime({
     cancelSidebarWarmup?.();
     cancelSidebarWarmup = null;
     for (const pending of [...pendingMutationStarts]) pending.cancel();
-    if (refreshHandle !== null) {
-      if (refreshHandleKind === 'idle') window.cancelIdleCallback?.(refreshHandle);
-      else window.clearTimeout(refreshHandle);
-    }
-    refreshHandle = null;
-    refreshHandleKind = null;
+    cancelScheduledRefresh();
     resolveRefresh?.(snapshot);
     resolveRefresh = null;
     refreshPromise = null;

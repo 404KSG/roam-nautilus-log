@@ -154,6 +154,15 @@ test('execution popover paints cached state before refreshing and does not rebui
   assert.doesNotMatch(timingTopbar.slice(triggerStart, triggerEnd), /renderPopover/);
 });
 
+test('execution actions do not imitate a blocked application while a graph write settles', () => {
+  assert.match(
+    css,
+    /\.nautilus-log-timing__icon-button:disabled\s*\{[^}]*cursor:\s*default;/s,
+    'disabled execution actions should stay visually quiet instead of showing the operating-system wait cursor',
+  );
+  assert.doesNotMatch(css, /\.nautilus-log-timing__icon-button:disabled\s*\{[^}]*cursor:\s*wait;/s);
+});
+
 test('execution popover exposes a lightweight daily Review without another graph reader', () => {
   assert.match(timingTopbar, /\['timing', 'plan', 'review'\]/);
   assert.match(timingTopbar, /tabs\.setAttribute\('role', 'tablist'\)/);

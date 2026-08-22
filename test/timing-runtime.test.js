@@ -235,3 +235,78 @@ test('runtime serializes close-before-switch and close-before-complete', async (
 
   runtime.destroy();
 });
+
+test('Clock Out uses the confirmed Timing snapshot and cancels a competing idle refresh', async (t) => {
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#clock-out-fast-${Date.now()}`;
+  const extension = await import(moduleUrl);
+  const trace = [];
+  const { roam, blocks } = graphMock({ trace });
+  const settings = new Map([
+    ['todo-duration', 15],
+    ['pomodoro-minutes', 45],
+    ['timing-line-sidebar', false],
+    ['recent-retention-minutes', 45],
+    ['forgotten-timer-minutes', 120],
+  ]);
+  const idleCallbacks = new Map();
+  const cancelledIdle = [];
+  let idleId = 0;
+  let current = new Date(2026, 7, 22, 10, 0);
+  global.window = {
+    roamAlphaAPI: roam,
+    setInterval: () => 99,
+    clearInterval: () => {},
+    setTimeout,
+    clearTimeout,
+    requestIdleCallback: (callback) => {
+      const id = ++idleId;
+      idleCallbacks.set(id, callback);
+      return id;
+    },
+    cancelIdleCallback: (id) => {
+      cancelledIdle.push(id);
+      idleCallbacks.delete(id);
+    },
+  };
+  t.after(() => { delete global.window; });
+
+  const extensionAPI = {
+    settings: {
+      get: (key) => settings.get(key),
+      set: async (key, value) => settings.set(key, value),
+    },
+  };
+  const runtime = extension.createTimingRuntime({ extensionAPI, now: () => new Date(current) });
+  await runtime.initialize();
+  await runtime.startTask('task-a');
+  const clock = [...blocks.values()].find((block) => /^CLOCK:/.test(block.string));
+  assert.ok(clock);
+
+  trace.length = 0;
+  const staleRefresh = runtime.requestRefresh();
+  current = new Date(2026, 7, 22, 10, 5);
+  await runtime.stopTask();
+  const cancelledBeforeDestroy = cancelledIdle.slice();
+  const entriesQueries = trace.filter((entry) => entry === 'query:entries').length;
+  const planQueries = trace.filter((entry) => entry === 'query:plan').length;
+  const closedClockString = blocks.get(clock.uid).string;
+  const finalSnapshot = runtime.getSnapshot();
+  runtime.destroy();
+  await staleRefresh;
+
+  assert.deepEqual(cancelledBeforeDestroy, [1], 'a user mutation should cancel a queued idle graph refresh');
+  assert.equal(
+    entriesQueries,
+    0,
+    'Clock Out should verify its confirmed CLOCK UID directly instead of rescanning every LOGBOOK',
+  );
+  assert.equal(
+    planQueries,
+    0,
+    'Clock Out should keep the cached Primary Plan instead of rereading the Daily Note tree',
+  );
+  assert.match(closedClockString, /--\[2026-08-22 Sat 10:05\] => 0:05$/);
+  assert.equal(finalSnapshot.activeWork.focused, null);
+  assert.deepEqual(finalSnapshot.activeWork.recent.map(({ taskUid }) => taskUid), ['task-a']);
+});

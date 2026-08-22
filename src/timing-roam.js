@@ -308,13 +308,20 @@ export async function createRunningClock(taskUid, now) {
 
 export async function closeClock(entry, now) {
   if (!entry?.running || !entry.clockUid) return false;
-  await updateGraphBlock(entry.clockUid, timingCore.formatClockLine(entry.start, now));
+  // A Timing snapshot is authoritative enough to identify the one CLOCK UID,
+  // but an external editor may have changed that block since the snapshot was
+  // published. Re-read only the selected block before writing so Clock Out
+  // preserves graph safety without rescanning every LOGBOOK drawer.
+  const current = timingCore.parseClockLine(readBlockString(entry.clockUid));
+  if (!current) throw new Error('Clock Out could not read the current CLOCK block.');
+  if (!current.running) return { ...entry, ...current };
+  await updateGraphBlock(entry.clockUid, timingCore.formatClockLine(current.start, now));
   // The mutation targets one known CLOCK UID. Confirm that block directly
   // instead of rescanning every LOGBOOK drawer in the graph; the next state
   // refresh still performs the authoritative aggregate read when required.
   const confirmed = timingCore.parseClockLine(readBlockString(entry.clockUid));
   if (!confirmed || confirmed.running) throw new Error('Clock Out could not be confirmed.');
-  return true;
+  return { ...entry, ...confirmed };
 }
 
 export async function deleteClock(entry) {
