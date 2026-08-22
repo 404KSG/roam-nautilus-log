@@ -28,7 +28,7 @@
   disable either behavior, live Recent time-left labels, and a distinct long-running
   CLOCK warning state.
 - A focused-row `trash` control with two-click confirmation deletes only the current
-  open CLOCK; Blueprint's filled `tick-circle` gives completion a white negative-space check.
+  open CLOCK; all task-completion actions use Blueprint's `confirm` icon.
 - Actual/Planned row metadata and deterministic selection of the first Nautilus
   Log component on today's Daily Note as the one Primary Plan.
 - Default component prefix `[[Nautilus Log]]` and default chart range 05:00–21:00.

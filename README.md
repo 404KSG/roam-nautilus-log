@@ -65,8 +65,7 @@ changing the spiral's estimated scheduling rules:
   native right sidebar before graph validation or CLOCK confirmation; previously
   confirmed windows are previewed immediately and reconciled in the background;
 - each row can Clock In, explicitly Clock Out with Blueprint's `log-out`
-  control, or complete the task with Blueprint's filled `tick-circle` control,
-  whose check is rendered as negative white space. The
+  control, or complete the task with Blueprint's `confirm` control. The
   focused row also has a two-click `trash` action that deletes only its current
   open CLOCK, never the task or older CLOCK history;
 - Actual time is shown when today's CLOCK history exists; otherwise the row
@@ -192,9 +191,8 @@ Todo Trigger 仍然是可选工具：它可以在完成时追加时间戳，但 
   默认 45，填写 0 可关闭，并在每一行显示剩余保留时间；
 - Clock In 会在图谱校验与 CLOCK 确认前开始打开或置顶右侧边栏任务；已确认过的窗口会先
   即时显示，再在后台按 Roam 的真实窗口列表去重；
-- 每一行都可以直接 Clock In、用 Blueprint `log-out` 明确 Clock Out，或用更饱满的
-  `tick-circle` 图标完成任务；圆形主体沿用灰色，内部勾以白色留白呈现。当前 Timing
-  行还提供两次点击确认的 `trash`，只删除本次
+- 每一行都可以直接 Clock In、用 Blueprint `log-out` 明确 Clock Out，或统一用
+  Blueprint `confirm` 图标完成任务；当前 Timing 行还提供两次点击确认的 `trash`，只删除本次
   未闭合 CLOCK，不删除任务和旧历史；
 - 当天存在有效 CLOCK 时显示 Actual，否则回退到 Planned 预计时长；
 - 番茄钟阈值默认 45 分钟，任务切换不会重置，达到阈值只把顶栏计时变红，绝不自动停止。
