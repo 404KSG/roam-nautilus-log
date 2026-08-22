@@ -221,6 +221,19 @@ test('execution panel exposes cached capacity and deterministic Plan sections', 
   assert.doesNotMatch(timingTopbar, /readAllEntries|readPrimaryPlan/);
 });
 
+test('Plan projections keep their scheduled interval while Timing ticks update', () => {
+  assert.match(
+    timingTopbar,
+    /const liveMeta = focused && !planState;/,
+    'only Timing rows should opt into live elapsed metadata',
+  );
+  assert.match(
+    timingTopbar,
+    /const updateLiveElapsed = \(\) => \{[\s\S]*?if \(!popover \|\| view === 'plan'\) return;/,
+    'the one-second updater must not rewrite deterministic Plan labels',
+  );
+});
+
 test('execution lists stay scrollable without visible scrollbar chrome', () => {
   assert.match(css, /\.nautilus-log-timing__list\s*\{[^}]*overflow:\s*auto;[^}]*scrollbar-width:\s*none;[^}]*-ms-overflow-style:\s*none;/s);
   assert.match(css, /\.nautilus-log-timing__list::-webkit-scrollbar\s*\{[^}]*display:\s*none;[^}]*width:\s*0;[^}]*height:\s*0;/s);

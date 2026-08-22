@@ -150,7 +150,8 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     } else if (recent) {
       metaText = `Recent · ${timingCore.compactMinutes(recentRemaining)} left · ${duration.detailLabel}`;
     }
-    const meta = element('div', `nautilus-log-timing__row-meta${focused ? ' is-live' : ''}${forgotten ? ' is-warning' : ''}`, metaText);
+    const liveMeta = focused && !planState;
+    const meta = element('div', `nautilus-log-timing__row-meta${liveMeta ? ' is-live' : ''}${forgotten ? ' is-warning' : ''}`, metaText);
     copy.append(meta);
     row.append(copy);
 
@@ -325,7 +326,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
   };
 
   const updateLiveElapsed = () => {
-    if (!popover) return;
+    if (!popover || view === 'plan') return;
     const focused = state.activeWork?.focused;
     if (!focused) return;
     if (view === 'review') {

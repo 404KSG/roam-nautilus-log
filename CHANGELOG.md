@@ -58,6 +58,8 @@
 
 ### Fixed
 
+- Expanding or folding Unscheduled today no longer makes the focused Plan row
+  alternate between its projected interval and the live Timing label.
 - Execution-panel capacity metrics now keep the normal UI typeface across Roam
   themes by matching the rendered chart metrics; the metrics sit together on
   the left, and Unscheduled rows no longer draw a decorative left rail.
