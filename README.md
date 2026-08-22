@@ -77,9 +77,11 @@ changing the spiral's estimated scheduling rules:
   topbar and Timing row without stopping or deleting it.
 
 The popover header identifies itself as **Nautilus Log** beside the same Blueprint
-`unresolve` icon, before the Timing and Plan tabs. The idle topbar entry uses that
-icon as well. The `locate` action
-opens the Primary Plan in Roam's main window. Task titles open in the main
+`unresolve` icon, before the Timing and Plan tabs. The identity is a navigation
+button: its persistent chevron, hover treatment, tooltip, and keyboard focus state
+signal that clicking it locates the Primary Plan in Roam's main window. The separate
+right-side locate icon is intentionally removed. The idle topbar entry uses the
+same `unresolve` icon. Task titles open in the main
 window; Shift+Click opens them in the right sidebar. The Command Palette exposes
 **Nautilus Log: Focus current block**, **Nautilus Log: Clock out Timing Line**,
 and **Nautilus Log: Locate Primary Plan**. Assign any preferred shortcuts in
@@ -202,7 +204,9 @@ Todo Trigger 仍然是可选工具：它可以在完成时追加时间戳，但 
   Timing 行显示警告，不会自动停止或删除 CLOCK。
 
 弹窗头部会在 Timing / Plan 前以相同的 `unresolve` 图标和 **Nautilus Log** 名称明确标识
-插件来源；顶栏空闲入口也沿用该图标。`locate` 会把当天 Primary Plan 定位到主界面。
+插件来源；整块品牌区域就是定位入口，常驻细箭头，并通过悬停底色、Tooltip 和键盘焦点
+提示可点击。点击后会把当天 Primary Plan 定位到主界面，不再保留右侧独立 `locate`
+按钮；顶栏空闲入口也沿用 `unresolve` 图标。
 点击任务标题在主界面打开，Shift+Click 在右侧边栏打开。命令面板提供“聚焦当前
 block”“Clock out Timing Line”和“定位 Primary Plan”三项操作，可在 **Roam Settings
 → Hotkeys** 自行绑定快捷键；插件不会安装可能冲突的全局按键监听。TODO 右键菜单也会

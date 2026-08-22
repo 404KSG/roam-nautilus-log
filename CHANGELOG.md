@@ -23,6 +23,9 @@
   tabs, one-click task completion, `unresolve` idle state, and `locate` navigation.
 - A compact `unresolve · Nautilus Log` identity in the popover header makes the
   execution panel's owning extension explicit without adding another row.
+- The identity itself now locates the Primary Plan and advertises that action with
+  a persistent chevron plus hover/focus feedback; the redundant right-side locate
+  icon is removed.
 - Compatible Org-style `LOGBOOK::` / `CLOCK:` persistence, serialized single-clock
   switching, numerically configurable recent Threads, and a shared configurable
   Pomodoro threshold.
