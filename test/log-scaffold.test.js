@@ -82,7 +82,8 @@ test('built extension creates Log scaffolding sequentially and unload is graph-s
 
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#${Date.now()}`;
-  const extension = (await import(moduleUrl)).default;
+  const extensionModule = await import(moduleUrl);
+  const extension = extensionModule.default;
   const settings = new Map();
   settings.set('language', 'en');
   settings.set('workday-end', 21);
@@ -144,7 +145,8 @@ test('a fresh install defaults the settings panel and rendered UI to English', a
 
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#fresh-${Date.now()}`;
-  const extension = (await import(moduleUrl)).default;
+  const extensionModule = await import(moduleUrl);
+  const extension = extensionModule.default;
   const settings = new Map();
   let latestPanel;
   const extensionAPI = {
@@ -169,14 +171,25 @@ test('a fresh install defaults the settings panel and rendered UI to English', a
   assert.equal(latestPanel.settings.find(({ id }) => id === 'language').action.default, 'en');
   assert.equal(latestPanel.settings.find(({ id }) => id === 'workday-start').name, 'Chart Start Time');
   assert.equal(latestPanel.settings.find(({ id }) => id === 'workday-end').action.default, 21);
-  assert.equal(latestPanel.settings.find(({ id }) => id === 'actual-time-tracking').action.defaultValue, false);
-  assert.equal(latestPanel.settings.find(({ id }) => id === 'timing-line-sidebar').action.defaultValue, true);
-  assert.equal(latestPanel.settings.find(({ id }) => id === 'recent-retention-minutes').action.default, 45);
-  assert.equal(latestPanel.settings.find(({ id }) => id === 'forgotten-timer-minutes').action.default, 120);
-  await latestPanel.settings.find(({ id }) => id === 'recent-retention-minutes').action.onChange({ target: { value: '30' } });
-  await latestPanel.settings.find(({ id }) => id === 'forgotten-timer-minutes').action.onChange({ target: { value: '0' } });
+  const executionEntry = latestPanel.settings.find(({ id }) => id === 'actual-time-tracking');
+  assert.equal(executionEntry.name, 'Execution Layer · Advanced');
+  assert.match(executionEntry.description, /Enable to reveal execution settings/);
+  assert.equal(executionEntry.action.defaultValue, false);
+  for (const id of ['timing-line-sidebar', 'pomodoro-minutes', 'recent-retention-minutes', 'forgotten-timer-minutes']) {
+    assert.equal(latestPanel.settings.some((setting) => setting.id === id), false);
+  }
+
+  settings.set('actual-time-tracking', true);
+  const expandedPanel = extensionModule.panelConfig(extensionAPI, 'en');
+  assert.equal(expandedPanel.settings.find(({ id }) => id === 'timing-line-sidebar').action.defaultValue, true);
+  assert.equal(expandedPanel.settings.find(({ id }) => id === 'recent-retention-minutes').action.default, 45);
+  assert.equal(expandedPanel.settings.find(({ id }) => id === 'forgotten-timer-minutes').action.default, 120);
+  await expandedPanel.settings.find(({ id }) => id === 'recent-retention-minutes').action.onChange({ target: { value: '30' } });
+  await expandedPanel.settings.find(({ id }) => id === 'forgotten-timer-minutes').action.onChange({ target: { value: '0' } });
   assert.equal(settings.get('recent-retention-minutes'), 30);
   assert.equal(settings.get('forgotten-timer-minutes'), 0);
+  const zhPanel = extensionModule.panelConfig(extensionAPI, 'zh');
+  assert.equal(zhPanel.settings.find(({ id }) => id === 'actual-time-tracking').name, '执行层 · 进阶');
   assert.equal(global.document, undefined);
 
   await extension.onunload();

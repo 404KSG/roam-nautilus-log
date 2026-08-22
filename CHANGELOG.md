@@ -19,6 +19,8 @@
   available from Language settings and is preserved after it is selected.
 - Optional Actual Time Tracking, defaulting off with no topbar, poller, commands,
   or CLOCK writes until explicitly enabled.
+- The optional Execution Layer is now a prominent advanced entry in Settings;
+  dependent execution options stay hidden until the master switch is enabled.
 - A Blueprint-native topbar execution surface with Timing and flat Primary Plan
   tabs, one-click task completion, `unresolve` idle state, and `locate` navigation.
 - A compact `unresolve · Nautilus` identity in the popover header exposes the

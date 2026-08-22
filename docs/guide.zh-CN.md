@@ -55,10 +55,10 @@
 
 过去空档只是排程事实，不等于插件判断那段时间“被浪费”。
 
-## Actual Time Tracking
+## 执行层
 
-Actual Time Tracking 默认**关闭**。关闭时不会加载执行面板、计时轮询、命令或 CLOCK
-写入者。
+可选的执行层默认**关闭**。启用前会隐藏进阶执行设置，也不会加载执行面板、计时轮询、
+命令或 CLOCK 写入者。
 
 开启后，当天 Daily Note 中的第一个 Nautilus Log 会成为顶栏面板使用的 **Primary
 Plan**。
@@ -101,7 +101,7 @@ Todo Trigger 是可选工具。它追加的完成时间可以提供 `dHH:MM` 锚
 | Legend Max Length | 22 |
 | Default Todo Duration | 15 分钟 |
 | Urgent Trigger Word | 空 |
-| Actual Time Tracking | 关闭 |
+| 执行层 · 进阶 | 关闭 |
 | Keep Timing Line first in right sidebar | 开启 |
 | Pomodoro Threshold | 45 分钟 |
 | Recent Retention | 45 分钟；`0` 为关闭 |
@@ -109,6 +109,8 @@ Todo Trigger 是可选工具。它追加的完成时间可以提供 `dHH:MM` 锚
 
 开始时间可选择 05:00–08:00，结束时间可选择 18:00–24:00。选择 `24:00` 时，内部按第
 1440 分钟处理并标为 `0`。跨午夜事件会在当前展示日期边界截断。
+
+只有开启 **执行层 · 进阶** 后，设置面板才会展开执行层的其他选项。
 
 ## 命令
 

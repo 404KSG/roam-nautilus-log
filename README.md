@@ -52,10 +52,10 @@ fit** instead of disappearing. No AI estimates and no black-box scheduling.
 Durations use minutes: `30m`, `90m`, or `30min`. Untimed tasks use the configured
 default duration.
 
-## Actual time—when you want it
+## Execution Layer—when you want it
 
-Actual Time Tracking defaults to **off**, so estimate-only planning stays light.
-Enable it to add a compact execution panel:
+The optional **Execution Layer** defaults to **off**, so estimate-only planning
+stays light. Enable it in Settings to add a compact execution panel:
 
 - **Timing** shows the current task and recently closed work.
 - **Plan** shows unfinished tasks from today's Primary Plan.

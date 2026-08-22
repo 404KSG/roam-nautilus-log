@@ -57,10 +57,11 @@ small flame marks whether the current minute is consuming Available or Event tim
 
 Past gaps are factual schedule data, not a judgment that time was wasted.
 
-## Actual Time Tracking
+## Execution Layer
 
-Actual Time Tracking defaults to **off**. While disabled, Nautilus Log loads no
-execution panel, timer poller, commands, or CLOCK writer.
+The optional Execution Layer defaults to **off**. Its advanced settings remain hidden
+until enabled, and Nautilus Log loads no execution panel, timer poller, commands, or
+CLOCK writer while it is off.
 
 When enabled, the first Nautilus Log on today's Daily Note becomes the **Primary
 Plan** used by the topbar panel.
@@ -106,7 +107,7 @@ but ordinary planning and completion do not require it.
 | Legend Max Length | 22 |
 | Default Todo Duration | 15 minutes |
 | Urgent Trigger Word | Empty |
-| Actual Time Tracking | Off |
+| Execution Layer · Advanced | Off |
 | Keep Timing Line first in right sidebar | On |
 | Pomodoro Threshold | 45 minutes |
 | Recent Retention | 45 minutes; `0` disables |
@@ -115,6 +116,9 @@ but ordinary planning and completion do not require it.
 Chart start can be 05:00–08:00; chart end can be 18:00–24:00. A `24:00` end is
 represented as minute 1440 and labelled `0`. Cross-midnight events are clipped at the
 displayed day's boundary.
+
+Execution-specific settings are revealed only while **Execution Layer · Advanced** is
+enabled.
 
 ## Commands
 

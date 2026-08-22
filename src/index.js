@@ -258,8 +258,8 @@ function panelConfig(extensionAPI, language) {
       durationDesc: "没有写时长的弹性任务默认占用的分钟数。",
       color: "紧急触发词",
       colorDesc: "使任务显示为紧急红色的关键词（不可包含空格，例如：重要）。",
-      tracking: "实际时间记录",
-      trackingDesc: "启用后显示 Nautilus Log 顶栏，并允许聚焦、CLOCK 计时、任务切换和一键完成。默认关闭；关闭时整套顶栏交互均不加载。",
+      tracking: "执行层 · 进阶",
+      trackingDesc: "可选功能。将计划转化为行动：支持任务聚焦、CLOCK 计时、多任务切换、一键完成和每日复盘。启用后会在下方显示执行设置；默认关闭。",
       sidebar: "计时任务置顶到右侧边栏",
       sidebarDesc: "Clock In 或切换任务时，将当前 Timing Line 打开或移动到 Roam 右侧边栏顶部。",
       pomodoro: "番茄钟阈值",
@@ -285,8 +285,8 @@ function panelConfig(extensionAPI, language) {
       durationDesc: "Default minutes for an untimed flexible task.",
       color: "Urgent Trigger Word",
       colorDesc: "Keyword that colors a task urgent red (no spaces, for example urgent).",
-      tracking: "Actual Time Tracking",
-      trackingDesc: "Enable the Nautilus Log topbar for focus, CLOCK timing, task switching, and one-click completion. Defaults off; while off the entire topbar interaction layer stays unloaded.",
+      tracking: "Execution Layer · Advanced",
+      trackingDesc: "Optional. Turn your plan into action with focus, CLOCK timing, task switching, one-click completion, and daily Review. Enable to reveal execution settings; disabled by default.",
       sidebar: "Keep Timing Line first in right sidebar",
       sidebarDesc: "After Clock In or a task switch, open or move the Timing Line to the top of Roam's right sidebar.",
       pomodoro: "Pomodoro Threshold",
@@ -313,6 +313,60 @@ function panelConfig(extensionAPI, language) {
     publishRuntimeSettings(extensionAPI);
     await timingRuntime?.requestRefresh?.();
   };
+
+  const executionEnabled = extensionAPI.settings.get("actual-time-tracking") === true;
+  const executionSettings = [
+    {
+      id: "timing-line-sidebar",
+      name: labels.sidebar,
+      description: labels.sidebarDesc,
+      action: {
+        type: "switch",
+        defaultValue: extensionAPI.settings.get("timing-line-sidebar") ?? true,
+        onChange: async (value) => {
+          const enabled = typeof value === "boolean" ? value : Boolean(value?.target?.checked);
+          await extensionAPI.settings.set("timing-line-sidebar", enabled);
+          publishRuntimeSettings(extensionAPI);
+        },
+      },
+    },
+    {
+      id: "pomodoro-minutes",
+      name: labels.pomodoro,
+      description: labels.pomodoroDesc,
+      action: {
+        type: "select",
+        default: extensionAPI.settings.get("pomodoro-minutes") ?? 45,
+        items: [15, 20, 25, 30, 45, 50, 60, 90],
+        onChange: async (value) => {
+          await extensionAPI.settings.set("pomodoro-minutes", value);
+          publishRuntimeSettings(extensionAPI);
+        },
+      },
+    },
+    {
+      id: "recent-retention-minutes",
+      name: labels.recentRetention,
+      description: labels.recentRetentionDesc,
+      action: {
+        type: "input",
+        default: extensionAPI.settings.get("recent-retention-minutes") ?? 45,
+        placeholder: "45",
+        onChange: (event) => updateExecutionMinutes("recent-retention-minutes", event, 45),
+      },
+    },
+    {
+      id: "forgotten-timer-minutes",
+      name: labels.forgottenTimer,
+      description: labels.forgottenTimerDesc,
+      action: {
+        type: "input",
+        default: extensionAPI.settings.get("forgotten-timer-minutes") ?? 120,
+        placeholder: "120",
+        onChange: (event) => updateExecutionMinutes("forgotten-timer-minutes", event, 120),
+      },
+    },
+  ];
 
   return {
     tabTitle: labels.tabTitle,
@@ -385,56 +439,7 @@ function panelConfig(extensionAPI, language) {
           },
         },
       },
-      {
-        id: "timing-line-sidebar",
-        name: labels.sidebar,
-        description: labels.sidebarDesc,
-        action: {
-          type: "switch",
-          defaultValue: extensionAPI.settings.get("timing-line-sidebar") ?? true,
-          onChange: async (value) => {
-            const enabled = typeof value === "boolean" ? value : Boolean(value?.target?.checked);
-            await extensionAPI.settings.set("timing-line-sidebar", enabled);
-            publishRuntimeSettings(extensionAPI);
-          },
-        },
-      },
-      {
-        id: "pomodoro-minutes",
-        name: labels.pomodoro,
-        description: labels.pomodoroDesc,
-        action: {
-          type: "select",
-          default: extensionAPI.settings.get("pomodoro-minutes") ?? 45,
-          items: [15, 20, 25, 30, 45, 50, 60, 90],
-          onChange: async (value) => {
-            await extensionAPI.settings.set("pomodoro-minutes", value);
-            publishRuntimeSettings(extensionAPI);
-          },
-        },
-      },
-      {
-        id: "recent-retention-minutes",
-        name: labels.recentRetention,
-        description: labels.recentRetentionDesc,
-        action: {
-          type: "input",
-          default: extensionAPI.settings.get("recent-retention-minutes") ?? 45,
-          placeholder: "45",
-          onChange: (event) => updateExecutionMinutes("recent-retention-minutes", event, 45),
-        },
-      },
-      {
-        id: "forgotten-timer-minutes",
-        name: labels.forgottenTimer,
-        description: labels.forgottenTimerDesc,
-        action: {
-          type: "input",
-          default: extensionAPI.settings.get("forgotten-timer-minutes") ?? 120,
-          placeholder: "120",
-          onChange: (event) => updateExecutionMinutes("forgotten-timer-minutes", event, 120),
-        },
-      },
+      ...(executionEnabled ? executionSettings : []),
     ],
   };
 }
