@@ -9,6 +9,7 @@ const helpers = fs.readFileSync(path.join(__dirname, '..', 'src', 'entry-helpers
 const css = fs.readFileSync(path.join(__dirname, '..', 'extension.css'), 'utf8');
 const packageJson = fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8');
 const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
+const readmeZh = fs.readFileSync(path.join(__dirname, '..', 'README.zh-CN.md'), 'utf8');
 const changelog = fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'utf8');
 const timingTopbar = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-topbar.js'), 'utf8');
 const timingRuntime = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-runtime.js'), 'utf8');
@@ -41,6 +42,16 @@ function parenDepthBefore(source, targetIndex) {
 
   return depth;
 }
+
+test('README media uses absolute HTTPS URLs for Roam Depot rendering', () => {
+  for (const source of [readme, readmeZh]) {
+    const media = [...source.matchAll(/\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)]
+      .map((match) => match[1])
+      .filter((url) => /\.(?:gif|jpe?g|mov|mp4|png|svg|webp)(?:[?#].*)?$/i.test(url));
+    assert.ok(media.length > 0, 'README should keep its product image');
+    for (const url of media) assert.match(url, /^https:\/\//);
+  }
+});
 
 test('Nautilus Log is the only active product identity', () => {
   const activeSurface = [component, entry, css, packageJson, readme, changelog].join('\n');

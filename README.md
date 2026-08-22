@@ -8,7 +8,7 @@ the day gets away from you.
 
 **English** · [简体中文](./README.zh-CN.md) · [User guide](./docs/guide.md)
 
-![Nautilus Log visual day planner with Timing, Plan, Review, and right-sidebar views](./docs/assets/nautilus-log-overview.png)
+![Nautilus Log visual day planner with Timing, Plan, Review, and right-sidebar views](https://raw.githubusercontent.com/404KSG/roam-nautilus-log/main/docs/assets/nautilus-log-overview.png)
 
 ## See the whole day, not just a list
 
