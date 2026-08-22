@@ -1,6 +1,6 @@
 # Nautilus Log
 
-> **Plan every minute with purpose.**
+> **Give every minute a job.**
 
 A transparent visual day planner for Roam Research. Nautilus Log combines fixed
 events, flexible tasks, and optional Actual time tracking in one daily workflow.
