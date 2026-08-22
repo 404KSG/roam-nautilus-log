@@ -164,3 +164,40 @@ test('a fresh install defaults the settings panel and rendered UI to English', a
 
   await extension.onunload();
 });
+
+test('legacy preview installs migrate the old automatic Chinese default once', async (t) => {
+  const { roam } = createRoamMock();
+  global.window = {
+    roamAlphaAPI: roam,
+    dispatchEvent: () => {},
+  };
+  t.after(() => { delete global.window; });
+
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#migration-${Date.now()}`;
+  const extension = (await import(moduleUrl)).default;
+  const settings = new Map([['language', 'zh']]);
+  let latestPanel;
+  const extensionAPI = {
+    settings: {
+      get: (key) => settings.get(key),
+      set: async (key, value) => settings.set(key, value),
+      panel: { create: (config) => { latestPanel = config; } },
+    },
+  };
+
+  await extension.onload({ extensionAPI });
+
+  assert.equal(settings.get('language'), 'en');
+  assert.equal(settings.get('language-default-version'), 'en-v1');
+  assert.equal(window.nautilusLogExtensionData.settings.language, 'en');
+
+  await latestPanel.settings.find(({ id }) => id === 'language').action.onChange('zh');
+  await extension.onunload();
+  await extension.onload({ extensionAPI });
+
+  assert.equal(settings.get('language'), 'zh');
+  assert.equal(window.nautilusLogExtensionData.settings.language, 'zh');
+
+  await extension.onunload();
+});

@@ -42,8 +42,8 @@ does not require it to draw the schedule.
   1440 and the final boundary is labelled `0`.
 - Default duration, label length, an optional urgent trigger word, and a
   bilingual settings panel.
-- Language defaults to English on a fresh install; select `zh` only when a
-  Chinese interface is preferred.
+- Language defaults to English on a fresh or upgraded preview install; select
+  `zh` only when a Chinese interface is preferred. That choice is then preserved.
 
 The chart header puts the changing remainder beside a stable full-day baseline:
 
@@ -116,7 +116,8 @@ Todo Trigger 仍然是可选工具：它可以在完成时追加时间戳，但 
 - 图表结束时间：18 点至 24 点（默认 24 点）。内部将 24 点表示为第 1440 分钟，
   最后一根边界线标为 `0`。
 - 默认待办时长、标签长度、可选的紧急触发词，以及中英文设置面板。
-- 首次安装默认显示英文；需要中文界面时，在 Language 设置中选择 `zh`。
+- 首次安装或升级预览版时默认显示英文；需要中文界面时，在 Language 设置中选择
+  `zh`，选择后会持续保留。
 
 图表上方把动态变化的剩余时间与当天稳定基准放在一起显示：
 

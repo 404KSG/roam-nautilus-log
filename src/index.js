@@ -14,6 +14,7 @@ const disabledReplacementString = `{{${componentName}-disabled`;
 const version = "v1";
 const titleblockUID = "roam-render-Nautilus-Log";
 const settingsEventName = "nautilus-log:settings-changed";
+const languageDefaultVersion = "en-v1";
 
 // Keep the existing argument order for old templates; the new end-hour value
 // is appended after the old color trigger argument.
@@ -86,6 +87,19 @@ async function setDefaultSettings(extensionAPI) {
     const current = extensionAPI.settings.get(key);
     if (current === undefined || current === null) await extensionAPI.settings.set(key, defaults[key]);
   }));
+}
+
+async function initializeLanguage(extensionAPI) {
+  const migrated = extensionAPI.settings.get("language-default-version") === languageDefaultVersion;
+  const saved = extensionAPI.settings.get("language");
+  if (!migrated) {
+    await extensionAPI.settings.set("language", "en");
+    await extensionAPI.settings.set("language-default-version", languageDefaultVersion);
+    return "en";
+  }
+  if (saved === "en" || saved === "zh") return saved;
+  await extensionAPI.settings.set("language", "en");
+  return "en";
 }
 
 function panelConfig(extensionAPI, language) {
@@ -199,9 +213,8 @@ async function onload({ extensionAPI }) {
     isRightSidebarRenderContext,
   };
   await setDefaultSettings(extensionAPI);
+  const language = await initializeLanguage(extensionAPI);
   publishRuntimeSettings(extensionAPI);
-  const language = extensionAPI.settings.get("language") || "en";
-  if (!extensionAPI.settings.get("language")) await extensionAPI.settings.set("language", language);
   extensionAPI.settings.panel.create(panelConfig(extensionAPI, language));
   await toggleRenderComponent(
     true,
