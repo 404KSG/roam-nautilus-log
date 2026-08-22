@@ -38,6 +38,16 @@ actively focused.
   as 09:00–09:17. Future unscheduled sectors remain transparent. Existing past
   task/event fading stays above the overlay, so the overlay clarifies elapsed
   empty time without replacing semantic task and event colors.
+- Normal fixed events use one opaque semantic yellow token rather than cycling
+  through four arbitrary alpha levels based on list position. SVG overlap can
+  therefore no longer manufacture a darker event color. Events may still be
+  split at hour boundaries because each spiral hour has a different radius,
+  but every piece inherits the same fill. The hour grid is rendered above the
+  slices so time boundaries remain readable over the opaque fill.
+- Actual overlapping fixed-event intervals are detected with half-open time
+  ranges and receive a dashed warning outline. Adjacent events whose end/start
+  times merely touch are not conflicts. Color continues to mean only “fixed
+  event”; the outline carries the separate conflict meaning.
 
 ## Rendering and compatibility
 
@@ -53,6 +63,8 @@ a Roam graph.
 Core tests cover before-start, in-event, available, at/after event end,
 workday end, ignored completed/non-meeting events, and overlap boundaries.
 Core tests also cover partial-hour and bounded past-overlay segments. Contract
-tests cover the bridge call, localized outline flame SVG, compact summary,
-center time, removal of the needle badge/year, overlay render order, and
-theme-aware CSS. `npm test` and `git diff --check` are the acceptance checks.
+tests additionally cover fixed-event conflict boundaries. Renderer contracts
+cover the bridge calls, localized outline flame SVG, compact summary, center
+time, removal of the needle badge/year, overlay/grid render order, one event
+fill token, conflict styling, and theme-aware CSS. `npm test` and
+`git diff --check` are the acceptance checks.

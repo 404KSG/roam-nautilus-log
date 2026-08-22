@@ -73,8 +73,7 @@
 
 (def task-legend-color "var(--nautilus-flow-task)")
 
-(def meeting-color-palette
-  ["rgba(252,194,0,0.8)", "rgba(252,194,0,0.6)", "rgba(252,194,0,0.4)", "rgba(252,194,0,0.3)"])
+(def meeting-fill-color "var(--nautilus-flow-event-fill)")
 
 (def todo-color-palette
   ["rgba(4,100,132,0.3)", "rgba(8,153,200,0.3)", "rgba(47,186,232,0.3)", "rgba(58,202,249,0.3)"])
@@ -845,7 +844,7 @@
         click-to-progress (if (and daily-page? todo?) true false)
         expired? (and meeting? (>= @now-time-atom (:end event)))
         todo-bg-color (or (:bg-color event ) (nth todo-color-palette (mod index (count todo-color-palette))))
-        meeting-color (or (:bg-color event) (nth meeting-color-palette (mod index (count meeting-color-palette))))]
+        meeting-color (or (:bg-color event) meeting-fill-color)]
     {:start-angle start-angle
      :end-angle end-angle
      :bg-color (cond
@@ -855,6 +854,8 @@
      :done done?
      :outer-radius outer-radius
      :progress progress
+     :meeting? meeting?
+     :expired? expired?
      :click-to-progress click-to-progress}))
 
 (defn get-hour-boundaries [start-min end-min]
@@ -862,12 +863,12 @@
         first-bound (if (<= first-bound start-min) (+ first-bound 60) first-bound)]
     (range first-bound end-min 60)))
 
-(defn event-slice-component [event index legend-rect inner-radius daily-page? center settings now-time-atom]
-  (let [{:keys [bg-color done click-to-progress]} (calculate-slice-params event index daily-page? now-time-atom)
-        legend-color (when (and (:todo event)
-                                (not done)
-                                (nil? (:bg-color event)))
-                       task-legend-color)
+(defn event-slice-component [event index legend-rect inner-radius daily-page? center settings now-time-atom conflict?]
+  (let [{:keys [bg-color done click-to-progress meeting? expired?]} (calculate-slice-params event index daily-page? now-time-atom)
+        legend-color (cond
+                       (and meeting? (not expired?) (nil? (:bg-color event))) "var(--nautilus-flow-event)"
+                       (and (:todo event) (not done) (nil? (:bg-color event))) task-legend-color
+                       :else nil)
         description (:description event)
         uid (:uid event)
         progress (:progress event)
@@ -882,7 +883,9 @@
                        (conj segs [curr end-min])
                        segs)
                      (recur (first bounds) (rest bounds) (conj segs [curr (first bounds)]))))]
-    (into [:g {:class (str "nautilus-flow-event-slice-group" (when (and daily-page? (:end event) (<= (:end event) @now-time-atom)) " nautilus-flow-past"))}]
+    (into [:g {:class (str "nautilus-flow-event-slice-group"
+                            (when (and daily-page? (:end event) (<= (:end event) @now-time-atom)) " nautilus-flow-past")
+                            (when conflict? " nautilus-flow-event-conflict"))}]
           (map-indexed
            (fn [idx [s e]]
              (let [start-angle (min->angle s)
@@ -917,7 +920,8 @@
    (events->slices events daily-page-atom? center settings now-time-atom []))
    ([events daily-page-atom? center settings now-time-atom init-rects]
    (let [events (vec (filter #(not= true (:freetime %)) events))
-         track-map (label-track-map events)]
+         track-map (label-track-map events)
+         conflict-uids (set (or (flow-core-call "overlappingFixedEventUids" {:events events}) []))]
    (loop [i 0
           events events
           rects init-rects
@@ -934,7 +938,10 @@
                       (* 18 (or (get track-map (:uid event)) 0)))
             new-rect (get-legend-rect rects text mid-radians radius center settings (:start event) anchor-y)]
         (println?debug "RADIUS INSIDE EVENTS-SLICES: " radius)              
-        (recur (inc i) (rest events) (conj rects new-rect) (conj all-slice-components (event-slice-component event i new-rect snail-inner-radius @daily-page-atom? center settings now-time-atom))))
+        (recur (inc i) (rest events) (conj rects new-rect)
+               (conj all-slice-components
+                     (event-slice-component event i new-rect snail-inner-radius @daily-page-atom? center settings now-time-atom
+                                            (contains? conflict-uids (:uid event))))))
       [all-slice-components rects])))))
 
 (defn events->new-dimensions
@@ -1037,9 +1044,9 @@
      [:g
       (when (or @daily-page-atom? @playback-state-atom)
         [past-time-overlay-component snail-inner-radius center settings now-time-atom])
-      [snail-blueprint-component snail-template-color snail-inner-radius center settings @daily-page-atom? now-time-atom]
       (when @show-done-atom? done-slice-components)
       all-slice-components         ;; zobrazení všech událostí
+      [snail-blueprint-component snail-template-color snail-inner-radius center settings @daily-page-atom? now-time-atom]
       (when now-visible?
         (let [visible-now @now-time-atom
               now-angle (min->angle visible-now)

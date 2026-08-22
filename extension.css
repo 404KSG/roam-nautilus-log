@@ -9,6 +9,7 @@
   --nautilus-flow-hover: rgba(25, 25, 25, 0.05);
   --nautilus-flow-warning: #c96c00;
   --nautilus-flow-event: #c58a00;
+  --nautilus-flow-event-fill: #fee18a;
   --nautilus-flow-task: #0899c8;
   --nautilus-flow-control-icon: #888;
   --nautilus-flow-now: #d44b4b;
@@ -24,6 +25,7 @@
   --nautilus-flow-hover: rgba(255, 255, 255, 0.08);
   --nautilus-flow-warning: #f4b75d;
   --nautilus-flow-event: #f2c14e;
+  --nautilus-flow-event-fill: #6d570f;
   --nautilus-flow-task: #47b8df;
   --nautilus-flow-control-icon: #aaa;
   --nautilus-flow-now: #ff8b78;
@@ -369,6 +371,12 @@
   filter: brightness(1.08) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.15));
   stroke: rgba(255, 255, 255, 0.7);
   stroke-width: 1.5px;
+}
+
+.nautilus-flow-event-conflict .nautilus-flow-slice {
+  stroke: var(--nautilus-flow-warning);
+  stroke-width: 1.5px;
+  stroke-dasharray: 4 2;
 }
 
 .nautilus-flow-slice-group text {

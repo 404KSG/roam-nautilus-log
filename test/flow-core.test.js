@@ -6,6 +6,7 @@ const {
   resolveRendererSettings,
   hourlyGridSegments,
   pastTimelineSegments,
+  overlappingFixedEventUids,
   uiCopy,
   capacityMetrics,
   scheduleTasks,
@@ -47,6 +48,22 @@ test('past timeline segments respect workday bounds', () => {
     [{ start: 300, end: 360 }, { start: 360, end: 420 }],
   );
   assert.deepEqual(pastTimelineSegments({ startMinutes: 420, endMinutes: 300, nowMinutes: 360 }), []);
+});
+
+test('fixed event conflicts use half-open overlap boundaries', () => {
+  assert.deepEqual(
+    overlappingFixedEventUids({
+      events: [
+        { uid: 'a', meeting: true, start: 540, end: 600 },
+        { uid: 'b', meeting: true, start: 590, end: 630 },
+        { uid: 'touching', meeting: true, start: 630, end: 660 },
+        { uid: 'task', meeting: false, start: 550, end: 620 },
+        { uid: 'done', meeting: true, done: true, start: 550, end: 620 },
+      ],
+    }),
+    ['a', 'b'],
+  );
+  assert.deepEqual(overlappingFixedEventUids({ events: [] }), []);
 });
 
 test('English UI settings localize all extension-owned status labels', () => {

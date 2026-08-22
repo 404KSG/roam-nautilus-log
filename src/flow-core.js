@@ -141,6 +141,32 @@ function pastTimelineSegments({ startMinutes, endMinutes, nowMinutes } = {}) {
     }));
 }
 
+/**
+ * Return the UIDs of unfinished fixed events whose half-open time ranges
+ * overlap. Touching boundaries (for example 10:00–11:00 and 11:00–12:00) are
+ * adjacent, not conflicting.
+ */
+function overlappingFixedEventUids({ events = [] } = {}) {
+  const fixedEvents = (Array.isArray(events) ? events : [])
+    .filter((event) => event && event.uid && event.meeting === true && !event.done)
+    .map((event) => ({ ...event, start: asNumber(event.start), end: asNumber(event.end) }))
+    .filter((event) => Number.isFinite(event.start) && Number.isFinite(event.end) && event.end > event.start);
+  const conflicts = new Set();
+
+  for (let left = 0; left < fixedEvents.length; left += 1) {
+    for (let right = left + 1; right < fixedEvents.length; right += 1) {
+      const first = fixedEvents[left];
+      const second = fixedEvents[right];
+      if (first.start < second.end && second.start < first.end) {
+        conflicts.add(first.uid);
+        conflicts.add(second.uid);
+      }
+    }
+  }
+
+  return fixedEvents.filter((event) => conflicts.has(event.uid)).map((event) => event.uid);
+}
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -811,6 +837,7 @@ module.exports = {
   resolveRendererSettings,
   hourlyGridSegments,
   pastTimelineSegments,
+  overlappingFixedEventUids,
   scheduleTasks,
   historicalDoneSlice,
   calculateCapacity,

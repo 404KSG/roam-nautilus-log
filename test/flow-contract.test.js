@@ -45,6 +45,7 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested F
   assert.match(component, /flow-core-call "resolveRendererSettings"/);
   assert.match(component, /flow-core-call "hourlyGridSegments"/);
   assert.match(component, /flow-core-call "pastTimelineSegments"/);
+  assert.match(component, /flow-core-call "overlappingFixedEventUids"/);
   assert.match(component, /flow-core-call "uiCopy"/);
   assert.match(component, /flow-core-call "capacityMetrics"/);
   assert.match(component, /flow-core-call "burningCapacityBucket"/);
@@ -164,9 +165,19 @@ test('Flow shades elapsed time continuously behind slices and through the curren
   assert.match(component, /nautilus-flow-past-overlay/);
   assert.match(component, /flow-core-call "pastTimelineSegments"/);
   assert.match(component, /create-arc-path/);
-  assert.match(component, /\[past-time-overlay-component[^\n]+\]\)\s*\[snail-blueprint-component/s);
+  assert.match(component, /\[past-time-overlay-component[^\n]+\]\)\s*\(when @show-done-atom\?/s);
   assert.match(css, /--nautilus-flow-past-overlay:/);
   assert.match(css, /\.nautilus-flow-past-overlay\s*\{[^}]*fill:\s*var\(--nautilus-flow-past-overlay\);[^}]*pointer-events:\s*none;/s);
+});
+
+test('Flow gives normal fixed events one semantic yellow and marks real conflicts separately', () => {
+  assert.doesNotMatch(component, /meeting-color-palette/);
+  assert.match(component, /meeting-fill-color "var\(--nautilus-flow-event-fill\)"/);
+  assert.match(component, /flow-core-call "overlappingFixedEventUids"/);
+  assert.match(component, /nautilus-flow-event-conflict/);
+  assert.match(component, /\(when @show-done-atom\? done-slice-components\)\s*all-slice-components[^\n]*\n\s*\[snail-blueprint-component/s);
+  assert.match(css, /--nautilus-flow-event-fill:\s*#[0-9a-f]{6};/i);
+  assert.match(css, /\.nautilus-flow-event-conflict \.nautilus-flow-slice\s*\{[^}]*stroke:\s*var\(--nautilus-flow-warning\);[^}]*stroke-dasharray:/s);
 });
 
 test('Flow feature-detects ResizeObserver with syntax supported by Roam SCI', () => {
@@ -189,7 +200,7 @@ test('Flow prefers horizontal label rails and keeps past leader lines legible', 
 
 test('flexible task labels and connectors use one semantic blue', () => {
   assert.match(component, /def task-legend-color "var\(--nautilus-flow-task\)"/);
-  assert.match(component, /legend-color \(when \(and \(:todo event\)[\s\S]*task-legend-color\)/);
+  assert.match(component, /\(and \(:todo event\) \(not done\) \(nil\? \(:bg-color event\)\)\) task-legend-color/);
   assert.match(component, /:legend-color legend-color/);
   assert.match(component, /:fill \(if-not done\? legend-color/);
   assert.match(css, /--nautilus-flow-task:\s*#0899c8/);
