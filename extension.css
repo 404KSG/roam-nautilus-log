@@ -1119,8 +1119,8 @@
   font-weight: 650;
 }
 
-.nautilus-log-timing__capacity-metric.is-warning,
-.nautilus-log-timing__capacity-metric.is-warning strong {
+.nautilus-log-timing__capacity-part.is-warning,
+.nautilus-log-timing__capacity-part.is-warning strong {
   color: #ad690f;
 }
 

@@ -270,6 +270,9 @@ test('execution popover exposes a lightweight daily Review without another graph
 
 test('execution panel exposes cached capacity and deterministic Plan sections', () => {
   assert.match(timingTopbar, /nautilus-log-timing__capacity/);
+  assert.match(timingCore, /function capacitySummary/);
+  assert.match(timingTopbar, /timingCore\.capacitySummary/);
+  assert.match(timingTopbar, /' · '/);
   assert.match(timingCore, /available: 'Available'/);
   assert.match(timingCore, /remaining: 'Remaining'/);
   assert.match(timingCore, /overload: 'Overload'/);

@@ -282,6 +282,38 @@ test('execution surface copy follows the extension language', () => {
   assert.equal(timing.executionCopy('en').empty.noActive, 'No active work. Open Plan to start a task.');
 });
 
+test('Plan capacity summary shares the chart allocation language', () => {
+  assert.deepEqual(timing.capacitySummary({
+    availableMinutes: 181,
+    demandMinutes: 155,
+    slackMinutes: 26,
+  }, 'en'), {
+    planned: { value: '2h35m', label: 'planned' },
+    status: { value: '26m', label: 'free', warning: false },
+    left: { value: '14%', label: 'left' },
+  });
+
+  assert.deepEqual(timing.capacitySummary({
+    availableMinutes: 180,
+    demandMinutes: 200,
+    overloadMinutes: 20,
+  }, 'en'), {
+    planned: { value: '3h20m', label: 'planned' },
+    status: { value: '20m', label: 'over', warning: true },
+    left: { value: '0%', label: 'left' },
+  });
+
+  assert.deepEqual(timing.capacitySummary({
+    availableMinutes: 181,
+    demandMinutes: 155,
+    unplacedMinutes: 30,
+  }, 'en'), {
+    planned: { value: '2h35m', label: 'planned' },
+    status: { value: '30m', label: 'no slot', warning: true },
+    left: { value: '14%', label: 'left' },
+  });
+});
+
 test('standalone POMO uses one absolute start and crosses its shared threshold without stopping', () => {
   const started = timing.nextStandalonePomodoroState(null, { action: 'start', nowMs: 1_000 });
   const tick = timing.standalonePomodoroElapsed(started, 46 * 60 * 1000 + 1_000);

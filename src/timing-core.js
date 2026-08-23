@@ -68,6 +68,19 @@ function executionCopy(language = 'en') {
   return language === 'zh' ? EXECUTION_COPY.zh : EXECUTION_COPY.en;
 }
 
+function capacitySummary(execution = {}, language = 'en') {
+  const [planned, status] = logCore.capacityMetrics({ capacity: execution, language });
+  return {
+    planned: { value: planned.value, label: planned.summaryLabel },
+    status: {
+      value: status.value,
+      label: status.summaryLabel,
+      warning: status.tone === 'warning',
+    },
+    left: { value: planned.percent, label: planned.percentLabel },
+  };
+}
+
 const pad = (value) => String(value).padStart(2, '0');
 const asTime = (value) => {
   if (value instanceof Date && Number.isFinite(value.getTime())) return value.getTime();
@@ -497,6 +510,7 @@ module.exports = {
   actualMinutesToday,
   buildDailyReview,
   buildActiveWork,
+  capacitySummary,
   chooseFocusedEntry,
   compactMinutes,
   durationMetadata,

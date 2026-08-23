@@ -211,30 +211,31 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
 
   const capacityStrip = (execution) => {
     const text = ui().capacity;
+    const summary = timingCore.capacitySummary(
+      execution,
+      extensionAPI.settings.get('language') || 'en',
+    );
     // Use a neutral div instead of section so Roam themes cannot accidentally
     // apply editorial/serif section typography to this compact UI strip.
     const strip = element('div', 'nautilus-log-timing__capacity');
     strip.setAttribute('aria-label', text.label);
-    const available = element('span', 'nautilus-log-timing__capacity-metric');
-    available.append(`${text.available} `, element('strong', '', timingCore.compactMinutes(execution.availableMinutes || 0)));
-    let statusLabel = text.remaining;
-    let statusMinutes = execution.slackMinutes || 0;
-    let warning = false;
-    if (execution.overloadMinutes > 0) {
-      statusLabel = text.overload;
-      statusMinutes = execution.overloadMinutes;
-      warning = true;
-    } else if (execution.unplacedMinutes > 0) {
-      statusLabel = text.noSlot;
-      statusMinutes = execution.unplacedMinutes;
-      warning = true;
-    }
-    const status = element(
-      'span',
-      `nautilus-log-timing__capacity-metric${warning ? ' is-warning' : ''}`,
+    const metric = element('span', 'nautilus-log-timing__capacity-metric');
+    const part = ({ value, label }, warning = false) => {
+      const node = element(
+        'span',
+        `nautilus-log-timing__capacity-part${warning ? ' is-warning' : ''}`,
+      );
+      node.append(element('strong', '', value), ` ${label}`);
+      return node;
+    };
+    metric.append(
+      part(summary.planned),
+      ' · ',
+      part(summary.status, summary.status.warning),
+      ' · ',
+      part(summary.left),
     );
-    status.append(`${statusLabel} `, element('strong', '', timingCore.compactMinutes(statusMinutes)));
-    strip.append(available, status);
+    strip.append(metric);
     return strip;
   };
 
