@@ -1268,7 +1268,7 @@
   display: flex;
   font-size: 10px;
   font-weight: 650;
-  justify-content: space-between;
+  justify-content: flex-start;
   letter-spacing: 0.055em;
   min-height: 30px;
   padding: 6px 10px 4px;
@@ -1304,14 +1304,7 @@ button.nautilus-log-timing__plan-heading:focus-visible {
   margin-left: -3px;
 }
 
-.nautilus-log-timing__plan-total {
-  flex: 0 0 auto;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0;
-}
-
-.nautilus-log-timing__plan-section.is-unscheduled .nautilus-log-timing__plan-heading,
-.nautilus-log-timing__plan-section.is-unscheduled .nautilus-log-timing__plan-total {
+.nautilus-log-timing__plan-section.is-unscheduled .nautilus-log-timing__plan-heading {
   color: #ad690f;
 }
 
@@ -1435,14 +1428,12 @@ button.nautilus-log-timing__plan-heading:focus-visible {
   color: #d6dbe2;
 }
 
-.bp3-dark .nautilus-log-timing__capacity-metric.is-warning,
-.bp3-dark .nautilus-log-timing__capacity-metric.is-warning strong,
-.dark .nautilus-log-timing__capacity-metric.is-warning,
-.dark .nautilus-log-timing__capacity-metric.is-warning strong,
+.bp3-dark .nautilus-log-timing__capacity-part.is-warning,
+.bp3-dark .nautilus-log-timing__capacity-part.is-warning strong,
+.dark .nautilus-log-timing__capacity-part.is-warning,
+.dark .nautilus-log-timing__capacity-part.is-warning strong,
 .bp3-dark .nautilus-log-timing__plan-section.is-unscheduled .nautilus-log-timing__plan-heading,
-.bp3-dark .nautilus-log-timing__plan-section.is-unscheduled .nautilus-log-timing__plan-total,
 .dark .nautilus-log-timing__plan-section.is-unscheduled .nautilus-log-timing__plan-heading,
-.dark .nautilus-log-timing__plan-section.is-unscheduled .nautilus-log-timing__plan-total,
 .bp3-dark .nautilus-log-timing__row.is-unscheduled .nautilus-log-timing__row-meta,
 .dark .nautilus-log-timing__row.is-unscheduled .nautilus-log-timing__row-meta {
   color: #d89a46;

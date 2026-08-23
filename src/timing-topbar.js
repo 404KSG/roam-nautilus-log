@@ -243,8 +243,8 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     }
     const labelNode = element('span', 'nautilus-log-timing__plan-label');
     if (collapsible) labelNode.append(icon(expanded ? 'chevron-down' : 'chevron-right'));
-    labelNode.append(label);
-    header.append(labelNode, element('span', 'nautilus-log-timing__plan-total', String(tasks.length)));
+    labelNode.append(`${label} · ${tasks.length}`);
+    header.append(labelNode);
     return header;
   };
 
