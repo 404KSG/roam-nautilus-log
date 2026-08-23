@@ -849,8 +849,10 @@
 
 .nautilus-log-timing__brand-icon {
   align-items: center;
+  color: var(--nl-exec-muted, #6b7280);
   display: inline-flex;
   flex: 0 0 auto;
+  font-weight: 400;
   height: 18px;
   justify-content: center;
   line-height: 1;
@@ -883,6 +885,9 @@
 
 .nautilus-log-timing__trigger.is-active {
   color: var(--nl-exec-text, #374151);
+}
+
+.nautilus-log-timing__elapsed {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
@@ -894,6 +899,7 @@
 
 .nautilus-log-timing__trigger.is-pomodoro .nautilus-log-timing__pomodoro-label {
   color: #747d8a;
+  font-size: 12px;
   font-weight: 500;
 }
 
@@ -970,6 +976,8 @@
 
 .nautilus-log-timing__threads {
   color: #747d8a;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
   font-weight: 500;
 }
 

@@ -236,7 +236,7 @@ test('standalone POMO has an independent topbar start/stop contract', () => {
   assert.match(timingTopbar, /pomoCloseButton\.append\(icon\('small-cross'\)\)/);
   assert.match(timingTopbar, /element\('span', 'nautilus-log-timing__pomodoro-label', 'POMO'\)/);
   assert.match(timingTopbar, /trigger\.classList\.toggle\('is-overdue', timingCore\.isStandalonePomodoroOverdue/);
-  assert.match(css, /\.nautilus-log-timing__trigger\.is-active\s*\{[^}]*font-variant-numeric:\s*tabular-nums;/s);
+  assert.match(css, /\.nautilus-log-timing__elapsed\s*\{[^}]*font-variant-numeric:\s*tabular-nums;/s);
   assert.match(css, /\.nautilus-log-timing__trigger\.is-overdue \.nautilus-log-timing__pomodoro-label/);
   assert.match(css, /\.nautilus-log-timing__pomodoro-close\s*\{[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*box-shadow:\s*none;/s);
   assert.match(css, /\.nautilus-log-timing__pomodoro-close\[hidden\]\s*\{[^}]*display:\s*none;/s);
@@ -268,6 +268,14 @@ test('the idle capacity strip shares one centered vertical rhythm', () => {
   assert.match(css, /\.nautilus-log-timing__capacity-token\s*\{[^}]*align-items:\s*center;[^}]*height:\s*18px;[^}]*line-height:\s*18px;/s);
   assert.match(css, /\.nautilus-log-timing__capacity-value\s*\{[^}]*color:\s*inherit;[^}]*font-weight:\s*500;/s);
   assert.doesNotMatch(css, /\.bp3-dark\s+\.nautilus-log-timing__capacity-value[^}]*#d6dbe2/s);
+});
+
+test('icon-only density keeps the Nautilus mark independent from active timer typography', () => {
+  const activeRule = css.match(/\.nautilus-log-timing__trigger\.is-active\s*\{([^}]*)\}/)?.[1] || '';
+  assert.doesNotMatch(activeRule, /font-(?:size|variant-numeric|weight)/);
+  assert.match(css, /\.nautilus-log-timing__brand-icon\s*\{[^}]*color:\s*var\(--nl-exec-muted,\s*#6b7280\);[^}]*font-weight:\s*400;/s);
+  assert.match(css, /\.nautilus-log-timing__elapsed\s*\{[^}]*font-size:\s*12px;[^}]*font-variant-numeric:\s*tabular-nums;[^}]*font-weight:\s*600;/s);
+  assert.match(css, /data-density="icon"[^}]*nautilus-log-timing__brand-icon/s);
 });
 
 test('Pomodoro restoration is pure and stale state is cleared through the awaited lifecycle', () => {
