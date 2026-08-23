@@ -220,6 +220,28 @@ test('execution actions do not imitate a blocked application while a graph write
   assert.doesNotMatch(css, /\.nautilus-log-timing__icon-button:disabled\s*\{[^}]*cursor:\s*wait;/s);
 });
 
+test('standalone POMO has an independent topbar start/stop contract', () => {
+  assert.match(timingCore, /nextStandalonePomodoroState/);
+  assert.match(timingCore, /standalonePomodoroElapsed/);
+  assert.match(timingCore, /isStandalonePomodoroOverdue/);
+  assert.match(timingRuntime, /standalone-pomodoro-state/);
+  assert.match(timingRuntime, /startStandalonePomodoro/);
+  assert.match(timingRuntime, /stopStandalonePomodoro/);
+  assert.match(timingTopbar, /!state\.activeWork\?\.focused && !state\.standalonePomodoro/);
+  assert.match(timingTopbar, /iconButton\('stopwatch', text\.actions\.startPomodoro/);
+  assert.match(timingTopbar, /runtime\.startStandalonePomodoro\(\)/);
+  assert.match(timingTopbar, /runtime\.stopStandalonePomodoro\(\)/);
+  assert.match(timingTopbar, /pomoCloseButton\.addEventListener\('click',[\s\S]*event\.stopPropagation\(\)/);
+  assert.match(timingTopbar, /element\('span', 'nautilus-log-timing__pomodoro-label', 'POMO'\)/);
+  assert.match(timingTopbar, /trigger\.classList\.toggle\('is-overdue', timingCore\.isStandalonePomodoroOverdue/);
+  assert.match(css, /\.nautilus-log-timing__trigger\.is-active\s*\{[^}]*font-variant-numeric:\s*tabular-nums;/s);
+  assert.match(css, /\.nautilus-log-timing__trigger\.is-overdue \.nautilus-log-timing__pomodoro-label/);
+  assert.match(css, /\.nautilus-log-timing__pomodoro-close\s*\{[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*box-shadow:\s*none;/s);
+  const triggerStart = timingTopbar.indexOf('const renderTrigger');
+  const triggerEnd = timingTopbar.indexOf('const ensureMounted', triggerStart);
+  assert.doesNotMatch(timingTopbar.slice(triggerStart, triggerEnd), /renderPopover/);
+});
+
 test('Pomodoro restoration is pure and stale state is cleared through the awaited lifecycle', () => {
   const restoreStart = timingRuntime.indexOf('function currentPomodoro');
   const restoreEnd = timingRuntime.indexOf('export function createTimingRuntime', restoreStart);

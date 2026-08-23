@@ -87,7 +87,10 @@ next at the same instant. With **Keep Timing Line first in right sidebar** enabl
 Clock In also opens or moves the active task to the top of Roam's sidebar.
 
 Recent retention defaults to 45 minutes. The Pomodoro threshold defaults to 45
-minutes and changes the live signal without stopping work. The forgotten-timer warning
+minutes and changes the live signal without stopping work. When no task CLOCK is
+active, the panel-header stopwatch starts a standalone count-up POMO. It writes no
+Roam blocks and does not affect Actual, Planned, Review, or the spiral; starting a
+task CLOCK clears it because CLOCK always has priority. The forgotten-timer warning
 defaults to 120 minutes and never stops or deletes a CLOCK. Enter `0` to disable
 Recent or the forgotten-timer warning.
 

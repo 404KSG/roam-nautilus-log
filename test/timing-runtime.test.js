@@ -438,3 +438,116 @@ test('Clock Out uses the confirmed Timing snapshot and cancels a competing idle 
   assert.equal(finalSnapshot.activeWork.focused, null);
   assert.deepEqual(finalSnapshot.activeWork.recent.map(({ taskUid }) => taskUid), ['task-a']);
 });
+
+test('standalone POMO persists without graph writes and CLOCK takes priority', async (t) => {
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#standalone-pomo-${Date.now()}`;
+  const extension = await import(moduleUrl);
+  const trace = [];
+  const { roam, blocks } = graphMock({ trace });
+  const settings = new Map([
+    ['todo-duration', 15],
+    ['pomodoro-minutes', 45],
+    ['timing-line-sidebar', false],
+    ['recent-retention-minutes', 45],
+  ]);
+  global.window = {
+    roamAlphaAPI: roam,
+    setInterval: () => 99,
+    clearInterval: () => {},
+    setTimeout,
+    clearTimeout,
+  };
+  const extensionAPI = {
+    settings: {
+      get: (key) => settings.get(key),
+      set: async (key, value) => settings.set(key, value),
+    },
+  };
+  const runtime = extension.createTimingRuntime({
+    extensionAPI,
+    now: () => new Date(2026, 7, 22, 10, 0),
+  });
+  await runtime.initialize();
+  t.after(() => {
+    runtime.destroy();
+    delete global.window;
+  });
+
+  trace.length = 0;
+  const graphSizeBeforePomo = blocks.size;
+  const started = await runtime.startStandalonePomodoro();
+  assert.deepEqual(started.standalonePomodoro, { startedAt: new Date(2026, 7, 22, 10, 0).getTime() });
+  assert.deepEqual(settings.get('standalone-pomodoro-state'), started.standalonePomodoro);
+  assert.equal(blocks.size, graphSizeBeforePomo, 'POMO must not write graph blocks');
+  assert.equal(trace.some((entry) => entry.startsWith('query:')), false, 'POMO must not query the graph');
+
+  await runtime.startStandalonePomodoro();
+  assert.deepEqual(runtime.getSnapshot().standalonePomodoro, started.standalonePomodoro);
+
+  await runtime.startTask('task-a');
+  assert.equal(runtime.getSnapshot().standalonePomodoro, null);
+  assert.equal(settings.get('standalone-pomodoro-state'), null);
+  assert.equal(runtime.getSnapshot().activeWork.focused.taskUid, 'task-a');
+
+  await runtime.stopTask();
+  const restarted = await runtime.startStandalonePomodoro();
+  assert.ok(restarted.standalonePomodoro);
+  await runtime.stopStandalonePomodoro();
+  assert.equal(runtime.getSnapshot().standalonePomodoro, null);
+  assert.equal(settings.get('standalone-pomodoro-state'), null);
+});
+
+test('standalone POMO restores its absolute start and is cleared if CLOCK is already focused', async (t) => {
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#standalone-pomo-restore-${Date.now()}`;
+  const extension = await import(moduleUrl);
+  const { roam } = graphMock();
+  const settings = new Map([
+    ['todo-duration', 15],
+    ['pomodoro-minutes', 45],
+    ['timing-line-sidebar', false],
+    ['recent-retention-minutes', 45],
+  ]);
+  global.window = {
+    roamAlphaAPI: roam,
+    setInterval: () => 99,
+    clearInterval: () => {},
+    setTimeout,
+    clearTimeout,
+  };
+  const extensionAPI = {
+    settings: {
+      get: (key) => settings.get(key),
+      set: async (key, value) => settings.set(key, value),
+    },
+  };
+  const first = extension.createTimingRuntime({
+    extensionAPI,
+    now: () => new Date(2026, 7, 22, 10, 0),
+  });
+  await first.initialize();
+  const started = await first.startStandalonePomodoro();
+  first.destroy();
+
+  const restored = extension.createTimingRuntime({
+    extensionAPI,
+    now: () => new Date(2026, 7, 22, 10, 20),
+  });
+  await restored.initialize();
+  t.after(() => {
+    restored.destroy();
+    first.destroy();
+    delete global.window;
+  });
+
+  assert.deepEqual(restored.getSnapshot().standalonePomodoro, started.standalonePomodoro);
+  await restored.startTask('task-a');
+  assert.equal(restored.getSnapshot().standalonePomodoro, null);
+
+  await extensionAPI.settings.set('standalone-pomodoro-state', { startedAt: started.standalonePomodoro.startedAt });
+  restored.refresh({ planSnapshot: restored.getSnapshot().planSnapshot, entries: restored.getSnapshot().entries });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(restored.getSnapshot().standalonePomodoro, null);
+  assert.equal(settings.get('standalone-pomodoro-state'), null);
+});

@@ -20,6 +20,7 @@ import {
 } from './timing-roam';
 
 const POMODORO_STATE_KEY = 'actual-time-pomodoro-state';
+const STANDALONE_POMODORO_STATE_KEY = 'standalone-pomodoro-state';
 const REFRESH_INTERVAL_MS = 15_000;
 
 function executionProjection(planSnapshot, currentNow, extensionAPI) {
@@ -66,6 +67,15 @@ function currentPomodoro(extensionAPI, focused) {
   return { startedAt: focused.start.getTime() };
 }
 
+function currentStandalonePomodoro(extensionAPI, focused) {
+  if (focused) return null;
+  const saved = extensionAPI.settings.get(STANDALONE_POMODORO_STATE_KEY);
+  const startedAt = Number(saved?.startedAt);
+  return Number.isFinite(startedAt)
+    ? timingCore.nextStandalonePomodoroState(saved, { action: 'start', nowMs: startedAt })
+    : null;
+}
+
 export function createTimingRuntime({
   extensionAPI,
   now = () => new Date(),
@@ -80,6 +90,7 @@ export function createTimingRuntime({
   let resolveRefresh = null;
   let mutationQueue = Promise.resolve();
   const pendingMutationStarts = new Set();
+  let standaloneClearPromise = null;
   let snapshot = {
     revision: 0,
     status: 'loading',
@@ -89,6 +100,7 @@ export function createTimingRuntime({
     dailyReview: timingCore.buildDailyReview(),
     activeWork: { focused: null, recent: [], items: [], count: 0, windowMinutes: 45 },
     pomodoro: null,
+    standalonePomodoro: null,
     now: now(),
   };
   const listeners = new Set();
@@ -102,6 +114,39 @@ export function createTimingRuntime({
   const setPomodoro = async (value) => {
     snapshot = { ...snapshot, pomodoro: value };
     await extensionAPI.settings.set(POMODORO_STATE_KEY, value);
+  };
+
+  const setStandalonePomodoro = async (value) => {
+    const next = value
+      ? timingCore.nextStandalonePomodoroState(value, { action: 'start', nowMs: value.startedAt })
+      : null;
+    // A refresh can discover stale persisted POMO while CLOCK is active. Do
+    // not let that asynchronous cleanup overwrite a subsequent user start.
+    if (standaloneClearPromise) await standaloneClearPromise;
+    const saved = extensionAPI.settings.get(STANDALONE_POMODORO_STATE_KEY);
+    const savedStartedAt = Number(saved?.startedAt);
+    const persistedMatches = next
+      ? Number.isFinite(savedStartedAt) && savedStartedAt === next.startedAt
+      : !saved;
+    const snapshotMatches = next
+      ? snapshot.standalonePomodoro?.startedAt === next.startedAt
+      : !snapshot.standalonePomodoro;
+    if (snapshotMatches && persistedMatches) {
+      return next;
+    }
+    snapshot = { ...snapshot, standalonePomodoro: next };
+    await extensionAPI.settings.set(STANDALONE_POMODORO_STATE_KEY, next);
+    return next;
+  };
+
+  const clearPersistedStandalonePomodoro = () => {
+    if (standaloneClearPromise) return standaloneClearPromise;
+    if (!extensionAPI.settings.get(STANDALONE_POMODORO_STATE_KEY)) return;
+    standaloneClearPromise = Promise.resolve()
+      .then(() => extensionAPI.settings.set(STANDALONE_POMODORO_STATE_KEY, null))
+      .catch((error) => console.error('[Nautilus Log] standalone POMO restore cleanup failed', error))
+      .finally(() => { standaloneClearPromise = null; });
+    return standaloneClearPromise;
   };
 
   const refresh = ({ notice = '', planSnapshot: suppliedPlanSnapshot, entries: suppliedEntries } = {}) => {
@@ -137,6 +182,10 @@ export function createTimingRuntime({
       const recentRetention = extensionAPI.settings.get('recent-retention-minutes') ?? 45;
       const activeWork = timingCore.buildActiveWork(entries, currentNow, recentRetention);
       const pomodoro = currentPomodoro(extensionAPI, activeWork.focused);
+      const standalonePomodoro = currentStandalonePomodoro(extensionAPI, activeWork.focused);
+      if (activeWork.focused && extensionAPI.settings.get(STANDALONE_POMODORO_STATE_KEY)) {
+        clearPersistedStandalonePomodoro();
+      }
       snapshot = {
         revision: snapshot.revision + 1,
         status: 'ready',
@@ -146,6 +195,7 @@ export function createTimingRuntime({
         dailyReview,
         activeWork,
         pomodoro,
+        standalonePomodoro,
         now: currentNow,
       };
     } catch (error) {
@@ -310,6 +360,12 @@ export function createTimingRuntime({
       const before = snapshot.entries;
       const focused = timingCore.chooseFocusedEntry(before);
       const instant = now();
+      // CLOCK is authoritative even when the caller re-selects the already
+      // focused task, so clear any stale standalone state before the early
+      // return as well.
+      if (snapshot.standalonePomodoro || extensionAPI.settings.get(STANDALONE_POMODORO_STATE_KEY)) {
+        await setStandalonePomodoro(null);
+      }
       if (focused?.taskUid === taskUid) {
         return refresh({ planSnapshot: snapshot.planSnapshot, entries: before });
       }
@@ -365,6 +421,24 @@ export function createTimingRuntime({
     return refresh();
   });
 
+  const startStandalonePomodoro = () => enqueue(async () => {
+    // Re-check inside the serialized mutation queue so CLOCK always wins a
+    // same-tick race with the header stopwatch action.
+    if (timingCore.chooseFocusedEntry(snapshot.entries)) return snapshot;
+    const instant = now();
+    const next = timingCore.nextStandalonePomodoroState(snapshot.standalonePomodoro, {
+      action: 'start',
+      nowMs: instant.getTime(),
+    });
+    await setStandalonePomodoro(next);
+    return refresh({ planSnapshot: snapshot.planSnapshot, entries: snapshot.entries });
+  });
+
+  const stopStandalonePomodoro = () => enqueue(async () => {
+    await setStandalonePomodoro(null);
+    return refresh({ planSnapshot: snapshot.planSnapshot, entries: snapshot.entries });
+  });
+
   const initialize = async () => {
     if (legacyLogbookIsRunning()) {
       const message = 'Disable Roam Logbook before enabling Nautilus Log Actual Time Tracking. Only one extension may write CLOCK records.';
@@ -409,6 +483,7 @@ export function createTimingRuntime({
     const entries = snapshot.entries;
     await closeEntriesAt(entries, now());
     await setPomodoro(null);
+    await setStandalonePomodoro(null);
     refresh();
     destroy();
     return true;
@@ -437,6 +512,8 @@ export function createTimingRuntime({
     stopTask,
     completeTask: finishTask,
     deleteCurrentClock,
+    startStandalonePomodoro,
+    stopStandalonePomodoro,
     locate: () => openPrimaryPlan(snapshot.planSnapshot?.plan?.uid),
     openTask: (taskUid, { sidebar = false } = {}) => (
       sidebar ? openTaskInRightSidebar(taskUid) : openTaskInMainWindow(taskUid)

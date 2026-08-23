@@ -261,6 +261,10 @@ test('execution surface structure ignores one-second ticks but detects real row 
   assert.notEqual(timing.executionStructureKey(tick, 'timing'), timing.executionStructureKey(tick, 'plan'));
   assert.notEqual(timing.executionStructureKey(tick, 'timing'), timing.executionStructureKey(tick, 'review'));
   assert.equal(timing.executionStructureKey(base, 'review'), timing.executionStructureKey(tick, 'review'));
+  assert.notEqual(
+    timing.executionStructureKey(base, 'timing'),
+    timing.executionStructureKey({ ...base, standalonePomodoro: { startedAt: 1234 } }, 'timing'),
+  );
   assert.equal(
     timing.executionStructureKey({ ...base, revision: 4 }, 'plan'),
     timing.executionStructureKey({ ...changed, revision: 4 }, 'plan'),
@@ -276,4 +280,17 @@ test('execution surface copy follows the extension language', () => {
   assert.equal(timing.executionCopy('zh').tabs.plan, '计划');
   assert.equal(timing.executionCopy('zh').capacity.available, '可安排');
   assert.equal(timing.executionCopy('en').empty.noActive, 'No active work. Open Plan to start a task.');
+});
+
+test('standalone POMO uses one absolute start and crosses its shared threshold without stopping', () => {
+  const started = timing.nextStandalonePomodoroState(null, { action: 'start', nowMs: 1_000 });
+  const tick = timing.standalonePomodoroElapsed(started, 46 * 60 * 1000 + 1_000);
+  const switched = timing.nextStandalonePomodoroState(started, { action: 'start', nowMs: 99_000 });
+
+  assert.deepEqual(started, { startedAt: 1_000 });
+  assert.equal(tick, 46 * 60);
+  assert.equal(timing.isStandalonePomodoroOverdue(started, 45 * 60 * 1000 + 1_000, 45), true);
+  assert.equal(timing.isStandalonePomodoroOverdue(started, 46 * 60 * 1000 + 1_000, 45), true);
+  assert.deepEqual(switched, started, 'repeated start must not reset the absolute clock');
+  assert.equal(timing.nextStandalonePomodoroState(started, { action: 'stop' }), null);
 });

@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.0.2 — 2026-08-23
+
+### Added
+
+- The optional Execution Layer now includes a standalone count-up POMO for
+  estimate-first work: start it from the panel header, monitor `elapsed · POMO`
+  in the topbar, and close it directly without creating a task CLOCK.
+- Standalone POMO restores from its absolute start after navigation or refresh,
+  reuses the configured Pomodoro threshold, and marks only its live text red
+  after the threshold while continuing to count upward.
+
+### Fixed
+
+- Standalone POMO and task CLOCK are strictly mutually exclusive: CLOCK always
+  wins a same-tick race, Clock In clears POMO first, and restored stale POMO
+  state is removed when an active CLOCK already exists.
+- Per-second standalone POMO ticks update only the compact topbar signal; they
+  do not query the Roam graph or rebuild Timing, Plan, or Review.
+
 ## 1.0.1 — 2026-08-23
 
 ### Fixed

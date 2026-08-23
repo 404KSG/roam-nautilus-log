@@ -22,6 +22,7 @@ const EXECUTION_COPY = Object.freeze({
     actions: {
       clockIn: 'Clock In', clockOut: 'Clock Out', complete: 'Complete task', deleteClock: 'Delete current CLOCK',
       confirmDelete: 'Click again to delete current CLOCK', openPanel: 'Open Nautilus Log execution panel',
+      startPomodoro: 'Start standalone POMO', stopPomodoro: 'Stop standalone POMO',
     },
     capacity: { label: 'Today capacity', available: 'Available', remaining: 'Remaining', overload: 'Overload', noSlot: 'No fitting slot' },
     plan: { scheduled: 'Scheduled today', unscheduled: 'Unscheduled today', today: 'Today' },
@@ -44,6 +45,7 @@ const EXECUTION_COPY = Object.freeze({
     actions: {
       clockIn: '开始计时', clockOut: '结束计时', complete: '完成任务', deleteClock: '删除当前 CLOCK',
       confirmDelete: '再次点击以删除当前 CLOCK', openPanel: '打开 Nautilus Log 执行面板',
+      startPomodoro: '开始独立番茄钟', stopPomodoro: '结束独立番茄钟',
     },
     capacity: { label: '今日容量', available: '可安排', remaining: '余量', overload: '超载', noSlot: '没有连续空档' },
     plan: { scheduled: '今日已安排', unscheduled: '今日未排入', today: '今天' },
@@ -428,6 +430,29 @@ function nextPomodoroState(current, { action, nowMs = Date.now() } = {}) {
   return current || null;
 }
 
+function nextStandalonePomodoroState(current, { action, nowMs = Date.now() } = {}) {
+  if (action === 'stop') return null;
+  if (action === 'start') {
+    const startedAt = Number(current?.startedAt);
+    return Number.isFinite(startedAt) ? { startedAt } : { startedAt: nowMs };
+  }
+  return current && Number.isFinite(Number(current.startedAt))
+    ? { startedAt: Number(current.startedAt) }
+    : null;
+}
+
+function standalonePomodoroElapsed(state, now = Date.now()) {
+  const startedAt = Number(state?.startedAt);
+  const nowMs = asTime(now);
+  if (!Number.isFinite(startedAt) || nowMs === null) return 0;
+  return Math.max(0, Math.floor((nowMs - startedAt) / 1000));
+}
+
+function isStandalonePomodoroOverdue(state, now = Date.now(), thresholdMinutes = 45) {
+  const threshold = normalizedMinuteSetting(thresholdMinutes, 45);
+  return threshold > 0 && standalonePomodoroElapsed(state, now) >= threshold * 60;
+}
+
 function executionStructureKey(snapshot = {}, view = 'timing') {
   const normalizedView = ['timing', 'plan', 'review'].includes(view) ? view : 'timing';
   if (Number.isInteger(snapshot.revision)) {
@@ -462,6 +487,7 @@ function executionStructureKey(snapshot = {}, view = 'timing') {
     (active.recent || []).map(entry),
     (snapshot.entries || []).map(entry),
     Number(snapshot.pomodoro?.startedAt) || 0,
+    Number(snapshot.standalonePomodoro?.startedAt) || 0,
   ]);
 }
 
@@ -481,6 +507,9 @@ module.exports = {
   isNautilusComponent,
   isForgottenClock,
   nextPomodoroState,
+  nextStandalonePomodoroState,
+  standalonePomodoroElapsed,
+  isStandalonePomodoroOverdue,
   parseClockLine,
   plannedMinutes,
   taskProgress,

@@ -37,8 +37,8 @@ fit** instead of disappearing. No AI estimates and no black-box scheduling.
 
 ## Quick start
 
-1. During Depot review, install the [Roam Depot preview PR](https://github.com/Roam-Research/roam-depot/pull/1428)
-   with ShortHand `404KSG+roam-nautilus-log+1428`.
+1. During Depot review, install the [Roam Depot preview PR](https://github.com/Roam-Research/roam-depot/pull/1430)
+   with ShortHand `404KSG+roam-nautilus-log+1430`.
 2. On today's Daily Note, type `;;` and choose **Nautilus Log**.
 3. Add events and TODOs as direct children of the component.
 4. Order the tasks, add rough durations, and adjust until the day fits.
@@ -64,6 +64,8 @@ stays light. Enable it in Settings to add a compact execution panel:
 
 Only one CLOCK runs at a time. Clock In can place the active task at the top of
 Roam's right sidebar, keeping focus and task switching close to native Shift+Click.
+For estimate-first work, the panel header can start a standalone count-up POMO
+that shares the same threshold without writing a task CLOCK or changing Review.
 
 See the [full user guide](./docs/guide.md) for syntax, metrics, settings, commands,
 Actual-history rules, and safety boundaries.

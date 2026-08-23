@@ -830,6 +830,47 @@
   color: #d14343;
 }
 
+.nautilus-log-timing__trigger.is-pomodoro .nautilus-log-timing__pomodoro-label {
+  color: #747d8a;
+  font-weight: 500;
+}
+
+.nautilus-log-timing__trigger.is-overdue .nautilus-log-timing__elapsed,
+.nautilus-log-timing__trigger.is-overdue .nautilus-log-timing__pomodoro-label {
+  color: #d14343;
+}
+
+.nautilus-log-timing__pomodoro-close {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  box-shadow: none;
+  color: var(--nl-exec-muted, #6b7280);
+  cursor: pointer;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  height: 24px;
+  line-height: 22px;
+  margin-left: -4px;
+  padding: 0;
+  width: 24px;
+}
+
+.nautilus-log-timing__pomodoro-close:hover,
+.nautilus-log-timing__pomodoro-close:focus-visible {
+  background: rgba(111, 120, 132, 0.1);
+  color: var(--nl-exec-text, #374151);
+  outline: none;
+}
+
+.nautilus-log-timing__pomodoro-start {
+  color: #8a929f;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 .nautilus-log-timing__forgotten-signal {
   align-items: center;
   color: #b96f12;

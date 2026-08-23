@@ -48,6 +48,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
   let destroyed = false;
   let container = null;
   let trigger = null;
+  let pomoCloseButton = null;
   let popover = null;
   let observers = [];
   let unsubscribe = null;
@@ -431,6 +432,17 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     });
     headerMain.append(identity, identityDivider, tabs);
     header.append(headerMain);
+    if (!state.activeWork?.focused && !state.standalonePomodoro) {
+      const startPomodoro = iconButton('stopwatch', text.actions.startPomodoro, (event) => {
+        event.stopPropagation();
+        runAction(async () => {
+          await runtime.startStandalonePomodoro();
+          closePopover();
+        });
+      });
+      startPomodoro.classList.add('nautilus-log-timing__pomodoro-start');
+      header.append(startPomodoro);
+    }
     popover.append(header);
 
     if (state.notice) {
@@ -563,14 +575,45 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     if (!trigger) return;
     const text = ui();
     const focused = state.activeWork?.focused;
+    const standalone = !focused && state.standalonePomodoro;
+    if (standalone) {
+      const elapsed = timingCore.formatElapsed(state.now.getTime() - Number(standalone.startedAt));
+      const pomodoroMinutes = Number(extensionAPI.settings.get('pomodoro-minutes')) || 45;
+      if (triggerMode !== 'pomodoro') {
+        trigger.replaceChildren(
+          element('span', 'nautilus-log-timing__elapsed'),
+          element('span', 'nautilus-log-timing__trigger-separator', '·'),
+          element('span', 'nautilus-log-timing__pomodoro-label', 'POMO'),
+        );
+        triggerMode = 'pomodoro';
+      }
+      trigger.classList.add('is-active', 'is-pomodoro');
+      trigger.classList.remove('is-forgotten');
+      trigger.classList.toggle('is-overdue', timingCore.isStandalonePomodoroOverdue(
+        standalone,
+        state.now,
+        pomodoroMinutes,
+      ));
+      trigger.querySelector('.nautilus-log-timing__elapsed').textContent = elapsed;
+      trigger.querySelector('.nautilus-log-timing__pomodoro-label').textContent = 'POMO';
+      trigger.setAttribute('aria-label', `${elapsed}, POMO`);
+      trigger.title = text.actions.openPanel;
+      if (pomoCloseButton) {
+        pomoCloseButton.hidden = false;
+        pomoCloseButton.title = text.actions.stopPomodoro;
+        pomoCloseButton.setAttribute('aria-label', text.actions.stopPomodoro);
+      }
+      return;
+    }
     if (!focused) {
       if (triggerMode !== 'idle') {
         trigger.replaceChildren(icon('unresolve'));
         triggerMode = 'idle';
       }
-      trigger.classList.remove('is-active', 'is-overdue', 'is-forgotten');
+      trigger.classList.remove('is-active', 'is-overdue', 'is-forgotten', 'is-pomodoro');
       trigger.setAttribute('aria-label', text.actions.openPanel);
       trigger.title = 'Nautilus Log';
+      if (pomoCloseButton) pomoCloseButton.hidden = true;
     } else {
       const elapsed = timingCore.formatElapsed(state.now - focused.start);
       const count = state.activeWork.count;
@@ -590,12 +633,14 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
         triggerMode = 'active';
       }
       trigger.classList.add('is-active');
+      trigger.classList.remove('is-pomodoro');
       trigger.classList.toggle('is-overdue', pomodoroElapsed >= pomodoroMinutes * 60000);
       trigger.classList.toggle('is-forgotten', forgotten);
       trigger.querySelector('.nautilus-log-timing__elapsed').textContent = elapsed;
       trigger.querySelector('.nautilus-log-timing__threads').textContent = `${count} ${count === 1 ? text.trigger.thread : text.trigger.threads}`;
       trigger.setAttribute('aria-label', `${forgotten ? `${text.trigger.check}, ` : ''}${elapsed}, ${count} ${count === 1 ? text.trigger.thread : text.trigger.threads}`);
       trigger.title = `${forgotten ? `${text.trigger.check} · ` : ''}${focused.title}`;
+      if (pomoCloseButton) pomoCloseButton.hidden = true;
     }
   };
 
@@ -612,7 +657,18 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       trigger.setAttribute('aria-controls', POPOVER_ID);
       trigger.setAttribute('aria-expanded', 'false');
       trigger.addEventListener('click', openPopover);
-      container.append(trigger);
+      pomoCloseButton = element('button', 'nautilus-log-timing__pomodoro-close', '×');
+      pomoCloseButton.type = 'button';
+      pomoCloseButton.hidden = true;
+      pomoCloseButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        runAction(async () => {
+          closePopover();
+          await runtime.stopStandalonePomodoro();
+        });
+      });
+      container.append(trigger, pomoCloseButton);
     }
     if (!container.isConnected || !topbar.contains(container)) placeAfterNavigation(topbar, container);
     renderTrigger();
@@ -682,6 +738,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     container?.remove();
     container = null;
     trigger = null;
+    pomoCloseButton = null;
   };
 
   return { initialize, destroy, ensureMounted };
