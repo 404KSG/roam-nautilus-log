@@ -90,8 +90,8 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
   };
 
   const brandIcon = () => {
-    const mark = icon('unresolve');
-    mark.classList.add('nautilus-log-timing__brand-icon');
+    const mark = element('span', 'nautilus-log-timing__brand-icon');
+    mark.append(icon('unresolve'));
     return mark;
   };
 

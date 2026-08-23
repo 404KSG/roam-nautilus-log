@@ -848,7 +848,17 @@
 }
 
 .nautilus-log-timing__brand-icon {
+  align-items: center;
+  display: inline-flex;
   flex: 0 0 auto;
+  height: 18px;
+  justify-content: center;
+  line-height: 1;
+  width: 18px;
+}
+
+.nautilus-log-timing__brand-icon > .bp3-icon {
+  display: block;
   font-size: 18px;
   height: 18px;
   line-height: 18px;
@@ -948,7 +958,11 @@
 }
 
 .nautilus-log-timing__trigger-separator {
+  align-items: center;
   color: #a3aab5;
+  display: inline-flex;
+  height: 18px;
+  line-height: 18px;
 }
 
 .nautilus-log-timing__threads {
@@ -957,13 +971,15 @@
 }
 
 .nautilus-log-timing__capacity-token {
-  align-items: baseline;
+  align-items: center;
   color: #747d8a;
   display: inline-flex;
   flex: 0 0 auto;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   gap: 3px;
+  height: 18px;
+  line-height: 18px;
 }
 
 .nautilus-log-timing__capacity-token[hidden],

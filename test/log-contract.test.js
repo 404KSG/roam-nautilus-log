@@ -259,6 +259,13 @@ test('the global capacity token yields topbar space to Roam search', () => {
   assert.doesNotMatch(timingTopbar, /readAllEntries|readPrimaryPlan/);
 });
 
+test('the idle capacity strip shares one centered vertical rhythm', () => {
+  assert.match(timingTopbar, /mark\.append\(icon\('unresolve'\)\)/);
+  assert.match(css, /\.nautilus-log-timing__brand-icon\s*\{[^}]*align-items:\s*center;[^}]*display:\s*inline-flex;[^}]*justify-content:\s*center;/s);
+  assert.match(css, /\.nautilus-log-timing__trigger-separator\s*\{[^}]*align-items:\s*center;[^}]*display:\s*inline-flex;[^}]*height:\s*18px;/s);
+  assert.match(css, /\.nautilus-log-timing__capacity-token\s*\{[^}]*align-items:\s*center;[^}]*height:\s*18px;[^}]*line-height:\s*18px;/s);
+});
+
 test('Pomodoro restoration is pure and stale state is cleared through the awaited lifecycle', () => {
   const restoreStart = timingRuntime.indexOf('function currentPomodoro');
   const restoreEnd = timingRuntime.indexOf('export function createTimingRuntime', restoreStart);
