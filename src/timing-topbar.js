@@ -204,11 +204,6 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     return `${String(Math.floor(safe / 60)).padStart(2, '0')}:${String(safe % 60).padStart(2, '0')}`;
   };
 
-  const taskMinutes = (tasks = []) => tasks.reduce(
-    (total, task) => total + Math.max(0, Number(task.duration ?? task.remainingMinutes ?? task.plannedMinutes) || 0),
-    0,
-  );
-
   const capacityStrip = (execution) => {
     const text = ui().capacity;
     const summary = timingCore.capacitySummary(
@@ -249,8 +244,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     const labelNode = element('span', 'nautilus-log-timing__plan-label');
     if (collapsible) labelNode.append(icon(expanded ? 'chevron-down' : 'chevron-right'));
     labelNode.append(label);
-    const duration = timingCore.compactMinutes(taskMinutes(tasks));
-    header.append(labelNode, element('span', 'nautilus-log-timing__plan-total', `${tasks.length} · ${duration}`));
+    header.append(labelNode, element('span', 'nautilus-log-timing__plan-total', String(tasks.length)));
     return header;
   };
 

@@ -282,6 +282,8 @@ test('execution panel exposes cached capacity and deterministic Plan sections', 
   assert.match(timingTopbar, /aria-expanded/);
   assert.match(timingTopbar, /execution\?\.scheduledTasks/);
   assert.match(timingTopbar, /execution\?\.overflowTasks/);
+  assert.match(timingTopbar, /nautilus-log-timing__plan-total', String\(tasks\.length\)/);
+  assert.doesNotMatch(timingTopbar, /taskMinutes/);
   assert.match(timingTopbar, /element\('div', 'nautilus-log-timing__capacity'\)/);
   assert.match(timingTopbar, /document\.querySelector\('\.nautilus-log-metric'\)/);
   assert.match(timingTopbar, /getComputedStyle\(source\)\.fontFamily/);
