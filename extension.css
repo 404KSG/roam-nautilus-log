@@ -992,7 +992,7 @@
 
 .nautilus-log-timing__capacity-value {
   color: var(--nl-exec-text, #374151);
-  font-weight: 650;
+  font-weight: 500;
 }
 
 .nautilus-log-timing__capacity-label {
