@@ -118,7 +118,7 @@ test('the spiral exposes slice and available-slot hover targets above an inert g
   assert.match(component, /createPortal/);
   assert.match(component, /nautilus-log-event-slice-group--interactive/);
   assert.match(component, /hover-enabled\? \(not compact\?\)/);
-  assert.match(component, /\(when hover-enabled\?\s+\[available-slot-component/);
+  assert.match(component, /\(when \(and hover-enabled\? \(:showAvailableSlots timeline-state\)\)\s+\[available-slot-component/);
   assert.match(component, /\(when hover-enabled\? \[hover-tooltip-component/);
   assert.match(component, /:on-mouse-enter/);
   assert.match(component, /:on-focus/);
@@ -140,13 +140,17 @@ test('renderer install polling does not invalidate an unchanged chart', () => {
   assert.doesNotMatch(pollBody, /#\(reset! \*running\? \(is-running\?\)\)/);
 });
 
-test('a mounted chart recomputes Daily Note ownership after midnight', () => {
+test('a mounted chart derives historical/today behavior from the shared timeline day state', () => {
   const clockStart = component.indexOf('daily-page-atom? (r/atom (daily-page? block-uid))');
   const clockEnd = component.indexOf('page-title-val', clockStart);
   const clockBody = component.slice(clockStart, clockEnd);
   assert.match(clockBody, /next-daily-page-state/);
   assert.match(clockBody, /daily-page\? block-uid/);
   assert.match(clockBody, /reset! daily-page-atom\?/);
+  assert.match(component, /log-core-call "timelineDayState"/);
+  assert.match(component, /:capacityFromMinutes/);
+  assert.match(component, /:elapsedThroughMinutes/);
+  assert.match(component, /:showAvailableSlots/);
 });
 
 test('Log scaffolding is isolated and unload is graph-safe', () => {

@@ -29,6 +29,7 @@ const {
   isCompactChartWidth,
   parseDurationToken,
   parseTimeRangeToken,
+  timelineDayState,
 } = require('../src/log-core');
 
 test('shared syntax accepts every documented task duration form', () => {
@@ -68,6 +69,50 @@ test('shared time-range syntax returns semantic warning codes', () => {
     cleanedText: 'Invalid',
     warningCode: 'sameTime',
   });
+});
+
+test('a past Daily Note is fully elapsed and exposes no available planning slots', () => {
+  assert.deepEqual(
+    timelineDayState({
+      displayDate: 'August 22nd, 2026',
+      currentDate: new Date(2026, 7, 23, 8, 21).getTime(),
+      startMinutes: 300,
+      endMinutes: 1260,
+      nowMinutes: 501,
+    }),
+    {
+      relation: 'past',
+      scheduleFromMinutes: 300,
+      capacityFromMinutes: 1260,
+      elapsedThroughMinutes: 1260,
+      interactive: false,
+      showElapsed: true,
+      showAvailableSlots: false,
+      showNow: false,
+    },
+  );
+});
+
+test('today keeps planning, capacity, elapsed shading, and interaction on the same minute', () => {
+  assert.deepEqual(
+    timelineDayState({
+      displayDate: 'August 23rd, 2026',
+      currentDate: new Date(2026, 7, 23, 8, 21).getTime(),
+      startMinutes: 300,
+      endMinutes: 1260,
+      nowMinutes: 501,
+    }),
+    {
+      relation: 'today',
+      scheduleFromMinutes: 501,
+      capacityFromMinutes: 501,
+      elapsedThroughMinutes: 501,
+      interactive: true,
+      showElapsed: true,
+      showAvailableSlots: true,
+      showNow: true,
+    },
+  );
 });
 
 test('the chart background uses one grid sector per hour', () => {

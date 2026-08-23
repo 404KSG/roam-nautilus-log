@@ -887,11 +887,11 @@
                                       "before-edge")}
         (if debug? (str (round2 start-radians) " / " start-angle) timestamp)])]))
 
-(defn past-time-overlay-component [inner-radius center settings now-time-atom]
+(defn past-time-overlay-component [inner-radius center settings elapsed-through-minutes]
   (let [segments (or (log-core-call "pastTimelineSegments"
                                      {:startMinutes (:workday-start settings)
                                       :endMinutes (:workday-end settings)
-                                      :nowMinutes @now-time-atom})
+                                      :nowMinutes elapsed-through-minutes})
                      [])]
     [:g {:class "nautilus-log-past-overlay" :aria-hidden "true"}
      (for [{:keys [start end]} segments]
@@ -903,11 +903,11 @@
                     (outer-radius-at (mod (quot start 60) (count snail-blueprint-outer-radiuses)))
                     center)}])]))
 
-(defn past-unplanned-overlay-component [occupied-events inner-radius center settings now-time-atom pattern-id]
+(defn past-unplanned-overlay-component [occupied-events inner-radius center settings elapsed-through-minutes pattern-id]
   (let [segments (or (log-core-call "pastUnplannedSegments"
                                      {:startMinutes (:workday-start settings)
                                       :endMinutes (:workday-end settings)
-                                      :nowMinutes @now-time-atom
+                                      :nowMinutes elapsed-through-minutes
                                       :occupiedEvents occupied-events})
                      [])]
     [:g {:class "nautilus-log-unplanned-overlay" :aria-hidden "true"}
@@ -931,7 +931,7 @@
                :fill (str "url(#" pattern-id ")")}])]))
 
 
-(defn snail-blueprint-component [color inner-radius center settings daily-page? now-time-atom]
+(defn snail-blueprint-component [color inner-radius center settings show-elapsed? elapsed-through-minutes]
   (let [workday-start (:workday-start settings)
         workday-end (:workday-end settings)
         segments (or (log-core-call "hourlyGridSegments"
@@ -945,7 +945,7 @@
                   (outer-radius-at (mod (quot start 60) (count snail-blueprint-outer-radiuses)))
                  center settings]
                  :border-color color
-                 :past? (and daily-page? (<= end @now-time-atom))
+                 :past? (and show-elapsed? (<= end elapsed-through-minutes))
                  :timestamp label]])
              segments)
      (when (= workday-end 1440)
@@ -979,7 +979,7 @@
                      :font-size (str (* font-size 0.82)))
         center-now-label])]))
 
-(defn calculate-slice-params [event index daily-page? now-time-atom]
+(defn calculate-slice-params [event index elapsed-page? interactive? timeline-minute]
   (let [outer-radius (outer-radius-at (mod (quot (int (:start event)) 60) (count snail-blueprint-outer-radiuses)))
         start-angle (min->angle (:start event))
         end-angle (min->angle (:end event))
@@ -988,16 +988,16 @@
         done? (if (:done event) true false)
         meeting? (:meeting event)
         progress (:progress event)
-        click-to-progress (if (and daily-page? todo?) true false)
-        expired? (and meeting? (>= @now-time-atom (:end event)))
+        click-to-progress (if (and interactive? todo?) true false)
+        expired? (and elapsed-page? meeting? (>= timeline-minute (:end event)))
         current? (= true (log-core-call "isCurrentPlannedTask"
                                          {:event event
-                                          :nowMinutes @now-time-atom
-                                          :dailyPage daily-page?}))
+                                          :nowMinutes timeline-minute
+                                          :dailyPage interactive?}))
         past-status (log-core-call "pastItemStatus"
                                    {:event event
-                                    :nowMinutes @now-time-atom
-                                    :dailyPage daily-page?})
+                                    :nowMinutes timeline-minute
+                                    :dailyPage elapsed-page?})
         todo-bg-color (or (:bg-color event) task-fill-color)
         meeting-color (or (:bg-color event) meeting-fill-color)]
     {:start-angle start-angle
@@ -1022,8 +1022,8 @@
         first-bound (if (<= first-bound start-min) (+ first-bound 60) first-bound)]
     (range first-bound end-min 60)))
 
-(defn event-slice-component [event index legend-rect inner-radius daily-page? center settings now-time-atom conflict? hover-enabled? hover-info-state copy]
-  (let [{:keys [bg-color done click-to-progress meeting? expired? past-status current?]} (calculate-slice-params event index daily-page? now-time-atom)
+(defn event-slice-component [event index legend-rect inner-radius elapsed-page? interactive? timeline-minute center settings now-time-atom conflict? hover-enabled? hover-info-state copy]
+  (let [{:keys [bg-color done click-to-progress meeting? expired? past-status current?]} (calculate-slice-params event index elapsed-page? interactive? timeline-minute)
         legend-color (cond
                        (= "completed" past-status) "var(--nautilus-log-completed)"
                        (and meeting? (nil? (:bg-color event))) "var(--nautilus-log-event)"
@@ -1097,9 +1097,9 @@
 
 (defn events->slices
   "Returns svg vector of all slice components + list of legend rectangles"
-  ([events daily-page-atom? center settings now-time-atom hover-enabled? hover-info-state copy]
-   (events->slices events daily-page-atom? center settings now-time-atom hover-enabled? hover-info-state copy []))
-  ([events daily-page-atom? center settings now-time-atom hover-enabled? hover-info-state copy init-rects]
+  ([events elapsed-page? interactive? timeline-minute center settings now-time-atom hover-enabled? hover-info-state copy]
+   (events->slices events elapsed-page? interactive? timeline-minute center settings now-time-atom hover-enabled? hover-info-state copy []))
+  ([events elapsed-page? interactive? timeline-minute center settings now-time-atom hover-enabled? hover-info-state copy init-rects]
    (let [events (vec (filter #(not= true (:freetime %)) events))
          track-map (label-track-map events)
          conflict-uids (set (or (log-core-call "overlappingFixedEventUids" {:events events}) []))]
@@ -1121,7 +1121,7 @@
         (println?debug "RADIUS INSIDE EVENTS-SLICES: " radius)              
         (recur (inc i) (rest events) (conj rects new-rect)
                (conj all-slice-components
-                     (event-slice-component event i new-rect snail-inner-radius @daily-page-atom? center settings now-time-atom
+                     (event-slice-component event i new-rect snail-inner-radius elapsed-page? interactive? timeline-minute center settings now-time-atom
                                             (contains? conflict-uids (:uid event)) hover-enabled? hover-info-state copy))))
       [all-slice-components rects])))))
 
@@ -1237,7 +1237,7 @@
                       center)
                   :vector-effect "non-scaling-stroke"}])])]))
 
-(defn show-events [events-state daily-page-atom? show-done-atom? playback-state-atom now-time-atom page-title dimensions settings compact? copy compact-open-state hover-info-state block-uid]
+(defn show-events [events-state show-done-atom? playback-state-atom now-time-atom page-title dimensions settings compact? copy compact-open-state hover-info-state block-uid timeline-state]
   (let [[events done-todos] events-state
         old-width (js/Math.round (:width dimensions))
         old-height (js/Math.round (:height dimensions))
@@ -1250,15 +1250,16 @@
           (events->new-dimensions all-events-for-dim {:center-x (/ old-width 2) :center-y (/ old-height 2)} settings))
         center {:center-x center-x :center-y center-y}
         hover-enabled? (not compact?)
-        [all-slice-components rects] (events->slices events daily-page-atom? center settings now-time-atom hover-enabled? hover-info-state copy)
+        elapsed-page? (:showElapsed timeline-state)
+        interactive? (:interactive timeline-state)
+        timeline-minute (:elapsedThroughMinutes timeline-state)
+        [all-slice-components rects] (events->slices events elapsed-page? interactive? timeline-minute center settings now-time-atom hover-enabled? hover-info-state copy)
         done-slices-and-rects (when @show-done-atom?
-                                (events->slices done-todos daily-page-atom? center settings now-time-atom hover-enabled? hover-info-state copy rects))
+                                (events->slices done-todos elapsed-page? interactive? timeline-minute center settings now-time-atom hover-enabled? hover-info-state copy rects))
         done-slice-components (first done-slices-and-rects)
         rects (or (second done-slices-and-rects) rects)
-        now-visible? (and (or @daily-page-atom? @playback-state-atom)
-                          (>= @now-time-atom (:workday-start settings))
-                          (< @now-time-atom (:workday-end settings)))
-        center-now-label (when now-visible? (minutes->time @now-time-atom))]
+        now-visible? (:showNow timeline-state)
+        center-now-label (when now-visible? (minutes->time timeline-minute))]
     [:div {:class (str "nautilus-log-visual" (when compact? " nautilus-log-visual--compact"))}
      [:svg {:viewBox (str "0 0 " suggested-width " " suggested-height)
            :width "100%"
@@ -1268,17 +1269,17 @@
            :font-family font-family
            :font-size font-size}
      [:g
-      (when (or @daily-page-atom? @playback-state-atom)
-        [past-time-overlay-component snail-inner-radius center settings now-time-atom])
-      (when (or @daily-page-atom? @playback-state-atom)
-        [past-unplanned-overlay-component past-occupied-events snail-inner-radius center settings now-time-atom unplanned-pattern-id])
+      (when elapsed-page?
+        [past-time-overlay-component snail-inner-radius center settings timeline-minute])
+      (when elapsed-page?
+        [past-unplanned-overlay-component past-occupied-events snail-inner-radius center settings timeline-minute unplanned-pattern-id])
       (when @show-done-atom? done-slice-components)
       all-slice-components         ;; zobrazení všech událostí
-      [snail-blueprint-component snail-template-color snail-inner-radius center settings @daily-page-atom? now-time-atom]
-      (when hover-enabled?
-        [available-slot-component events @daily-page-atom? @playback-state-atom now-time-atom snail-inner-radius center settings hover-info-state copy])
+      [snail-blueprint-component snail-template-color snail-inner-radius center settings elapsed-page? timeline-minute]
+      (when (and hover-enabled? (:showAvailableSlots timeline-state))
+        [available-slot-component events interactive? @playback-state-atom now-time-atom snail-inner-radius center settings hover-info-state copy])
       (when now-visible?
-        (let [visible-now @now-time-atom
+        (let [visible-now timeline-minute
               now-angle (min->angle visible-now)
               now-rad (angle->rad now-angle)
               inner-r (+ snail-inner-radius 2)
@@ -1754,17 +1755,30 @@
                 dimensions {:width (if mobile? mob-width desk-width)
                             :height (* start-svg-rect-ratio (if mobile? mob-width desk-width))}
                 show-debug-button? (= :debug (first args))
-                plan-from-time (if @daily-page-atom?
-                                 (if @playback-state-atom (:workday-start settings) @now-time-atom)
-                                 (:workday-start settings))
+                timeline-state (or (log-core-call "timelineDayState"
+                                                   {:displayDate page-title-val
+                                                    :currentDate (.now js/Date)
+                                                    :startMinutes (:workday-start settings)
+                                                    :endMinutes (:workday-end settings)
+                                                    :nowMinutes @now-time-atom
+                                                    :playback @playback-state-atom})
+                                   {:relation (if @daily-page-atom? "today" "other")
+                                    :scheduleFromMinutes (if @daily-page-atom? @now-time-atom (:workday-start settings))
+                                    :capacityFromMinutes (if @daily-page-atom? @now-time-atom (:workday-start settings))
+                                    :elapsedThroughMinutes @now-time-atom
+                                    :interactive @daily-page-atom?
+                                    :showElapsed @daily-page-atom?
+                                    :showAvailableSlots true
+                                    :showNow @daily-page-atom?})
+                plan-from-time (:scheduleFromMinutes timeline-state)
                 [text-events done-events] @*text-events
                 pending-tasks (vec (filter #(and (:todo %) (not (:done %))) text-events))
                 fixed-events (vec (filter #(and (:meeting %) (not (:done %))) text-events))
                 all-fixed-events (vec (concat fixed-events (filter :meeting done-events)))
                 capacity-base (or (log-core-call "calculateCapacity"
-                                                   {:startMinutes (:workday-start settings)
-                                                    :endMinutes (:workday-end settings)
-                                                    :nowMinutes (if @playback-state-atom @now-time-atom plan-from-time)
+                                                    {:startMinutes (:workday-start settings)
+                                                     :endMinutes (:workday-end settings)
+                                                    :nowMinutes (:capacityFromMinutes timeline-state)
                                                     :fixedEvents fixed-events
                                                     :allFixedEvents all-fixed-events
                                                     :pendingTasks (map #(dissoc % :progress) pending-tasks)})
@@ -1775,7 +1789,7 @@
                 burning-bucket (log-core-call "burningCapacityBucket"
                                                {:startMinutes (:workday-start settings)
                                                 :endMinutes (:workday-end settings)
-                                                :nowMinutes @now-time-atom
+                                                :nowMinutes (:capacityFromMinutes timeline-state)
                                                 :fixedEvents fixed-events})
                 capacity (assoc capacity-base :burningBucket burning-bucket)
                 events-state [(fill-day text-events (:workday-start settings) (:workday-end settings) plan-from-time) done-events]]
@@ -1795,7 +1809,7 @@
                 (when @compact-state
                   [compact-overview-component capacity settings copy compact-overview-open-state])
                 [:div {:class "nautilus-log-content"}
-                 [show-events events-state daily-page-atom? show-done-state playback-state-atom now-time-atom page-title-val dimensions settings @compact-state copy compact-list-open-state hover-info-state block-uid]
+                 [show-events events-state show-done-state playback-state-atom now-time-atom page-title-val dimensions settings @compact-state copy compact-list-open-state hover-info-state block-uid timeline-state]
                  [overflow-panel capacity copy]
                  [schedule-warning-panel text-events copy]]])]))))
     (finally

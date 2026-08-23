@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.1 — 2026-08-23
+
+### Fixed
+
+- Historical Daily Notes now render the configured workday as elapsed, keep
+  their unrecorded time hatched, and expose no actionable Available-slot hover
+  targets, current-time needle, or burning-capacity marker.
+- The Execution Layer now resolves direct block-reference tasks with the same
+  semantics as the spiral, so task demand, remaining capacity, and no-fitting-slot
+  status agree between the popover and chart.
+
 ## 1.0.0 — 2026-08-22
 
 ### Added

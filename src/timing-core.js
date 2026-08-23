@@ -10,6 +10,7 @@ const logCore = require('./log-core');
 
 const TODO_RE = /\{\{\[\[(TODO|DONE)\]\]\}\}|\{\{(TODO|DONE)\}\}/i;
 const CLOCK_RE = /^\s*:?CLOCK:{1,2}\s*\[([^\]]+)\](?:\s*--\s*\[([^\]]+)\])?(?:\s*=>\s*(\d+:[0-5]\d))?\s*$/i;
+const BLOCK_REF_RE = /\(\(([a-zA-Z0-9_-]{6,})\)\)/g;
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const ACTIVE_WORK_WINDOW_MINUTES = 45;
 const FORGOTTEN_CLOCK_MINUTES = 120;
@@ -137,6 +138,14 @@ function taskStatus(string) {
   if (typeof string !== 'string') return null;
   const match = TODO_RE.exec(string);
   return match ? (match[1] || match[2]).toUpperCase() : null;
+}
+
+function resolveBlockReferences(string, readString) {
+  if (typeof string !== 'string' || typeof readString !== 'function') return string;
+  return string.replace(BLOCK_REF_RE, (reference, uid) => {
+    const resolved = readString(uid);
+    return typeof resolved === 'string' && resolved ? resolved : reference;
+  });
 }
 
 function taskTitle(string) {
@@ -479,6 +488,7 @@ module.exports = {
   projectPlan,
   projectReviewTasks,
   projectFixedEvents,
+  resolveBlockReferences,
   selectPrimaryPlan,
   taskStatus,
   taskTitle,

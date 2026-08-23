@@ -138,6 +138,61 @@ test('execution capacity applies task progress exactly once', async (t) => {
   assert.equal(runtime.getSnapshot().planSnapshot.execution.scheduledTasks[0].duration, 30);
 });
 
+test('execution capacity resolves direct block-reference tasks exactly like the chart', async (t) => {
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#references-${Date.now()}`;
+  const extension = await import(moduleUrl);
+  const { roam, blocks } = graphMock({
+    taskAString: '((source-a))',
+    taskBString: '{{[[TODO]]}} Beta 45m',
+  });
+  blocks.set('source-a', {
+    uid: 'source-a',
+    string: '{{[[TODO]]}} Referenced task 2h',
+    parentUid: 'outside-plan',
+    order: 0,
+  });
+  const settings = new Map([
+    ['todo-duration', 15],
+    ['workday-start', 5],
+    ['workday-end', 21],
+    ['timing-line-sidebar', false],
+    ['recent-retention-minutes', 45],
+  ]);
+  global.window = {
+    roamAlphaAPI: roam,
+    setInterval: () => 99,
+    clearInterval: () => {},
+    setTimeout,
+    clearTimeout,
+  };
+  const extensionAPI = {
+    settings: {
+      get: (key) => settings.get(key),
+      set: async (key, value) => settings.set(key, value),
+    },
+  };
+
+  const runtime = extension.createTimingRuntime({
+    extensionAPI,
+    now: () => new Date(2026, 7, 22, 10, 0),
+  });
+  await runtime.initialize();
+  t.after(() => {
+    runtime.destroy();
+    delete global.window;
+  });
+
+  assert.deepEqual(
+    runtime.getSnapshot().planSnapshot.tasks.map(({ uid, title, plannedMinutes }) => ({ uid, title, plannedMinutes })),
+    [
+      { uid: 'task-a', title: 'Referenced task', plannedMinutes: 120 },
+      { uid: 'task-b', title: 'Beta', plannedMinutes: 45 },
+    ],
+  );
+  assert.equal(runtime.getSnapshot().planSnapshot.execution.demandMinutes, 165);
+});
+
 test('runtime serializes close-before-switch and close-before-complete', async (t) => {
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#timing-${Date.now()}`;

@@ -218,6 +218,79 @@ function pastTimelineSegments({ startMinutes, endMinutes, nowMinutes } = {}) {
     }));
 }
 
+function localDayOrdinal(value) {
+  if (typeof value === 'string') {
+    const match = /^([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th),\s*(\d{4})$/.exec(value.trim());
+    if (match) {
+      const months = [
+        'january', 'february', 'march', 'april', 'may', 'june',
+        'july', 'august', 'september', 'october', 'november', 'december',
+      ];
+      const month = months.indexOf(match[1].toLowerCase());
+      const day = Number(match[2]);
+      const year = Number(match[3]);
+      if (month >= 0 && day >= 1 && day <= 31) {
+        const timestamp = Date.UTC(year, month, day);
+        const date = new Date(timestamp);
+        if (date.getUTCFullYear() === year && date.getUTCMonth() === month && date.getUTCDate() === day) {
+          return timestamp / 86400000;
+        }
+      }
+    }
+  }
+  const timestamp = asTimestamp(value);
+  if (!Number.isFinite(timestamp)) return null;
+  const date = new Date(timestamp);
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86400000;
+}
+
+/**
+ * Describe how a rendered Daily Note relates to the real day.
+ *
+ * A historical page still reconstructs its plan from the configured start,
+ * but its capacity cursor and elapsed shading end at the workday boundary.
+ * That prevents yesterday's gaps from becoming actionable "Available" slots.
+ */
+function timelineDayState({
+  displayDate,
+  currentDate = Date.now(),
+  startMinutes,
+  endMinutes,
+  nowMinutes,
+  playback = false,
+} = {}) {
+  const start = asNumber(startMinutes);
+  const end = asNumber(endMinutes);
+  const validRange = Number.isFinite(start) && Number.isFinite(end) && end > start;
+  const safeStart = validRange ? start : 0;
+  const safeEnd = validRange ? end : safeStart;
+  const displayDay = localDayOrdinal(displayDate);
+  const currentDay = localDayOrdinal(currentDate);
+  const relation = displayDay === null || currentDay === null
+    ? 'other'
+    : displayDay < currentDay ? 'past' : displayDay > currentDay ? 'future' : 'today';
+  const cursor = validRange
+    ? effectiveNow({ startMinutes: safeStart, endMinutes: safeEnd, nowMinutes })
+    : safeStart;
+  const simulated = playback === true;
+  const today = relation === 'today';
+  const past = relation === 'past';
+
+  return {
+    relation,
+    scheduleFromMinutes: past && !simulated ? safeStart : (today || simulated ? cursor : safeStart),
+    capacityFromMinutes: past && !simulated ? safeEnd : (today || simulated ? cursor : safeStart),
+    elapsedThroughMinutes: past && !simulated ? safeEnd : (today || simulated ? cursor : safeStart),
+    interactive: today,
+    showElapsed: past || today || simulated,
+    showAvailableSlots: !past || simulated,
+    showNow: (today || simulated)
+      && Number.isFinite(asNumber(nowMinutes))
+      && asNumber(nowMinutes) >= safeStart
+      && asNumber(nowMinutes) < safeEnd,
+  };
+}
+
 /**
  * Return elapsed intervals that have no recorded item occupying them.
  *
@@ -1269,6 +1342,7 @@ module.exports = {
   resolveRendererSettings,
   hourlyGridSegments,
   pastTimelineSegments,
+  timelineDayState,
   pastUnplannedSegments,
   availableSlotGroups,
   pastItemStatus,

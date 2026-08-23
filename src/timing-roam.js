@@ -203,14 +203,24 @@ export function readPrimaryPlan(date = new Date(), fallbackMinutes = 15) {
   })).filter((row) => row.pageUid && row.uid && typeof row.string === 'string' && row.parentUid);
   const pageUid = normalized[0]?.pageUid || null;
   const plan = timingCore.selectPrimaryPlan(normalized, pageUid);
+  const referencedStrings = new Map();
+  const readReferencedString = (uid) => {
+    if (!referencedStrings.has(uid)) referencedStrings.set(uid, readBlockString(uid));
+    return referencedStrings.get(uid);
+  };
+  const resolved = plan
+    ? normalized.map((row) => row.parentUid === plan.uid
+      ? { ...row, string: timingCore.resolveBlockReferences(row.string, readReferencedString) }
+      : row)
+    : normalized;
   return {
     pageTitle,
     pageUid,
     plan,
-    rows: normalized,
-    tasks: plan ? timingCore.projectPlan(normalized, plan.uid, fallbackMinutes) : [],
-    reviewTasks: plan ? timingCore.projectReviewTasks(normalized, plan.uid, fallbackMinutes) : [],
-    fixedEvents: plan ? timingCore.projectFixedEvents(normalized, plan.uid) : [],
+    rows: resolved,
+    tasks: plan ? timingCore.projectPlan(resolved, plan.uid, fallbackMinutes) : [],
+    reviewTasks: plan ? timingCore.projectReviewTasks(resolved, plan.uid, fallbackMinutes) : [],
+    fixedEvents: plan ? timingCore.projectFixedEvents(resolved, plan.uid) : [],
   };
 }
 
