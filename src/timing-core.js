@@ -37,7 +37,7 @@ const EXECUTION_COPY = Object.freeze({
       noPlanTasks: 'The Primary Plan has no unfinished direct-child tasks.',
       noReviewTasks: 'The Primary Plan has no direct-child tasks to review.',
     },
-    trigger: { thread: 'Thread', threads: 'Threads', check: 'Check CLOCK' },
+    trigger: { thread: 'thread', threads: 'threads', check: 'Check CLOCK' },
   },
   zh: {
     tabs: { timing: '计时', plan: '计划', review: '复盘' },

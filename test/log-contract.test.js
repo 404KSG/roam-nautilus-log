@@ -261,8 +261,9 @@ test('the global capacity token yields topbar space to Roam search', () => {
 
 test('the idle capacity strip shares one centered vertical rhythm', () => {
   assert.match(timingTopbar, /mark\.append\(icon\('unresolve'\)\)/);
+  assert.match(timingTopbar, /separator\.setAttribute\('aria-hidden', 'true'\)/);
   assert.match(css, /\.nautilus-log-timing__brand-icon\s*\{[^}]*align-items:\s*center;[^}]*display:\s*inline-flex;[^}]*justify-content:\s*center;/s);
-  assert.match(css, /\.nautilus-log-timing__trigger-separator\s*\{[^}]*align-items:\s*center;[^}]*display:\s*inline-flex;[^}]*height:\s*18px;/s);
+  assert.match(css, /\.nautilus-log-timing__trigger-separator\s*\{[^}]*background:\s*currentColor;[^}]*border-radius:\s*999px;[^}]*height:\s*3px;[^}]*width:\s*3px;/s);
   assert.match(css, /\.nautilus-log-timing__capacity-token\s*\{[^}]*align-items:\s*center;[^}]*height:\s*18px;[^}]*line-height:\s*18px;/s);
 });
 

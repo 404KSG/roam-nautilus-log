@@ -95,11 +95,16 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     return mark;
   };
 
-  const modeSeparator = () => element(
-    'span',
-    'nautilus-log-timing__trigger-separator nautilus-log-timing__mode-separator',
-    '·',
-  );
+  const triggerSeparator = (modifier) => {
+    const separator = element(
+      'span',
+      `nautilus-log-timing__trigger-separator nautilus-log-timing__${modifier}-separator`,
+    );
+    separator.setAttribute('aria-hidden', 'true');
+    return separator;
+  };
+
+  const modeSeparator = () => triggerSeparator('mode');
 
   const triggerNodes = (...nodes) => {
     const capacity = element('span', 'nautilus-log-timing__capacity-token');
@@ -108,11 +113,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       element('strong', 'nautilus-log-timing__capacity-value'),
       element('span', 'nautilus-log-timing__capacity-label'),
     );
-    const capacitySeparator = element(
-      'span',
-      'nautilus-log-timing__trigger-separator nautilus-log-timing__capacity-separator',
-      '·',
-    );
+    const capacitySeparator = triggerSeparator('capacity');
     capacitySeparator.hidden = true;
     return [
       brandIcon(),

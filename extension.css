@@ -958,11 +958,13 @@
 }
 
 .nautilus-log-timing__trigger-separator {
-  align-items: center;
+  background: currentColor;
+  border-radius: 999px;
   color: #a3aab5;
-  display: inline-flex;
-  height: 18px;
-  line-height: 18px;
+  display: block;
+  flex: 0 0 auto;
+  height: 3px;
+  width: 3px;
 }
 
 .nautilus-log-timing__threads {
