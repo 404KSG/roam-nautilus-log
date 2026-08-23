@@ -36,7 +36,7 @@ if it cannot fit one gap, it moves to the next suitable gap instead of being spl
 
 | Metric | Meaning |
 | --- | --- |
-| Planned | Remaining flexible-task demand; percentage = `Planned ÷ Available now` |
+| Planned | Remaining flexible-task demand; `left` percentage = `current free time ÷ full-day Available` |
 | Remaining | Available time left after Planned demand |
 | Overload | Demand beyond available time |
 | No fitting slot | Time exists in total, but no continuous gap can hold an atomic task |

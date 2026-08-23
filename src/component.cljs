@@ -1495,10 +1495,10 @@
 
 (defn capacity-metrics [capacity settings]
   (or (log-core-call "capacityMetrics" {:capacity capacity :language (:language settings)})
-      [{:key "demand" :label "Demand" :value "0m" :summaryLabel "planned" :percent "0%" :percentLabel "left" :percentTone "neutral" :tone "neutral"}
-       {:key "remaining" :label "Remaining" :value "0m" :summaryLabel "free" :tone "neutral"}
-       {:key "available" :label "Available" :value "0m" :tone "neutral"}
-       {:key "events" :label "Events" :value "0m" :tone "event"}]))
+      {:planned {:key "demand" :label "Demand" :value "0m" :summaryLabel "planned" :percent "0%" :percentLabel "left" :percentTone "neutral" :tone "neutral"}
+       :status {:key "remaining" :label "Remaining" :value "0m" :summaryLabel "free" :tone "neutral"}
+       :available {:key "available" :label "Available" :value "0m" :tone "neutral"}
+       :events {:key "events" :label "Events" :value "0m" :tone "event"}}))
 
 (defn burning-flame-icon [label]
   [:svg {:class "nautilus-log-burning-icon"
@@ -1536,22 +1536,23 @@
    [:span {:class "nautilus-log-metric-summary-label"} (:summaryLabel metric)]])
 
 (defn metrics-component [metrics]
-  (let [[demand status available events] metrics
+  (let [{:keys [planned status available events]} metrics
+        ordered-metrics [planned status available events]
         aria-label (str/join ", " (map #(str (:label %) " " (:value %)
                                              (when-let [total (:total %)] (str " / " total))
                                              (when-let [percent (:percent %)]
                                                (str ", " percent " " (:percentLabel %)))
                                              (when (:burning %)
-                                               (str ", " (:burningLabel %)))) metrics))]
+                                               (str ", " (:burningLabel %)))) ordered-metrics))]
     [:div {:class "nautilus-log-metrics" :aria-label aria-label}
      [:div {:class "nautilus-log-metrics-summary"}
-      [metric-summary-component demand]
+      [metric-summary-component planned]
       [:span {:class "nautilus-log-metric-separator" :aria-hidden "true"} "·"]
       [metric-summary-component status]
       [:span {:class "nautilus-log-metric-separator" :aria-hidden "true"} "·"]
-      [:span {:class (str "nautilus-log-metric-summary-item nautilus-log-metric-percent nautilus-log-metric-percent--" (:percentTone demand))}
-       [:strong {:class "nautilus-log-metric-value"} (:percent demand)]
-       [:span {:class "nautilus-log-metric-summary-label"} (:percentLabel demand)]]]
+      [:span {:class (str "nautilus-log-metric-summary-item nautilus-log-metric-percent nautilus-log-metric-percent--" (:percentTone planned))}
+       [:strong {:class "nautilus-log-metric-value"} (:percent planned)]
+       [:span {:class "nautilus-log-metric-summary-label"} (:percentLabel planned)]]]
      [:div {:class "nautilus-log-metrics-capacity"}
       [metric-reading-component available]
       [metric-reading-component events]]]))
@@ -1573,7 +1574,7 @@
 
 (defn compact-overview-component [capacity settings copy compact-open-state]
   (let [metrics (capacity-metrics capacity settings)
-        status (first (filter #(contains? #{"overload" "fragmented" "remaining"} (:key %)) metrics))
+        status (:status metrics)
         warning? (= "warning" (:tone status))
         burning-bucket (:burningBucket capacity)
         burning-label (case burning-bucket

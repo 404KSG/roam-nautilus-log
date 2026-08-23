@@ -424,12 +424,12 @@ test('English UI settings localize all extension-owned status labels', () => {
       language: 'en',
       capacity: { availableMinutes: 0, fixedMinutes: 90, demandMinutes: 30, overloadMinutes: 30, slackMinutes: 0, unplacedMinutes: 30 },
     }),
-    [
-      { key: 'demand', label: 'Planned', value: '30m', summaryLabel: 'planned', percent: '0%', percentLabel: 'left', percentTone: 'neutral', tone: 'neutral' },
-      { key: 'overload', label: 'Overload', value: '30m', summaryLabel: 'over', tone: 'warning' },
-      { key: 'available', label: 'Available', value: '0m', tone: 'neutral' },
-      { key: 'events', label: 'Events', value: '1h30m', tone: 'event' },
-    ],
+    {
+      planned: { key: 'demand', label: 'Planned', value: '30m', summaryLabel: 'planned', percent: '0%', percentLabel: 'left', percentTone: 'neutral', tone: 'neutral' },
+      status: { key: 'overload', label: 'Overload', value: '30m', summaryLabel: 'over', tone: 'warning' },
+      available: { key: 'available', label: 'Available', value: '0m', tone: 'neutral' },
+      events: { key: 'events', label: 'Events', value: '1h30m', tone: 'event' },
+    },
   );
   assert.equal(uiCopy('zh').capacity.demand, '已计划');
   assert.deepEqual(copy.allocation, {
@@ -453,11 +453,11 @@ test('capacity metrics mark exactly the bucket that is currently burning', () =>
     },
   });
 
-  assert.equal(metrics[0].burning, undefined);
-  assert.equal(metrics[1].burning, undefined);
-  assert.equal(metrics[2].burning, undefined);
-  assert.equal(metrics[3].burning, true);
-  assert.equal(metrics[3].burningLabel, 'Event time is elapsing');
+  assert.equal(metrics.planned.burning, undefined);
+  assert.equal(metrics.status.burning, undefined);
+  assert.equal(metrics.available.burning, undefined);
+  assert.equal(metrics.events.burning, true);
+  assert.equal(metrics.events.burningLabel, 'Event time is elapsing');
 });
 
 test('capacity summary reports current free time as a share of full-day flexible capacity', () => {
@@ -465,20 +465,20 @@ test('capacity summary reports current free time as a share of full-day flexible
     capacityMetrics({
       language: 'en',
       capacity: { availableMinutes: 540, totalAvailableMinutes: 540, fixedMinutes: 420, demandMinutes: 105, overloadMinutes: 0, slackMinutes: 435, unplacedMinutes: 0 },
-    })[0],
+    }).planned,
     { key: 'demand', label: 'Planned', value: '1h45m', summaryLabel: 'planned', percent: '81%', percentLabel: 'left', percentTone: 'neutral', tone: 'neutral' },
   );
 
   const lateDayDemand = capacityMetrics({
     language: 'en',
     capacity: { availableMinutes: 60, totalAvailableMinutes: 540, demandMinutes: 45, slackMinutes: 15 },
-  })[0];
+  }).planned;
   assert.equal(lateDayDemand.percent, '3%');
 
   const overloadedDemand = capacityMetrics({
       language: 'en',
       capacity: { availableMinutes: 90, demandMinutes: 105 },
-    })[0];
+    }).planned;
   assert.equal(overloadedDemand.percent, '0%');
   assert.equal(overloadedDemand.percentLabel, 'left');
   assert.equal(overloadedDemand.percentTone, 'neutral');
@@ -486,7 +486,7 @@ test('capacity summary reports current free time as a share of full-day flexible
   const emptyDemand = capacityMetrics({
     language: 'en',
     capacity: { availableMinutes: 90, demandMinutes: 0, slackMinutes: 90 },
-  })[0];
+  }).planned;
   assert.equal(emptyDemand.percent, '100%');
 });
 
@@ -731,10 +731,10 @@ test('capacity metrics expose optional current / full-day ratios', () => {
     },
   });
 
-  assert.equal(metrics[2].value, '7h31m');
-  assert.equal(metrics[2].total, '9h');
-  assert.equal(metrics[3].value, '3h15m');
-  assert.equal(metrics[3].total, '7h');
+  assert.equal(metrics.available.value, '7h31m');
+  assert.equal(metrics.available.total, '9h');
+  assert.equal(metrics.events.value, '3h15m');
+  assert.equal(metrics.events.total, '7h');
 });
 
 test('burning bucket uses half-open event boundaries and workday bounds', () => {

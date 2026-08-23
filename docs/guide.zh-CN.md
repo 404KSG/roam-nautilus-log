@@ -34,7 +34,7 @@
 
 | 指标 | 含义 |
 | --- | --- |
-| Planned | 剩余弹性任务需求；百分比 = `Planned ÷ 当前 Available` |
+| Planned | 剩余弹性任务需求；`left` 百分比 = `当前剩余灵活时间 ÷ 全天 Available 总量` |
 | Remaining | 安排完 Planned 后的余量 |
 | Overload | 超出当前可用时间的需求 |
 | 空档不足 | 总时间存在，但没有连续空档能容纳某项完整任务 |

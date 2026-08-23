@@ -963,7 +963,12 @@ function capacityMetrics({ capacity = {}, language = 'en' } = {}) {
   }
   // The first row answers the planning question (planned, free/over, and left),
   // while the second row provides the flexible and fixed time budgets behind it.
-  return [demand, status, available, events];
+  return {
+    planned: demand,
+    status,
+    available,
+    events,
+  };
 }
 
 function formatCapacitySummary(capacity) {

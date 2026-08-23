@@ -69,7 +69,7 @@ function executionCopy(language = 'en') {
 }
 
 function capacitySummary(execution = {}, language = 'en') {
-  const [planned, status] = logCore.capacityMetrics({ capacity: execution, language });
+  const { planned, status } = logCore.capacityMetrics({ capacity: execution, language });
   return {
     planned: { value: planned.value, label: planned.summaryLabel },
     status: {

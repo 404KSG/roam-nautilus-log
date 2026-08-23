@@ -10,6 +10,8 @@ const css = fs.readFileSync(path.join(__dirname, '..', 'extension.css'), 'utf8')
 const packageJson = fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8');
 const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
 const readmeZh = fs.readFileSync(path.join(__dirname, '..', 'README.zh-CN.md'), 'utf8');
+const guide = fs.readFileSync(path.join(__dirname, '..', 'docs', 'guide.md'), 'utf8');
+const guideZh = fs.readFileSync(path.join(__dirname, '..', 'docs', 'guide.zh-CN.md'), 'utf8');
 const changelog = fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'utf8');
 const timingTopbar = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-topbar.js'), 'utf8');
 const timingCore = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-core.js'), 'utf8');
@@ -67,6 +69,13 @@ test('Nautilus Log is the only active product identity', () => {
   assert.match(entry, /roam-render-Nautilus-Log-cljs/);
   assert.match(packageJson, /"name": "nautilus-log"/);
   for (const legacy of legacyVariants) assert.equal(activeSurface.includes(legacy), false);
+});
+
+test('guides define left as current free time over full-day Available', () => {
+  assert.match(guide, /`left` percentage = `current free time ÷ full-day Available`/);
+  assert.match(guideZh, /`left` 百分比 = `当前剩余灵活时间 ÷ 全天 Available 总量`/);
+  assert.doesNotMatch(guide, /Planned ÷ Available now/);
+  assert.doesNotMatch(guideZh, /Planned ÷ 当前 Available/);
 });
 
 test('the Roam renderer delegates schedule and capacity behavior to the tested Log core', () => {
@@ -257,6 +266,16 @@ test('the global capacity token yields topbar space to Roam search', () => {
   assert.match(css, /data-density="icon"/);
   assert.match(css, /data-density="icon"[^}]*nautilus-log-timing__brand-icon/s);
   assert.doesNotMatch(timingTopbar, /readAllEntries|readPrimaryPlan/);
+});
+
+test('responsive observers rebind when Roam replaces the topbar or search surface', () => {
+  assert.match(timingTopbar, /let observedTopbar = null;/);
+  assert.match(timingTopbar, /let observedSearch = null;/);
+  assert.match(timingTopbar, /const hostChanged = currentTopbar !== observedTopbar;/);
+  assert.match(timingTopbar, /const searchChanged = currentSearch !== observedSearch;/);
+  assert.match(timingTopbar, /if \(hostChanged \|\| searchChanged \|\|/);
+  assert.match(timingTopbar, /records\.some\(\(record\) => !container\?\.contains\(record\.target\)\)/);
+  assert.match(timingTopbar, /hostObserver\.observe\(topbar, \{ childList: true, subtree: true \}\)/);
 });
 
 test('the idle capacity strip shares one centered vertical rhythm', () => {

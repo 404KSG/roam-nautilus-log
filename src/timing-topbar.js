@@ -74,6 +74,8 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
   let cachedCapacityExecution = null;
   let cachedCapacityLanguage = null;
   let cachedCapacitySummary = null;
+  let observedTopbar = null;
+  let observedSearch = null;
 
   const ui = () => timingCore.executionCopy(extensionAPI.settings.get('language') || 'en');
 
@@ -778,10 +780,17 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
   const watchTopbar = () => {
     resetObservers();
     const topbar = document.querySelector('.rm-topbar');
+    const search = findSearchSurface(topbar);
+    observedTopbar = topbar;
+    observedSearch = search;
     const scheduleRecovery = () => queueMicrotask(() => {
       if (destroyed) return;
+      const currentTopbar = document.querySelector('.rm-topbar');
+      const currentSearch = findSearchSurface(currentTopbar);
+      const hostChanged = currentTopbar !== observedTopbar;
+      const searchChanged = currentSearch !== observedSearch;
       ensureMounted();
-      if (!document.getElementById(TOPBAR_ID) || !document.querySelector('.rm-topbar')?.contains(container)) watchTopbar();
+      if (hostChanged || searchChanged || !document.getElementById(TOPBAR_ID) || !currentTopbar?.contains(container)) watchTopbar();
     });
     if (!topbar) {
       const bootObserver = new MutationObserver(() => {
@@ -794,8 +803,11 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       observers.push(bootObserver);
       return;
     }
-    const hostObserver = new MutationObserver(scheduleRecovery);
-    hostObserver.observe(topbar, { childList: true });
+    const hostObserver = new MutationObserver((records) => {
+      const externalMutation = records.some((record) => !container?.contains(record.target));
+      if (externalMutation) scheduleRecovery();
+    });
+    hostObserver.observe(topbar, { childList: true, subtree: true });
     observers.push(hostObserver);
     if (topbar.parentElement) {
       const shellObserver = new MutationObserver(scheduleRecovery);
@@ -805,7 +817,6 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     if (typeof ResizeObserver === 'function') {
       const resizeObserver = new ResizeObserver(syncResponsiveDensity);
       resizeObserver.observe(topbar);
-      const search = findSearchSurface(topbar);
       if (search) resizeObserver.observe(search);
       observers.push(resizeObserver);
     }
@@ -836,6 +847,8 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     if (settingsListener) window.removeEventListener('nautilus-log:settings-changed', settingsListener);
     settingsListener = null;
     resetObservers();
+    observedTopbar = null;
+    observedSearch = null;
     cancelDeferredRefresh();
     clearDeleteConfirmation();
     container?.remove();
