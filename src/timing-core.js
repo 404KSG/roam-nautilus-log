@@ -82,18 +82,16 @@ function capacitySummary(execution = {}, language = 'en') {
 }
 
 function topbarDensity({
-  searchWidth,
-  controlWidth,
-  minimumSearchWidth = 420,
+  availableWidth,
   fullControlWidth = 220,
   compactControlWidth = 112,
+  safetyGap = 12,
 } = {}) {
-  const search = Number(searchWidth);
-  const control = Number(controlWidth);
-  if (!Number.isFinite(search) || !Number.isFinite(control)) return 'full';
-  const sharedWidth = Math.max(0, search) + Math.max(0, control);
-  if (sharedWidth >= minimumSearchWidth + fullControlWidth) return 'full';
-  if (sharedWidth >= minimumSearchWidth + compactControlWidth) return 'compact';
+  const available = Number(availableWidth);
+  if (!Number.isFinite(available)) return 'full';
+  const usableWidth = Math.max(0, available - Math.max(0, Number(safetyGap) || 0));
+  if (usableWidth >= fullControlWidth) return 'full';
+  if (usableWidth >= compactControlWidth) return 'compact';
   return 'icon';
 }
 

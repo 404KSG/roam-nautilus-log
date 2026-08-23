@@ -725,11 +725,10 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     if (!container?.isConnected) return;
     const topbar = document.querySelector('.rm-topbar');
     const search = findSearchSurface(topbar);
-    const density = search
-      ? timingCore.topbarDensity({
-        searchWidth: search.getBoundingClientRect().width,
-        controlWidth: container.getBoundingClientRect().width,
-      })
+    const searchRect = search?.getBoundingClientRect?.();
+    const controlRect = container.getBoundingClientRect();
+    const density = searchRect
+      ? timingCore.topbarDensity({ availableWidth: searchRect.left - controlRect.left })
       : 'full';
     if (container.dataset.density !== density) container.dataset.density = density;
   };
@@ -805,7 +804,6 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     if (typeof ResizeObserver === 'function') {
       const resizeObserver = new ResizeObserver(syncResponsiveDensity);
       resizeObserver.observe(topbar);
-      if (container) resizeObserver.observe(container);
       const search = findSearchSurface(topbar);
       if (search) resizeObserver.observe(search);
       observers.push(resizeObserver);

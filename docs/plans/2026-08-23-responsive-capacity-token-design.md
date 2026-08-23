@@ -31,11 +31,11 @@ Roam reads or writes and is disconnected on unload.
 
 ## Responsive rule
 
-Density is a pure function of `search width + current control width`. This sum
-is stable when the flex layout reallocates space, avoiding breakpoint loops.
-The full state requires room for a 420 px search field and full controls; the
-compact state requires the same search reserve plus compact controls; otherwise
-the control falls back to the icon.
+Density is a pure function of the leading space between the Nautilus control's
+left edge and Roam search's left edge. This geometry does not depend on the
+control's current width, so an icon-sized control can recover to compact or full
+mode when room returns. Full mode reserves 220 px plus a safety gap; compact
+mode reserves 112 px plus the same gap; otherwise the control becomes an icon.
 
 ## Acceptance
 

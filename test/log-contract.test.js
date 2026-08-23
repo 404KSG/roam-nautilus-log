@@ -248,6 +248,7 @@ test('standalone POMO has an independent topbar start/stop contract', () => {
 test('the global capacity token yields topbar space to Roam search', () => {
   assert.match(timingCore, /function topbarDensity/);
   assert.match(timingTopbar, /timingCore\.topbarDensity/);
+  assert.match(timingTopbar, /availableWidth: searchRect\.left - controlRect\.left/);
   assert.match(timingTopbar, /planSnapshot\?\.execution/);
   assert.match(timingTopbar, /nautilus-log-timing__capacity-token/);
   assert.match(timingTopbar, /nautilus-log-timing__brand-icon/);

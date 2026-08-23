@@ -314,10 +314,10 @@ test('Plan capacity summary shares the chart allocation language', () => {
   });
 });
 
-test('topbar density protects Roam search before retaining optional metadata', () => {
-  assert.equal(timing.topbarDensity({ searchWidth: 500, controlWidth: 150 }), 'full');
-  assert.equal(timing.topbarDensity({ searchWidth: 400, controlWidth: 150 }), 'compact');
-  assert.equal(timing.topbarDensity({ searchWidth: 300, controlWidth: 150 }), 'icon');
+test('topbar density uses stable leading space and can recover from icon mode', () => {
+  assert.equal(timing.topbarDensity({ availableWidth: 620, controlWidth: 30 }), 'full');
+  assert.equal(timing.topbarDensity({ availableWidth: 180, controlWidth: 30 }), 'compact');
+  assert.equal(timing.topbarDensity({ availableWidth: 70, controlWidth: 220 }), 'icon');
   assert.equal(timing.topbarDensity(), 'full');
 });
 

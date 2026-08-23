@@ -849,6 +849,10 @@
 
 .nautilus-log-timing__brand-icon {
   flex: 0 0 auto;
+  font-size: 18px;
+  height: 18px;
+  line-height: 18px;
+  width: 18px;
 }
 
 .nautilus-log-timing__trigger.is-active .nautilus-log-timing__brand-icon {
