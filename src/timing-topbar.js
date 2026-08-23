@@ -657,9 +657,10 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       trigger.setAttribute('aria-controls', POPOVER_ID);
       trigger.setAttribute('aria-expanded', 'false');
       trigger.addEventListener('click', openPopover);
-      pomoCloseButton = element('button', 'nautilus-log-timing__pomodoro-close', '×');
+      pomoCloseButton = element('button', 'nautilus-log-timing__pomodoro-close');
       pomoCloseButton.type = 'button';
       pomoCloseButton.hidden = true;
+      pomoCloseButton.append(icon('small-cross'));
       pomoCloseButton.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();

@@ -232,6 +232,7 @@ test('standalone POMO has an independent topbar start/stop contract', () => {
   assert.match(timingTopbar, /runtime\.startStandalonePomodoro\(\)/);
   assert.match(timingTopbar, /runtime\.stopStandalonePomodoro\(\)/);
   assert.match(timingTopbar, /pomoCloseButton\.addEventListener\('click',[\s\S]*event\.stopPropagation\(\)/);
+  assert.match(timingTopbar, /pomoCloseButton\.append\(icon\('small-cross'\)\)/);
   assert.match(timingTopbar, /element\('span', 'nautilus-log-timing__pomodoro-label', 'POMO'\)/);
   assert.match(timingTopbar, /trigger\.classList\.toggle\('is-overdue', timingCore\.isStandalonePomodoroOverdue/);
   assert.match(css, /\.nautilus-log-timing__trigger\.is-active\s*\{[^}]*font-variant-numeric:\s*tabular-nums;/s);
