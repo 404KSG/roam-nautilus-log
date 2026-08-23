@@ -460,14 +460,20 @@ test('capacity metrics mark exactly the bucket that is currently burning', () =>
   assert.equal(metrics[3].burningLabel, 'Event time is elapsing');
 });
 
-test('capacity summary reports free share of available flexible time and clamps overload at zero', () => {
+test('capacity summary reports current free time as a share of full-day flexible capacity', () => {
   assert.deepEqual(
     capacityMetrics({
       language: 'en',
-      capacity: { availableMinutes: 540, fixedMinutes: 420, demandMinutes: 105, overloadMinutes: 0, slackMinutes: 435, unplacedMinutes: 0 },
+      capacity: { availableMinutes: 540, totalAvailableMinutes: 540, fixedMinutes: 420, demandMinutes: 105, overloadMinutes: 0, slackMinutes: 435, unplacedMinutes: 0 },
     })[0],
     { key: 'demand', label: 'Planned', value: '1h45m', summaryLabel: 'planned', percent: '81%', percentLabel: 'left', percentTone: 'neutral', tone: 'neutral' },
   );
+
+  const lateDayDemand = capacityMetrics({
+    language: 'en',
+    capacity: { availableMinutes: 60, totalAvailableMinutes: 540, demandMinutes: 45, slackMinutes: 15 },
+  })[0];
+  assert.equal(lateDayDemand.percent, '3%');
 
   const overloadedDemand = capacityMetrics({
       language: 'en',

@@ -901,8 +901,11 @@ function capacityMetrics({ capacity = {}, language = 'en' } = {}) {
   const totalFixedMinutes = asNumber(capacity.totalFixedMinutes);
   const demandMinutes = Math.max(0, asNumber(capacity.demandMinutes) || 0);
   const freeMinutes = Math.max(0, availableMinutes - demandMinutes);
-  const leftPercent = availableMinutes > 0
-    ? `${Math.round((freeMinutes / availableMinutes) * 100)}%`
+  const fullDayAvailableMinutes = Number.isFinite(totalAvailableMinutes) && totalAvailableMinutes > 0
+    ? totalAvailableMinutes
+    : availableMinutes;
+  const leftPercent = fullDayAvailableMinutes > 0
+    ? `${Math.round((freeMinutes / fullDayAvailableMinutes) * 100)}%`
     : '0%';
   const available = markBurning({
     key: 'available',
