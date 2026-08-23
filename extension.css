@@ -858,6 +858,10 @@
   width: 24px;
 }
 
+.nautilus-log-timing__pomodoro-close[hidden] {
+  display: none;
+}
+
 .nautilus-log-timing__pomodoro-close:hover,
 .nautilus-log-timing__pomodoro-close:focus-visible {
   background: rgba(111, 120, 132, 0.1);

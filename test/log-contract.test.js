@@ -238,6 +238,7 @@ test('standalone POMO has an independent topbar start/stop contract', () => {
   assert.match(css, /\.nautilus-log-timing__trigger\.is-active\s*\{[^}]*font-variant-numeric:\s*tabular-nums;/s);
   assert.match(css, /\.nautilus-log-timing__trigger\.is-overdue \.nautilus-log-timing__pomodoro-label/);
   assert.match(css, /\.nautilus-log-timing__pomodoro-close\s*\{[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*box-shadow:\s*none;/s);
+  assert.match(css, /\.nautilus-log-timing__pomodoro-close\[hidden\]\s*\{[^}]*display:\s*none;/s);
   const triggerStart = timingTopbar.indexOf('const renderTrigger');
   const triggerEnd = timingTopbar.indexOf('const ensureMounted', triggerStart);
   assert.doesNotMatch(timingTopbar.slice(triggerStart, triggerEnd), /renderPopover/);
