@@ -266,7 +266,8 @@ test('the idle capacity strip shares one centered vertical rhythm', () => {
   assert.match(css, /\.nautilus-log-timing__brand-icon\s*>\s*\.bp3-icon\s*\{[^}]*transform:\s*translateY\(1px\);/s);
   assert.match(css, /\.nautilus-log-timing__trigger-separator\s*\{[^}]*background:\s*currentColor;[^}]*border-radius:\s*999px;[^}]*height:\s*3px;[^}]*width:\s*3px;/s);
   assert.match(css, /\.nautilus-log-timing__capacity-token\s*\{[^}]*align-items:\s*center;[^}]*height:\s*18px;[^}]*line-height:\s*18px;/s);
-  assert.match(css, /\.nautilus-log-timing__capacity-value\s*\{[^}]*font-weight:\s*500;/s);
+  assert.match(css, /\.nautilus-log-timing__capacity-value\s*\{[^}]*color:\s*inherit;[^}]*font-weight:\s*500;/s);
+  assert.doesNotMatch(css, /\.bp3-dark\s+\.nautilus-log-timing__capacity-value[^}]*#d6dbe2/s);
 });
 
 test('Pomodoro restoration is pure and stale state is cleared through the awaited lifecycle', () => {

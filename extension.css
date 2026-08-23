@@ -991,7 +991,7 @@
 }
 
 .nautilus-log-timing__capacity-value {
-  color: var(--nl-exec-text, #374151);
+  color: inherit;
   font-weight: 500;
 }
 
@@ -1002,11 +1002,6 @@
 .nautilus-log-timing__capacity-token.is-warning,
 .nautilus-log-timing__capacity-token.is-warning .nautilus-log-timing__capacity-value {
   color: #ad690f;
-}
-
-.bp3-dark .nautilus-log-timing__capacity-value,
-.dark .nautilus-log-timing__capacity-value {
-  color: #d6dbe2;
 }
 
 .bp3-dark .nautilus-log-timing__capacity-token.is-warning,
