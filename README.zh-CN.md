@@ -2,43 +2,32 @@
 
 > **给每一分钟分配一份工作。**
 
-一个面向 Roam Research 的透明可视化日计划工具。Nautilus Log 把固定事件和弹性任务
-放到同一条螺旋时间线上，让你在一天失控前看清楚计划是否放得下。
+一个面向 Roam Research 的可视化日计划工具。Nautilus Log 把一篇 Daily Note
+变成动态螺旋日程：固定事件保持不动，弹性任务进入剩余时间，超载工作始终可见。
 
 [English](./README.md) · **简体中文** · [使用指南](./docs/guide.zh-CN.md)
 
 ![Nautilus Log 螺旋日计划、Timing、Plan、Review 与右侧边栏视图](https://raw.githubusercontent.com/404KSG/roam-nautilus-log/main/docs/assets/nautilus-log-overview.png)
 
-## 看见完整的一天，而不只是一张清单
+## 它能带来什么
 
-待办清单告诉你“什么重要”，却不告诉你“今天是否放得下”。Nautilus Log 把今天的
-Daily Note 变成一份动态时间计划：
+- **让计划真正放进时间。** 同时看到 Planned、Available、固定 Events、剩余容量，
+  以及今天放不下的工作。
+- **透明而灵活的排程。** 事件保留原定时间，未完成任务按照 Roam block 顺序向前推进。
+- **低摩擦执行。** 可以只使用预计时长，也可以启动独立 POMO，或按需用兼容的
+  `LOGBOOK::` / `CLOCK:` 记录任务时间。
+- **有依据的每日回顾。** 直接在普通 Roam block 上比较 Planned 与 Actual。
 
-- **承诺之前先看清容量。** Planned、剩余时间、超载和今日放不下都会明确显示。
-- **既有结构，又不僵硬。** 固定事件保持不动，未完成任务按照 Roam block 顺序绕开
-  事件向前推进。
-- **连接预计与现实。** 先用预计时长低摩擦规划，再按需用 `LOGBOOK::` / `CLOCK:`
-  Actual 时间校准估算。
-- **不离开 Roam 就能执行。** 聚焦、任务切换、计时、完成和每日 Review 都连接在普通
-  Roam block 上。
-
-## 一套工作流，三个层级
-
-1. **保护固定承诺。** 用明确时间范围写下会议、吃饭和作息。
-2. **给行动分配时间。** 按顺序排列弹性 TODO，并为每项任务填写预计时长。
-3. **用现实校准计划。** 可选记录 Actual 时间，改进下一次估算。
-
-排程规则完全确定：固定事件先占用自己的时间范围，再从当前时刻开始，把完整任务依次
-放进足够大的空档。未完成工作会向前推进，但不改变优先顺序；仍然放不下的任务进入
-**今日放不下**，不会消失。没有 AI 自动估算，也没有黑盒排程。
+排程规则完全确定：事件先占用自己的时间范围，再从当前时刻开始，把完整任务依次放入
+足够大的空档。放不下的任务进入**今日放不下**，不会被静默丢弃。
 
 ## 快速开始
 
-1. Depot 审核期间，通过 [Roam Depot 预览 PR](https://github.com/Roam-Research/roam-depot/pull/1428)
-   使用 ShortHand `404KSG+roam-nautilus-log+1428` 安装。
+1. Depot 审核期间，通过 [Draft PR #1430](https://github.com/Roam-Research/roam-depot/pull/1430)
+   使用 ShortHand `404KSG+roam-nautilus-log+1430` 安装。
 2. 在今天的 Daily Note 输入 `;;`，选择 **Nautilus Log**。
-3. 把事件和 TODO 写成组件的直接子级。
-4. 排列任务、填写粗略时长，并调整到一天能够容纳。
+3. 把固定事件和 TODO 写成组件的直接子级。
+4. 排列任务，并为每项任务填写粗略时长。
 
 ```text
 05:00-06:00 Morning routine
@@ -47,31 +36,31 @@ Daily Note 变成一份动态时间计划：
 11:45-12:30 Lunch
 ```
 
-预计时长支持 `30m`、`30min`、`1h` 和 `1h30m`。没有时长的任务使用设置中的默认值。
+时长支持 `30m`、`30min`、`1h` 和 `1h30m`。没有时长的任务使用设置中的默认值。
 
-## 需要时再开启执行层
+## 可选执行层
 
-可选的**执行层**默认关闭，因此只使用预计时长时仍然轻量。在设置中开启后，会增加一个
-精简执行面板：
+需要在可视化规划之外进一步执行时，可在设置中开启 **Execution Layer · Advanced**。
+精简顶栏面板提供：
 
-- **Timing** 显示当前任务和最近结束的工作。
-- **Plan** 显示当天 Primary Plan 中尚未完成的任务。
-- **Review** 比较当天有效的 Planned 与 Actual 结果。
+- **Timing**：当前 CLOCK 与最近任务。
+- **Plan**：今天已安排和未排入的工作。
+- **Review**：Planned 与 Actual 对比。
+- **POMO**：不写入 CLOCK 的独立正计时专注模式。
 
-任意时刻只运行一个 CLOCK。Clock In 可以把当前任务置顶到 Roam 右侧边栏，让聚焦和
-任务切换尽量接近原生 Shift+Click。
+任意时刻只运行一个任务 CLOCK。CLOCK 的优先级高于 POMO，并可把当前任务置顶到
+Roam 右侧边栏。执行层默认关闭，因此只使用预计时长时仍然轻量。
 
-语法、指标、设置、命令、Actual 历史规则和安全边界请参阅
-[完整使用指南](./docs/guide.zh-CN.md)。
+设置、命令、语法、历史规则和安全边界请参阅[使用指南](./docs/guide.zh-CN.md)。
 
-## 致谢与灵感来源
+## 致谢
 
-- Tomáš Barys 的 [Nautilus](https://github.com/tombarys/roam-depot-nautilus)：透明螺旋
-  日计划的原始理念。
-- [Nautilus Enhanced](https://github.com/hopeserena/nautilus-enhanced)：本项目继续开发所基于
-  的增强分支。
-- [Roam Logbook](https://github.com/forrestchang/roam-logbook)：兼容 CLOCK 计时与聚焦执行
-  交互的重要灵感来源。
+- Tomáš Barys 的 [Nautilus](https://github.com/tombarys/roam-depot-nautilus)：原始螺旋
+  日计划理念。
+- [Nautilus Enhanced](https://github.com/hopeserena/nautilus-enhanced)：本项目继续开发
+  所基于的分支。
+- [Roam Logbook](https://github.com/forrestchang/roam-logbook)：兼容 CLOCK 计时与聚焦
+  执行的灵感来源。
 
 时间分配哲学受到 [YNAB Method](https://www.ynab.com/the-four-rules/) 启发；Nautilus Log
 与 YNAB 没有关联。项目沿用原始 MIT License。

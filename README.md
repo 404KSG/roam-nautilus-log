@@ -2,46 +2,36 @@
 
 > **Give every minute a job.**
 
-A transparent visual day planner for Roam Research. Nautilus Log places fixed
-events and flexible tasks on one spiral timeline, so you can see what fits before
-the day gets away from you.
+A visual day planner for Roam Research. Nautilus Log turns one Daily Note into
+a living spiral schedule: fixed events stay fixed, flexible tasks flow into the
+time that remains, and overload never disappears from view.
 
 **English** · [简体中文](./README.zh-CN.md) · [User guide](./docs/guide.md)
 
 ![Nautilus Log visual day planner with Timing, Plan, Review, and right-sidebar views](https://raw.githubusercontent.com/404KSG/roam-nautilus-log/main/docs/assets/nautilus-log-overview.png)
 
-## See the whole day, not just a list
+## What it gives you
 
-A to-do list tells you what matters, but not whether it fits. Nautilus Log turns
-today's Daily Note into a living time plan:
+- **A plan that fits time.** See Planned demand, Available time, fixed Events,
+  remaining capacity, and work that cannot fit today.
+- **Flexible scheduling without a black box.** Events keep their time; unfinished
+  tasks move forward in Roam block order.
+- **Low-friction execution.** Work from estimates alone, run a standalone POMO,
+  or optionally track tasks with compatible `LOGBOOK::` / `CLOCK:` records.
+- **A useful daily review.** Compare Planned and Actual time without leaving your
+  ordinary Roam blocks.
 
-- **See capacity before committing.** Planned demand, remaining time, overload, and
-  work that will not fit stay visible.
-- **Keep structure without becoming rigid.** Events stay fixed while unfinished
-  tasks flow forward around them in Roam block order.
-- **Connect estimates with reality.** Plan with low-friction estimates, then
-  optionally compare Planned with `LOGBOOK::` / `CLOCK:` Actual time.
-- **Stay inside Roam.** Focus, task switching, timing, completion, and daily Review
-  remain connected to ordinary Roam blocks.
-
-## One workflow, three layers
-
-1. **Block commitments.** Write meetings, meals, and routines as fixed ranges.
-2. **Timebox intentions.** Order flexible TODOs and give each one an estimate.
-3. **Review reality.** Optionally record Actual time and improve future estimates.
-
-The scheduler is deterministic: fixed events claim their ranges first, then whole
-tasks fill suitable gaps from the current moment. Unfinished work moves forward
-without changing priority. Anything that still cannot fit appears in **Today won't
-fit** instead of disappearing. No AI estimates and no black-box scheduling.
+Scheduling is deterministic: events claim their ranges first, then whole tasks
+fill suitable gaps from the current moment. Tasks that cannot fit appear in
+**Today won't fit** instead of being silently dropped.
 
 ## Quick start
 
-1. During Depot review, install the [Roam Depot preview PR](https://github.com/Roam-Research/roam-depot/pull/1430)
+1. During Depot review, install [Draft PR #1430](https://github.com/Roam-Research/roam-depot/pull/1430)
    with ShortHand `404KSG+roam-nautilus-log+1430`.
 2. On today's Daily Note, type `;;` and choose **Nautilus Log**.
-3. Add events and TODOs as direct children of the component.
-4. Order the tasks, add rough durations, and adjust until the day fits.
+3. Add fixed events and TODOs as direct children.
+4. Order the tasks and give each one a rough duration.
 
 ```text
 05:00-06:00 Morning routine
@@ -51,33 +41,33 @@ fit** instead of disappearing. No AI estimates and no black-box scheduling.
 ```
 
 Durations support `30m`, `30min`, `1h`, and `1h30m`. Untimed tasks use the
-configured default duration.
+configured default.
 
-## Execution Layer—when you want it
+## Optional Execution Layer
 
-The optional **Execution Layer** defaults to **off**, so estimate-only planning
-stays light. Enable it in Settings to add a compact execution panel:
+Enable **Execution Layer · Advanced** in Settings when you want more than visual
+planning. The compact topbar panel provides:
 
-- **Timing** shows the current task and recently closed work.
-- **Plan** shows unfinished tasks from today's Primary Plan.
-- **Review** compares valid Planned and Actual results for the day.
+- **Timing** for the current CLOCK and recent tasks.
+- **Plan** for today's scheduled and unscheduled work.
+- **Review** for Planned versus Actual results.
+- **POMO** for independent count-up focus without writing a CLOCK.
 
-Only one CLOCK runs at a time. Clock In can place the active task at the top of
-Roam's right sidebar, keeping focus and task switching close to native Shift+Click.
-For estimate-first work, the panel header can start a standalone count-up POMO
-that shares the same threshold without writing a task CLOCK or changing Review.
+Only one task CLOCK runs at a time. CLOCK takes priority over POMO, and can keep
+the active task at the top of Roam's right sidebar. The Execution Layer defaults
+to off, so estimate-only planning stays light.
 
-See the [full user guide](./docs/guide.md) for syntax, metrics, settings, commands,
-Actual-history rules, and safety boundaries.
+See the [user guide](./docs/guide.md) for settings, commands, syntax, history
+rules, and safety boundaries.
 
-## Credits and inspiration
+## Credits
 
 - [Nautilus](https://github.com/tombarys/roam-depot-nautilus) by Tomáš Barys—the
-  original transparent spiral-planning concept.
-- [Nautilus Enhanced](https://github.com/hopeserena/nautilus-enhanced)—the enhanced
-  fork from which this project developed.
-- [Roam Logbook](https://github.com/forrestchang/roam-logbook)—the inspiration for
-  compatible CLOCK tracking and focused task execution.
+  original spiral-planning concept.
+- [Nautilus Enhanced](https://github.com/hopeserena/nautilus-enhanced)—the fork
+  from which this project developed.
+- [Roam Logbook](https://github.com/forrestchang/roam-logbook)—the inspiration
+  for compatible CLOCK tracking and focused execution.
 
 The time-allocation philosophy is inspired by the
 [YNAB Method](https://www.ynab.com/the-four-rules/). Nautilus Log is not affiliated
