@@ -326,9 +326,14 @@ test('Log owns the previously tested controls and collapses without reserving ch
   assert.doesNotMatch(css, /#roam-right-sidebar-content \.nautilus-log-container/);
 });
 
-test('Log uses a flat two-row header with metrics left and controls plus legend right', () => {
+test('Log uses an action-first two-row capacity ledger with controls plus legend right', () => {
   assert.match(component, /nautilus-log-header/);
   assert.match(component, /nautilus-log-metrics/);
+  assert.match(component, /nautilus-log-metrics-summary/);
+  assert.match(component, /nautilus-log-metrics-capacity/);
+  assert.match(component, /nautilus-log-metric-separator/);
+  assert.match(component, /:summaryLabel/);
+  assert.match(component, /:percentLabel/);
   assert.match(component, /nautilus-log-metric-percent/);
   assert.match(component, /nautilus-log-metric-total/);
   assert.match(component, /nautilus-log-header-actions/);
@@ -337,7 +342,9 @@ test('Log uses a flat two-row header with metrics left and controls plus legend 
   assert.doesNotMatch(css, /filter:\s*drop-shadow\(0 4px 12px/);
   assert.doesNotMatch(css, /border:\s*1px dashed/);
   assert.match(css, /\.nautilus-log-metric--event/);
-  assert.match(css, /\.nautilus-log-metrics\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(2, max-content\);/s);
+  assert.match(css, /\.nautilus-log-metrics\s*\{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*32px 16px;/s);
+  assert.match(css, /\.nautilus-log-metrics-summary\s*\{[^}]*display:\s*inline-flex;/s);
+  assert.match(css, /\.nautilus-log-metrics-capacity\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(2, max-content\);/s);
   assert.match(css, /\.nautilus-log-header-actions\s*\{[^}]*align-items:\s*flex-end;/s);
   assert.match(css, /\.nautilus-log-metric-total,[\s\S]*\.nautilus-log-metric-percent\s*\{[^}]*color:\s*var\(--nautilus-log-text-sub\);/s);
 });

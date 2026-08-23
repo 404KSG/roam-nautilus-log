@@ -1484,6 +1484,7 @@
   (or (log-core-call "uiCopy" (:language settings))
       {:capacity {:available "Available" :events "Events" :demand "Demand" :overload "Overload" :fragmented "No fitting slot" :remaining "Remaining"
                   :burningAvailable "Flexible time is elapsing" :burningEvents "Event time is elapsing" :now "Current time"}
+       :allocation {:planned "planned" :free "free" :over "over" :noSlot "no slot" :left "left"}
        :legend {:urgent "Urgent" :event "Event" :task "Task"}
        :controls {:hideDone "Hide completed items" :showDone "Show completed items" :playback "Play back the day"
                   :collapse "Collapse Nautilus Log" :expand "Expand Nautilus Log"}
@@ -1494,8 +1495,8 @@
 
 (defn capacity-metrics [capacity settings]
   (or (log-core-call "capacityMetrics" {:capacity capacity :language (:language settings)})
-      [{:key "demand" :label "Demand" :value "0m" :percent "0%" :percentTone "neutral" :tone "neutral"}
-       {:key "remaining" :label "Remaining" :value "0m" :tone "neutral"}
+      [{:key "demand" :label "Demand" :value "0m" :summaryLabel "planned" :percent "0%" :percentLabel "left" :percentTone "neutral" :tone "neutral"}
+       {:key "remaining" :label "Remaining" :value "0m" :summaryLabel "free" :tone "neutral"}
        {:key "available" :label "Available" :value "0m" :tone "neutral"}
        {:key "events" :label "Events" :value "0m" :tone "event"}]))
 
@@ -1514,31 +1515,46 @@
    [:title label]
    [:path {:d "M12 22c4.4 0 8-3.1 8-7.5 0-3.3-1.8-5.8-4.4-8.2.2 2.7-1.5 4.2-2.8 4.9.4-4.1-1.3-7.1-4.6-9.2.3 3.8-1 6-2.6 8.2A7.4 7.4 0 0 0 4 14.5C4 18.9 7.6 22 12 22Z"}]])
 
+(defn metric-reading-component [metric]
+  (let [reading-label (str (:value metric)
+                           (when-let [total (:total metric)] (str " / " total))
+                           (when (:burning metric)
+                             (str ". " (:burningLabel metric))))]
+    [:div {:class (str "nautilus-log-metric nautilus-log-metric--" (:tone metric))}
+     [:span {:class "nautilus-log-metric-label"} (:label metric)]
+     [:span {:class "nautilus-log-metric-reading"
+             :aria-label (when (or (:total metric) (:burning metric)) reading-label)}
+      [:strong {:class "nautilus-log-metric-value"} (:value metric)]
+      (when-let [total (:total metric)]
+        [:span {:class "nautilus-log-metric-total"} (str "/ " total)])
+      (when (:burning metric)
+        [burning-flame-icon (:burningLabel metric)])]]))
+
+(defn metric-summary-component [metric]
+  [:span {:class (str "nautilus-log-metric-summary-item nautilus-log-metric--" (:tone metric))}
+   [:strong {:class "nautilus-log-metric-value"} (:value metric)]
+   [:span {:class "nautilus-log-metric-summary-label"} (:summaryLabel metric)]])
+
 (defn metrics-component [metrics]
-  (let [aria-label (str/join ", " (map #(str (:label %) " " (:value %)
+  (let [[demand status available events] metrics
+        aria-label (str/join ", " (map #(str (:label %) " " (:value %)
                                              (when-let [total (:total %)] (str " / " total))
-                                             (when-let [percent (:percent %)] (str ", " percent))
+                                             (when-let [percent (:percent %)]
+                                               (str ", " percent " " (:percentLabel %)))
                                              (when (:burning %)
                                                (str ", " (:burningLabel %)))) metrics))]
     [:div {:class "nautilus-log-metrics" :aria-label aria-label}
-     (for [metric metrics
-           :let [reading-label (str (:value metric)
-                                    (when-let [total (:total metric)] (str " / " total))
-                                    (when (:burning metric)
-                                      (str ". " (:burningLabel metric))))]]
-       ^{:key (:key metric)}
-       [:div {:class (str "nautilus-log-metric nautilus-log-metric--" (:tone metric))}
-        [:span {:class "nautilus-log-metric-label"} (:label metric)]
-        [:span {:class "nautilus-log-metric-reading"
-                :aria-label (when (or (:total metric) (:burning metric)) reading-label)}
-         [:strong {:class "nautilus-log-metric-value"} (:value metric)]
-         (when-let [total (:total metric)]
-           [:span {:class "nautilus-log-metric-total"} (str "/ " total)])
-         (when-let [percent (:percent metric)]
-           [:span {:class (str "nautilus-log-metric-percent nautilus-log-metric-percent--" (:percentTone metric))}
-            (str "/ " percent)])
-         (when (:burning metric)
-           [burning-flame-icon (:burningLabel metric)])]])]))
+     [:div {:class "nautilus-log-metrics-summary"}
+      [metric-summary-component demand]
+      [:span {:class "nautilus-log-metric-separator" :aria-hidden "true"} "·"]
+      [metric-summary-component status]
+      [:span {:class "nautilus-log-metric-separator" :aria-hidden "true"} "·"]
+      [:span {:class (str "nautilus-log-metric-summary-item nautilus-log-metric-percent nautilus-log-metric-percent--" (:percentTone demand))}
+       [:strong {:class "nautilus-log-metric-value"} (:percent demand)]
+       [:span {:class "nautilus-log-metric-summary-label"} (:percentLabel demand)]]]
+     [:div {:class "nautilus-log-metrics-capacity"}
+      [metric-reading-component available]
+      [metric-reading-component events]]]))
 
 (defn capacity-metrics-component [capacity settings]
   [metrics-component (capacity-metrics capacity settings)])

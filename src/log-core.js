@@ -800,6 +800,13 @@ const UI_COPY = {
       burningEvents: 'Event time is elapsing',
       now: 'Current time',
     },
+    allocation: {
+      planned: 'planned',
+      free: 'free',
+      over: 'over',
+      noSlot: 'no slot',
+      left: 'left',
+    },
     legend: { urgent: 'Urgent', event: 'Event', task: 'Task' },
     controls: {
       hideDone: 'Hide completed items',
@@ -839,6 +846,13 @@ const UI_COPY = {
       burningEvents: '事件时间正在流逝',
       now: '当前时间',
     },
+    allocation: {
+      planned: '已计划',
+      free: '余量',
+      over: '超载',
+      noSlot: '无合适空档',
+      left: '剩余',
+    },
     legend: { urgent: '紧急', event: '事件', task: '任务' },
     controls: {
       hideDone: '隐藏已完成事项',
@@ -873,7 +887,9 @@ function uiCopy(language = 'en') {
 }
 
 function capacityMetrics({ capacity = {}, language = 'en' } = {}) {
-  const copy = uiCopy(language).capacity;
+  const localized = uiCopy(language);
+  const copy = localized.capacity;
+  const allocation = localized.allocation;
   const burningBucket = capacity.burningBucket;
   const markBurning = (metric, bucket, label) => (
     burningBucket === bucket
@@ -884,9 +900,10 @@ function capacityMetrics({ capacity = {}, language = 'en' } = {}) {
   const totalAvailableMinutes = asNumber(capacity.totalAvailableMinutes);
   const totalFixedMinutes = asNumber(capacity.totalFixedMinutes);
   const demandMinutes = Math.max(0, asNumber(capacity.demandMinutes) || 0);
-  const demandPercent = availableMinutes > 0
-    ? `${Math.round((demandMinutes / availableMinutes) * 100)}%`
-    : (demandMinutes === 0 ? '0%' : '—');
+  const freeMinutes = Math.max(0, availableMinutes - demandMinutes);
+  const leftPercent = availableMinutes > 0
+    ? `${Math.round((freeMinutes / availableMinutes) * 100)}%`
+    : '0%';
   const available = markBurning({
     key: 'available',
     label: copy.available,
@@ -909,20 +926,40 @@ function capacityMetrics({ capacity = {}, language = 'en' } = {}) {
     key: 'demand',
     label: copy.demand,
     value: formatDuration(demandMinutes),
-    percent: demandPercent,
-    percentTone: availableMinutes > 0 && demandMinutes > availableMinutes ? 'warning' : 'neutral',
+    summaryLabel: allocation.planned,
+    percent: leftPercent,
+    percentLabel: allocation.left,
+    percentTone: 'neutral',
     tone: 'neutral',
   };
   let status;
   if (capacity.overloadMinutes > 0) {
-    status = { key: 'overload', label: copy.overload, value: formatDuration(capacity.overloadMinutes), tone: 'warning' };
+    status = {
+      key: 'overload',
+      label: copy.overload,
+      value: formatDuration(capacity.overloadMinutes),
+      summaryLabel: allocation.over,
+      tone: 'warning',
+    };
   } else if (capacity.unplacedMinutes > 0) {
-    status = { key: 'fragmented', label: copy.fragmented, value: formatDuration(capacity.unplacedMinutes), tone: 'warning' };
+    status = {
+      key: 'fragmented',
+      label: copy.fragmented,
+      value: formatDuration(capacity.unplacedMinutes),
+      summaryLabel: allocation.noSlot,
+      tone: 'warning',
+    };
   } else {
-    status = { key: 'remaining', label: copy.remaining, value: formatDuration(capacity.slackMinutes), tone: 'neutral' };
+    status = {
+      key: 'remaining',
+      label: copy.remaining,
+      value: formatDuration(freeMinutes),
+      summaryLabel: allocation.free,
+      tone: 'neutral',
+    };
   }
-  // The first row answers the planning question (commitment and headroom),
-  // while the second row provides the capacity inputs behind that answer.
+  // The first row answers the planning question (planned, free/over, and left),
+  // while the second row provides the flexible and fixed time budgets behind it.
   return [demand, status, available, events];
 }
 

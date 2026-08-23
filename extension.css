@@ -120,11 +120,45 @@
 
 .nautilus-log-metrics {
   display: grid;
-  grid-template-columns: repeat(2, max-content);
   grid-template-rows: 32px 16px;
   align-items: center;
-  gap: 2px 28px;
+  row-gap: 2px;
   min-height: 50px;
+}
+
+.nautilus-log-metrics-summary {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.nautilus-log-metrics-capacity {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  align-items: baseline;
+  column-gap: 28px;
+}
+
+.nautilus-log-metric-summary-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.nautilus-log-metric-summary-label,
+.nautilus-log-metric-separator {
+  color: var(--nautilus-log-text-sub);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.nautilus-log-metric-separator {
+  opacity: 0.72;
 }
 
 .nautilus-log-metric {
@@ -704,6 +738,10 @@
   }
 
   .nautilus-log-metrics {
+    row-gap: 2px;
+  }
+
+  .nautilus-log-metrics-capacity {
     column-gap: 12px;
   }
 
