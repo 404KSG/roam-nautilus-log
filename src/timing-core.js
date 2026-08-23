@@ -81,6 +81,22 @@ function capacitySummary(execution = {}, language = 'en') {
   };
 }
 
+function topbarDensity({
+  searchWidth,
+  controlWidth,
+  minimumSearchWidth = 420,
+  fullControlWidth = 220,
+  compactControlWidth = 112,
+} = {}) {
+  const search = Number(searchWidth);
+  const control = Number(controlWidth);
+  if (!Number.isFinite(search) || !Number.isFinite(control)) return 'full';
+  const sharedWidth = Math.max(0, search) + Math.max(0, control);
+  if (sharedWidth >= minimumSearchWidth + fullControlWidth) return 'full';
+  if (sharedWidth >= minimumSearchWidth + compactControlWidth) return 'compact';
+  return 'icon';
+}
+
 const pad = (value) => String(value).padStart(2, '0');
 const asTime = (value) => {
   if (value instanceof Date && Number.isFinite(value.getTime())) return value.getTime();
@@ -535,4 +551,5 @@ module.exports = {
   selectPrimaryPlan,
   taskStatus,
   taskTitle,
+  topbarDensity,
 };

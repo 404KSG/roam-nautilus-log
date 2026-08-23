@@ -26,6 +26,14 @@ function iconButton(name, label, onClick) {
   return button;
 }
 
+function findSearchSurface(topbar) {
+  const known = topbar?.querySelector?.('.rm-find-or-create-wrapper, .rm-find-or-create');
+  if (known) return known;
+  const input = [...(topbar?.querySelectorAll?.('input') || [])]
+    .find((node) => /find|create|search/i.test(node.getAttribute('placeholder') || ''));
+  return input?.closest?.('.bp3-input-group') || input?.parentElement || input || null;
+}
+
 function placeAfterNavigation(topbar, container) {
   const signals = [...topbar.querySelectorAll('button, a, [role="button"], span')];
   const signal = signals.find((node) => /forward|arrow-right|chevron-right/i.test([
@@ -63,8 +71,78 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
   let deleteConfirmation = null;
   let unscheduledExpanded = false;
   let settingsListener = null;
+  let cachedCapacityExecution = null;
+  let cachedCapacityLanguage = null;
+  let cachedCapacitySummary = null;
 
   const ui = () => timingCore.executionCopy(extensionAPI.settings.get('language') || 'en');
+
+  const currentCapacitySummary = () => {
+    const execution = state.planSnapshot?.execution;
+    if (!execution) return null;
+    const language = extensionAPI.settings.get('language') || 'en';
+    if (execution !== cachedCapacityExecution || language !== cachedCapacityLanguage) {
+      cachedCapacityExecution = execution;
+      cachedCapacityLanguage = language;
+      cachedCapacitySummary = timingCore.capacitySummary(execution, language);
+    }
+    return cachedCapacitySummary;
+  };
+
+  const brandIcon = () => {
+    const mark = icon('unresolve');
+    mark.classList.add('nautilus-log-timing__brand-icon');
+    return mark;
+  };
+
+  const modeSeparator = () => element(
+    'span',
+    'nautilus-log-timing__trigger-separator nautilus-log-timing__mode-separator',
+    '·',
+  );
+
+  const triggerNodes = (...nodes) => {
+    const capacity = element('span', 'nautilus-log-timing__capacity-token');
+    capacity.hidden = true;
+    capacity.append(
+      element('strong', 'nautilus-log-timing__capacity-value'),
+      element('span', 'nautilus-log-timing__capacity-label'),
+    );
+    const capacitySeparator = element(
+      'span',
+      'nautilus-log-timing__trigger-separator nautilus-log-timing__capacity-separator',
+      '·',
+    );
+    capacitySeparator.hidden = true;
+    return [
+      brandIcon(),
+      ...nodes,
+      capacitySeparator,
+      capacity,
+    ];
+  };
+
+  const updateTriggerCapacity = ({ ariaLabel, title }) => {
+    const summary = currentCapacitySummary();
+    const separator = trigger.querySelector('.nautilus-log-timing__capacity-separator');
+    const capacity = trigger.querySelector('.nautilus-log-timing__capacity-token');
+    if (!summary || !separator || !capacity) {
+      if (separator) separator.hidden = true;
+      if (capacity) capacity.hidden = true;
+      trigger.setAttribute('aria-label', ariaLabel);
+      trigger.title = title;
+      return;
+    }
+    const summaryText = `${summary.planned.value} ${summary.planned.label} · ${summary.status.value} ${summary.status.label} · ${summary.left.value} ${summary.left.label}`;
+    separator.hidden = false;
+    capacity.hidden = false;
+    capacity.classList.toggle('is-warning', summary.status.warning);
+    capacity.querySelector('.nautilus-log-timing__capacity-value').textContent = summary.left.value;
+    capacity.querySelector('.nautilus-log-timing__capacity-label').textContent = summary.left.label;
+    capacity.title = summaryText;
+    trigger.setAttribute('aria-label', `${ariaLabel}, ${summaryText}`);
+    trigger.title = title ? `${title} · ${summaryText}` : summaryText;
+  };
 
   const clearDeleteConfirmation = () => {
     if (!deleteConfirmation) return;
@@ -576,9 +654,11 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       const pomodoroMinutes = Number(extensionAPI.settings.get('pomodoro-minutes')) || 45;
       if (triggerMode !== 'pomodoro') {
         trigger.replaceChildren(
-          element('span', 'nautilus-log-timing__elapsed'),
-          element('span', 'nautilus-log-timing__trigger-separator', '·'),
-          element('span', 'nautilus-log-timing__pomodoro-label', 'POMO'),
+          ...triggerNodes(
+            element('span', 'nautilus-log-timing__elapsed'),
+            modeSeparator(),
+            element('span', 'nautilus-log-timing__pomodoro-label', 'POMO'),
+          ),
         );
         triggerMode = 'pomodoro';
       }
@@ -591,8 +671,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       ));
       trigger.querySelector('.nautilus-log-timing__elapsed').textContent = elapsed;
       trigger.querySelector('.nautilus-log-timing__pomodoro-label').textContent = 'POMO';
-      trigger.setAttribute('aria-label', `${elapsed}, POMO`);
-      trigger.title = text.actions.openPanel;
+      updateTriggerCapacity({ ariaLabel: `${elapsed}, POMO`, title: text.actions.openPanel });
       if (pomoCloseButton) {
         pomoCloseButton.hidden = false;
         pomoCloseButton.title = text.actions.stopPomodoro;
@@ -602,12 +681,11 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     }
     if (!focused) {
       if (triggerMode !== 'idle') {
-        trigger.replaceChildren(icon('unresolve'));
+        trigger.replaceChildren(...triggerNodes());
         triggerMode = 'idle';
       }
       trigger.classList.remove('is-active', 'is-overdue', 'is-forgotten', 'is-pomodoro');
-      trigger.setAttribute('aria-label', text.actions.openPanel);
-      trigger.title = 'Nautilus Log';
+      updateTriggerCapacity({ ariaLabel: text.actions.openPanel, title: 'Nautilus Log' });
       if (pomoCloseButton) pomoCloseButton.hidden = true;
     } else {
       const elapsed = timingCore.formatElapsed(state.now - focused.start);
@@ -620,10 +698,12 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
         const forgottenSignal = element('span', 'nautilus-log-timing__forgotten-signal');
         forgottenSignal.append(icon('warning-sign'));
         trigger.replaceChildren(
-          element('span', 'nautilus-log-timing__elapsed'),
-          element('span', 'nautilus-log-timing__trigger-separator', '·'),
-          element('span', 'nautilus-log-timing__threads'),
-          forgottenSignal,
+          ...triggerNodes(
+            element('span', 'nautilus-log-timing__elapsed'),
+            modeSeparator(),
+            element('span', 'nautilus-log-timing__threads'),
+            forgottenSignal,
+          ),
         );
         triggerMode = 'active';
       }
@@ -633,10 +713,25 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       trigger.classList.toggle('is-forgotten', forgotten);
       trigger.querySelector('.nautilus-log-timing__elapsed').textContent = elapsed;
       trigger.querySelector('.nautilus-log-timing__threads').textContent = `${count} ${count === 1 ? text.trigger.thread : text.trigger.threads}`;
-      trigger.setAttribute('aria-label', `${forgotten ? `${text.trigger.check}, ` : ''}${elapsed}, ${count} ${count === 1 ? text.trigger.thread : text.trigger.threads}`);
-      trigger.title = `${forgotten ? `${text.trigger.check} · ` : ''}${focused.title}`;
+      updateTriggerCapacity({
+        ariaLabel: `${forgotten ? `${text.trigger.check}, ` : ''}${elapsed}, ${count} ${count === 1 ? text.trigger.thread : text.trigger.threads}`,
+        title: `${forgotten ? `${text.trigger.check} · ` : ''}${focused.title}`,
+      });
       if (pomoCloseButton) pomoCloseButton.hidden = true;
     }
+  };
+
+  const syncResponsiveDensity = () => {
+    if (!container?.isConnected) return;
+    const topbar = document.querySelector('.rm-topbar');
+    const search = findSearchSurface(topbar);
+    const density = search
+      ? timingCore.topbarDensity({
+        searchWidth: search.getBoundingClientRect().width,
+        controlWidth: container.getBoundingClientRect().width,
+      })
+      : 'full';
+    if (container.dataset.density !== density) container.dataset.density = density;
   };
 
   const ensureMounted = () => {
@@ -646,12 +741,16 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     if (!container) {
       container = element('div', 'nautilus-log-timing__topbar');
       container.id = TOPBAR_ID;
+      container.dataset.density = 'full';
       trigger = element('button', 'nautilus-log-timing__trigger');
       trigger.type = 'button';
       trigger.setAttribute('aria-haspopup', 'dialog');
       trigger.setAttribute('aria-controls', POPOVER_ID);
       trigger.setAttribute('aria-expanded', 'false');
-      trigger.addEventListener('click', openPopover);
+      trigger.addEventListener('click', (event) => {
+        if (event.target.closest?.('.nautilus-log-timing__capacity-token')) view = 'plan';
+        openPopover();
+      });
       pomoCloseButton = element('button', 'nautilus-log-timing__pomodoro-close');
       pomoCloseButton.type = 'button';
       pomoCloseButton.hidden = true;
@@ -668,6 +767,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     }
     if (!container.isConnected || !topbar.contains(container)) placeAfterNavigation(topbar, container);
     renderTrigger();
+    syncResponsiveDensity();
   };
 
   const resetObservers = () => {
@@ -701,6 +801,14 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       const shellObserver = new MutationObserver(scheduleRecovery);
       shellObserver.observe(topbar.parentElement, { childList: true });
       observers.push(shellObserver);
+    }
+    if (typeof ResizeObserver === 'function') {
+      const resizeObserver = new ResizeObserver(syncResponsiveDensity);
+      resizeObserver.observe(topbar);
+      if (container) resizeObserver.observe(container);
+      const search = findSearchSurface(topbar);
+      if (search) resizeObserver.observe(search);
+      observers.push(resizeObserver);
     }
   };
 

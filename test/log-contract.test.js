@@ -167,7 +167,8 @@ test('Actual Time Tracking is opt-in and owns no disabled topbar interaction', (
   assert.match(entry, /if \(extensionAPI\.settings\.get\("actual-time-tracking"\) === true\)/);
   assert.match(entry, /stopTiming\(\{ closeActive: false \}\)/);
   assert.match(timingTopbar, /bp3-icon-\$\{name\}/);
-  assert.match(timingTopbar, /trigger\.replaceChildren\(icon\('unresolve'\)\)/);
+  assert.match(timingTopbar, /const brandIcon = \(\) => \{[\s\S]*icon\('unresolve'\)/);
+  assert.match(timingTopbar, /trigger\.replaceChildren\(\.\.\.triggerNodes\(\)\)/);
   assert.match(timingTopbar, /nautilus-log-timing__identity-name', 'Nautilus'/);
   assert.match(timingTopbar, /identityHint = icon\('chevron-right'\)/);
   assert.match(timingTopbar, /nautilus-log-timing__identity-divider/);
@@ -242,6 +243,19 @@ test('standalone POMO has an independent topbar start/stop contract', () => {
   const triggerStart = timingTopbar.indexOf('const renderTrigger');
   const triggerEnd = timingTopbar.indexOf('const ensureMounted', triggerStart);
   assert.doesNotMatch(timingTopbar.slice(triggerStart, triggerEnd), /renderPopover/);
+});
+
+test('the global capacity token yields topbar space to Roam search', () => {
+  assert.match(timingCore, /function topbarDensity/);
+  assert.match(timingTopbar, /timingCore\.topbarDensity/);
+  assert.match(timingTopbar, /planSnapshot\?\.execution/);
+  assert.match(timingTopbar, /nautilus-log-timing__capacity-token/);
+  assert.match(timingTopbar, /nautilus-log-timing__brand-icon/);
+  assert.match(timingTopbar, /new ResizeObserver/);
+  assert.match(css, /data-density="compact"/);
+  assert.match(css, /data-density="icon"/);
+  assert.match(css, /data-density="icon"[^}]*nautilus-log-timing__brand-icon/s);
+  assert.doesNotMatch(timingTopbar, /readAllEntries|readPrimaryPlan/);
 });
 
 test('Pomodoro restoration is pure and stale state is cleared through the awaited lifecycle', () => {

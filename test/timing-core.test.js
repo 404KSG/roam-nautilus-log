@@ -314,6 +314,13 @@ test('Plan capacity summary shares the chart allocation language', () => {
   });
 });
 
+test('topbar density protects Roam search before retaining optional metadata', () => {
+  assert.equal(timing.topbarDensity({ searchWidth: 500, controlWidth: 150 }), 'full');
+  assert.equal(timing.topbarDensity({ searchWidth: 400, controlWidth: 150 }), 'compact');
+  assert.equal(timing.topbarDensity({ searchWidth: 300, controlWidth: 150 }), 'icon');
+  assert.equal(timing.topbarDensity(), 'full');
+});
+
 test('standalone POMO uses one absolute start and crosses its shared threshold without stopping', () => {
   const started = timing.nextStandalonePomodoroState(null, { action: 'start', nowMs: 1_000 });
   const tick = timing.standalonePomodoroElapsed(started, 46 * 60 * 1000 + 1_000);

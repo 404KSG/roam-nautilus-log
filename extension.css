@@ -816,7 +816,7 @@
 .nautilus-log-timing__topbar {
   align-items: center;
   display: inline-flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   height: 32px;
   margin: 0 4px;
   min-width: 32px;
@@ -842,8 +842,17 @@
   height: 30px;
   justify-content: center;
   min-width: 30px;
+  overflow: hidden;
   padding: 0 8px;
   white-space: nowrap;
+}
+
+.nautilus-log-timing__brand-icon {
+  flex: 0 0 auto;
+}
+
+.nautilus-log-timing__trigger.is-active .nautilus-log-timing__brand-icon {
+  display: none;
 }
 
 .nautilus-log-timing__trigger:hover,
@@ -941,6 +950,78 @@
 .nautilus-log-timing__threads {
   color: #747d8a;
   font-weight: 500;
+}
+
+.nautilus-log-timing__capacity-token {
+  align-items: baseline;
+  color: #747d8a;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  gap: 3px;
+}
+
+.nautilus-log-timing__capacity-token[hidden],
+.nautilus-log-timing__capacity-separator[hidden] {
+  display: none;
+}
+
+.nautilus-log-timing__capacity-value {
+  color: var(--nl-exec-text, #374151);
+  font-weight: 650;
+}
+
+.nautilus-log-timing__capacity-label {
+  font-weight: 500;
+}
+
+.nautilus-log-timing__capacity-token.is-warning,
+.nautilus-log-timing__capacity-token.is-warning .nautilus-log-timing__capacity-value {
+  color: #ad690f;
+}
+
+.bp3-dark .nautilus-log-timing__capacity-value,
+.dark .nautilus-log-timing__capacity-value {
+  color: #d6dbe2;
+}
+
+.bp3-dark .nautilus-log-timing__capacity-token.is-warning,
+.bp3-dark .nautilus-log-timing__capacity-token.is-warning .nautilus-log-timing__capacity-value,
+.dark .nautilus-log-timing__capacity-token.is-warning,
+.dark .nautilus-log-timing__capacity-token.is-warning .nautilus-log-timing__capacity-value {
+  color: #d89a46;
+}
+
+.nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__mode-separator,
+.nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__pomodoro-label,
+.nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__threads,
+.nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__forgotten-signal,
+.nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__capacity-label {
+  display: none;
+}
+
+.nautilus-log-timing__topbar[data-density="icon"] {
+  margin-left: 2px;
+  margin-right: 2px;
+  min-width: 30px;
+  width: 30px;
+}
+
+.nautilus-log-timing__topbar[data-density="icon"] .nautilus-log-timing__trigger {
+  min-width: 30px;
+  padding-left: 0;
+  padding-right: 0;
+  width: 30px;
+}
+
+.nautilus-log-timing__topbar[data-density="icon"] .nautilus-log-timing__brand-icon {
+  display: inline-flex;
+}
+
+.nautilus-log-timing__topbar[data-density="icon"] .nautilus-log-timing__trigger > :not(.nautilus-log-timing__brand-icon),
+.nautilus-log-timing__topbar[data-density="icon"] .nautilus-log-timing__pomodoro-close {
+  display: none !important;
 }
 
 .nautilus-log-timing__popover {
