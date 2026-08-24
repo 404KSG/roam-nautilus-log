@@ -127,6 +127,10 @@ but ordinary planning and completion do not require it.
 | Recent Retention | 45 minutes; `0` disables |
 | Forgotten Timer Warning | 120 minutes; `0` disables |
 
+Component Prefix is display-only text for newly inserted components. It may be
+changed or left empty; Primary Plan detection follows Nautilus Log's stable
+renderer identity instead of this label.
+
 Chart start can be any whole hour from 00:00–23:00. Chart end can be 01:00–24:00;
 an end hour at or before Start is explicitly labelled **next day**. For example,
 21:00–02:00 is one continuous 300-minute window owned by the Daily Note where the

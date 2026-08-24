@@ -117,6 +117,9 @@ Todo Trigger 是可选工具。它追加的完成时间可以提供 `dHH:MM` 锚
 | Recent Retention | 45 分钟；`0` 为关闭 |
 | Forgotten Timer Warning | 120 分钟；`0` 为关闭 |
 
+Component Prefix 只是新插入组件前的展示文本，可以修改或留空。Primary Plan 根据
+Nautilus Log 稳定的 renderer 身份识别组件，不依赖这个标签。
+
 开始时间可选择 00:00–23:00 的任意整点；结束时间可选择 01:00–24:00。结束时间早于
 或等于开始时间时，设置中会明确标为 **次日**。例如 21:00–02:00 会成为一个连续的
 300 分钟窗口，并始终归属于放置该组件的 Daily Note。旧模板继续兼容，默认值仍为

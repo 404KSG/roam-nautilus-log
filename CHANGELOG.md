@@ -14,6 +14,12 @@
 - Spiral depth is based on hours elapsed from the configured start, preserving
   the default 05:00 profile while keeping pre-05:00 and next-day sectors visible.
 
+### Fixed
+
+- Timing, Plan, and Review now identify a Nautilus component by its stable
+  renderer instead of the optional display prefix, so custom or empty prefixes
+  continue to expose the Primary Plan without admitting unrelated renderers.
+
 ## 1.0.2 — 2026-08-23
 
 ### Added

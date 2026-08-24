@@ -10,6 +10,7 @@ const logCore = require('./log-core');
 
 const TODO_RE = /\{\{\[\[(TODO|DONE)\]\]\}\}|\{\{(TODO|DONE)\}\}/i;
 const CLOCK_RE = /^\s*:?CLOCK:{1,2}\s*\[([^\]]+)\](?:\s*--\s*\[([^\]]+)\])?(?:\s*=>\s*(\d+:[0-5]\d))?\s*$/i;
+const NAUTILUS_RENDER_RE = /\{\{\s*\[\[roam\/render\]\]\s*:\s*\(\(roam-render-Nautilus-Log-cljs\)\)/i;
 const BLOCK_REF_RE = /\(\(([a-zA-Z0-9_-]{6,})\)\)/g;
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const ACTIVE_WORK_WINDOW_MINUTES = 45;
@@ -221,8 +222,7 @@ function compareTreeOrder(left, right) {
 
 function isNautilusComponent(string) {
   if (typeof string !== 'string') return false;
-  return /\[\[Nautilus Log\]\]/i.test(string)
-    && (/roam\/render/i.test(string) || /roam-render-Nautilus-Log-cljs/i.test(string));
+  return NAUTILUS_RENDER_RE.test(string);
 }
 
 function selectPrimaryPlan(rows = [], pageUid, matcher = isNautilusComponent) {

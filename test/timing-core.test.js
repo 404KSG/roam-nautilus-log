@@ -15,12 +15,27 @@ test('CLOCK records round-trip in compatible Org format', () => {
   assert.equal(timing.parseClockLine(closed).minutes, 19);
 });
 
+test('Nautilus component identity follows the stable renderer rather than its display prefix', () => {
+  const renderer = '{{[[roam/render]]:((roam-render-Nautilus-Log-cljs)) 22 15 5 "" 21}}';
+
+  assert.equal(timing.isNautilusComponent(`[[Nautilus Log]] ${renderer}`), true);
+  assert.equal(timing.isNautilusComponent(`[[Log]] ${renderer}`), true);
+  assert.equal(timing.isNautilusComponent(`#schedule ${renderer}`), true);
+  assert.equal(timing.isNautilusComponent(renderer), true);
+  assert.equal(
+    timing.isNautilusComponent('[[Nautilus Log]] {{[[roam/render]]:((another-renderer))}}'),
+    false,
+  );
+  assert.equal(timing.isNautilusComponent('Mention ((roam-render-Nautilus-Log-cljs))'), false);
+});
+
 test('the first component in Daily Note tree order owns the Primary Plan', () => {
+  const renderer = '{{[[roam/render]]:((roam-render-Nautilus-Log-cljs))}}';
   const rows = [
     { uid: 'later-root', parentUid: 'page', order: 1, string: 'section' },
-    { uid: 'later-plan', parentUid: 'later-root', order: 0, string: '[[Nautilus Log]] {{[[roam/render]]:later}}' },
+    { uid: 'later-plan', parentUid: 'later-root', order: 0, string: `[[Later]] ${renderer}` },
     { uid: 'first-root', parentUid: 'page', order: 0, string: 'section' },
-    { uid: 'first-plan', parentUid: 'first-root', order: 2, string: '[[Nautilus Log]] {{[[roam/render]]:first}}' },
+    { uid: 'first-plan', parentUid: 'first-root', order: 2, string: `[[First]] ${renderer}` },
     { uid: 'first-task', parentUid: 'first-plan', order: 0, string: '{{[[TODO]]}} Write 30m' },
   ];
 
