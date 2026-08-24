@@ -1608,20 +1608,13 @@
 
 (defn compact-overview-component [capacity settings copy compact-open-state]
   (let [metrics (capacity-metrics capacity settings)
+        planned (:planned metrics)
         status (:status metrics)
         warning? (= "warning" (:tone status))
-        burning-bucket (:burningBucket capacity)
-        burning-label (case burning-bucket
-                        "available" (get-in copy [:capacity :available])
-                        "events" (get-in copy [:capacity :events])
-                        nil)
-        burning-aria (case burning-bucket
-                       "available" (get-in copy [:capacity :burningAvailable])
-                       "events" (get-in copy [:capacity :burningEvents])
-                       nil)
         summary-aria (str (get-in copy [:panels :overview])
-                          (when burning-label (str ". " burning-label ". " burning-aria))
-                          (when warning? (str ". " (:label status) " " (:value status))))]
+                          ". " (:value planned) " " (:summaryLabel planned)
+                          ". " (:value status) " " (:summaryLabel status)
+                          ". " (:percent planned) " " (:percentLabel planned))]
     [:details {:class (str "nautilus-log-compact-overview"
                            (when warning? " nautilus-log-compact-overview--warning"))
                :open @compact-open-state
@@ -1631,16 +1624,16 @@
      [:summary {:class "nautilus-log-compact-summary nautilus-log-compact-overview-summary"
                 :aria-label summary-aria}
       [:span {:class "nautilus-log-compact-overview-summary-content"}
-       (get-in copy [:panels :overview])
-       (when burning-label
-         [:span {:class "nautilus-log-burning-summary"}
-          " · "
-          [burning-flame-icon burning-aria]
-          " "
-          burning-label])]
-      (when warning?
-        [:span {:class "nautilus-log-compact-overview-warning"}
-         (str " · " (:label status) " " (:value status))])]
+       [:span {:class "nautilus-log-compact-overview-label"}
+        (get-in copy [:panels :overview])]
+       [:span {:class "nautilus-log-metric-separator" :aria-hidden "true"} "·"]
+       [metric-summary-component planned]
+       [:span {:class "nautilus-log-metric-separator" :aria-hidden "true"} "·"]
+       [metric-summary-component status]
+       [:span {:class "nautilus-log-metric-separator" :aria-hidden "true"} "·"]
+       [:span {:class (str "nautilus-log-metric-summary-item nautilus-log-metric-percent nautilus-log-metric-percent--" (:percentTone planned))}
+        [:strong {:class "nautilus-log-metric-value"} (:percent planned)]
+        [:span {:class "nautilus-log-metric-summary-label"} (:percentLabel planned)]]]
      [:div {:class "nautilus-log-compact-overview-body"}
       [metrics-component metrics]
       [html-legend-component copy]]]))

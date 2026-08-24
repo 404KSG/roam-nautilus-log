@@ -466,16 +466,25 @@ test('Log renders a collapsible below-chart label list in narrow containers', ()
 });
 
 test('Log moves metrics and the legend into a folded Overview in narrow containers', () => {
+  const compactOverviewStart = component.indexOf('(defn compact-overview-component');
+  const compactOverviewEnd = component.indexOf('(defn localized-warning', compactOverviewStart);
+  const compactOverview = component.slice(compactOverviewStart, compactOverviewEnd);
+
   assert.match(component, /nautilus-log-compact-overview/);
   assert.match(component, /nautilus-log-compact-overview-summary/);
   assert.match(component, /compact-overview-open-state/);
   assert.match(component, /compact-overview-component/);
   assert.match(component, /:open @compact-open-state/);
-  assert.match(component, /\(when warning\?/);
+  assert.match(compactOverview, /metric-summary-component planned/);
+  assert.match(compactOverview, /metric-summary-component status/);
+  assert.match(compactOverview, /:percent planned/);
+  assert.match(compactOverview, /:percentLabel planned/);
+  assert.doesNotMatch(compactOverview, /burning-label|burning-aria|nautilus-log-burning-summary/);
   assert.match(css, /\.nautilus-log-compact-overview\s*\{[^}]*display:\s*none;/s);
   assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-log-compact-overview\s*\{[^}]*display:\s*block;/);
   assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-log-header--compact\s*\{[^}]*justify-content:\s*flex-end;/);
   assert.match(css, /\.nautilus-log-compact-overview-summary\s*\{[^}]*justify-content:\s*flex-start;/s);
+  assert.match(css, /\.nautilus-log-compact-overview-summary-content\s*\{[^}]*display:\s*inline-flex;[^}]*align-items:\s*baseline;/s);
   assert.match(css, /\.nautilus-log-compact-overview-summary::after\s*\{[^}]*margin-left:\s*auto;/s);
 });
 

@@ -339,6 +339,18 @@
   justify-content: flex-start;
 }
 
+.nautilus-log-compact-overview-summary-content {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.nautilus-log-compact-overview-label {
+  color: var(--nautilus-log-text-sub);
+}
+
 .nautilus-log-compact-overview-summary::after {
   margin-left: auto;
 }
