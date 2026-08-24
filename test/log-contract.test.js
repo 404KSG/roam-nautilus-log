@@ -346,6 +346,21 @@ test('the global capacity token yields topbar space to Roam search', () => {
   assert.doesNotMatch(timingTopbar, /readAllEntries|readPrimaryPlan/);
 });
 
+test('the global capacity token stays neutral and shows only the percentage', () => {
+  const triggerNodesStart = timingTopbar.indexOf('const triggerNodes');
+  const triggerNodesEnd = timingTopbar.indexOf('const updateTriggerCapacity', triggerNodesStart);
+  const updateStart = triggerNodesEnd;
+  const updateEnd = timingTopbar.indexOf('const clearDeleteConfirmation', updateStart);
+  const triggerNodesSource = timingTopbar.slice(triggerNodesStart, triggerNodesEnd);
+  const updateSource = timingTopbar.slice(updateStart, updateEnd);
+
+  assert.match(triggerNodesSource, /element\('span', 'nautilus-log-timing__capacity-value'\)/);
+  assert.doesNotMatch(triggerNodesSource, /nautilus-log-timing__capacity-label/);
+  assert.match(updateSource, /capacity\.classList\.remove\('is-warning'\)/);
+  assert.doesNotMatch(updateSource, /capacity\.classList\.toggle\('is-warning'/);
+  assert.doesNotMatch(css, /nautilus-log-timing__capacity-token\.is-warning/);
+});
+
 test('responsive observers rebind when Roam replaces the topbar or search surface', () => {
   assert.match(timingTopbar, /let observedTopbar = null;/);
   assert.match(timingTopbar, /let observedSearch = null;/);

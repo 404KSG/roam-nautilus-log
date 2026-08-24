@@ -111,10 +111,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
   const triggerNodes = (...nodes) => {
     const capacity = element('span', 'nautilus-log-timing__capacity-token');
     capacity.hidden = true;
-    capacity.append(
-      element('strong', 'nautilus-log-timing__capacity-value'),
-      element('span', 'nautilus-log-timing__capacity-label'),
-    );
+    capacity.append(element('span', 'nautilus-log-timing__capacity-value'));
     const capacitySeparator = triggerSeparator('capacity');
     capacitySeparator.hidden = true;
     return [
@@ -139,9 +136,8 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     const summaryText = `${summary.planned.value} ${summary.planned.label} · ${summary.status.value} ${summary.status.label} · ${summary.left.value} ${summary.left.label}`;
     separator.hidden = false;
     capacity.hidden = false;
-    capacity.classList.toggle('is-warning', summary.status.warning);
+    capacity.classList.remove('is-warning');
     capacity.querySelector('.nautilus-log-timing__capacity-value').textContent = summary.left.value;
-    capacity.querySelector('.nautilus-log-timing__capacity-label').textContent = summary.left.label;
     capacity.title = summaryText;
     trigger.setAttribute('aria-label', `${ariaLabel}, ${summaryText}`);
     trigger.title = title ? `${title} · ${summaryText}` : summaryText;

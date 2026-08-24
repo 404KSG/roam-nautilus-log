@@ -1015,27 +1015,10 @@
   font-weight: 500;
 }
 
-.nautilus-log-timing__capacity-label {
-  font-weight: 500;
-}
-
-.nautilus-log-timing__capacity-token.is-warning,
-.nautilus-log-timing__capacity-token.is-warning .nautilus-log-timing__capacity-value {
-  color: #ad690f;
-}
-
-.bp3-dark .nautilus-log-timing__capacity-token.is-warning,
-.bp3-dark .nautilus-log-timing__capacity-token.is-warning .nautilus-log-timing__capacity-value,
-.dark .nautilus-log-timing__capacity-token.is-warning,
-.dark .nautilus-log-timing__capacity-token.is-warning .nautilus-log-timing__capacity-value {
-  color: #d89a46;
-}
-
 .nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__mode-separator,
 .nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__pomodoro-label,
 .nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__threads,
-.nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__forgotten-signal,
-.nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__capacity-label {
+.nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__forgotten-signal {
   display: none;
 }
 
