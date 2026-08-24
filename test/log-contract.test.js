@@ -13,6 +13,7 @@ const readmeZh = fs.readFileSync(path.join(__dirname, '..', 'README.zh-CN.md'), 
 const guide = fs.readFileSync(path.join(__dirname, '..', 'docs', 'guide.md'), 'utf8');
 const guideZh = fs.readFileSync(path.join(__dirname, '..', 'docs', 'guide.zh-CN.md'), 'utf8');
 const changelog = fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'utf8');
+const buildScript = fs.readFileSync(path.join(__dirname, '..', 'build.sh'), 'utf8');
 const timingTopbar = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-topbar.js'), 'utf8');
 const timingCore = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-core.js'), 'utf8');
 const timingRuntime = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-runtime.js'), 'utf8');
@@ -101,6 +102,8 @@ function assertBalancedReaderDelimiters(source) {
 
 test('Roam SCI component source keeps reader delimiters balanced', () => {
   assertBalancedReaderDelimiters(component);
+  assert.match(buildScript, /LineNumberingPushbackReader/);
+  assert.match(buildScript, /read \{:eof eof :read-cond :allow :features #\{:cljs\}\}/);
 });
 
 test('README media uses absolute HTTPS URLs for Roam Depot rendering', () => {

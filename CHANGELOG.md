@@ -22,6 +22,8 @@
 - The folded right-sidebar Overview now leads with the canonical allocation
   summary—planned, free/over/no-slot, and percent left—instead of transient
   burning-bucket context.
+- Depot builds now parse the SCI component source with Clojure's reader before
+  packaging, preventing delimiter errors from reaching Preview installs.
 
 ## 1.0.2 — 2026-08-23
 
