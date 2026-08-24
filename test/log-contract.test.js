@@ -46,6 +46,63 @@ function parenDepthBefore(source, targetIndex) {
   return depth;
 }
 
+function assertBalancedReaderDelimiters(source) {
+  const openers = new Set(['(', '[', '{']);
+  const matchingOpener = { ')': '(', ']': '[', '}': '{' };
+  const stack = [];
+  let inString = false;
+  let escaped = false;
+  let inComment = false;
+  let line = 1;
+  let column = 0;
+
+  for (const char of source) {
+    if (char === '\n') {
+      line += 1;
+      column = 0;
+      inComment = false;
+      continue;
+    }
+    column += 1;
+
+    if (inComment) continue;
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === ';') {
+      inComment = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+    if (openers.has(char)) {
+      stack.push({ char, line, column });
+      continue;
+    }
+    if (Object.hasOwn(matchingOpener, char)) {
+      const opener = stack.pop();
+      assert.ok(opener, `Unexpected ${char} at ${line}:${column}`);
+      assert.equal(
+        opener.char,
+        matchingOpener[char],
+        `Unmatched ${char} at ${line}:${column}; expected the delimiter for ${opener.char} opened at ${opener.line}:${opener.column}`,
+      );
+    }
+  }
+
+  assert.equal(inString, false, 'Unterminated string in component.cljs');
+  assert.deepEqual(stack, [], `Unclosed delimiter in component.cljs: ${JSON.stringify(stack.at(-1))}`);
+}
+
+test('Roam SCI component source keeps reader delimiters balanced', () => {
+  assertBalancedReaderDelimiters(component);
+});
+
 test('README media uses absolute HTTPS URLs for Roam Depot rendering', () => {
   for (const source of [readme, readmeZh]) {
     const media = [...source.matchAll(/\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)]

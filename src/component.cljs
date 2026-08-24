@@ -1633,7 +1633,7 @@
        [:span {:class "nautilus-log-metric-separator" :aria-hidden "true"} "·"]
        [:span {:class (str "nautilus-log-metric-summary-item nautilus-log-metric-percent nautilus-log-metric-percent--" (:percentTone planned))}
         [:strong {:class "nautilus-log-metric-value"} (:percent planned)]
-        [:span {:class "nautilus-log-metric-summary-label"} (:percentLabel planned)]]]
+        [:span {:class "nautilus-log-metric-summary-label"} (:percentLabel planned)]]]]
      [:div {:class "nautilus-log-compact-overview-body"}
       [metrics-component metrics]
       [html-legend-component copy]]]))
