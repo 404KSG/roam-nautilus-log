@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Chart windows may now start at any whole hour from 00:00–23:00 and end at
+  01:00–24:00; an end at or before Start is treated and labelled as next day.
+- Overnight events, capacity, elapsed time, hover slots, and the current-time
+  needle share one continuous timeline owned by the plan's Daily Note.
+
+### Changed
+
+- Spiral depth is based on hours elapsed from the configured start, preserving
+  the default 05:00 profile while keeping pre-05:00 and next-day sectors visible.
+
 ## 1.0.2 — 2026-08-23
 
 ### Added

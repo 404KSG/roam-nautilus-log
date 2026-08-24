@@ -123,8 +123,8 @@ test('built extension creates Log scaffolding sequentially and unload is graph-s
   assert.equal(window.nautilusLogExtensionData.settings.language, 'zh');
 
   const endSetting = latestPanel.settings.find(({ id }) => id === 'workday-end');
-  assert.equal(endSetting.action.default, 21);
-  await endSetting.action.onChange(20);
+  assert.equal(endSetting.action.default, '21:00');
+  await endSetting.action.onChange('20:00');
   assert.equal(window.nautilusLogExtensionData.settings['workday-end'], 20);
   assert.ok(dispatchedEvents.some(({ type }) => type === 'nautilus-log:settings-changed'));
   const blockCount = blocks.size;
@@ -170,7 +170,19 @@ test('a fresh install defaults the settings panel and rendered UI to English', a
   assert.equal(window.nautilusLogExtensionData.settings.language, 'en');
   assert.equal(latestPanel.settings.find(({ id }) => id === 'language').action.default, 'en');
   assert.equal(latestPanel.settings.find(({ id }) => id === 'workday-start').name, 'Chart Start Time');
-  assert.equal(latestPanel.settings.find(({ id }) => id === 'workday-end').action.default, 21);
+  const startSetting = latestPanel.settings.find(({ id }) => id === 'workday-start');
+  const endSetting = latestPanel.settings.find(({ id }) => id === 'workday-end');
+  assert.equal(startSetting.action.default, '05:00');
+  assert.ok(startSetting.action.items.includes('00:00'));
+  assert.ok(startSetting.action.items.includes('09:00'));
+  assert.equal(endSetting.action.default, '21:00');
+  await startSetting.action.onChange('21:00');
+  const overnightEndSetting = latestPanel.settings.find(({ id }) => id === 'workday-end');
+  assert.ok(overnightEndSetting.action.items.includes('02:00 · next day'));
+  await overnightEndSetting.action.onChange('02:00 · next day');
+  assert.equal(settings.get('workday-start'), 21);
+  assert.equal(settings.get('workday-end'), 2);
+  assert.equal(window.nautilusLogExtensionData.settings['workday-end'], 2);
   const executionEntry = latestPanel.settings.find(({ id }) => id === 'actual-time-tracking');
   assert.equal(executionEntry.name, 'Execution Layer · Advanced');
   assert.match(executionEntry.description, /Enable to reveal execution settings/);

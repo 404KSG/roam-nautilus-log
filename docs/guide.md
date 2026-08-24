@@ -104,7 +104,8 @@ Recent or the forgotten-timer warning.
 - Without Actual, Planned history requires an explicit completion anchor such as
   `d18:21`.
 - Without an Actual end or completion anchor, Nautilus Log does not invent history.
-- Cross-midnight CLOCK sessions contribute only the portion inside the displayed day.
+- For an overnight chart window, next-day CLOCK time remains part of the owning
+  Daily Note until that window ends.
 
 Todo Trigger is optional. Its completion timestamp can supply the `dHH:MM` anchor,
 but ordinary planning and completion do not require it.
@@ -126,9 +127,11 @@ but ordinary planning and completion do not require it.
 | Recent Retention | 45 minutes; `0` disables |
 | Forgotten Timer Warning | 120 minutes; `0` disables |
 
-Chart start can be 05:00–08:00; chart end can be 18:00–24:00. A `24:00` end is
-represented as minute 1440 and labelled `0`. Cross-midnight events are clipped at the
-displayed day's boundary.
+Chart start can be any whole hour from 00:00–23:00. Chart end can be 01:00–24:00;
+an end hour at or before Start is explicitly labelled **next day**. For example,
+21:00–02:00 is one continuous 300-minute window owned by the Daily Note where the
+component appears. Existing templates keep working and the default remains
+05:00–21:00.
 
 Execution-specific settings are revealed only while **Execution Layer · Advanced** is
 enabled.

@@ -162,6 +162,24 @@ test('a mounted chart derives historical/today behavior from the shared timeline
   assert.match(component, /:showAvailableSlots/);
 });
 
+test('global and overnight windows use continuous minutes and a start-relative spiral profile', () => {
+  assert.match(entry, /logCore\.START_HOURS\.map\(hourLabel\)/);
+  assert.match(entry, /logCore\.END_HOURS\.map\(endLabel\)/);
+  assert.match(entry, /Number\(hour\) <= startHour/);
+  assert.match(entry, /labels\.nextDay/);
+  assert.match(component, /defn spiral-profile-index/);
+  assert.match(component, /windowStartMinutes \(:workday-start settings\)/);
+  assert.match(component, /:windowStartMinutes \(:workday-start settings\)/);
+  assert.match(component, /:nowMinutes timeline-minute/);
+  assert.match(component, /clock-render-context page-title-val \(mapv :uid mapped\) \(:workday-end settings\)/);
+  assert.match(guide, /00:00–23:00/);
+  assert.match(guide, /21:00–02:00/);
+  assert.match(guideZh, /00:00–23:00/);
+  assert.match(guideZh, /21:00–02:00/);
+  assert.doesNotMatch(guide, /Chart start can be 05:00–08:00/);
+  assert.doesNotMatch(guideZh, /开始时间可选择 05:00–08:00/);
+});
+
 test('Log scaffolding is isolated and unload is graph-safe', () => {
   assert.match(entry, /Nautilus Log/);
   assert.match(entry, /roam-render-Nautilus-Log-cljs/);

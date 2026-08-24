@@ -7,8 +7,8 @@
  * validating settings before they become render arguments.
  */
 
-const START_HOURS = Object.freeze([5, 6, 7, 8]);
-const END_HOURS = Object.freeze([18, 19, 20, 21, 22, 23, 24]);
+const START_HOURS = Object.freeze(Array.from({ length: 24 }, (_value, hour) => hour));
+const END_HOURS = Object.freeze(Array.from({ length: 24 }, (_value, index) => index + 1));
 const DURATION_TOKEN_RE = /(?:^|\s)(\d+h(?:\d+(?:min|m))?|\d+(?:min|m))(?=\s|$)/i;
 const TIME_RANGE_TOKEN_RE = /(?:^|\s)(\d{1,2}(?::\d{1,2})?(?:\s*(?:am|pm))?\s*(?:-|–|až|to)\s*\d{1,2}(?::\d{1,2})?(?:\s*(?:am|pm))?)(?=\s|$)/i;
 
@@ -70,7 +70,48 @@ function clockTokenMinutes(value, inheritedPeriod = null) {
   return { minutes: hour * 60 + minute, explicitPeriod };
 }
 
-function parseTimeRangeToken({ text = '' } = {}) {
+function intervalOverlap(start, end, windowStart, windowEnd) {
+  return Math.max(0, Math.min(end, windowEnd) - Math.max(start, windowStart));
+}
+
+/**
+ * Place a wall-clock interval on the continuous timeline owned by a plan.
+ * Early clock times belong to the next-day portion only when that placement
+ * actually overlaps an overnight chart window.
+ */
+function alignIntervalToWindow({ start, end, windowStart, windowEnd } = {}) {
+  const intervalStart = asNumber(start);
+  const intervalEnd = asNumber(end);
+  const rangeStart = asNumber(windowStart);
+  const rangeEnd = asNumber(windowEnd);
+  if (!Number.isFinite(intervalStart) || !Number.isFinite(intervalEnd)
+      || intervalEnd <= intervalStart || !Number.isFinite(rangeStart)
+      || !Number.isFinite(rangeEnd) || rangeEnd <= rangeStart) {
+    return { start: intervalStart, end: intervalEnd };
+  }
+
+  const candidates = [0, 1440].map((shift) => ({
+    start: intervalStart + shift,
+    end: intervalEnd + shift,
+  }));
+  const ranked = candidates
+    .map((candidate) => ({
+      ...candidate,
+      overlap: intervalOverlap(candidate.start, candidate.end, rangeStart, rangeEnd),
+      distance: Math.abs(candidate.start - rangeStart),
+    }))
+    .sort((left, right) => right.overlap - left.overlap || left.distance - right.distance);
+  const best = ranked[0];
+  return best.overlap > 0
+    ? { start: best.start, end: best.end }
+    : { start: intervalStart, end: intervalEnd };
+}
+
+function parseTimeRangeToken({
+  text = '',
+  windowStartMinutes,
+  windowEndMinutes,
+} = {}) {
   const source = String(text ?? '');
   const token = TIME_RANGE_TOKEN_RE.exec(source)?.[1];
   if (!token) return null;
@@ -79,17 +120,24 @@ function parseTimeRangeToken({ text = '' } = {}) {
   const end = clockTokenMinutes(parts[1]);
   const start = clockTokenMinutes(parts[0], end?.explicitPeriod || null);
   if (!start || !end) return null;
-  const warningCode = end.minutes < start.minutes && end.minutes !== 0
-    ? 'overnight'
-    : end.minutes === start.minutes ? 'sameTime' : '';
+  const sameTime = end.minutes === start.minutes;
+  const continuousEnd = sameTime
+    ? start.minutes
+    : end.minutes > start.minutes ? end.minutes : end.minutes + 1440;
+  const aligned = sameTime
+    ? { start: start.minutes, end: continuousEnd }
+    : alignIntervalToWindow({
+      start: start.minutes,
+      end: continuousEnd,
+      windowStart: windowStartMinutes,
+      windowEnd: windowEndMinutes,
+    });
   return {
-    start: start.minutes,
-    end: end.minutes > start.minutes
-      ? end.minutes
-      : (end.minutes === start.minutes ? start.minutes : 1440),
+    start: aligned.start,
+    end: aligned.end,
     token,
     cleanedText: cleanParsedText(source, token),
-    warningCode,
+    warningCode: sameTime ? 'sameTime' : '',
   };
 }
 
@@ -112,17 +160,14 @@ function normalizeScheduleSettings({ startHour, endHour, workdayStart, workdayEn
     21,
   );
 
-  // The available choices make this impossible in the settings panel, but a
-  // hand-edited render block must still fail safe rather than render backwards.
-  if (normalizedStart * 60 >= normalizedEnd * 60) {
-    return { startHour: 5, endHour: 21, startMinutes: 300, endMinutes: 1260 };
-  }
+  const startMinutes = normalizedStart * 60;
+  const endMinutes = (normalizedEnd <= normalizedStart ? normalizedEnd + 24 : normalizedEnd) * 60;
 
   return {
     startHour: normalizedStart,
     endHour: normalizedEnd,
-    startMinutes: normalizedStart * 60,
-    endMinutes: normalizedEnd * 60,
+    startMinutes,
+    endMinutes,
   };
 }
 
@@ -266,18 +311,29 @@ function timelineDayState({
   const safeEnd = validRange ? end : safeStart;
   const displayDay = localDayOrdinal(displayDate);
   const currentDay = localDayOrdinal(currentDate);
+  const rawNow = asNumber(nowMinutes);
+  const dayDelta = displayDay === null || currentDay === null ? 0 : currentDay - displayDay;
+  const simulated = playback === true;
+  const timelineMinutes = Number.isFinite(rawNow)
+    ? (simulated ? rawNow : rawNow + dayDelta * 1440)
+    : safeStart;
+  const sameCalendarDay = displayDay !== null && currentDay !== null && dayDelta === 0;
+  const nextDayCarryover = displayDay !== null && currentDay !== null
+    && dayDelta === 1 && safeEnd > 1440 && timelineMinutes < safeEnd;
   const relation = displayDay === null || currentDay === null
     ? 'other'
-    : displayDay < currentDay ? 'past' : displayDay > currentDay ? 'future' : 'today';
+    : sameCalendarDay || nextDayCarryover
+      ? 'today'
+      : displayDay < currentDay ? 'past' : 'future';
   const cursor = validRange
-    ? effectiveNow({ startMinutes: safeStart, endMinutes: safeEnd, nowMinutes })
+    ? effectiveNow({ startMinutes: safeStart, endMinutes: safeEnd, nowMinutes: timelineMinutes })
     : safeStart;
-  const simulated = playback === true;
   const today = relation === 'today';
   const past = relation === 'past';
 
   return {
     relation,
+    timelineMinutes,
     scheduleFromMinutes: past && !simulated ? safeStart : (today || simulated ? cursor : safeStart),
     capacityFromMinutes: past && !simulated ? safeEnd : (today || simulated ? cursor : safeStart),
     elapsedThroughMinutes: past && !simulated ? safeEnd : (today || simulated ? cursor : safeStart),
@@ -285,9 +341,9 @@ function timelineDayState({
     showElapsed: past || today || simulated,
     showAvailableSlots: !past || simulated,
     showNow: (today || simulated)
-      && Number.isFinite(asNumber(nowMinutes))
-      && asNumber(nowMinutes) >= safeStart
-      && asNumber(nowMinutes) < safeEnd,
+      && Number.isFinite(timelineMinutes)
+      && timelineMinutes >= safeStart
+      && timelineMinutes < safeEnd,
   };
 }
 
@@ -431,13 +487,16 @@ function pastItemStatus({ event, nowMinutes, dailyPage = false } = {}) {
  * edge, so 05:00 can occupy the outer band without coloring an empty 17:00
  * cell. A pair that starts at the chart end is outside the visible timeline.
  */
-function spiralCellInnerHour({ startMinute, endMinutes } = {}) {
+function spiralCellInnerHour({ startMinute, endMinutes, windowStartMinutes = 300 } = {}) {
   const start = asNumber(startMinute);
   const end = asNumber(endMinutes);
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start >= end) return null;
+  const windowStart = asNumber(windowStartMinutes);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || !Number.isFinite(windowStart)
+      || start < 0 || start >= end) return null;
 
-  const pairedHour = Math.floor(start / 60) + 12;
-  return pairedHour * 60 < end ? pairedHour : null;
+  const pairedMinute = start + 12 * 60;
+  const profileIndex = 5 + Math.floor((pairedMinute - windowStart) / 60);
+  return pairedMinute < end ? profileIndex : null;
 }
 
 /**
@@ -830,7 +889,7 @@ const UI_COPY = {
       availableNow: 'Available now',
     },
     warnings: {
-      overnight: 'Overnight events display only through 24:00',
+      overnight: 'Continues into the next day',
       sameTime: 'Start and end times cannot be the same',
     },
   },
@@ -876,7 +935,7 @@ const UI_COPY = {
       availableNow: '当前可用',
     },
     warnings: {
-      overnight: '跨日事件仅显示至 24:00',
+      overnight: '连续到次日',
       sameTime: '开始时间与结束时间不能相同',
     },
   },
@@ -1384,6 +1443,7 @@ module.exports = {
   normalizeScheduleSettings,
   parseDurationToken,
   parseTimeRangeToken,
+  alignIntervalToWindow,
   resolveRendererSettings,
   hourlyGridSegments,
   pastTimelineSegments,

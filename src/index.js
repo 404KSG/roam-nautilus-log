@@ -73,23 +73,34 @@ function rendererClockEntries(taskUids = []) {
   }
 }
 
-function dailyPageBounds(pageTitle) {
+function dailyPageBounds(pageTitle, logicalEndMinutes = 1440) {
   try {
     const parsed = window.roamAlphaAPI?.util?.pageTitleToDate?.(pageTitle);
     const date = parsed instanceof Date ? parsed : new Date(parsed);
     if (!Number.isFinite(date.getTime())) return {};
     const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+    const endMinutes = Number(logicalEndMinutes);
+    const dayEnd = Number.isFinite(endMinutes) && endMinutes > 1440
+      ? new Date(dayStart.getTime() + endMinutes * 60_000)
+      : new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
     return { dayStartMs: dayStart.getTime(), dayEndMs: dayEnd.getTime() };
   } catch (_error) {
     return {};
   }
 }
 
-function getClockRenderContext(pageTitle, taskUids = []) {
+function getClockRenderContext(pageTitle, taskUids = [], logicalEndMinutes = null) {
+  const runtime = window.nautilusLogExtensionData?.settings || {};
+  const schedule = logCore.normalizeScheduleSettings({
+    startHour: runtime['workday-start'],
+    endHour: runtime['workday-end'],
+  });
+  const resolvedEnd = Number.isFinite(Number(logicalEndMinutes))
+    ? Number(logicalEndMinutes)
+    : schedule.endMinutes;
   return {
     entries: rendererClockEntries(taskUids),
-    ...dailyPageBounds(pageTitle),
+    ...dailyPageBounds(pageTitle, resolvedEnd),
   };
 }
 
@@ -254,9 +265,10 @@ function panelConfig(extensionAPI, language) {
       language: "语言 / Language",
       languageDesc: "选择设置面板显示的语言（切换后立即生效）。",
       start: "图表开始时间",
-      startDesc: "螺旋图从每天 5、6、7 或 8 点开始绘制。默认 5 点。",
+      startDesc: "选择计划日的开始整点（00:00–23:00）。默认 05:00。",
       end: "图表结束时间",
-      endDesc: "螺旋图绘制到每天 18–24 点。默认 21 点。",
+      endDesc: "选择结束整点；早于或等于开始时间表示次日。默认 21:00。",
+      nextDay: "次日",
       prefix: "组件前缀文本",
       prefixDesc: "在新建组件前默认插入的文本前缀（例如：#日程）。",
       length: "最大图例长度",
@@ -281,9 +293,10 @@ function panelConfig(extensionAPI, language) {
       language: "Language",
       languageDesc: "Select the settings language (takes effect immediately).",
       start: "Chart Start Time",
-      startDesc: "Draw the spiral from 5, 6, 7, or 8 AM. Defaults to 5 AM.",
+      startDesc: "Choose any whole-hour start from 00:00 to 23:00. Defaults to 05:00.",
       end: "Chart End Time",
-      endDesc: "Draw through 18:00–24:00. Defaults to 21:00 (9 PM).",
+      endDesc: "Choose the ending hour; an hour at or before Start means next day. Defaults to 21:00.",
+      nextDay: "next day",
       prefix: "Component Prefix",
       prefixDesc: "Text inserted before a new component (for example, #schedule).",
       length: "Legend Max Length",
@@ -319,6 +332,31 @@ function panelConfig(extensionAPI, language) {
     await extensionAPI.settings.set(key, next);
     publishRuntimeSettings(extensionAPI);
     await timingRuntime?.requestRefresh?.();
+  };
+
+  const hourLabel = (hour) => `${String(Number(hour)).padStart(2, "0")}:00`;
+  const parseHour = (value, fallback) => {
+    const parsed = Number.parseInt(String(value ?? ""), 10);
+    return Number.isInteger(parsed) ? parsed : fallback;
+  };
+  const scheduleSelection = logCore.normalizeScheduleSettings({
+    startHour: settingValue(extensionAPI, "workday-start"),
+    endHour: settingValue(extensionAPI, "workday-end"),
+  });
+  const { startHour, endHour } = scheduleSelection;
+  const startItems = logCore.START_HOURS.map(hourLabel);
+  const endLabel = (hour) => {
+    const label = hourLabel(hour);
+    return Number(hour) <= startHour && Number(hour) !== 24
+      ? `${label} · ${labels.nextDay}`
+      : label;
+  };
+  const endItems = logCore.END_HOURS.map(endLabel);
+  const updateScheduleHour = async (key, value, fallback) => {
+    await update(key, parseHour(value, fallback));
+    extensionAPI.settings.panel.create(
+      panelConfig(extensionAPI, extensionAPI.settings.get("language") || "en"),
+    );
   };
 
   const executionEnabled = extensionAPI.settings.get("actual-time-tracking") === true;
@@ -397,13 +435,23 @@ function panelConfig(extensionAPI, language) {
         id: "workday-start",
         name: labels.start,
         description: labels.startDesc,
-        action: { type: "select", default: settingValue(extensionAPI, "workday-start"), items: [5, 6, 7, 8], onChange: (value) => update("workday-start", value) },
+        action: {
+          type: "select",
+          default: hourLabel(startHour),
+          items: startItems,
+          onChange: (value) => updateScheduleHour("workday-start", value, 5),
+        },
       },
       {
         id: "workday-end",
         name: labels.end,
         description: labels.endDesc,
-        action: { type: "select", default: settingValue(extensionAPI, "workday-end"), items: [18, 19, 20, 21, 22, 23, 24], onChange: (value) => update("workday-end", value) },
+        action: {
+          type: "select",
+          default: endLabel(endHour),
+          items: endItems,
+          onChange: (value) => updateScheduleHour("workday-end", value, 21),
+        },
       },
       {
         id: "prefix-str",

@@ -38,7 +38,15 @@ function executionProjection(planSnapshot, currentNow, extensionAPI) {
     // here would apply the same progress a second time.
     duration: Number(task.plannedMinutes) || 0,
   }));
-  const fixedEvents = planSnapshot.fixedEvents || [];
+  const fixedEvents = (planSnapshot.fixedEvents || []).map((event) => ({
+    ...event,
+    ...logCore.alignIntervalToWindow({
+      start: event.start,
+      end: event.end,
+      windowStart: schedule.startMinutes,
+      windowEnd: schedule.endMinutes,
+    }),
+  }));
   return {
     ...logCore.calculateCapacity({
       startMinutes: schedule.startMinutes,

@@ -16,6 +16,8 @@ time that remains, and overload never disappears from view.
   remaining capacity, and work that cannot fit today.
 - **Flexible scheduling without a black box.** Events keep their time; unfinished
   tasks move forward in Roam block order.
+- **A day shaped around you.** Start at any whole hour and continue past midnight
+  when the plan belongs to a late or overnight schedule.
 - **Low-friction execution.** Work from estimates alone, run a standalone POMO,
   or optionally track tasks with compatible `LOGBOOK::` / `CLOCK:` records.
 - **A useful daily review.** Compare Planned and Actual time without leaving your

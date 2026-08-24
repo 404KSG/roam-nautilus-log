@@ -209,9 +209,7 @@ function parseTimeRangeMinutes(string) {
     start: parsed.start,
     end: parsed.end,
     text: parsed.token,
-    warning: parsed.warningCode === 'overnight'
-      ? 'Overnight events display only through 24:00'
-      : (parsed.warningCode === 'sameTime' ? 'Start and end times cannot be the same' : ''),
+    warning: parsed.warningCode === 'sameTime' ? 'Start and end times cannot be the same' : '',
     warningCode: parsed.warningCode,
   };
 }

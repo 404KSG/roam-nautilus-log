@@ -56,12 +56,20 @@
 (def font-size (if mobile? 12 14))
 
 (def snail-blueprint-outer-radiuses
-  (concat (repeat 5 0) [135 140 145 150] (range 145 65 -5)))
+  (concat (repeat 5 0) [135 140 145 150] (range 145 65 -5) [68 66 64 62]))
 
 (def snail-inner-radius (* 50 snail-scaler))
 
 (defn outer-radius-at [t]
   (* (nth snail-blueprint-outer-radiuses t) snail-scaler))
+
+(defn spiral-profile-index [minute settings]
+  (let [workday-start (:workday-start settings)
+        offset (max 0 (quot (- (int minute) workday-start) 60))]
+    (min (dec (count snail-blueprint-outer-radiuses)) (+ 5 offset))))
+
+(defn spiral-outer-radius [minute settings]
+  (outer-radius-at (spiral-profile-index minute settings)))
 
 (def len-central-legend 16) ;; length of the central legend description (page name or date)
 
@@ -305,20 +313,21 @@
         (js->clj (.call function nil (clj->js value)) :keywordize-keys true)))
     (catch :default _e nil)))
 
-(defn clock-render-context [page-title task-uids]
+(defn clock-render-context [page-title task-uids logical-end-minutes]
   "Reads one cached CLOCK snapshot for the displayed daily page. The entry
    bridge owns graph access so rendering multiple tasks does not repeat the
    global LOGBOOK query."
   (try
     (if-let [reader (some-> js/window .-nautilusLogExtensionData .-getClockRenderContext)]
-      (js->clj (.call reader nil page-title (clj->js task-uids)) :keywordize-keys true)
+      (js->clj (.call reader nil page-title (clj->js task-uids) logical-end-minutes) :keywordize-keys true)
       {:entries []})
     (catch :default _e {:entries []})))
 
 (defn spiral-cell-inner-radius [start-minute settings fallback-inner-radius]
   (let [paired-hour (log-core-call "spiralCellInnerHour"
                                     {:startMinute start-minute
-                                     :endMinutes (:workday-end settings)})]
+                                     :endMinutes (:workday-end settings)
+                                     :windowStartMinutes (:workday-start settings)})]
     (if (number? paired-hour)
       (max fallback-inner-radius (outer-radius-at paired-hour))
       fallback-inner-radius)))
@@ -379,7 +388,7 @@
       first))
 
 (defn minutes->time [minutes]
-  (let [h (int (/ minutes 60))
+  (let [h (mod (int (/ minutes 60)) 24)
         m (mod minutes 60)]
     (str (if (< h 10) (str "0" h) h) ":" (if (< m 10) (str "0" m) m))))
 
@@ -543,7 +552,10 @@
     [(+ m (* 60 h)) (or am? pm?)]))
 
 (defn parse-time-range [s settings]
-  (if-let [parsed (log-core-call "parseTimeRangeToken" {:text s})]
+  (if-let [parsed (log-core-call "parseTimeRangeToken"
+                                 {:text s
+                                  :windowStartMinutes (:workday-start settings)
+                                  :windowEndMinutes (:workday-end settings)})]
     (let [warnings (:warnings (log-core-call "uiCopy" (:language settings)))
           warning (case (:warningCode parsed)
                     "overnight" (:overnight warnings)
@@ -789,7 +801,7 @@
                       (pos-sweep-angle-mid start-radians end-radians))
         inner-radius (+ inner-radius (shake-if shaky))
         line-outer-radius (if (and task-start-min task-end-min)
-                            (+ (outer-radius-at (mod (quot (int (/ (+ task-start-min task-end-min) 2)) 60) (count snail-blueprint-outer-radiuses))) (shake-if shaky))
+                            (+ (spiral-outer-radius (/ (+ task-start-min task-end-min) 2) settings) (shake-if shaky))
                             (+ outer-radius (shake-if shaky)))
         outer-radius (+ outer-radius (shake-if shaky))
         [center-x center-y] [(:center-x center) (:center-y center)]
@@ -900,7 +912,7 @@
                     (min->angle start)
                     (min->angle end)
                     (spiral-cell-inner-radius start settings inner-radius)
-                    (outer-radius-at (mod (quot start 60) (count snail-blueprint-outer-radiuses)))
+                    (spiral-outer-radius start settings)
                     center)}])]))
 
 (defn past-unplanned-overlay-component [occupied-events inner-radius center settings elapsed-through-minutes pattern-id]
@@ -926,7 +938,7 @@
                     (min->angle start)
                     (min->angle end)
                     (spiral-cell-inner-radius start settings inner-radius)
-                    (outer-radius-at (mod (quot start 60) (count snail-blueprint-outer-radiuses)))
+                    (spiral-outer-radius start settings)
                     center)
                :fill (str "url(#" pattern-id ")")}])]))
 
@@ -942,7 +954,7 @@
      (mapcat (fn [{:keys [start end label]}]
                [[slice
                  [(min->angle start) (min->angle end) (spiral-cell-inner-radius start settings inner-radius)
-                  (outer-radius-at (mod (quot start 60) (count snail-blueprint-outer-radiuses)))
+                  (spiral-outer-radius start settings)
                  center settings]
                  :border-color color
                  :past? (and show-elapsed? (<= end elapsed-through-minutes))
@@ -951,7 +963,7 @@
      (when (= workday-end 1440)
        (let [angle (min->angle workday-end)
              radians (angle->rad angle)
-             radius (+ (outer-radius-at (mod 23 (count snail-blueprint-outer-radiuses))) 12)
+             radius (+ (spiral-outer-radius (- workday-end 60) settings) 12)
              x (+ (:center-x center) (* (cos radians) radius))
              y (- (:center-y center) (* (sin radians) radius))]
          [:text {:class "nautilus-log-midnight-label"
@@ -979,8 +991,8 @@
                      :font-size (str (* font-size 0.82)))
         center-now-label])]))
 
-(defn calculate-slice-params [event index elapsed-page? interactive? timeline-minute]
-  (let [outer-radius (outer-radius-at (mod (quot (int (:start event)) 60) (count snail-blueprint-outer-radiuses)))
+(defn calculate-slice-params [event index elapsed-page? interactive? timeline-minute settings]
+  (let [outer-radius (spiral-outer-radius (:start event) settings)
         start-angle (min->angle (:start event))
         end-angle (min->angle (:end event))
         todo? (:todo event)
@@ -1023,7 +1035,7 @@
     (range first-bound end-min 60)))
 
 (defn event-slice-component [event index legend-rect inner-radius elapsed-page? interactive? timeline-minute center settings now-time-atom conflict? hover-enabled? hover-info-state copy]
-  (let [{:keys [bg-color done click-to-progress meeting? expired? past-status current?]} (calculate-slice-params event index elapsed-page? interactive? timeline-minute)
+  (let [{:keys [bg-color done click-to-progress meeting? expired? past-status current?]} (calculate-slice-params event index elapsed-page? interactive? timeline-minute settings)
         legend-color (cond
                        (= "completed" past-status) "var(--nautilus-log-completed)"
                        (and meeting? (nil? (:bg-color event))) "var(--nautilus-log-event)"
@@ -1071,7 +1083,7 @@
              (let [start-angle (min->angle s)
                    end-angle (min->angle e)
                    seg-inner-radius (spiral-cell-inner-radius s settings inner-radius)
-                   seg-outer-radius (outer-radius-at (mod (quot (int s) 60) (count snail-blueprint-outer-radiuses)))]
+                   seg-outer-radius (spiral-outer-radius s settings)]
                [slice
                 [start-angle end-angle seg-inner-radius seg-outer-radius center settings]
                 :bg-color bg-color
@@ -1112,10 +1124,10 @@
                          (angle->rad (min->angle (:start event)))
                          (angle->rad (min->angle (:end event))))
             mid-minute (/ (+ (:start event) (:end event)) 2)
-            source-radius (outer-radius-at (mod (quot (int mid-minute) 60) (count snail-blueprint-outer-radiuses)))
+            source-radius (spiral-outer-radius mid-minute settings)
             anchor-y (- (:center-y center) (* (sin mid-radians) (+ source-radius 5)))
             text (:description event)
-            radius (+ (nth snail-blueprint-outer-radiuses (mod (quot (int (:start event)) 60) (count snail-blueprint-outer-radiuses)))
+            radius (+ (nth snail-blueprint-outer-radiuses (spiral-profile-index (:start event) settings))
                       (* 18 (or (get track-map (:uid event)) 0)))
             new-rect (get-legend-rect rects text mid-radians radius center settings (:start event) anchor-y)]
         (println?debug "RADIUS INSIDE EVENTS-SLICES: " radius)              
@@ -1125,29 +1137,51 @@
                                             (contains? conflict-uids (:uid event)) hover-enabled? hover-info-state copy))))
       [all-slice-components rects])))))
 
+(defn spiral-grid-bounds [center settings]
+  (let [segments (or (log-core-call "hourlyGridSegments"
+                                    {:startMinutes (:workday-start settings)
+                                     :endMinutes (:workday-end settings)})
+                     [])
+        points (mapcat (fn [{:keys [start end]}]
+                         (let [radius (spiral-outer-radius start settings)]
+                           [(calculate-coordinates (min->angle start) radius center)
+                            (calculate-coordinates (min->angle end) radius center)]))
+                       segments)]
+    (if (seq points)
+      {:left (apply min (map first points))
+       :right (apply max (map first points))
+       :top (apply min (map second points))
+       :bottom (apply max (map second points))}
+      (let [radius (apply max (map outer-radius-at (range (count snail-blueprint-outer-radiuses))))]
+        {:left (- (:center-x center) radius)
+         :right (+ (:center-x center) radius)
+         :top (- (:center-y center) radius)
+         :bottom (+ (:center-y center) radius)}))))
+
 (defn events->new-dimensions
   "Returns a new center and width so that events can be aligned"
   [events center settings]
   (let [center-x (:center-x center)
         center-y (:center-y center)
         visible-events (vec (filter #(not= true (:freetime %)) events))
-        track-map (label-track-map visible-events)]
+        track-map (label-track-map visible-events)
+        grid-bounds (spiral-grid-bounds center settings)]
     (loop [i 0
            events visible-events
            rects []
-           left-min (- center-x (outer-radius-at 9))
-           right-max (+ center-x (outer-radius-at 14))
-           top-min (- center-y (outer-radius-at 11))
-           bottom-max (+ center-y (outer-radius-at 17))]
+           left-min (:left grid-bounds)
+           right-max (:right grid-bounds)
+           top-min (:top grid-bounds)
+           bottom-max (:bottom grid-bounds)]
       (if-let [event (first events)]
         (let [mid-radians (pos-sweep-angle-mid
                            (angle->rad (min->angle (:start event)))
                            (angle->rad (min->angle (:end event))))
               mid-minute (/ (+ (:start event) (:end event)) 2)
-              source-radius (outer-radius-at (mod (quot (int mid-minute) 60) (count snail-blueprint-outer-radiuses)))
+              source-radius (spiral-outer-radius mid-minute settings)
               anchor-y (- (:center-y center) (* (sin mid-radians) (+ source-radius 5)))
               text (:description event)
-              radius (+ (nth snail-blueprint-outer-radiuses (mod (quot (int (:start event)) 60) (count snail-blueprint-outer-radiuses)))
+              radius (+ (nth snail-blueprint-outer-radiuses (spiral-profile-index (:start event) settings))
                         (* 18 (or (get track-map (:uid event)) 0)))
               new-rect (get-legend-rect rects text mid-radians radius center settings (:start event) anchor-y)]
           (recur (inc i) (rest events) (conj rects new-rect) (min left-min (:x new-rect)) (max right-max (+ (:x new-rect) (:w new-rect))) (min top-min (:y new-rect)) (max bottom-max (+ (:y new-rect) (:h new-rect)))))
@@ -1204,12 +1238,12 @@
             :aria-label (str slot-label ". " time-range ". " duration)}
            (timeline-tooltip-geometry (:start slot) (:end slot) center))))
 
-(defn available-slot-component [events daily-page? playback? now-time-atom inner-radius center settings hover-info-state copy]
+(defn available-slot-component [events daily-page? playback? timeline-minute inner-radius center settings hover-info-state copy]
   (let [slots (or (log-core-call "availableSlotGroups"
                                  {:events events
                                   :startMinutes (:workday-start settings)
                                   :endMinutes (:workday-end settings)
-                                  :nowMinutes @now-time-atom
+                                  :nowMinutes timeline-minute
                                   :clampToNow (or daily-page? playback?)})
                   [])]
     [:g {:class "nautilus-log-available-slots"}
@@ -1233,7 +1267,7 @@
                       (min->angle start)
                       (min->angle end)
                       (spiral-cell-inner-radius start settings inner-radius)
-                      (outer-radius-at (mod (quot start 60) (count snail-blueprint-outer-radiuses)))
+                      (spiral-outer-radius start settings)
                       center)
                   :vector-effect "non-scaling-stroke"}])])]))
 
@@ -1277,7 +1311,7 @@
       all-slice-components         ;; zobrazení všech událostí
       [snail-blueprint-component snail-template-color snail-inner-radius center settings elapsed-page? timeline-minute]
       (when (and hover-enabled? (:showAvailableSlots timeline-state))
-        [available-slot-component events interactive? @playback-state-atom now-time-atom snail-inner-radius center settings hover-info-state copy])
+        [available-slot-component events interactive? @playback-state-atom timeline-minute snail-inner-radius center settings hover-info-state copy])
       (when now-visible?
         (let [visible-now timeline-minute
               now-angle (min->angle visible-now)
@@ -1490,7 +1524,7 @@
                   :collapse "Collapse Nautilus Log" :expand "Expand Nautilus Log"}
        :panels {:overview "Overview" :overflow "Unscheduled today" :warnings "Schedule warnings" :schedule "Schedule" :item "item" :items "items"}
        :tooltips {:task "Task" :event "Event" :available "Available slot" :availableNow "Available now"}
-       :warnings {:overnight "Overnight events display only through 24:00"
+       :warnings {:overnight "Continues into the next day"
                   :sameTime "Start and end times cannot be the same"}}))
 
 (defn capacity-metrics [capacity settings]
@@ -1613,7 +1647,7 @@
 
 (defn localized-warning [warning copy]
   (case warning
-    "跨日事件仅显示至 24:00" (get-in copy [:warnings :overnight])
+    "连续到次日" (get-in copy [:warnings :overnight])
     "开始时间与结束时间不能相同" (get-in copy [:warnings :sameTime])
     warning))
 
@@ -1746,7 +1780,7 @@
                                                         (filter #(not= "" (:block/string %)))
                                                         (sort-by :block/order))
                                      mapped (mapv #(hash-map :s (str-with-resolved-block-refs %) :uid (:block/uid %)) children-list)
-                                     clock-context (clock-render-context page-title-val (mapv :uid mapped))
+                                     clock-context (clock-render-context page-title-val (mapv :uid mapped) (:workday-end settings))
                                      parsed (mapv #(parse-row-params % settings clock-context) mapped)
                                      filtered (filterv #(not= "" (:description %)) parsed)]
                                  (let [dones (filterv #(or (:done-at %) (and (:meeting %) (:done %))) filtered)
@@ -1780,6 +1814,7 @@
                                                     :nowMinutes @now-time-atom
                                                     :playback @playback-state-atom})
                                    {:relation (if @daily-page-atom? "today" "other")
+                                    :timelineMinutes @now-time-atom
                                     :scheduleFromMinutes (if @daily-page-atom? @now-time-atom (:workday-start settings))
                                     :capacityFromMinutes (if @daily-page-atom? @now-time-atom (:workday-start settings))
                                     :elapsedThroughMinutes @now-time-atom

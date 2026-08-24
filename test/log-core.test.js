@@ -29,6 +29,7 @@ const {
   isCompactChartWidth,
   parseDurationToken,
   parseTimeRangeToken,
+  alignIntervalToWindow,
   timelineDayState,
 } = require('../src/log-core');
 
@@ -54,13 +55,13 @@ test('shared syntax accepts every documented task duration form', () => {
   });
 });
 
-test('shared time-range syntax returns semantic warning codes', () => {
+test('shared time-range syntax keeps overnight events continuous', () => {
   assert.deepEqual(parseTimeRangeToken({ text: '23:00-01:00 Late' }), {
     start: 1380,
-    end: 1440,
+    end: 1500,
     token: '23:00-01:00',
     cleanedText: 'Late',
-    warningCode: 'overnight',
+    warningCode: '',
   });
   assert.deepEqual(parseTimeRangeToken({ text: '09:00-09:00 Invalid' }), {
     start: 540,
@@ -69,6 +70,27 @@ test('shared time-range syntax returns semantic warning codes', () => {
     cleanedText: 'Invalid',
     warningCode: 'sameTime',
   });
+});
+
+test('early clock events align to the next-day portion of an overnight window', () => {
+  assert.deepEqual(
+    alignIntervalToWindow({ start: 30, end: 90, windowStart: 1260, windowEnd: 1560 }),
+    { start: 1470, end: 1530 },
+  );
+  assert.deepEqual(
+    parseTimeRangeToken({
+      text: '00:30-01:30 Deep work',
+      windowStartMinutes: 1260,
+      windowEndMinutes: 1560,
+    }),
+    {
+      start: 1470,
+      end: 1530,
+      token: '00:30-01:30',
+      cleanedText: 'Deep work',
+      warningCode: '',
+    },
+  );
 });
 
 test('a past Daily Note is fully elapsed and exposes no available planning slots', () => {
@@ -82,6 +104,7 @@ test('a past Daily Note is fully elapsed and exposes no available planning slots
     }),
     {
       relation: 'past',
+      timelineMinutes: 1941,
       scheduleFromMinutes: 300,
       capacityFromMinutes: 1260,
       elapsedThroughMinutes: 1260,
@@ -104,6 +127,7 @@ test('today keeps planning, capacity, elapsed shading, and interaction on the sa
     }),
     {
       relation: 'today',
+      timelineMinutes: 501,
       scheduleFromMinutes: 501,
       capacityFromMinutes: 501,
       elapsedThroughMinutes: 501,
@@ -115,10 +139,52 @@ test('today keeps planning, capacity, elapsed shading, and interaction on the sa
   );
 });
 
+test('the owning Daily Note stays active during its next-day carryover window', () => {
+  assert.deepEqual(
+    timelineDayState({
+      displayDate: 'August 23rd, 2026',
+      currentDate: new Date(2026, 7, 24, 1, 15).getTime(),
+      startMinutes: 1260,
+      endMinutes: 1560,
+      nowMinutes: 75,
+    }),
+    {
+      relation: 'today',
+      timelineMinutes: 1515,
+      scheduleFromMinutes: 1515,
+      capacityFromMinutes: 1515,
+      elapsedThroughMinutes: 1515,
+      interactive: true,
+      showElapsed: true,
+      showAvailableSlots: true,
+      showNow: true,
+    },
+  );
+
+  assert.equal(
+    timelineDayState({
+      displayDate: 'August 23rd, 2026',
+      currentDate: new Date(2026, 7, 24, 2, 0).getTime(),
+      startMinutes: 1260,
+      endMinutes: 1560,
+      nowMinutes: 120,
+    }).relation,
+    'past',
+  );
+});
+
 test('the chart background uses one grid sector per hour', () => {
   assert.deepEqual(hourlyGridSegments({ startMinutes: 300, endMinutes: 420 }), [
     { start: 300, end: 360, label: '5' },
     { start: 360, end: 420, label: '6' },
+  ]);
+});
+
+test('the chart background wraps clock labels after midnight', () => {
+  assert.deepEqual(hourlyGridSegments({ startMinutes: 1380, endMinutes: 1560 }), [
+    { start: 1380, end: 1440, label: '23' },
+    { start: 1440, end: 1500, label: '0' },
+    { start: 1500, end: 1560, label: '1' },
   ]);
 });
 
@@ -357,6 +423,10 @@ test('paired clock hours occupy separate spiral cells', () => {
   assert.equal(spiralCellInnerHour({ startMinute: 1020, endMinutes: 1440 }), null);
   assert.equal(spiralCellInnerHour({ startMinute: 540, endMinutes: 1260 }), null);
   assert.equal(spiralCellInnerHour({ startMinute: 300, endMinutes: 1020 }), null);
+  assert.equal(
+    spiralCellInnerHour({ startMinute: 1500, endMinutes: 2700, windowStartMinutes: 1260 }),
+    21,
+  );
 });
 
 test('fixed event conflicts use half-open overlap boundaries', () => {
@@ -635,12 +705,24 @@ test('normalizes selectable start/end hours and keeps 24:00 as minute 1440', () 
     { startHour: 5, endHour: 24, startMinutes: 300, endMinutes: 1440 },
   );
   assert.deepEqual(
-    normalizeScheduleSettings({ startHour: 3, endHour: 17 }),
-    { startHour: 5, endHour: 21, startMinutes: 300, endMinutes: 1260 },
+    normalizeScheduleSettings({ startHour: 9, endHour: 18 }),
+    { startHour: 9, endHour: 18, startMinutes: 540, endMinutes: 1080 },
   );
   assert.deepEqual(
-    normalizeScheduleSettings({ startHour: '8', endHour: '18' }),
-    { startHour: 8, endHour: 18, startMinutes: 480, endMinutes: 1080 },
+    normalizeScheduleSettings({ startHour: '21', endHour: '2' }),
+    { startHour: 21, endHour: 2, startMinutes: 1260, endMinutes: 1560 },
+  );
+  assert.deepEqual(
+    normalizeScheduleSettings({ startHour: 0, endHour: 24 }),
+    { startHour: 0, endHour: 24, startMinutes: 0, endMinutes: 1440 },
+  );
+  assert.deepEqual(
+    normalizeScheduleSettings({ startHour: 23, endHour: 23 }),
+    { startHour: 23, endHour: 23, startMinutes: 1380, endMinutes: 2820 },
+  );
+  assert.deepEqual(
+    normalizeScheduleSettings({ startHour: -1, endHour: 25 }),
+    { startHour: 5, endHour: 21, startMinutes: 300, endMinutes: 1260 },
   );
 });
 
