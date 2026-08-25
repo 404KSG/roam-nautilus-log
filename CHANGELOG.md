@@ -4,6 +4,9 @@
 
 ### Added
 
+- Option/Alt-clicking the Nautilus topbar trigger now locates the Primary Plan
+  directly, while a normal click continues to open the Execution panel without
+  delay.
 - Chart windows may now start at any whole hour from 00:00–23:00 and end at
   01:00–24:00; an end at or before Start is treated and labelled as next day.
 - Overnight events, capacity, elapsed time, hover slots, and the current-time

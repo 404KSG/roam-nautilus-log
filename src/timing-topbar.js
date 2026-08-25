@@ -646,6 +646,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
   const renderTrigger = () => {
     if (!trigger) return;
     const text = ui();
+    trigger.setAttribute('aria-description', text.actions.openPanelHint);
     const focused = state.activeWork?.focused;
     const standalone = !focused && state.standalonePomodoro;
     if (standalone) {
@@ -670,7 +671,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       ));
       trigger.querySelector('.nautilus-log-timing__elapsed').textContent = elapsed;
       trigger.querySelector('.nautilus-log-timing__pomodoro-label').textContent = 'POMO';
-      updateTriggerCapacity({ ariaLabel: `${elapsed}, POMO`, title: text.actions.openPanel });
+      updateTriggerCapacity({ ariaLabel: `${elapsed}, POMO`, title: text.actions.openPanelHint });
       if (pomoCloseButton) {
         pomoCloseButton.hidden = false;
         pomoCloseButton.title = text.actions.stopPomodoro;
@@ -684,7 +685,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
         triggerMode = 'idle';
       }
       trigger.classList.remove('is-active', 'is-overdue', 'is-forgotten', 'is-pomodoro');
-      updateTriggerCapacity({ ariaLabel: text.actions.openPanel, title: 'Nautilus Log' });
+      updateTriggerCapacity({ ariaLabel: text.actions.openPanel, title: `Nautilus Log · ${text.actions.openPanelHint}` });
       if (pomoCloseButton) pomoCloseButton.hidden = true;
     } else {
       const elapsed = timingCore.formatElapsed(state.now - focused.start);
@@ -714,7 +715,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       trigger.querySelector('.nautilus-log-timing__threads').textContent = `${count} ${count === 1 ? text.trigger.thread : text.trigger.threads}`;
       updateTriggerCapacity({
         ariaLabel: `${forgotten ? `${text.trigger.check}, ` : ''}${elapsed}, ${count} ${count === 1 ? text.trigger.thread : text.trigger.threads}`,
-        title: `${forgotten ? `${text.trigger.check} · ` : ''}${focused.title}`,
+        title: `${forgotten ? `${text.trigger.check} · ` : ''}${focused.title} · ${text.actions.openPanelHint}`,
       });
       if (pomoCloseButton) pomoCloseButton.hidden = true;
     }
@@ -746,6 +747,13 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       trigger.setAttribute('aria-controls', POPOVER_ID);
       trigger.setAttribute('aria-expanded', 'false');
       trigger.addEventListener('click', (event) => {
+        if (event.altKey) {
+          event.preventDefault();
+          event.stopPropagation();
+          closePopover();
+          runAction(() => runtime.locate());
+          return;
+        }
         if (event.target.closest?.('.nautilus-log-timing__capacity-token')) view = 'plan';
         openPopover();
       });

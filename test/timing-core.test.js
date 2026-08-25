@@ -464,8 +464,10 @@ test('execution surface copy follows the extension language', () => {
   assert.equal(timing.executionCopy('en').tabs.plan, 'Plan');
   assert.equal(timing.executionCopy('en').trigger.thread, 'thread');
   assert.equal(timing.executionCopy('en').trigger.threads, 'threads');
+  assert.equal(timing.executionCopy('en').actions.openPanelHint, 'Open panel · Option/Alt-click to locate');
   assert.equal(timing.executionCopy('zh').tabs.plan, '计划');
   assert.equal(timing.executionCopy('zh').capacity.available, '可安排');
+  assert.equal(timing.executionCopy('zh').actions.openPanelHint, '打开面板 · Option/Alt + 单击定位');
   assert.equal(timing.executionCopy('en').empty.noActive, 'No active work. Open Plan to start a task.');
 });
 

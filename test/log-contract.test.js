@@ -295,6 +295,20 @@ test('Actual Time Tracking is opt-in and owns no disabled topbar interaction', (
   assert.match(timingRuntime, /deleteCurrentClock/);
 });
 
+test('the topbar trigger preserves normal click and locates the Primary Plan on Option or Alt click', () => {
+  const listenerStart = timingTopbar.indexOf("trigger.addEventListener('click'");
+  const listenerEnd = timingTopbar.indexOf('pomoCloseButton =', listenerStart);
+  const listener = timingTopbar.slice(listenerStart, listenerEnd);
+
+  assert.ok(listenerStart >= 0 && listenerEnd > listenerStart);
+  assert.match(listener, /if \(event\.altKey\)/);
+  assert.match(listener, /closePopover\(\)/);
+  assert.match(listener, /runtime\.locate\(\)/);
+  assert.match(listener, /return;/);
+  assert.match(listener, /openPopover\(\)/);
+  assert.ok(listener.indexOf('event.altKey') < listener.indexOf('openPopover()'));
+});
+
 test('execution popover paints cached state before refreshing and does not rebuild on every tick', () => {
   const openStart = timingTopbar.indexOf('const openPopover');
   const openEnd = timingTopbar.indexOf('const renderTrigger', openStart);
