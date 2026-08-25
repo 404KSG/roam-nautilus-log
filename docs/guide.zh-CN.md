@@ -75,6 +75,9 @@
 开启后，当天 Daily Note 中的第一个 Nautilus Log 会成为顶栏面板使用的 **Primary
 Plan**。
 
+单击 Nautilus 顶栏按钮会打开面板；Option/Alt + 单击会在主界面定位 Primary Plan；
+Shift + 单击则会在 Roam 右侧边栏打开同一个 block，已存在时只将其移到顶部并展开。
+
 | 视图 | 用途 |
 | --- | --- |
 | Timing | 当前 Timing Line 与最近结束的任务 |

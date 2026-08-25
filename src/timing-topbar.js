@@ -747,6 +747,13 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       trigger.setAttribute('aria-controls', POPOVER_ID);
       trigger.setAttribute('aria-expanded', 'false');
       trigger.addEventListener('click', (event) => {
+        if (event.shiftKey) {
+          event.preventDefault();
+          event.stopPropagation();
+          closePopover();
+          runAction(() => runtime.locate({ sidebar: true }));
+          return;
+        }
         if (event.altKey) {
           event.preventDefault();
           event.stopPropagation();

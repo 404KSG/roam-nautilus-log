@@ -545,6 +545,68 @@ test('runtime serializes close-before-switch and close-before-complete', async (
   runtime.destroy();
 });
 
+test('Primary Plan location opens one deduplicated right-sidebar window without rereading the graph', async (t) => {
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#locate-sidebar-${Date.now()}`;
+  const extension = await import(moduleUrl);
+  const trace = [];
+  const { roam } = graphMock({ trace });
+  const sidebarWindows = [];
+  const settings = new Map([
+    ['todo-duration', 15],
+    ['workday-start', 5],
+    ['workday-end', 21],
+    ['timing-line-sidebar', false],
+    ['recent-retention-minutes', 45],
+  ]);
+  global.window = {
+    roamAlphaAPI: {
+      ...roam,
+      ui: {
+        rightSidebar: {
+          open: () => trace.push('sidebar:open'),
+          getWindows: () => sidebarWindows.slice(),
+          addWindow: async ({ window }) => {
+            trace.push(`sidebar:addWindow:${window?.['block-uid'] || ''}`);
+            sidebarWindows.push(window);
+          },
+          setWindowOrder: async ({ window }) => trace.push(`sidebar:front:${window?.['block-uid'] || ''}`),
+          expandWindow: async ({ window }) => trace.push(`sidebar:expand:${window?.['block-uid'] || ''}`),
+        },
+      },
+    },
+    setInterval: () => 99,
+    clearInterval: () => {},
+    setTimeout,
+    clearTimeout,
+  };
+  t.after(() => { delete global.window; });
+
+  const extensionAPI = {
+    settings: {
+      get: (key) => settings.get(key),
+      set: async (key, value) => settings.set(key, value),
+    },
+  };
+  const runtime = extension.createTimingRuntime({
+    extensionAPI,
+    now: () => new Date(2026, 7, 22, 10, 0),
+  });
+  await runtime.initialize();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  trace.length = 0;
+
+  await runtime.locate({ sidebar: true });
+  await runtime.locate({ sidebar: true });
+
+  assert.deepEqual(sidebarWindows, [{ type: 'block', 'block-uid': 'plan', order: 0 }]);
+  assert.equal(trace.filter((entry) => entry === 'sidebar:addWindow:plan').length, 1);
+  assert.equal(trace.includes('sidebar:front:plan'), true);
+  assert.equal(trace.includes('sidebar:expand:plan'), true);
+  assert.equal(trace.includes('query:plan'), false);
+  runtime.destroy();
+});
+
 test('Clock Out uses the confirmed Timing snapshot and cancels a competing idle refresh', async (t) => {
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#clock-out-fast-${Date.now()}`;

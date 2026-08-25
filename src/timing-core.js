@@ -26,7 +26,7 @@ const EXECUTION_COPY = Object.freeze({
     actions: {
       clockIn: 'Clock In', clockOut: 'Clock Out', complete: 'Complete task', deleteClock: 'Delete current CLOCK',
       confirmDelete: 'Click again to delete current CLOCK', openPanel: 'Open Nautilus Log execution panel',
-      openPanelHint: 'Open panel · Option/Alt-click to locate',
+      openPanelHint: 'Open panel · Option/Alt-click main · Shift-click sidebar',
       startPomodoro: 'Start standalone POMO', stopPomodoro: 'Stop standalone POMO',
     },
     capacity: { label: 'Today capacity', available: 'Available', remaining: 'Remaining', overload: 'Overload', noSlot: 'No fitting slot' },
@@ -50,7 +50,7 @@ const EXECUTION_COPY = Object.freeze({
     actions: {
       clockIn: '开始计时', clockOut: '结束计时', complete: '完成任务', deleteClock: '删除当前 CLOCK',
       confirmDelete: '再次点击以删除当前 CLOCK', openPanel: '打开 Nautilus Log 执行面板',
-      openPanelHint: '打开面板 · Option/Alt + 单击定位',
+      openPanelHint: '打开面板 · Option/Alt + 单击主界面 · Shift + 单击侧边栏',
       startPomodoro: '开始独立番茄钟', stopPomodoro: '结束独立番茄钟',
     },
     capacity: { label: '今日容量', available: '可安排', remaining: '余量', overload: '超载', noSlot: '没有连续空档' },

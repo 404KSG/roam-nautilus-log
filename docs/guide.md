@@ -81,6 +81,10 @@ CLOCK writer while it is off.
 When enabled, the first Nautilus Log on today's Daily Note becomes the **Primary
 Plan** used by the topbar panel.
 
+Click the Nautilus topbar trigger to open the panel, Option/Alt-click it to locate
+the Primary Plan in the main window, or Shift-click it to open or bring the same
+block to the top of Roam's right sidebar.
+
 | View | Purpose |
 | --- | --- |
 | Timing | Current Timing Line and recently closed tasks |

@@ -571,7 +571,7 @@ export function createTimingRuntime({
     deleteCurrentClock,
     startStandalonePomodoro,
     stopStandalonePomodoro,
-    locate: () => openPrimaryPlan(snapshot.planSnapshot?.plan?.uid),
+    locate: (options = {}) => openPrimaryPlan(snapshot.planSnapshot?.plan?.uid, options),
     openTask: (taskUid, { sidebar = false } = {}) => (
       sidebar ? openTaskInRightSidebar(taskUid) : openTaskInMainWindow(taskUid)
     ),

@@ -397,8 +397,9 @@ export async function completeTask(taskUid) {
   return true;
 }
 
-export async function openPrimaryPlan(planUid) {
+export async function openPrimaryPlan(planUid, { sidebar = false } = {}) {
   if (!planUid) throw new Error('No Primary Nautilus Log was found today.');
+  if (sidebar) return openTaskInRightSidebar(planUid);
   const openBlock = api()?.ui?.mainWindow?.openBlock;
   if (typeof openBlock !== 'function') throw new Error('Roam main-window navigation is unavailable.');
   await openBlock({ block: { uid: planUid } });
