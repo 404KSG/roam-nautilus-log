@@ -39,6 +39,9 @@
   Layer immediately. One shared graph-native watcher coordinates parent
   membership, direct-child edits, and referenced source edits for every render
   of the plan, without adding a high-frequency poller.
+- The spiral now hydrates referenced task content through the same authoritative
+  UID resolver as the Execution Layer when Roam omits `block/refs` strings from
+  a nested Pull Watch snapshot, keeping planned totals and percent left aligned.
 
 ## 1.0.2 — 2026-08-23
 

@@ -7,7 +7,7 @@ import {
 import * as logCore from "./log-core";
 import * as timingCore from "./timing-core";
 import { createTimingCommands } from "./timing-commands";
-import { readAllEntries, readEntriesForTaskUids } from "./timing-roam";
+import { readAllEntries, readBlockString, readEntriesForTaskUids } from "./timing-roam";
 import { createTimingRuntime } from "./timing-runtime";
 import { createTimingTopbar } from "./timing-topbar";
 import { createPlanWatchBridge } from "./plan-watch";
@@ -105,6 +105,28 @@ function getClockRenderContext(pageTitle, taskUids = [], logicalEndMinutes = nul
     entries: rendererClockEntries(taskUids),
     ...dailyPageBounds(pageTitle, resolvedEnd),
   };
+}
+
+/**
+ * Resolve one chart row through the same authoritative task-instance core as
+ * the execution panel. Roam does not always include a referenced block's
+ * string in a nested Pull Watch snapshot, so the renderer must be able to
+ * hydrate that source by UID instead of silently dropping the row.
+ */
+function resolveRendererTaskInstance(payload = {}, readString = readBlockString) {
+  const safeReadString = (uid) => {
+    try {
+      const value = typeof readString === "function" ? readString(uid) : "";
+      return typeof value === "string" ? value : "";
+    } catch (error) {
+      console.debug("[Nautilus Log] Referenced task source unavailable", error);
+      return "";
+    }
+  };
+  return timingCore.resolveTaskInstance({
+    ...(payload && typeof payload === "object" ? payload : {}),
+    readString: safeReadString,
+  });
 }
 
 function settingValue(extensionAPI, key) {
@@ -515,6 +537,7 @@ async function onload({ extensionAPI }) {
     shouldSuppressRenderContext,
     isRightSidebarRenderContext,
     getClockRenderContext,
+    resolveTaskInstance: resolveRendererTaskInstance,
     readPlan: planWatchBridge.read,
     watchPlan: planWatchBridge.subscribe,
   };
@@ -574,6 +597,7 @@ export {
   createTimingRuntime,
   createTimingCommands,
   createPlanWatchBridge,
+  resolveRendererTaskInstance,
   generateTemplateString,
   generateUpdatedRenderString,
   panelConfig,

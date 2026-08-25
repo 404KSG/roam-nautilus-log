@@ -121,3 +121,32 @@ test('direct child edits invalidate the shared plan even when the parent members
   stop();
   bridge.destroy();
 });
+
+test('renderer task resolution hydrates a referenced source when the plan snapshot omits refs', async () => {
+  const extension = await loadExtension('renderer-task-source-fallback');
+  const source = '{{[[DONE]]}} Reusable report 15m d10:46';
+
+  const task = extension.resolveRendererTaskInstance({
+    uid: 'daily-wrapper',
+    localString: '{{[[TODO]]}} ((source-task))',
+    references: [],
+    fallbackMinutes: 10,
+  }, (uid) => (uid === 'source-task' ? source : ''));
+
+  assert.deepEqual(
+    {
+      title: task.title,
+      status: task.status,
+      statusOrigin: task.statusOrigin,
+      plannedMinutes: task.plannedMinutes,
+      effectiveString: task.effectiveString,
+    },
+    {
+      title: 'Reusable report',
+      status: 'TODO',
+      statusOrigin: 'local',
+      plannedMinutes: 15,
+      effectiveString: '{{[[TODO]]}} Reusable report 15m',
+    },
+  );
+});

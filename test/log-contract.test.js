@@ -172,6 +172,9 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested L
 test('the chart resolves daily task instances through the shared reference-precedence core', () => {
   assert.match(entry, /import \* as timingCore from "\.\/timing-core"/);
   assert.match(entry, /window\.nautilusLogTaskCore = timingCore/);
+  assert.match(entry, /resolveRendererTaskInstance/);
+  assert.match(entry, /resolveTaskInstance: resolveRendererTaskInstance/);
+  assert.match(component, /\.\-resolveTaskInstance/);
   assert.match(component, /task-core-call "resolveTaskInstance"/);
   assert.match(component, /:effectiveString/);
   const mappingStart = component.indexOf('mapped (mapv');

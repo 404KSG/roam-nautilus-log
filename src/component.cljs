@@ -325,14 +325,21 @@
     (catch :default _e nil)))
 
 (defn task-instance-row [child settings]
-  (let [instance (task-core-call "resolveTaskInstance"
-                                 {:uid (:block/uid child)
-                                  :localString (:block/string child)
-                                  :references (mapv (fn [ref]
-                                                      {:uid (:block/uid ref)
-                                                       :string (:block/string ref)})
-                                                    (:block/refs child))
-                                  :fallbackMinutes (:default-duration settings)})]
+  (let [payload {:uid (:block/uid child)
+                 :localString (:block/string child)
+                 :references (mapv (fn [ref]
+                                     {:uid (:block/uid ref)
+                                      :string (:block/string ref)})
+                                   (:block/refs child))
+                 :fallbackMinutes (:default-duration settings)}
+        instance (or
+                  (try
+                    (when-let [resolver (some-> js/window .-nautilusLogExtensionData .-resolveTaskInstance)]
+                      (js->clj (.call resolver nil (clj->js payload)) :keywordize-keys true))
+                    (catch :default _e nil))
+                  ;; Compatibility fallback for a chart that mounts while an
+                  ;; older extension entry point is still unloading.
+                  (task-core-call "resolveTaskInstance" payload))]
     {:s (or (:effectiveString instance) (:block/string child))
      :uid (:block/uid child)
      :task-instance instance}))
