@@ -1595,6 +1595,11 @@
    [:strong {:class "nautilus-log-metric-value"} (:value metric)]
    [:span {:class "nautilus-log-metric-summary-label"} (:summaryLabel metric)]])
 
+(defn metrics-capacity-component [available events]
+  [:div {:class "nautilus-log-metrics-capacity"}
+   [metric-reading-component available]
+   [metric-reading-component events]])
+
 (defn metrics-component [metrics]
   (let [{:keys [planned status available events]} metrics
         ordered-metrics [planned status available events]
@@ -1613,9 +1618,7 @@
       [:span {:class (str "nautilus-log-metric-summary-item nautilus-log-metric-percent nautilus-log-metric-percent--" (:percentTone planned))}
        [:strong {:class "nautilus-log-metric-value"} (:percent planned)]
        [:span {:class "nautilus-log-metric-summary-label"} (:percentLabel planned)]]]
-     [:div {:class "nautilus-log-metrics-capacity"}
-      [metric-reading-component available]
-      [metric-reading-component events]]]))
+     [metrics-capacity-component available events]]))
 
 (defn capacity-metrics-component [capacity settings]
   [metrics-component (capacity-metrics capacity settings)])
@@ -1661,7 +1664,7 @@
         [:strong {:class "nautilus-log-metric-value"} (:percent planned)]
         [:span {:class "nautilus-log-metric-summary-label"} (:percentLabel planned)]]]]
      [:div {:class "nautilus-log-compact-overview-body"}
-      [metrics-component metrics]
+      [metrics-capacity-component (:available metrics) (:events metrics)]
       [html-legend-component copy]]]))
 
 (defn localized-warning [warning copy]

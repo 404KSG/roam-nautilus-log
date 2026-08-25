@@ -50,6 +50,9 @@
   TODO/DONE status, matching their already-recursive title and duration. A
   completed reusable task therefore stays out of Plan even when today's block
   reaches it through an intermediate reference.
+- Expanded compact Overviews now show only Available, Events, and the legend;
+  the canonical planned/free-or-over/left summary remains in the disclosure
+  row instead of being repeated in the body.
 
 ## 1.0.2 — 2026-08-23
 

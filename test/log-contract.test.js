@@ -575,6 +575,8 @@ test('Log moves metrics and the legend into a folded Overview in narrow containe
   assert.match(compactOverview, /metric-summary-component status/);
   assert.match(compactOverview, /:percent planned/);
   assert.match(compactOverview, /:percentLabel planned/);
+  assert.match(compactOverview, /metrics-capacity-component \(:available metrics\) \(:events metrics\)/);
+  assert.doesNotMatch(compactOverview, /\[metrics-component metrics\]/);
   assert.doesNotMatch(compactOverview, /burning-label|burning-aria|nautilus-log-burning-summary/);
   assert.match(css, /\.nautilus-log-compact-overview\s*\{[^}]*display:\s*none;/s);
   assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-log-compact-overview\s*\{[^}]*display:\s*block;/);
