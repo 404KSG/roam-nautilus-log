@@ -246,6 +246,71 @@ test('runtime capacity excludes inherited DONE and outer TODO reopens the source
   assert.equal(snapshot.planSnapshot.execution.demandMinutes, 25);
 });
 
+test('Plan Pull Watch refreshes capacity immediately when a moved wrapper reopens a DONE source', async (t) => {
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#watched-status-${Date.now()}`;
+  const extension = await import(moduleUrl);
+  const { roam, blocks } = graphMock({
+    taskAString: '((source-a))',
+    taskBString: '{{[[DONE]]}} Beta 45m',
+  });
+  blocks.set('source-a', {
+    uid: 'source-a',
+    string: '{{[[DONE]]}} 给谭总汇报房租事情 15m d10:46',
+    parentUid: 'outside-plan',
+    order: 0,
+  });
+  const settings = new Map([
+    ['todo-duration', 15],
+    ['workday-start', 5],
+    ['workday-end', 21],
+    ['timing-line-sidebar', false],
+    ['recent-retention-minutes', 45],
+  ]);
+  let planListener = null;
+  let stopped = false;
+  global.window = {
+    roamAlphaAPI: roam,
+    setInterval: () => 99,
+    clearInterval: () => {},
+    setTimeout,
+    clearTimeout,
+  };
+  const runtime = extension.createTimingRuntime({
+    extensionAPI: {
+      settings: {
+        get: (key) => settings.get(key),
+        set: async (key, value) => settings.set(key, value),
+      },
+    },
+    now: () => new Date(2026, 7, 22, 10, 0),
+    watchPlan: (uid, listener, options) => {
+      assert.equal(uid, 'plan');
+      assert.deepEqual(options, { emitInitial: false });
+      planListener = listener;
+      return () => { stopped = true; };
+    },
+  });
+  await runtime.initialize();
+  t.after(() => {
+    runtime.destroy();
+    delete global.window;
+  });
+
+  assert.equal(runtime.getSnapshot().planSnapshot.execution.demandMinutes, 0);
+  blocks.set('task-a', {
+    ...blocks.get('task-a'),
+    string: '{{[[TODO]]}} ((source-a))',
+  });
+  planListener();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+
+  assert.equal(runtime.getSnapshot().planSnapshot.execution.demandMinutes, 15);
+  assert.equal(runtime.getSnapshot().planSnapshot.tasks[0].statusOrigin, 'local');
+  runtime.destroy();
+  assert.equal(stopped, true);
+});
+
 test('referenced and plain daily instances can CLOCK and complete without mutating their source', async (t) => {
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#daily-instance-${Date.now()}`;

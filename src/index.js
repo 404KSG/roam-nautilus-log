@@ -10,6 +10,7 @@ import { createTimingCommands } from "./timing-commands";
 import { readAllEntries, readEntriesForTaskUids } from "./timing-roam";
 import { createTimingRuntime } from "./timing-runtime";
 import { createTimingTopbar } from "./timing-topbar";
+import { createPlanWatchBridge } from "./plan-watch";
 import "../extension.css";
 
 const componentName = "Nautilus Log";
@@ -44,6 +45,7 @@ const executionDefaults = {
 let timingRuntime = null;
 let timingTopbar = null;
 let timingCommands = null;
+let planWatchBridge = null;
 const rendererClockCacheMs = 15_000;
 const rendererClockCache = new Map();
 
@@ -181,7 +183,10 @@ async function migratePreviewDefaults(extensionAPI) {
 
 async function startTiming(extensionAPI) {
   if (timingRuntime || typeof document === "undefined") return true;
-  const runtime = createTimingRuntime({ extensionAPI });
+  const runtime = createTimingRuntime({
+    extensionAPI,
+    watchPlan: planWatchBridge?.subscribe,
+  });
   let topbar = null;
   let commands = null;
   try {
@@ -501,6 +506,8 @@ function panelConfig(extensionAPI, language) {
 }
 
 async function onload({ extensionAPI }) {
+  planWatchBridge?.destroy();
+  planWatchBridge = createPlanWatchBridge();
   window.nautilusLogCore = logCore;
   window.nautilusLogTaskCore = timingCore;
   window.nautilusLogExtensionData = {
@@ -508,6 +515,8 @@ async function onload({ extensionAPI }) {
     shouldSuppressRenderContext,
     isRightSidebarRenderContext,
     getClockRenderContext,
+    readPlan: planWatchBridge.read,
+    watchPlan: planWatchBridge.subscribe,
   };
   await setDefaultSettings(extensionAPI);
   await migratePreviewDefaults(extensionAPI);
@@ -538,6 +547,8 @@ async function onload({ extensionAPI }) {
 
 function onunload() {
   stopTiming({ closeActive: false });
+  planWatchBridge?.destroy();
+  planWatchBridge = null;
   if (typeof window !== "undefined") {
     if (window.nautilusLogExtensionData) {
       window.nautilusLogExtensionData.running = false;
@@ -562,6 +573,7 @@ function onunload() {
 export {
   createTimingRuntime,
   createTimingCommands,
+  createPlanWatchBridge,
   generateTemplateString,
   generateUpdatedRenderString,
   panelConfig,

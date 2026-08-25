@@ -2,8 +2,7 @@
   (:require [clojure.string :as str]
             [reagent.core :as r]
             [roam.datascript :as rd]
-            [roam.block :as block]
-            [roam.datascript.reactive :as rdr]))
+            [roam.block :as block]))
 
 ;; ------- default settings -------
 
@@ -364,18 +363,6 @@
 
 
 ;; --------------- reading / writing Roam database ----------------------
-
-(defn eval-state [*get-children]
-  (:block/children @*get-children))
-
-(defn get-children-strings [block-uid]
-  (r/with-let [*get-children-atom (rdr/pull
-                                   [{:block/children [:block/string :block/order {:block/refs [:block/string :block/uid]}]}]
-                                   [:block/uid block-uid])
-               *children (r/track eval-state *get-children-atom)]
-    (map str-with-resolved-block-refs
-         (->> @*children
-              (sort-by :block/order)))))
 
 (defn get-page-title [page-uid] ;; when you have a block-uid for a page
   (-> (rd/q '[:find ?title
@@ -1388,10 +1375,17 @@
                             event)]
         (recur (rest events) new-start (conj result updated-event))))))
 
-(defn get-children-pull [block-uid]
-  (rdr/pull
-    [{:block/children [:block/uid :block/string :block/order {:block/refs [:block/string :block/uid]}]}]
-    [:block/uid block-uid]))
+(defn watch-plan-children! [block-uid children-state]
+  "Uses the extension's shared Roam Pull Watch so a moved or edited direct
+   child enters the chart immediately without one reactive watch per render."
+  (try
+    (if-let [watcher (some-> js/window .-nautilusLogExtensionData .-watchPlan)]
+      (.call watcher nil block-uid
+             (fn [snapshot]
+               (let [normalized (js->clj snapshot :keywordize-keys true)]
+                 (reset! children-state (:block/children normalized)))))
+      (fn [] nil))
+    (catch :default _e (fn [] nil))))
 
 (defn reset-now-time-atom [now-time-atom]
   (reset! now-time-atom
@@ -1789,12 +1783,12 @@
                                      (reset! daily-page-atom? next-daily-page-state))))
                                60000)
                page-title-val (page-title block-uid)
-               *get-children-atom (get-children-pull block-uid)
-               *children (r/track eval-state *get-children-atom)
+               watched-children-state (r/atom [])
+               stop-plan-watch (watch-plan-children! block-uid watched-children-state)
                *text-events (r/track
                              (fn []
                                (let [settings @settings-state
-                                     children-list (->> @*children
+                                     children-list (->> @watched-children-state
                                                         (filter #(not= "" (:block/string %)))
                                                         (sort-by :block/order))
                                      mapped (mapv #(task-instance-row % settings) children-list)
@@ -1886,6 +1880,10 @@
       (js/clearInterval check-interval)
       (js/clearInterval clock-interval)
       (.removeEventListener js/window settings-event-name settings-listener)
+      (when stop-plan-watch
+        (try
+          (.call stop-plan-watch nil)
+          (catch :default _e nil)))
       (when-let [resize-observer @resize-observer-state]
         (.disconnect resize-observer))
       (when @playback-frame-atom

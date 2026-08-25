@@ -180,6 +180,13 @@ test('the chart resolves daily task instances through the shared reference-prece
   assert.doesNotMatch(component.slice(mappingStart, mappingEnd), /str-with-resolved-block-refs/);
 });
 
+test('mounted charts share the extension Plan Pull Watch and release it on cleanup', () => {
+  assert.match(component, /\.\-watchPlan/);
+  assert.match(component, /watch-plan-children!/);
+  assert.match(component, /stop-plan-watch/);
+  assert.doesNotMatch(component, /roam\.datascript\.reactive/);
+});
+
 test('the spiral exposes slice and available-slot hover targets above an inert grid', () => {
   const gridStart = component.indexOf('(defn snail-blueprint-component');
   const gridEnd = component.indexOf('(defn central-label-component', gridStart);
