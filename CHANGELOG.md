@@ -46,6 +46,10 @@
   the source block's current string before publishing. A bare reference to a
   completed source therefore remains DONE and consumes no planned capacity;
   only an explicit TODO on today's wrapper reopens it.
+- Nested bare-reference chains now inherit the nearest explicit source
+  TODO/DONE status, matching their already-recursive title and duration. A
+  completed reusable task therefore stays out of Plan even when today's block
+  reaches it through an intermediate reference.
 
 ## 1.0.2 — 2026-08-23
 

@@ -287,13 +287,23 @@ function resolveTaskInstance({
     ));
     return removeTaskState(nested);
   };
+  const resolveSourceStatus = (referenceUid, stack = []) => {
+    if (!referenceUid || stack.includes(referenceUid) || stack.length >= maxDepth) return null;
+    const source = read(referenceUid);
+    if (!source) return null;
+    const status = taskStatus(source);
+    if (status) return status;
+    const nestedUid = referenceUids(source)[0] || null;
+    return nestedUid
+      ? resolveSourceStatus(nestedUid, [...stack, referenceUid])
+      : null;
+  };
 
   const refs = referenceUids(local);
   const sourceUid = refs[0] || null;
-  const sourceRaw = sourceUid ? read(sourceUid) : '';
   const source = sourceUid ? resolveSource(sourceUid) : '';
   const explicitStatus = taskStatus(local);
-  const sourceStatus = taskStatus(sourceRaw);
+  const sourceStatus = sourceUid ? resolveSourceStatus(sourceUid) : null;
   const localDone = doneTime(local);
   const localProgress = taskProgress(local);
   const localDurations = durationTokens(local);

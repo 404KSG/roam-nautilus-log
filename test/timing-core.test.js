@@ -94,6 +94,36 @@ test('a bare reference inherits source status but not source completion time', (
   assert.match(inherited.effectiveString, /DONE.*25m/);
 });
 
+test('a bare reference chain inherits the nearest explicit source status', () => {
+  const strings = new Map([
+    ['middle-source', '((completed-source))'],
+    ['completed-source', '{{[[DONE]]}} Reusable report 15m d10:46'],
+  ]);
+  const task = timing.resolveTaskInstance({
+    uid: 'daily-wrapper',
+    localString: '((middle-source))',
+    readString: (uid) => strings.get(uid) || '',
+    fallbackMinutes: 10,
+  });
+
+  assert.deepEqual(
+    {
+      title: task.title,
+      status: task.status,
+      statusOrigin: task.statusOrigin,
+      plannedMinutes: task.plannedMinutes,
+      doneAt: task.doneAt,
+    },
+    {
+      title: 'Reusable report',
+      status: 'DONE',
+      statusOrigin: 'source',
+      plannedMinutes: 15,
+      doneAt: null,
+    },
+  );
+});
+
 test('an outer marker owns today status while local duration overrides reusable source duration', () => {
   const sourceString = '{{[[DONE]]}} Reusable report 15m d60% d09:11';
   const readString = (uid) => (uid === 'source-task' ? sourceString : '');
