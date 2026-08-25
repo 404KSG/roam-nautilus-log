@@ -26,6 +26,9 @@
 
 ### Fixed
 
+- The Nautilus topbar shortcut hint now appears reliably on hover and keyboard
+  focus, even while a timer is refreshing the trigger state.
+
 - Timing, Plan, and Review now identify a Nautilus component by its stable
   renderer instead of the optional display prefix, so custom or empty prefixes
   continue to expose the Primary Plan without admitting unrelated renderers.

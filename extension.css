@@ -832,6 +832,7 @@
   height: 32px;
   margin: 0 4px;
   min-width: 32px;
+  position: relative;
 }
 
 .nautilus-log-timing__trigger,
@@ -947,6 +948,40 @@
   background: rgba(111, 120, 132, 0.1);
   color: var(--nl-exec-text, #374151);
   outline: none;
+}
+
+.nautilus-log-timing__shortcut-tooltip {
+  background: rgba(38, 43, 52, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  box-shadow: 0 6px 18px rgba(25, 31, 40, 0.2);
+  color: #f7f8fa;
+  display: block;
+  font-family: var(--nl-exec-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-size: 12px;
+  font-weight: 500;
+  left: 0;
+  line-height: 1.35;
+  max-width: min(390px, calc(100vw - 24px));
+  opacity: 0;
+  padding: 6px 8px;
+  pointer-events: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  transform: translateY(-2px);
+  transition: opacity 100ms ease, transform 100ms ease, visibility 0s linear 100ms;
+  visibility: hidden;
+  white-space: normal;
+  width: max-content;
+  z-index: 10060;
+}
+
+.nautilus-log-timing__trigger:hover ~ .nautilus-log-timing__shortcut-tooltip,
+.nautilus-log-timing__trigger:focus-visible ~ .nautilus-log-timing__shortcut-tooltip {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 180ms;
+  visibility: visible;
 }
 
 .nautilus-log-timing__pomodoro-start {

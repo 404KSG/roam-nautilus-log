@@ -312,6 +312,17 @@ test('the topbar trigger preserves normal click and routes modifier clicks to th
   assert.ok(listener.indexOf('event.altKey') < listener.indexOf('openPopover()'));
 });
 
+test('the topbar exposes a stable hover tooltip for its modifier-click shortcuts', () => {
+  assert.match(timingTopbar, /SHORTCUT_TOOLTIP_ID = 'nautilus-log-timing-shortcut-tooltip'/);
+  assert.match(timingTopbar, /trigger\.setAttribute\('aria-describedby', SHORTCUT_TOOLTIP_ID\)/);
+  assert.match(timingTopbar, /shortcutTooltip\.textContent = text\.actions\.openPanelHint/);
+  assert.match(timingTopbar, /shortcutTooltip\.setAttribute\('role', 'tooltip'\)/);
+  assert.match(css, /\.nautilus-log-timing__shortcut-tooltip\s*\{[^}]*position:\s*absolute;/s);
+  assert.match(css, /\.nautilus-log-timing__shortcut-tooltip\s*\{[^}]*pointer-events:\s*none;/s);
+  assert.match(css, /\.nautilus-log-timing__trigger:hover ~ \.nautilus-log-timing__shortcut-tooltip/);
+  assert.match(css, /\.nautilus-log-timing__trigger:focus-visible ~ \.nautilus-log-timing__shortcut-tooltip/);
+});
+
 test('execution popover paints cached state before refreshing and does not rebuild on every tick', () => {
   const openStart = timingTopbar.indexOf('const openPopover');
   const openEnd = timingTopbar.indexOf('const renderTrigger', openStart);
