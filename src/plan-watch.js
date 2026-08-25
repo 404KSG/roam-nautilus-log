@@ -45,6 +45,50 @@ export function normalizePlanPull(entity, uid = '') {
   };
 }
 
+function hydratePlanReferences(snapshot, readString, { authoritative = false } = {}) {
+  if (!snapshot || typeof readString !== 'function') return snapshot;
+  const sourceCache = new Map();
+  const readSource = (uid) => {
+    if (!sourceCache.has(uid)) {
+      try {
+        const value = readString(uid);
+        sourceCache.set(uid, typeof value === 'string' ? value : '');
+      } catch (error) {
+        console.debug('[Nautilus Log] Referenced Plan source unavailable', error);
+        sourceCache.set(uid, '');
+      }
+    }
+    return sourceCache.get(uid);
+  };
+  return {
+    ...snapshot,
+    'block/children': (snapshot['block/children'] || []).map((child) => {
+      const references = child['block/refs'] || [];
+      const byUid = new Map(references
+        .filter((reference) => reference?.['block/uid'])
+        .map((reference) => [reference['block/uid'], reference]));
+      const localReferenceUids = [...String(child['block/string'] || '')
+        .matchAll(new RegExp(BLOCK_REF_RE.source, BLOCK_REF_RE.flags))]
+        .map((match) => match[1])
+        .filter(Boolean);
+      for (const sourceUid of localReferenceUids) {
+        const current = byUid.get(sourceUid);
+        if (!authoritative && current?.['block/string']) continue;
+        const sourceString = readSource(sourceUid);
+        if (!sourceString) continue;
+        byUid.set(sourceUid, {
+          'block/uid': sourceUid,
+          'block/string': sourceString,
+        });
+      }
+      return {
+        ...child,
+        'block/refs': [...byUid.values()],
+      };
+    }),
+  };
+}
+
 function entityLookup(uid) {
   return `[:block/uid "${String(uid || '').replace(/["\\]/g, '')}"]`;
 }
@@ -66,9 +110,23 @@ function referencedUids(snapshot) {
  * the same normalized direct-child snapshot. This is event driven: no DOM
  * observer and no high-frequency graph polling are required.
  */
-export function createPlanWatchBridge({ roam = globalThis.window?.roamAlphaAPI } = {}) {
+export function createPlanWatchBridge({
+  roam = globalThis.window?.roamAlphaAPI,
+  readString,
+} = {}) {
   const watches = new Map();
   let destroyed = false;
+  const hasAuthoritativeReader = typeof readString === 'function';
+
+  const readReferencedString = hasAuthoritativeReader
+    ? readString
+    : (uid) => {
+      const pull = roam?.data?.pull || roam?.pull;
+      if (!uid || typeof pull !== 'function') return '';
+      const owner = pull === roam?.data?.pull ? roam.data : roam;
+      const entity = pull.call(owner, SOURCE_WATCH_PATTERN, [':block/uid', uid]);
+      return String(field(entity, ':block/string', '') || '');
+    };
 
   const addWatch = (pattern, uid, callback) => {
     const addPullWatch = roam?.data?.addPullWatch;
@@ -100,7 +158,13 @@ export function createPlanWatchBridge({ roam = globalThis.window?.roamAlphaAPI }
     if (typeof pull !== 'function') return normalizePlanPull(null, uid);
     const owner = pull === roam?.data?.pull ? roam.data : roam;
     try {
-      return normalizePlanPull(pull.call(owner, PLAN_PULL_PATTERN, [':block/uid', uid]), uid);
+      const snapshot = normalizePlanPull(
+        pull.call(owner, PLAN_PULL_PATTERN, [':block/uid', uid]),
+        uid,
+      );
+      return hydratePlanReferences(snapshot, readReferencedString, {
+        authoritative: hasAuthoritativeReader,
+      });
     } catch (error) {
       console.debug('[Nautilus Log] Plan snapshot pull unavailable', error);
       return normalizePlanPull(null, uid);

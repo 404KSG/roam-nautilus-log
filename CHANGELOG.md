@@ -42,6 +42,10 @@
 - The spiral now hydrates referenced task content through the same authoritative
   UID resolver as the Execution Layer when Roam omits `block/refs` strings from
   a nested Pull Watch snapshot, keeping planned totals and percent left aligned.
+- Shared Plan snapshots now replace missing or stale nested reference text with
+  the source block's current string before publishing. A bare reference to a
+  completed source therefore remains DONE and consumes no planned capacity;
+  only an explicit TODO on today's wrapper reopens it.
 
 ## 1.0.2 — 2026-08-23
 

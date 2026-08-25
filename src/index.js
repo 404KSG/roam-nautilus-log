@@ -529,7 +529,7 @@ function panelConfig(extensionAPI, language) {
 
 async function onload({ extensionAPI }) {
   planWatchBridge?.destroy();
-  planWatchBridge = createPlanWatchBridge();
+  planWatchBridge = createPlanWatchBridge({ readString: readBlockString });
   window.nautilusLogCore = logCore;
   window.nautilusLogTaskCore = timingCore;
   window.nautilusLogExtensionData = {

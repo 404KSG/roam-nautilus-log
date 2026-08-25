@@ -150,3 +150,48 @@ test('renderer task resolution hydrates a referenced source when the plan snapsh
     },
   );
 });
+
+test('shared Plan snapshots hydrate bare references before any chart parses task status', async () => {
+  const extension = await loadExtension('plan-watch-source-hydration');
+  const source = '{{[[DONE]]}} Reusable report 15m d10:46';
+  const roam = {
+    data: {
+      pull: () => ({
+        ':block/string': '[[Nautilus Log]] renderer',
+        ':block/children': [{
+          ':block/uid': 'daily-wrapper',
+          ':block/string': '((source-task))',
+          ':block/order': 0,
+          ':block/refs': [{
+            ':block/uid': 'source-task',
+            ':block/string': '{{[[TODO]]}} Stale report 15m',
+          }],
+        }],
+      }),
+    },
+  };
+  const bridge = extension.createPlanWatchBridge({
+    roam,
+    readString: (uid) => (uid === 'source-task' ? source : ''),
+  });
+
+  const snapshot = bridge.read('plan');
+  const child = snapshot['block/children'][0];
+  assert.deepEqual(child['block/refs'], [{
+    'block/uid': 'source-task',
+    'block/string': source,
+  }]);
+
+  const task = extension.resolveRendererTaskInstance({
+    uid: child['block/uid'],
+    localString: child['block/string'],
+    references: child['block/refs'].map((reference) => ({
+      uid: reference['block/uid'],
+      string: reference['block/string'],
+    })),
+    fallbackMinutes: 15,
+  }, () => '');
+  assert.equal(task.status, 'DONE');
+  assert.equal(task.statusOrigin, 'source');
+  bridge.destroy();
+});
