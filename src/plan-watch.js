@@ -1,4 +1,8 @@
 const PLAN_PULL_PATTERN = '[:block/string {:block/children [:block/uid :block/string :block/order {:block/refs [:block/uid :block/string]}]}]';
+const PLAN_MEMBERSHIP_WATCH_PATTERN = '[:block/children]';
+const CHILD_WATCH_PATTERN = '[:block/string :block/order]';
+const SOURCE_WATCH_PATTERN = '[:block/string]';
+const BLOCK_REF_RE = /\(\(([a-zA-Z0-9_-]{6,})\)\)/g;
 
 function sequence(value) {
   if (Array.isArray(value)) return value;
@@ -45,6 +49,17 @@ function entityLookup(uid) {
   return `[:block/uid "${String(uid || '').replace(/["\\]/g, '')}"]`;
 }
 
+function referencedUids(snapshot) {
+  const result = new Set();
+  for (const child of snapshot?.['block/children'] || []) {
+    const string = String(child?.['block/string'] || '');
+    for (const match of string.matchAll(new RegExp(BLOCK_REF_RE.source, BLOCK_REF_RE.flags))) {
+      if (match[1]) result.add(match[1]);
+    }
+  }
+  return result;
+}
+
 /**
  * Deduplicates Roam Pull Watches by plan UID. Rendered copies in the main
  * window and right sidebar share one graph watch, while each subscriber gets
@@ -54,6 +69,30 @@ function entityLookup(uid) {
 export function createPlanWatchBridge({ roam = globalThis.window?.roamAlphaAPI } = {}) {
   const watches = new Map();
   let destroyed = false;
+
+  const addWatch = (pattern, uid, callback) => {
+    const addPullWatch = roam?.data?.addPullWatch;
+    if (!uid || typeof addPullWatch !== 'function') return null;
+    const watch = { pattern, uid, callback, registered: null, removing: null };
+    try {
+      watch.registered = Promise.resolve(
+        addPullWatch.call(roam.data, pattern, entityLookup(uid), callback),
+      ).catch((error) => console.debug('[Nautilus Log] Plan Pull Watch unavailable', error));
+    } catch (error) {
+      console.debug('[Nautilus Log] Plan Pull Watch unavailable', error);
+    }
+    return watch;
+  };
+
+  const removeWatch = (watch) => {
+    if (!watch || watch.removing) return watch?.removing;
+    const removePullWatch = roam?.data?.removePullWatch;
+    if (typeof removePullWatch !== 'function' || !watch.registered) return undefined;
+    watch.removing = Promise.resolve(watch.registered)
+      .then(() => removePullWatch.call(roam.data, watch.pattern, entityLookup(watch.uid), watch.callback))
+      .catch((error) => console.debug('[Nautilus Log] Plan Pull Watch cleanup failed', error));
+    return watch.removing;
+  };
 
   const read = (uid) => {
     if (!uid) return normalizePlanPull(null, uid);
@@ -68,14 +107,46 @@ export function createPlanWatchBridge({ roam = globalThis.window?.roamAlphaAPI }
     }
   };
 
+  const syncEntityWatches = (uid, entry) => {
+    const refresh = () => {
+      if (destroyed || watches.get(uid) !== entry) return;
+      const snapshot = read(uid);
+      entry.snapshot = snapshot;
+      syncEntityWatches(uid, entry);
+      for (const subscriber of [...entry.listeners]) {
+        try { subscriber(snapshot); }
+        catch (error) { console.error('[Nautilus Log] Plan subscriber failed', error); }
+      }
+    };
+    const sync = (watchMap, targetUids, pattern) => {
+      for (const [targetUid, watch] of [...watchMap]) {
+        if (targetUids.has(targetUid)) continue;
+        watchMap.delete(targetUid);
+        void removeWatch(watch);
+      }
+      for (const targetUid of targetUids) {
+        if (watchMap.has(targetUid)) continue;
+        const watch = addWatch(pattern, targetUid, refresh);
+        if (watch) watchMap.set(targetUid, watch);
+      }
+    };
+    const childUids = new Set((entry.snapshot?.['block/children'] || [])
+      .map((child) => child?.['block/uid'])
+      .filter(Boolean));
+    sync(entry.childWatches, childUids, CHILD_WATCH_PATTERN);
+    sync(entry.sourceWatches, referencedUids(entry.snapshot), SOURCE_WATCH_PATTERN);
+  };
+
   const remove = (uid, entry) => {
     if (!entry || entry.removing) return entry?.removing;
     watches.delete(uid);
-    const removePullWatch = roam?.data?.removePullWatch;
-    if (typeof removePullWatch !== 'function' || !entry.registered) return undefined;
-    entry.removing = Promise.resolve(entry.registered)
-      .then(() => removePullWatch.call(roam.data, PLAN_PULL_PATTERN, entityLookup(uid), entry.callback))
-      .catch((error) => console.debug('[Nautilus Log] Plan Pull Watch cleanup failed', error));
+    const entityWatches = [entry.parentWatch, ...entry.childWatches.values(), ...entry.sourceWatches.values()]
+      .filter(Boolean);
+    entry.childWatches.clear();
+    entry.sourceWatches.clear();
+    entry.removing = Promise.all(entityWatches.map((watch) => removeWatch(watch))).catch((error) => {
+      console.debug('[Nautilus Log] Plan Pull Watch cleanup failed', error);
+    });
     return entry.removing;
   };
 
@@ -87,29 +158,28 @@ export function createPlanWatchBridge({ roam = globalThis.window?.roamAlphaAPI }
         listeners: new Set(),
         callback: null,
         snapshot: read(uid),
-        registered: null,
+        parentWatch: null,
+        childWatches: new Map(),
+        sourceWatches: new Map(),
         removing: null,
       };
-      entry.callback = (_before, after) => {
+      entry.callback = () => {
         if (destroyed || watches.get(uid) !== entry) return;
-        const snapshot = after ? normalizePlanPull(after, uid) : read(uid);
+        // A parent pull watch reliably reports membership changes, but Roam
+        // does not consistently invalidate it when only a nested child's
+        // string changes. Always read a fresh authoritative snapshot and keep
+        // direct child/source watches in sync with the latest membership.
+        const snapshot = read(uid);
         entry.snapshot = snapshot;
+        syncEntityWatches(uid, entry);
         for (const subscriber of [...entry.listeners]) {
           try { subscriber(snapshot); }
           catch (error) { console.error('[Nautilus Log] Plan subscriber failed', error); }
         }
       };
       watches.set(uid, entry);
-      const addPullWatch = roam?.data?.addPullWatch;
-      if (typeof addPullWatch === 'function') {
-        try {
-          entry.registered = Promise.resolve(
-            addPullWatch.call(roam.data, PLAN_PULL_PATTERN, entityLookup(uid), entry.callback),
-          ).catch((error) => console.debug('[Nautilus Log] Plan Pull Watch unavailable', error));
-        } catch (error) {
-          console.debug('[Nautilus Log] Plan Pull Watch unavailable', error);
-        }
-      }
+      entry.parentWatch = addWatch(PLAN_MEMBERSHIP_WATCH_PATTERN, uid, entry.callback);
+      syncEntityWatches(uid, entry);
     }
     entry.listeners.add(listener);
     if (emitInitial) listener(entry.snapshot);
@@ -139,4 +209,9 @@ export function createPlanWatchBridge({ roam = globalThis.window?.roamAlphaAPI }
   };
 }
 
-export { PLAN_PULL_PATTERN };
+export {
+  CHILD_WATCH_PATTERN,
+  PLAN_MEMBERSHIP_WATCH_PATTERN,
+  PLAN_PULL_PATTERN,
+  SOURCE_WATCH_PATTERN,
+};

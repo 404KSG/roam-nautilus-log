@@ -8,7 +8,7 @@ async function loadExtension(label) {
   return import(`data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#${label}-${Date.now()}`);
 }
 
-test('shared Plan Pull Watch publishes moved daily wrappers immediately and cleans up once', async () => {
+test('shared Plan watcher publishes moved daily wrappers immediately without duplicate subscribers', async () => {
   const extension = await loadExtension('plan-watch');
   const calls = { add: [], remove: [], pull: 0 };
   let watchedCallback = null;
@@ -42,7 +42,7 @@ test('shared Plan Pull Watch publishes moved daily wrappers immediately and clea
   const stopFirst = bridge.subscribe('plan', (snapshot) => first.push(snapshot));
   const stopSecond = bridge.subscribe('plan', (snapshot) => second.push(snapshot));
 
-  assert.equal(calls.add.length, 1);
+  assert.equal(calls.add.length, 3);
   assert.equal(bridge.getWatchCount(), 1);
   assert.equal(first[0]['block/children'][0]['block/string'], '((source-task))');
   assert.equal(second[0]['block/children'][0]['block/refs'][0]['block/string'], '{{[[DONE]]}} Reusable 15m d09:11');
@@ -68,8 +68,56 @@ test('shared Plan Pull Watch publishes moved daily wrappers immediately and clea
   stopSecond();
   await Promise.resolve();
   await Promise.resolve();
-  assert.equal(calls.remove.length, 1);
+  assert.equal(calls.remove.length, 4);
   assert.equal(bridge.getWatchCount(), 0);
   bridge.destroy();
 });
 
+test('direct child edits invalidate the shared plan even when the parent membership watch stays silent', async () => {
+  const extension = await loadExtension('plan-watch-child-edit');
+  const callbacks = new Map();
+  let current = {
+    ':block/string': '[[Nautilus Log]] renderer',
+    ':block/children': [
+      {
+        ':block/uid': 'daily-wrapper',
+        ':block/string': '((source-task))',
+        ':block/order': 0,
+        ':block/refs': [{ ':block/uid': 'source-task', ':block/string': '{{[[DONE]]}} Reusable 15m d09:11' }],
+      },
+    ],
+  };
+  const roam = {
+    data: {
+      pull: () => current,
+      addPullWatch: async (pattern, entity, callback) => {
+        callbacks.set(`${pattern}|${entity}`, callback);
+      },
+      removePullWatch: async () => undefined,
+    },
+  };
+  const bridge = extension.createPlanWatchBridge({ roam });
+  const snapshots = [];
+  const stop = bridge.subscribe('plan', (snapshot) => snapshots.push(snapshot));
+  await Promise.resolve();
+
+  const childWatch = [...callbacks.entries()]
+    .find(([key]) => key.endsWith('|[:block/uid "daily-wrapper"]'))?.[1];
+  assert.equal(typeof childWatch, 'function');
+
+  current = {
+    ...current,
+    ':block/children': [{
+      ...current[':block/children'][0],
+      ':block/string': '{{[[TODO]]}} ((source-task)) 25m',
+    }],
+  };
+  childWatch(null, { ':block/string': '{{[[TODO]]}} ((source-task)) 25m' });
+
+  assert.equal(
+    snapshots.at(-1)['block/children'][0]['block/string'],
+    '{{[[TODO]]}} ((source-task)) 25m',
+  );
+  stop();
+  bridge.destroy();
+});

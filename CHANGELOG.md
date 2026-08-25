@@ -35,8 +35,10 @@
   excluded from today's execution; adding an outer TODO explicitly reopens it,
   and later completion updates only that daily wrapper.
 - Moving a reusable reference into the Primary Plan or changing its outer
-  TODO/DONE marker now refreshes the spiral and Execution Layer immediately via
-  one shared Roam Pull Watch per plan, without adding a high-frequency poller.
+  TODO/DONE marker or local duration now refreshes the spiral and Execution
+  Layer immediately. One shared graph-native watcher coordinates parent
+  membership, direct-child edits, and referenced source edits for every render
+  of the plan, without adding a high-frequency poller.
 
 ## 1.0.2 — 2026-08-23
 
