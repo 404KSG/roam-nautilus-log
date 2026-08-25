@@ -951,29 +951,45 @@
 }
 
 .nautilus-log-timing__shortcut-tooltip {
-  background: rgba(46, 51, 59, 0.94);
-  border: 0;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(25, 31, 40, 0.14);
-  color: rgba(255, 255, 255, 0.92);
+  --nl-shortcut-tooltip-bg: #fff;
+  --nl-shortcut-tooltip-border: rgba(16, 22, 26, 0.2);
+  --nl-shortcut-tooltip-text: #182026;
+  background: var(--nl-shortcut-tooltip-bg);
+  border: 1px solid var(--nl-shortcut-tooltip-border);
+  border-radius: 3px;
+  box-shadow: 0 2px 4px rgba(16, 22, 26, 0.18), 0 8px 24px rgba(16, 22, 26, 0.12);
+  color: var(--nl-shortcut-tooltip-text);
   display: block;
   font-family: var(--nl-exec-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
-  font-size: 11px;
-  font-weight: 400;
+  font-size: 12px;
+  font-weight: 600;
   left: 0;
-  line-height: 1.25;
+  line-height: 1.3;
   max-width: min(320px, calc(100vw - 24px));
   opacity: 0;
-  padding: 3px 6px;
+  padding: 7px 9px;
   pointer-events: none;
   position: absolute;
-  top: calc(100% + 4px);
-  transform: translateY(-1px);
-  transition: opacity 80ms ease, transform 80ms ease, visibility 0s linear 80ms;
+  top: calc(100% + 9px);
+  transform: translateY(-2px);
+  transition: opacity 90ms ease, transform 90ms ease, visibility 0s linear 90ms;
   visibility: hidden;
   white-space: nowrap;
   width: max-content;
   z-index: 10060;
+}
+
+.nautilus-log-timing__shortcut-tooltip::before {
+  background: var(--nl-shortcut-tooltip-bg);
+  border-left: 1px solid var(--nl-shortcut-tooltip-border);
+  border-top: 1px solid var(--nl-shortcut-tooltip-border);
+  content: "";
+  height: 9px;
+  left: 10px;
+  position: absolute;
+  top: -6px;
+  transform: rotate(45deg);
+  width: 9px;
 }
 
 .nautilus-log-timing__trigger:hover ~ .nautilus-log-timing__shortcut-tooltip,
@@ -982,6 +998,15 @@
   transform: translateY(0);
   transition-delay: 140ms;
   visibility: visible;
+}
+
+.bp3-dark .nautilus-log-timing__shortcut-tooltip,
+.roam-app.rm-dark-theme .nautilus-log-timing__shortcut-tooltip,
+.dark .nautilus-log-timing__shortcut-tooltip {
+  --nl-shortcut-tooltip-bg: #293742;
+  --nl-shortcut-tooltip-border: rgba(245, 248, 250, 0.2);
+  --nl-shortcut-tooltip-text: #f5f8fa;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.28), 0 8px 24px rgba(0, 0, 0, 0.24);
 }
 
 .nautilus-log-timing__pomodoro-start {

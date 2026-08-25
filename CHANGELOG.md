@@ -27,8 +27,8 @@
 ### Fixed
 
 - The Nautilus topbar shortcut hint now appears reliably on hover and keyboard
-  focus, even while a timer is refreshing the trigger state, using a compact
-  native-weight treatment that stays subordinate to the topbar itself.
+  focus, even while a timer is refreshing the trigger state, using the same
+  compact surface, pointer, and light/dark treatment as Roam's native popovers.
 
 - Timing, Plan, and Review now identify a Nautilus component by its stable
   renderer instead of the optional display prefix, so custom or empty prefixes

@@ -319,8 +319,9 @@ test('the topbar exposes a stable hover tooltip for its modifier-click shortcuts
   assert.match(timingTopbar, /shortcutTooltip\.setAttribute\('role', 'tooltip'\)/);
   assert.match(css, /\.nautilus-log-timing__shortcut-tooltip\s*\{[^}]*position:\s*absolute;/s);
   assert.match(css, /\.nautilus-log-timing__shortcut-tooltip\s*\{[^}]*pointer-events:\s*none;/s);
-  assert.match(css, /\.nautilus-log-timing__shortcut-tooltip\s*\{[^}]*font-size:\s*11px;[^}]*padding:\s*3px 6px;/s);
-  assert.match(css, /\.nautilus-log-timing__shortcut-tooltip\s*\{[^}]*box-shadow:\s*0 2px 8px rgba\(25, 31, 40, 0\.14\);/s);
+  assert.match(css, /\.nautilus-log-timing__shortcut-tooltip\s*\{[^}]*background:\s*var\(--nl-shortcut-tooltip-bg\);[^}]*font-size:\s*12px;[^}]*padding:\s*7px 9px;/s);
+  assert.match(css, /\.nautilus-log-timing__shortcut-tooltip::before\s*\{[^}]*transform:\s*rotate\(45deg\);/s);
+  assert.match(css, /\.bp3-dark \.nautilus-log-timing__shortcut-tooltip/);
   assert.match(css, /\.nautilus-log-timing__trigger:hover ~ \.nautilus-log-timing__shortcut-tooltip/);
   assert.match(css, /\.nautilus-log-timing__trigger:focus-visible ~ \.nautilus-log-timing__shortcut-tooltip/);
 });
