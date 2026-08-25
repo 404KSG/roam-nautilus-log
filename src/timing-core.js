@@ -253,11 +253,12 @@ function referenceUids(string) {
 }
 
 /**
- * Build one daily task instance without allowing state from a referenced
- * source block to leak into today's wrapper. The wrapper owns TODO/DONE,
- * completion time, progress and CLOCK identity. Referenced blocks contribute
- * reusable content, with a wrapper duration or time range overriding source
- * metadata instead of adding to it.
+ * Build one daily task instance with explicit wrapper precedence. A bare
+ * reference inherits only its source TODO/DONE state; an explicit wrapper
+ * marker reopens or completes the task for today. Completion time, progress,
+ * and CLOCK identity always belong to the wrapper. Referenced blocks also
+ * contribute reusable content, with a wrapper duration or time range
+ * overriding source metadata instead of adding to it.
  */
 function resolveTaskInstance({
   uid = '',
@@ -289,8 +290,10 @@ function resolveTaskInstance({
 
   const refs = referenceUids(local);
   const sourceUid = refs[0] || null;
+  const sourceRaw = sourceUid ? read(sourceUid) : '';
   const source = sourceUid ? resolveSource(sourceUid) : '';
   const explicitStatus = taskStatus(local);
+  const sourceStatus = taskStatus(sourceRaw);
   const localDone = doneTime(local);
   const localProgress = taskProgress(local);
   const localDurations = durationTokens(local);
@@ -310,8 +313,9 @@ function resolveTaskInstance({
   const body = removeTimeRange(removeDurationTokens(removeTaskState(resolvedContent)))
     .replace(/\s+/g, ' ')
     .trim();
-  const status = explicitStatus === 'DONE' ? 'DONE' : 'TODO';
-  const marker = explicitStatus ? `{{[[${explicitStatus}]]}}` : '';
+  const status = explicitStatus || sourceStatus || 'TODO';
+  const statusOrigin = explicitStatus ? 'local' : sourceStatus ? 'source' : 'implicit';
+  const marker = `{{[[${status}]]}}`;
   const rangeToken = range?.text || '';
   const progressToken = localProgress > 0 ? `d${localProgress}%` : '';
   const doneToken = explicitStatus === 'DONE' ? localDone.token : '';
@@ -329,6 +333,7 @@ function resolveTaskInstance({
     effectiveString,
     title: taskTitle(body),
     status,
+    statusOrigin,
     explicitStatus,
     plannedMinutes: planned,
     progress: localProgress,
@@ -411,7 +416,8 @@ function projectPlan(rows = [], planUid, fallbackMinutes = 15) {
 }
 
 function projectReviewTasks(rows = [], planUid, fallbackMinutes = 15) {
-  return projectDirectTasks(rows, planUid, fallbackMinutes);
+  return projectDirectTasks(rows, planUid, fallbackMinutes)
+    .filter((task) => !(task.status === 'DONE' && task.statusOrigin === 'source'));
 }
 
 function projectFixedEvents(rows = [], planUid) {

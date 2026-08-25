@@ -315,8 +315,9 @@
 
 (defn task-core-call [function-name value]
   "Calls the tested JavaScript task-instance core. Keeping this projection in
-   one place prevents a referenced source block's DONE state, completion time,
-   or planned duration from leaking into today's wrapper block."
+   one place applies the same reference precedence everywhere: a bare wrapper
+   inherits source TODO/DONE, an explicit outer marker owns today's status,
+   and source completion time or progress never leaks into today's instance."
   (try
     (let [core (.-nautilusLogTaskCore js/window)
           function (aget core function-name)]

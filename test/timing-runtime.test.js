@@ -193,12 +193,65 @@ test('execution capacity resolves direct block-reference tasks exactly like the 
   assert.equal(runtime.getSnapshot().planSnapshot.execution.demandMinutes, 165);
 });
 
+test('runtime capacity excludes inherited DONE and outer TODO reopens the source', async (t) => {
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#status-precedence-${Date.now()}`;
+  const extension = await import(moduleUrl);
+  const { roam, blocks } = graphMock({
+    taskAString: '((source-a))',
+    taskBString: '{{[[TODO]]}} ((source-a)) 25m',
+  });
+  blocks.set('source-a', {
+    uid: 'source-a',
+    string: '{{[[DONE]]}} Reusable task 15m d09:11',
+    parentUid: 'outside-plan',
+    order: 0,
+  });
+  const settings = new Map([
+    ['todo-duration', 15],
+    ['workday-start', 5],
+    ['workday-end', 21],
+    ['timing-line-sidebar', false],
+    ['recent-retention-minutes', 45],
+  ]);
+  global.window = {
+    roamAlphaAPI: roam,
+    setInterval: () => 99,
+    clearInterval: () => {},
+    setTimeout,
+    clearTimeout,
+  };
+  const extensionAPI = {
+    settings: {
+      get: (key) => settings.get(key),
+      set: async (key, value) => settings.set(key, value),
+    },
+  };
+  const runtime = extension.createTimingRuntime({
+    extensionAPI,
+    now: () => new Date(2026, 7, 22, 10, 0),
+  });
+  await runtime.initialize();
+  t.after(() => {
+    runtime.destroy();
+    delete global.window;
+  });
+
+  const snapshot = runtime.getSnapshot();
+  assert.deepEqual(
+    snapshot.planSnapshot.tasks.map(({ uid, statusOrigin, plannedMinutes }) => ({ uid, statusOrigin, plannedMinutes })),
+    [{ uid: 'task-b', statusOrigin: 'local', plannedMinutes: 25 }],
+  );
+  assert.deepEqual(snapshot.planSnapshot.reviewTasks.map(({ uid }) => uid), ['task-b']);
+  assert.equal(snapshot.planSnapshot.execution.demandMinutes, 25);
+});
+
 test('referenced and plain daily instances can CLOCK and complete without mutating their source', async (t) => {
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#daily-instance-${Date.now()}`;
   const extension = await import(moduleUrl);
   const { roam, blocks } = graphMock({
-    taskAString: '((source-a)) 25m',
+    taskAString: '{{[[TODO]]}} ((source-a)) 25m',
     taskBString: 'Plain task 20m',
   });
   const originalSource = '{{[[DONE]]}} Referenced task 15m d09:11';

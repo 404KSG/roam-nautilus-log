@@ -169,7 +169,7 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested L
   assert.doesNotMatch(component, /\(abs \(- done-at duration\)\)/);
 });
 
-test('the chart resolves daily task instances without flattening source state into the wrapper', () => {
+test('the chart resolves daily task instances through the shared reference-precedence core', () => {
   assert.match(entry, /import \* as timingCore from "\.\/timing-core"/);
   assert.match(entry, /window\.nautilusLogTaskCore = timingCore/);
   assert.match(component, /task-core-call "resolveTaskInstance"/);

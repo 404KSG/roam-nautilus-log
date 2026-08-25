@@ -15,9 +15,10 @@
   the default 05:00 profile while keeping pre-05:00 and next-day sectors visible.
 - Direct flexible blocks no longer need a TODO marker to participate in Plan,
   Timing, completion, capacity, and the spiral.
-- Referenced tasks now use a daily-instance model: the source supplies reusable
-  content, while today's wrapper owns status, progress, completion time, CLOCK
-  history, and any local planned-duration override.
+- Referenced tasks now use one daily-instance model across the spiral, topbar,
+  Plan, Timing, and Review. A bare reference inherits its source TODO/DONE;
+  an explicit outer TODO or DONE owns today's status and can reopen a completed
+  source. Local duration overrides source duration instead of adding to it.
 
 ### Fixed
 
@@ -29,9 +30,10 @@
   burning-bucket context.
 - Depot builds now parse the SCI component source with Clojure's reader before
   packaging, preventing delimiter errors from reaching Preview installs.
-- A completed source block can be reused on another day without leaking its
-  DONE marker or completion time; completing the new instance updates only its
-  daily wrapper and leaves the reusable source unchanged.
+- Source completion time, progress, and CLOCK history are never inherited by a
+  daily wrapper. A bare reference to completed content stays complete and is
+  excluded from today's execution; adding an outer TODO explicitly reopens it,
+  and later completion updates only that daily wrapper.
 
 ## 1.0.2 — 2026-08-23
 

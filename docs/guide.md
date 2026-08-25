@@ -15,15 +15,20 @@ Their Roam block order is the task priority.
 ```
 
 - A time range is a fixed event.
-- An unfinished TODO is a flexible task.
+- A direct child without a time range is a flexible task; TODO is optional and
+  DONE excludes the task from today's execution.
 - Durations support `30m`, `30min`, `1h`, and `1h30m`.
 - Untimed tasks use **Default Todo Duration**.
 - **Urgent Trigger Word** changes a task's color, not its scheduling order.
+- A bare block reference inherits its source TODO/DONE. Add an outer TODO to
+  explicitly redo completed source content today.
+- A duration written after the reference overrides the source duration. Source
+  completion time, progress, and CLOCK history are never inherited.
 
 ## Scheduling rules
 
 1. Fixed events claim their written time ranges.
-2. Unfinished direct-child TODOs are read in Roam block order.
+2. Pending direct-child tasks are read in Roam block order.
 3. Starting at the current moment, complete tasks fill the next continuous gaps large
    enough for them.
 4. Time passing moves unfinished work forward without changing priority.
