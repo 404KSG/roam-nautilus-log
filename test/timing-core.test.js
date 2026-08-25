@@ -57,6 +57,73 @@ test('Plan is a flat ordered projection of unfinished direct children', () => {
   );
 });
 
+test('today wrapper owns state and overrides duration inherited from a referenced source', () => {
+  const sourceString = '{{[[DONE]]}} 群里通知上午处理完稿件 15m d09:11';
+  const readString = (uid) => (uid === 'source-task' ? sourceString : '');
+
+  const pending = timing.resolveTaskInstance({
+    uid: 'today-task',
+    localString: '((source-task)) 25m',
+    readString,
+    fallbackMinutes: 10,
+  });
+
+  assert.deepEqual(
+    {
+      uid: pending.uid,
+      sourceUid: pending.sourceUid,
+      title: pending.title,
+      status: pending.status,
+      explicitStatus: pending.explicitStatus,
+      plannedMinutes: pending.plannedMinutes,
+      doneAt: pending.doneAt,
+    },
+    {
+      uid: 'today-task',
+      sourceUid: 'source-task',
+      title: '群里通知上午处理完稿件',
+      status: 'TODO',
+      explicitStatus: null,
+      plannedMinutes: 25,
+      doneAt: null,
+    },
+  );
+  assert.doesNotMatch(pending.effectiveString, /DONE|d09:11|15m/);
+  assert.match(pending.effectiveString, /25m/);
+
+  const completed = timing.resolveTaskInstance({
+    uid: 'today-task',
+    localString: '{{[[DONE]]}} ((source-task)) 25m d10:20',
+    readString,
+    fallbackMinutes: 10,
+  });
+  assert.equal(completed.status, 'DONE');
+  assert.equal(completed.doneAt, 620);
+  assert.equal(completed.plannedMinutes, 25);
+});
+
+test('plain direct children are implicit pending tasks while fixed events remain excluded from Plan', () => {
+  const rows = [
+    { uid: 'plain', parentUid: 'plan', order: 0, string: 'Read 25m' },
+    { uid: 'todo', parentUid: 'plan', order: 1, string: '{{[[TODO]]}} Write 30m' },
+    { uid: 'done', parentUid: 'plan', order: 2, string: '{{[[DONE]]}} Ship 15m' },
+    { uid: 'event', parentUid: 'plan', order: 3, string: '10:00-11:00 Meeting' },
+  ];
+
+  assert.deepEqual(
+    timing.projectPlan(rows, 'plan').map(({ uid, status, explicitStatus, plannedMinutes }) => ({
+      uid,
+      status,
+      explicitStatus,
+      plannedMinutes,
+    })),
+    [
+      { uid: 'plain', status: 'TODO', explicitStatus: null, plannedMinutes: 25 },
+      { uid: 'todo', status: 'TODO', explicitStatus: 'TODO', plannedMinutes: 30 },
+    ],
+  );
+});
+
 test('execution projections share the renderer duration syntax', () => {
   assert.equal(timing.plannedMinutes('{{[[TODO]]}} A 30m'), 30);
   assert.equal(timing.plannedMinutes('{{[[TODO]]}} B 30min'), 30);

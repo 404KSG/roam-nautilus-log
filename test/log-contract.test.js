@@ -169,6 +169,17 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested L
   assert.doesNotMatch(component, /\(abs \(- done-at duration\)\)/);
 });
 
+test('the chart resolves daily task instances without flattening source state into the wrapper', () => {
+  assert.match(entry, /import \* as timingCore from "\.\/timing-core"/);
+  assert.match(entry, /window\.nautilusLogTaskCore = timingCore/);
+  assert.match(component, /task-core-call "resolveTaskInstance"/);
+  assert.match(component, /:effectiveString/);
+  const mappingStart = component.indexOf('mapped (mapv');
+  const mappingEnd = component.indexOf('clock-context', mappingStart);
+  assert.ok(mappingStart >= 0 && mappingEnd > mappingStart);
+  assert.doesNotMatch(component.slice(mappingStart, mappingEnd), /str-with-resolved-block-refs/);
+});
+
 test('the spiral exposes slice and available-slot hover targets above an inert grid', () => {
   const gridStart = component.indexOf('(defn snail-blueprint-component');
   const gridEnd = component.indexOf('(defn central-label-component', gridStart);

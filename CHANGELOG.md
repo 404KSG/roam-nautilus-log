@@ -13,6 +13,11 @@
 
 - Spiral depth is based on hours elapsed from the configured start, preserving
   the default 05:00 profile while keeping pre-05:00 and next-day sectors visible.
+- Direct flexible blocks no longer need a TODO marker to participate in Plan,
+  Timing, completion, capacity, and the spiral.
+- Referenced tasks now use a daily-instance model: the source supplies reusable
+  content, while today's wrapper owns status, progress, completion time, CLOCK
+  history, and any local planned-duration override.
 
 ### Fixed
 
@@ -24,6 +29,9 @@
   burning-bucket context.
 - Depot builds now parse the SCI component source with Clojure's reader before
   packaging, preventing delimiter errors from reaching Preview installs.
+- A completed source block can be reused on another day without leaking its
+  DONE marker or completion time; completing the new instance updates only its
+  daily wrapper and leaves the reusable source unchanged.
 
 ## 1.0.2 — 2026-08-23
 

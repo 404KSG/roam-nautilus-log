@@ -5,6 +5,7 @@ import {
   updateTemplateString,
 } from "./entry-helpers";
 import * as logCore from "./log-core";
+import * as timingCore from "./timing-core";
 import { createTimingCommands } from "./timing-commands";
 import { readAllEntries, readEntriesForTaskUids } from "./timing-roam";
 import { createTimingRuntime } from "./timing-runtime";
@@ -501,6 +502,7 @@ function panelConfig(extensionAPI, language) {
 
 async function onload({ extensionAPI }) {
   window.nautilusLogCore = logCore;
+  window.nautilusLogTaskCore = timingCore;
   window.nautilusLogExtensionData = {
     running: true,
     shouldSuppressRenderContext,
@@ -541,6 +543,7 @@ function onunload() {
       window.nautilusLogExtensionData.running = false;
     }
     delete window.nautilusLogCore;
+    delete window.nautilusLogTaskCore;
   }
   // Do not mutate the graph during unload; the render scaffolding is owned by
   // the user's graph and should remain available for a later reload.

@@ -208,19 +208,27 @@ export function readPrimaryPlan(date = new Date(), fallbackMinutes = 15) {
     if (!referencedStrings.has(uid)) referencedStrings.set(uid, readBlockString(uid));
     return referencedStrings.get(uid);
   };
-  const resolved = plan
+  const projected = plan
     ? normalized.map((row) => row.parentUid === plan.uid
-      ? { ...row, string: timingCore.resolveBlockReferences(row.string, readReferencedString) }
+      ? {
+        ...row,
+        taskInstance: timingCore.resolveTaskInstance({
+          uid: row.uid,
+          localString: row.string,
+          readString: readReferencedString,
+          fallbackMinutes,
+        }),
+      }
       : row)
     : normalized;
   return {
     pageTitle,
     pageUid,
     plan,
-    rows: resolved,
-    tasks: plan ? timingCore.projectPlan(resolved, plan.uid, fallbackMinutes) : [],
-    reviewTasks: plan ? timingCore.projectReviewTasks(resolved, plan.uid, fallbackMinutes) : [],
-    fixedEvents: plan ? timingCore.projectFixedEvents(resolved, plan.uid) : [],
+    rows: projected,
+    tasks: plan ? timingCore.projectPlan(projected, plan.uid, fallbackMinutes) : [],
+    reviewTasks: plan ? timingCore.projectReviewTasks(projected, plan.uid, fallbackMinutes) : [],
+    fixedEvents: plan ? timingCore.projectFixedEvents(projected, plan.uid) : [],
   };
 }
 
@@ -345,7 +353,7 @@ export async function createRunningClock(taskUid, now, knownTaskString = '') {
       taskUid,
       taskString,
       title: timingCore.taskTitle(taskString),
-      status: timingCore.taskStatus(taskString),
+      status: timingCore.taskStatus(taskString) || 'TODO',
       pageTitle: '',
     },
   };
@@ -377,8 +385,11 @@ export async function deleteClock(entry) {
 
 export async function completeTask(taskUid) {
   const before = readBlockString(taskUid);
-  if (timingCore.taskStatus(before) !== 'TODO') throw new Error('Only unfinished TODO tasks can be completed.');
-  const after = before.replace(/\{\{\[\[TODO\]\]\}\}|\{\{TODO\}\}/i, '{{[[DONE]]}}');
+  const status = timingCore.taskStatus(before);
+  if (status === 'DONE') throw new Error('This daily task instance is already complete.');
+  const after = status === 'TODO'
+    ? before.replace(/\{\{\[\[TODO\]\]\}\}|\{\{TODO\}\}/i, '{{[[DONE]]}}')
+    : `{{[[DONE]]}} ${before}`.trim();
   await updateGraphBlock(taskUid, after);
   if (timingCore.taskStatus(readBlockString(taskUid)) !== 'DONE') {
     throw new Error('Task completion could not be confirmed.');

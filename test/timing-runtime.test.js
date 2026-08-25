@@ -193,6 +193,69 @@ test('execution capacity resolves direct block-reference tasks exactly like the 
   assert.equal(runtime.getSnapshot().planSnapshot.execution.demandMinutes, 165);
 });
 
+test('referenced and plain daily instances can CLOCK and complete without mutating their source', async (t) => {
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#daily-instance-${Date.now()}`;
+  const extension = await import(moduleUrl);
+  const { roam, blocks } = graphMock({
+    taskAString: '((source-a)) 25m',
+    taskBString: 'Plain task 20m',
+  });
+  const originalSource = '{{[[DONE]]}} Referenced task 15m d09:11';
+  blocks.set('source-a', {
+    uid: 'source-a',
+    string: originalSource,
+    parentUid: 'outside-plan',
+    order: 0,
+  });
+  const settings = new Map([
+    ['todo-duration', 15],
+    ['workday-start', 5],
+    ['workday-end', 21],
+    ['timing-line-sidebar', false],
+    ['recent-retention-minutes', 45],
+  ]);
+  let current = new Date(2026, 7, 22, 10, 0);
+  global.window = {
+    roamAlphaAPI: roam,
+    setInterval: () => 99,
+    clearInterval: () => {},
+    setTimeout,
+    clearTimeout,
+  };
+  const extensionAPI = {
+    settings: {
+      get: (key) => settings.get(key),
+      set: async (key, value) => settings.set(key, value),
+    },
+  };
+  const runtime = extension.createTimingRuntime({ extensionAPI, now: () => new Date(current) });
+  await runtime.initialize();
+  t.after(() => {
+    runtime.destroy();
+    delete global.window;
+  });
+
+  assert.deepEqual(
+    runtime.getSnapshot().planSnapshot.tasks.map(({ uid, title, plannedMinutes }) => ({ uid, title, plannedMinutes })),
+    [
+      { uid: 'task-a', title: 'Referenced task', plannedMinutes: 25 },
+      { uid: 'task-b', title: 'Plain task', plannedMinutes: 20 },
+    ],
+  );
+
+  await runtime.startTask('task-a');
+  current = new Date(2026, 7, 22, 10, 5);
+  await runtime.completeTask('task-a');
+  assert.match(blocks.get('task-a').string, /^\{\{\[\[DONE\]\]\}\} \(\(source-a\)\) 25m/);
+  assert.equal(blocks.get('source-a').string, originalSource);
+
+  await runtime.startTask('task-b');
+  current = new Date(2026, 7, 22, 10, 10);
+  await runtime.completeTask('task-b');
+  assert.match(blocks.get('task-b').string, /^\{\{\[\[DONE\]\]\}\} Plain task 20m/);
+});
+
 test('runtime serializes close-before-switch and close-before-complete', async (t) => {
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#timing-${Date.now()}`;

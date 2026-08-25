@@ -12,6 +12,9 @@ const TODO_RE = /\{\{\[\[(TODO|DONE)\]\]\}\}|\{\{(TODO|DONE)\}\}/i;
 const CLOCK_RE = /^\s*:?CLOCK:{1,2}\s*\[([^\]]+)\](?:\s*--\s*\[([^\]]+)\])?(?:\s*=>\s*(\d+:[0-5]\d))?\s*$/i;
 const NAUTILUS_RENDER_RE = /\{\{\s*\[\[roam\/render\]\]\s*:\s*\(\(roam-render-Nautilus-Log-cljs\)\)/i;
 const BLOCK_REF_RE = /\(\(([a-zA-Z0-9_-]{6,})\)\)/g;
+const DURATION_TOKEN_RE = /(?:^|\s)(\d+h(?:\d+(?:min|m))?|\d+(?:min|m))(?=\s|$)/gi;
+const DONE_TIME_RE = /(?:^|\s)d(\d{1,2})(?::(\d{1,2}))?(?=\s|$)/i;
+const PROGRESS_RE = /(?:^|\s)d(\d{1,3})%(?=\s|$)/i;
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const ACTIVE_WORK_WINDOW_MINUTES = 45;
 const FORGOTTEN_CLOCK_MINUTES = 120;
@@ -199,8 +202,141 @@ function plannedMinutes(string, fallback = 15) {
 
 function taskProgress(string) {
   if (typeof string !== 'string') return 0;
-  const match = /(?:^|\s)d(\d{1,3})%(?=\s|$)/i.exec(string);
+  const match = PROGRESS_RE.exec(string);
   return match ? Math.min(100, Number(match[1]) || 0) : 0;
+}
+
+function doneTime(string) {
+  if (typeof string !== 'string') return { minutes: null, token: '' };
+  const match = DONE_TIME_RE.exec(string);
+  if (!match) return { minutes: null, token: '' };
+  const hour = Number(match[1]);
+  const minute = Number(match[2] || 0);
+  if (hour > 23 || minute > 59) return { minutes: null, token: '' };
+  return { minutes: hour * 60 + minute, token: match[0].trim() };
+}
+
+function durationTokens(string) {
+  if (typeof string !== 'string') return [];
+  return [...string.matchAll(new RegExp(DURATION_TOKEN_RE.source, DURATION_TOKEN_RE.flags))]
+    .map((match) => ({
+      token: match[1],
+      minutes: logCore.parseDurationToken({ text: match[1], fallback: 0 }).minutes,
+    }));
+}
+
+function removeTaskState(string) {
+  return String(string ?? '')
+    .replace(new RegExp(TODO_RE.source, 'gi'), ' ')
+    .replace(new RegExp(DONE_TIME_RE.source, 'gi'), ' ')
+    .replace(new RegExp(PROGRESS_RE.source, 'gi'), ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function removeDurationTokens(string) {
+  return String(string ?? '')
+    .replace(new RegExp(DURATION_TOKEN_RE.source, DURATION_TOKEN_RE.flags), ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function removeTimeRange(string) {
+  const parsed = logCore.parseTimeRangeToken({ text: String(string ?? '') });
+  return parsed ? parsed.cleanedText : String(string ?? '');
+}
+
+function referenceUids(string) {
+  if (typeof string !== 'string') return [];
+  return [...string.matchAll(new RegExp(BLOCK_REF_RE.source, BLOCK_REF_RE.flags))]
+    .map((match) => match[1]);
+}
+
+/**
+ * Build one daily task instance without allowing state from a referenced
+ * source block to leak into today's wrapper. The wrapper owns TODO/DONE,
+ * completion time, progress and CLOCK identity. Referenced blocks contribute
+ * reusable content, with a wrapper duration or time range overriding source
+ * metadata instead of adding to it.
+ */
+function resolveTaskInstance({
+  uid = '',
+  localString = '',
+  references = [],
+  readString,
+  fallbackMinutes = 15,
+  maxDepth = 8,
+} = {}) {
+  const local = String(localString ?? '');
+  const supplied = new Map((Array.isArray(references) ? references : [])
+    .filter((reference) => reference?.uid && typeof reference.string === 'string')
+    .map((reference) => [reference.uid, reference.string]));
+  const read = (referenceUid) => {
+    if (supplied.has(referenceUid)) return supplied.get(referenceUid);
+    if (typeof readString !== 'function') return '';
+    const value = readString(referenceUid);
+    return typeof value === 'string' ? value : '';
+  };
+  const resolveSource = (referenceUid, stack = []) => {
+    if (!referenceUid || stack.includes(referenceUid) || stack.length >= maxDepth) return '';
+    const source = read(referenceUid);
+    if (!source) return '';
+    const nested = source.replace(new RegExp(BLOCK_REF_RE.source, BLOCK_REF_RE.flags), (_match, nestedUid) => (
+      resolveSource(nestedUid, [...stack, referenceUid])
+    ));
+    return removeTaskState(nested);
+  };
+
+  const refs = referenceUids(local);
+  const sourceUid = refs[0] || null;
+  const source = sourceUid ? resolveSource(sourceUid) : '';
+  const explicitStatus = taskStatus(local);
+  const localDone = doneTime(local);
+  const localProgress = taskProgress(local);
+  const localDurations = durationTokens(local);
+  const sourceDurations = durationTokens(source);
+  const localDuration = localDurations.at(-1) || null;
+  const sourceDuration = sourceDurations.at(-1) || null;
+  const planned = localDuration?.minutes ?? sourceDuration?.minutes
+    ?? Math.max(0, Math.round(Number(fallbackMinutes) || 0));
+  const localRange = parseTimeRangeMinutes(local);
+  const sourceRange = parseTimeRangeMinutes(source);
+  const range = localRange || sourceRange;
+
+  const resolvedContent = local.replace(
+    new RegExp(BLOCK_REF_RE.source, BLOCK_REF_RE.flags),
+    (_match, referenceUid) => resolveSource(referenceUid),
+  );
+  const body = removeTimeRange(removeDurationTokens(removeTaskState(resolvedContent)))
+    .replace(/\s+/g, ' ')
+    .trim();
+  const status = explicitStatus === 'DONE' ? 'DONE' : 'TODO';
+  const marker = explicitStatus ? `{{[[${explicitStatus}]]}}` : '';
+  const rangeToken = range?.text || '';
+  const progressToken = localProgress > 0 ? `d${localProgress}%` : '';
+  const doneToken = explicitStatus === 'DONE' ? localDone.token : '';
+  const durationToken = range ? '' : `${planned}m`;
+  const effectiveString = [marker, rangeToken, body, durationToken, progressToken, doneToken]
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return {
+    uid,
+    sourceUid,
+    localString: local,
+    effectiveString,
+    title: taskTitle(body),
+    status,
+    explicitStatus,
+    plannedMinutes: planned,
+    progress: localProgress,
+    remainingMinutes: Math.max(0, Math.round(planned * (1 - localProgress / 100))),
+    doneAt: explicitStatus === 'DONE' ? localDone.minutes : null,
+    kind: range ? 'event' : 'task',
+    range,
+  };
 }
 
 function parseTimeRangeMinutes(string) {
@@ -250,28 +386,28 @@ function selectPrimaryPlan(rows = [], pageUid, matcher = isNautilusComponent) {
 
 function projectDirectTasks(rows = [], planUid, fallbackMinutes = 15) {
   return (Array.isArray(rows) ? rows : [])
-    .filter((row) => row?.parentUid === planUid && taskStatus(row.string) && !parseTimeRangeMinutes(row.string))
+    .filter((row) => row?.parentUid === planUid)
     .sort(compareTreeOrder)
     .map((row) => {
-      const planned = plannedMinutes(row.string, fallbackMinutes);
-      const progress = taskProgress(row.string);
-      return {
+      const instance = row.taskInstance || resolveTaskInstance({
         uid: row.uid,
-        string: row.string,
+        localString: row.string,
+        references: row.references,
+        fallbackMinutes,
+      });
+      if (instance.kind !== 'task' || !instance.title || instance.title === '(untitled)') return null;
+      return {
+        ...instance,
+        string: instance.effectiveString,
         order: row.order,
-        status: taskStatus(row.string),
-        title: taskTitle(row.string),
-        plannedMinutes: planned,
-        progress,
-        remainingMinutes: Math.max(0, Math.round(planned * (1 - progress / 100))),
       };
-    });
+    })
+    .filter(Boolean);
 }
 
 function projectPlan(rows = [], planUid, fallbackMinutes = 15) {
   return projectDirectTasks(rows, planUid, fallbackMinutes)
-    .filter((task) => task.status === 'TODO')
-    .map(({ status: _status, ...task }) => task);
+    .filter((task) => task.status === 'TODO');
 }
 
 function projectReviewTasks(rows = [], planUid, fallbackMinutes = 15) {
@@ -283,18 +419,19 @@ function projectFixedEvents(rows = [], planUid) {
     .filter((row) => row?.parentUid === planUid)
     .sort(compareTreeOrder)
     .map((row) => {
-      const range = parseTimeRangeMinutes(row.string);
-      if (!range) return null;
+      const instance = row.taskInstance || resolveTaskInstance({ uid: row.uid, localString: row.string });
+      const range = instance.range;
+      if (instance.kind !== 'event' || !range) return null;
       return {
         uid: row.uid,
-        string: row.string,
+        string: instance.effectiveString,
         order: row.order,
-        title: taskTitle(row.string.replace(range.text, '')),
+        title: instance.title,
         start: range.start,
         end: range.end,
         meeting: true,
         fixed: true,
-        done: taskStatus(row.string) === 'DONE',
+        done: instance.status === 'DONE',
         warning: range.warning,
       };
     })
@@ -544,6 +681,7 @@ module.exports = {
   projectReviewTasks,
   projectFixedEvents,
   resolveBlockReferences,
+  resolveTaskInstance,
   selectPrimaryPlan,
   taskStatus,
   taskTitle,

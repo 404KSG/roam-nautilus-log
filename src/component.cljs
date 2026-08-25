@@ -313,6 +313,30 @@
         (js->clj (.call function nil (clj->js value)) :keywordize-keys true)))
     (catch :default _e nil)))
 
+(defn task-core-call [function-name value]
+  "Calls the tested JavaScript task-instance core. Keeping this projection in
+   one place prevents a referenced source block's DONE state, completion time,
+   or planned duration from leaking into today's wrapper block."
+  (try
+    (let [core (.-nautilusLogTaskCore js/window)
+          function (aget core function-name)]
+      (when function
+        (js->clj (.call function nil (clj->js value)) :keywordize-keys true)))
+    (catch :default _e nil)))
+
+(defn task-instance-row [child settings]
+  (let [instance (task-core-call "resolveTaskInstance"
+                                 {:uid (:block/uid child)
+                                  :localString (:block/string child)
+                                  :references (mapv (fn [ref]
+                                                      {:uid (:block/uid ref)
+                                                       :string (:block/string ref)})
+                                                    (:block/refs child))
+                                  :fallbackMinutes (:default-duration settings)})]
+    {:s (or (:effectiveString instance) (:block/string child))
+     :uid (:block/uid child)
+     :task-instance instance}))
+
 (defn clock-render-context [page-title task-uids logical-end-minutes]
   "Reads one cached CLOCK snapshot for the displayed daily page. The entry
    bridge owns graph access so rendering multiple tasks does not repeat the
@@ -1772,7 +1796,7 @@
                                      children-list (->> @*children
                                                         (filter #(not= "" (:block/string %)))
                                                         (sort-by :block/order))
-                                     mapped (mapv #(hash-map :s (str-with-resolved-block-refs %) :uid (:block/uid %)) children-list)
+                                     mapped (mapv #(task-instance-row % settings) children-list)
                                      clock-context (clock-render-context page-title-val (mapv :uid mapped) (:workday-end settings))
                                      parsed (mapv #(parse-row-params % settings clock-context) mapped)
                                      filtered (filterv #(not= "" (:description %)) parsed)]

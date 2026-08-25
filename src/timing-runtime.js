@@ -183,9 +183,19 @@ export function createTimingRuntime({
           .filter((entry) => entry.running || snapshot.activeWork?.items?.some((item) => item.taskUid === entry.taskUid))
           .map((entry) => entry.taskUid),
       ];
-      const entries = suppliedEntries === undefined
+      const rawEntries = suppliedEntries === undefined
         ? readEntriesForTaskUids(relevantTaskUids)
         : suppliedEntries;
+      const tasksByUid = new Map(reviewTasks.map((task) => [task.uid, task]));
+      const entries = rawEntries.map((entry) => {
+        const task = tasksByUid.get(entry.taskUid);
+        return task ? {
+          ...entry,
+          title: task.title,
+          status: task.status,
+          plannedMinutes: task.plannedMinutes,
+        } : entry;
+      });
       const dailyReview = timingCore.buildDailyReview({ tasks: reviewTasks, entries, now: currentNow });
       const recentRetention = extensionAPI.settings.get('recent-retention-minutes') ?? 45;
       const activeWork = timingCore.buildActiveWork(entries, currentNow, recentRetention);
@@ -361,10 +371,11 @@ export function createTimingRuntime({
       });
     }
     return enqueue(async () => {
-      const taskString = readBlockString(taskUid);
-      if (timingCore.taskStatus(taskString) !== 'TODO') {
-        throw new Error('Only an unfinished TODO can own the Timing Line.');
+      const task = snapshot.planSnapshot?.tasks?.find((candidate) => candidate.uid === taskUid);
+      if (!task || task.status !== 'TODO') {
+        throw new Error('Only an unfinished task in today’s Nautilus Plan can own the Timing Line.');
       }
+      const taskString = readBlockString(taskUid);
       const before = snapshot.entries;
       const focused = timingCore.chooseFocusedEntry(before);
       const instant = now();
@@ -379,6 +390,12 @@ export function createTimingRuntime({
       }
       const closedEntries = await closeEntriesAt(before, instant);
       const created = await createRunningClock(taskUid, instant, taskString);
+      created.entry = {
+        ...created.entry,
+        title: task.title,
+        status: task.status,
+        plannedMinutes: task.plannedMinutes,
+      };
       await setPomodoro(timingCore.nextPomodoroState(snapshot.pomodoro, {
         action: focused ? 'switch' : 'start',
         nowMs: instant.getTime(),
