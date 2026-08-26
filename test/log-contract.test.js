@@ -562,6 +562,8 @@ test('Tidy is a stable, reversible direct-child action that does not rewrite sch
   assert.match(tidyPlan, /stableTidyOrder/);
   assert.match(tidyPlan, /childOrderMoves/);
   assert.match(tidyPlan, /setOpen/);
+  assert.match(tidyPlan, /applyOpenTarget/);
+  assert.match(tidyPlan, /collapsedUids/);
   assert.match(tidyPlan, /runningTaskUid/);
   assert.match(tidyPlan, /The Plan changed after Tidy/);
   assert.match(css, /\.nautilus-log-toast-action/);

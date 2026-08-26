@@ -22,6 +22,7 @@ function tidyHarness(extension, {
   ].map((row) => ({ ...row, open: expandedUids.includes(row.uid) }));
   const notices = [];
   const actions = [];
+  const openWrites = [];
   const read = () => rows.map((row, order) => ({ ...row, order }));
   const move = async ({ uid, order }) => {
     const from = rows.findIndex((row) => row.uid === uid);
@@ -29,6 +30,7 @@ function tidyHarness(extension, {
     if (collapseOnMove) rows = rows.map((row) => ({ ...row, open: false }));
   };
   const setOpen = async (uid, open) => {
+    openWrites.push({ uid, open });
     rows = rows.map((row) => (row.uid === uid ? { ...row, open } : row));
   };
   const tidy = extension.createPlanTidy({
@@ -39,12 +41,12 @@ function tidyHarness(extension, {
     notify: (message, intent) => notices.push({ message, intent }),
     notifyAction: (options) => actions.push(options),
   });
-  return { tidy, read, move, notices, actions };
+  return { tidy, read, move, notices, actions, openWrites };
 }
 
 test('Plan Tidy moves only settled wrappers, preserves active order, and supports one safe Undo', async () => {
   const extension = await loadExtension('tidy-runtime');
-  const harness = tidyHarness(extension);
+  const harness = tidyHarness(extension, { expandedUids: ['done-a', 'active-a'] });
   const result = await harness.tidy.run({
     planUid: 'plan',
     settledUids: ['done-a', 'past-event'],
@@ -60,6 +62,8 @@ test('Plan Tidy moves only settled wrappers, preserves active order, and support
     'divider',
     'active-b',
   ]);
+  assert.equal(harness.read().find((row) => row.uid === 'done-a').open, false);
+  assert.equal(harness.read().find((row) => row.uid === 'active-a').open, true);
   assert.equal(harness.actions.length, 1);
   assert.match(harness.actions[0].message, /Tidied 2 items/);
 
@@ -71,12 +75,17 @@ test('Plan Tidy moves only settled wrappers, preserves active order, and support
     'past-event',
     'active-b',
   ]);
+  assert.equal(harness.read().find((row) => row.uid === 'done-a').open, true);
+  assert.equal(harness.read().find((row) => row.uid === 'active-a').open, true);
   assert.deepEqual(harness.notices.at(-1), { message: 'Tidy undone.', intent: 'success' });
 });
 
 test('Plan Tidy never moves the currently running task and is idempotent', async () => {
   const extension = await loadExtension('tidy-running');
-  const harness = tidyHarness(extension, { runningTaskUid: 'done-a' });
+  const harness = tidyHarness(extension, {
+    runningTaskUid: 'done-a',
+    expandedUids: ['done-a'],
+  });
   const first = await harness.tidy.tidy({
     planUid: 'plan',
     settledUids: ['done-a', 'past-event'],
@@ -89,6 +98,7 @@ test('Plan Tidy never moves the currently running task and is idempotent', async
     'divider',
     'active-b',
   ]);
+  assert.equal(harness.read().find((row) => row.uid === 'done-a').open, true);
 
   const second = await harness.tidy.tidy({
     planUid: 'plan',
@@ -127,7 +137,32 @@ test('Plan Tidy restores the user\'s expanded direct blocks after Roam rerenders
   });
 
   const openByUid = Object.fromEntries(harness.read().map((row) => [row.uid, row.open]));
-  assert.equal(openByUid['done-a'], true);
+  assert.equal(openByUid['done-a'], false);
   assert.equal(openByUid['active-a'], true);
   assert.equal(openByUid['active-b'], false);
+});
+
+test('Plan Tidy treats collapse-only cleanup as a change and writes only expanded settled rows', async () => {
+  const extension = await loadExtension('tidy-collapse-only');
+  const harness = tidyHarness(extension, { expandedUids: ['done-a', 'active-a'] });
+  await harness.move({ uid: 'done-a', order: 0 });
+  await harness.move({ uid: 'past-event', order: 1 });
+
+  const result = await harness.tidy.run({
+    planUid: 'plan',
+    settledUids: ['done-a', 'past-event'],
+    language: 'en',
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(result.count, 1);
+  assert.deepEqual(harness.openWrites, [{ uid: 'done-a', open: false }]);
+  assert.equal(harness.read().find((row) => row.uid === 'active-a').open, true);
+  assert.match(harness.actions[0].message, /Tidied 1 item/);
+
+  await harness.actions[0].onAction();
+  assert.deepEqual(harness.openWrites, [
+    { uid: 'done-a', open: false },
+    { uid: 'done-a', open: true },
+  ]);
 });

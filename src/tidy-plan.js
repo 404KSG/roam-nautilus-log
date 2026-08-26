@@ -80,6 +80,18 @@ export function createPlanTidy({
     return moves;
   };
 
+  const applyOpenTarget = async (planUid, targetUids, open) => {
+    const targets = new Set(Array.isArray(targetUids) ? targetUids : []);
+    if (targets.size === 0) return [];
+    const changedUids = [];
+    for (const child of read(planUid)) {
+      if (!targets.has(child?.uid) || child?.open === open) continue;
+      await setOpen(child.uid, open);
+      changedUids.push(child.uid);
+    }
+    return changedUids;
+  };
+
   const undo = async ({ planUid, token, language = 'en' } = {}) => {
     const copy = copyFor(language);
     const state = undoStates.get(planUid);
@@ -92,6 +104,7 @@ export function createPlanTidy({
     }
     try {
       await applyTarget(planUid, currentUids, state.originalUids);
+      await applyOpenTarget(planUid, state.collapsedUids, true);
       undoStates.delete(planUid);
       notify(copy.undone, 'success');
       return { ok: true };
@@ -112,14 +125,26 @@ export function createPlanTidy({
       items: originalUids.map((uid) => ({ uid })),
       settledUids: safeSettled,
     }).map((item) => item.uid);
-    if (equalOrder(originalUids, targetUids)) {
+    const moves = equalOrder(originalUids, targetUids)
+      ? []
+      : await applyTarget(planUid, originalUids, targetUids);
+    const collapsedUids = await applyOpenTarget(planUid, safeSettled, false);
+    const changedUids = new Set([
+      ...moves.map((operation) => operation.uid),
+      ...collapsedUids,
+    ]);
+    if (changedUids.size === 0) {
       undoStates.delete(planUid);
       return { ok: true, changed: false, count: 0 };
     }
-    const moves = await applyTarget(planUid, originalUids, targetUids);
     const token = tokenFor(planUid);
-    undoStates.set(planUid, { token, originalUids, targetUids });
-    return { ok: true, changed: true, count: moves.length, token };
+    undoStates.set(planUid, {
+      token,
+      originalUids,
+      targetUids,
+      collapsedUids,
+    });
+    return { ok: true, changed: true, count: changedUids.size, token };
   };
 
   const run = async (options = {}) => {

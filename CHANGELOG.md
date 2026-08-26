@@ -19,6 +19,9 @@
 
 ### Changed
 
+- Tidy now collapses only expanded settled items after ordering while preserving
+  unfinished outline choices; Undo restores both order and only the outline
+  states changed by Tidy.
 - The Tidy control now uses the supplied Lucide `brush-cleaning` glyph at the
   same quiet 18px outline weight and interaction surface as the neighboring
   chart controls.
