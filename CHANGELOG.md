@@ -22,6 +22,8 @@
 - The Tidy control now uses the supplied Lucide `brush-cleaning` glyph at the
   same quiet 18px outline weight and interaction surface as the neighboring
   chart controls.
+- All four chart controls now share an 18px icon canvas and a 32px click target;
+  the denser Tidy brush is optically centered at 16.5px for balanced visual weight.
 - Spiral depth is based on hours elapsed from the configured start, preserving
   the default 05:00 profile while keeping pre-05:00 and next-day sectors visible.
 - Direct flexible blocks no longer need a TODO marker to participate in Plan,
