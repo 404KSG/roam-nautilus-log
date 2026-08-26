@@ -19,6 +19,9 @@
 
 ### Changed
 
+- The Tidy control now uses a quieter diagonal sweep glyph derived from a broom
+  silhouette, with the same 18px outline weight and interaction surface as the
+  neighboring chart controls.
 - Spiral depth is based on hours elapsed from the configured start, preserving
   the default 05:00 profile while keeping pre-05:00 and next-day sectors visible.
 - Direct flexible blocks no longer need a TODO marker to participate in Plan,

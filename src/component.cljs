@@ -1435,15 +1435,16 @@
     :aria-label (:tidy copy)
     :aria-busy (if @tidy-state "true" "false")
     :disabled @tidy-state}
-   ;; Lucide Brush Cleaning geometry, rendered inline so it inherits the same
-   ;; quiet size, color, and outline weight as the neighboring controls.
+   ;; A compact diagonal sweep mark derived from the reference broom silhouette.
+   ;; The broad solid source is reduced to the same quiet outline language as
+   ;; the neighboring Eye, Playback, and Collapse controls.
    [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none"
           :stroke "currentColor" :stroke-width "2" :stroke-linecap "round"
           :stroke-linejoin "round" :aria-hidden "true"}
-    [:path {:d "m16 22-1-4"}]
-    [:path {:d "M19 14a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2h-3a1 1 0 0 1-1-1V4a2 2 0 0 0-4 0v5a1 1 0 0 1-1 1H6a2 2 0 0 0-2 2v1a1 1 0 0 0 1 1"}]
-    [:path {:d "M19 14H5l-1.973 6.767A1 1 0 0 0 4 22h16a1 1 0 0 0 .973-1.233z"}]
-    [:path {:d "m8 22 1-4"}]]])
+    [:path {:d "M19.25 2.75 14.7 11.1"}]
+    [:path {:d "m13.3 10.4 5.1 2.9"}]
+    [:path {:d "M13.2 12.5c-2.1 3-5.6 4.7-10.2 5 3.2 2.7 7 4.1 11.3 4.2l3.7-6.5"}]
+    [:path {:d "M7.7 17.1c1 1.1 2.3 1.9 3.8 2.4"}]]])
 
 (defn collapse-storage-key [block-uid]
   (str "nautilus-log:collapsed:v1:" block-uid))
