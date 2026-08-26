@@ -207,6 +207,66 @@ test('plain direct children are implicit pending tasks while fixed events remain
   );
 });
 
+test('bare Roam dividers remain outline structure and never consume planning capacity', () => {
+  const rows = [
+    { uid: 'first', parentUid: 'plan', order: 0, string: 'First task 20m' },
+    { uid: 'dash-divider', parentUid: 'plan', order: 1, string: '---' },
+    { uid: 'long-divider', parentUid: 'plan', order: 2, string: '------ 45m' },
+    { uid: 'underscore-divider', parentUid: 'plan', order: 3, string: '___' },
+    { uid: 'star-divider', parentUid: 'plan', order: 4, string: '***' },
+    { uid: 'second', parentUid: 'plan', order: 5, string: 'Second task 25m' },
+  ];
+
+  const divider = timing.resolveTaskInstance({
+    uid: 'divider',
+    localString: '---',
+    fallbackMinutes: 15,
+  });
+  assert.deepEqual(
+    {
+      kind: divider.kind,
+      title: divider.title,
+      status: divider.status,
+      statusOrigin: divider.statusOrigin,
+      plannedMinutes: divider.plannedMinutes,
+      remainingMinutes: divider.remainingMinutes,
+      effectiveString: divider.effectiveString,
+    },
+    {
+      kind: 'structure',
+      title: '',
+      status: null,
+      statusOrigin: 'structure',
+      plannedMinutes: 0,
+      remainingMinutes: 0,
+      effectiveString: '---',
+    },
+  );
+  assert.deepEqual(
+    timing.projectPlan(rows, 'plan').map(({ uid, plannedMinutes }) => [uid, plannedMinutes]),
+    [['first', 20], ['second', 25]],
+  );
+  assert.deepEqual(
+    timing.projectReviewTasks(rows, 'plan').map(({ uid }) => uid),
+    ['first', 'second'],
+  );
+});
+
+test('structural matching is conservative and explicit task intent still wins', () => {
+  assert.equal(timing.isStructuralBlock('---'), true);
+  assert.equal(timing.isStructuralBlock('  ____  '), true);
+  assert.equal(timing.isStructuralBlock('Roadmap --- draft'), false);
+  assert.equal(timing.isStructuralBlock('--- #section'), false);
+
+  const explicit = timing.resolveTaskInstance({
+    uid: 'explicit-divider',
+    localString: '{{[[TODO]]}} --- 15m',
+  });
+  assert.equal(explicit.kind, 'task');
+  assert.equal(explicit.status, 'TODO');
+  assert.equal(explicit.plannedMinutes, 15);
+});
+
 test('Review keeps source-completed candidates only when the daily wrapper has today Actual', () => {
   const source = '{{[[DONE]]}} Reusable task 15m d09:11';
   const references = [{ uid: 'source-task', string: source }];

@@ -177,10 +177,13 @@ test('the chart resolves daily task instances through the shared reference-prece
   assert.match(component, /\.\-resolveTaskInstance/);
   assert.match(component, /task-core-call "resolveTaskInstance"/);
   assert.match(component, /:effectiveString/);
-  const mappingStart = component.indexOf('mapped (mapv');
+  const mappingStart = component.indexOf('mapped (->>');
   const mappingEnd = component.indexOf('clock-context', mappingStart);
   assert.ok(mappingStart >= 0 && mappingEnd > mappingStart);
-  assert.doesNotMatch(component.slice(mappingStart, mappingEnd), /str-with-resolved-block-refs/);
+  const mapping = component.slice(mappingStart, mappingEnd);
+  assert.match(mapping, /task-instance-row/);
+  assert.match(mapping, /"structure"/);
+  assert.doesNotMatch(mapping, /str-with-resolved-block-refs/);
 });
 
 test('mounted charts share the extension Plan Pull Watch and release it on cleanup', () => {

@@ -15,6 +15,7 @@ const BLOCK_REF_RE = /\(\(([a-zA-Z0-9_-]{6,})\)\)/g;
 const DURATION_TOKEN_RE = /(?:^|\s)(\d+h(?:\d+(?:min|m))?|\d+(?:min|m))(?=\s|$)/gi;
 const DONE_TIME_RE = /(?:^|\s)d(\d{1,2})(?::(\d{1,2}))?(?=\s|$)/i;
 const PROGRESS_RE = /(?:^|\s)d(\d{1,3})%(?=\s|$)/i;
+const STRUCTURAL_DIVIDER_RE = /^\s*(?:-{3,}|_{3,}|\*{3,})\s*$/;
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const ACTIVE_WORK_WINDOW_MINUTES = 45;
 const FORGOTTEN_CLOCK_MINUTES = 120;
@@ -198,6 +199,10 @@ function taskTitle(string) {
   return cleaned || '(untitled)';
 }
 
+function isStructuralBlock(string) {
+  return typeof string === 'string' && STRUCTURAL_DIVIDER_RE.test(string);
+}
+
 function plannedMinutes(string, fallback = 15) {
   return logCore.parseDurationToken({ text: string, fallback }).minutes;
 }
@@ -326,35 +331,40 @@ function resolveTaskInstance({
   const body = removeTimeRange(removeDurationTokens(removeTaskState(resolvedContent)))
     .replace(/\s+/g, ' ')
     .trim();
-  const status = explicitStatus || sourceStatus || 'TODO';
-  const statusOrigin = explicitStatus ? 'local' : sourceStatus ? 'source' : 'implicit';
+  // Roam dividers are outline structure, not work. Only a bare divider is
+  // ignored: an explicit TODO/DONE marker still wins as deliberate intent.
+  const structural = !explicitStatus && !range && isStructuralBlock(body);
+  const status = structural ? null : explicitStatus || sourceStatus || 'TODO';
+  const statusOrigin = structural ? 'structure' : explicitStatus ? 'local' : sourceStatus ? 'source' : 'implicit';
   const statusOwnerUid = explicitStatus ? uid : sourceState?.ownerUid || uid;
-  const marker = `{{[[${status}]]}}`;
+  const marker = structural ? '' : `{{[[${status}]]}}`;
   const rangeToken = range?.text || '';
   const progressToken = localProgress > 0 ? `d${localProgress}%` : '';
   const doneToken = explicitStatus === 'DONE' ? localDone.token : '';
-  const durationToken = range ? '' : `${planned}m`;
-  const effectiveString = [marker, rangeToken, body, durationToken, progressToken, doneToken]
-    .filter(Boolean)
-    .join(' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const durationToken = range || structural ? '' : `${planned}m`;
+  const effectiveString = structural
+    ? local.trim()
+    : [marker, rangeToken, body, durationToken, progressToken, doneToken]
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
 
   return {
     uid,
     sourceUid,
     localString: local,
     effectiveString,
-    title: taskTitle(body),
+    title: structural ? '' : taskTitle(body),
     status,
     statusOrigin,
     statusOwnerUid,
     explicitStatus,
-    plannedMinutes: planned,
-    progress: localProgress,
-    remainingMinutes: Math.max(0, Math.round(planned * (1 - localProgress / 100))),
+    plannedMinutes: structural ? 0 : planned,
+    progress: structural ? 0 : localProgress,
+    remainingMinutes: structural ? 0 : Math.max(0, Math.round(planned * (1 - localProgress / 100))),
     doneAt: explicitStatus === 'DONE' ? localDone.minutes : null,
-    kind: range ? 'event' : 'task',
+    kind: structural ? 'structure' : range ? 'event' : 'task',
     range,
   };
 }
@@ -698,6 +708,7 @@ module.exports = {
   formatClockLine,
   formatElapsed,
   isNautilusComponent,
+  isStructuralBlock,
   isForgottenClock,
   nextPomodoroState,
   nextStandalonePomodoroState,

@@ -342,6 +342,7 @@
                   (task-core-call "resolveTaskInstance" payload))]
     {:s (or (:effectiveString instance) (:block/string child))
      :uid (:block/uid child)
+     :kind (:kind instance)
      :task-instance instance}))
 
 (defn clock-render-context [page-title task-uids logical-end-minutes]
@@ -659,8 +660,8 @@
       (str/replace #"\}\}" "")
 
 
-      ;; Trim double spaces and whitespace
-      (str/replace #"---" "")
+      ;; Trim double spaces and whitespace. Structural dividers are filtered
+      ;; by the shared task-instance classifier before this renderer runs.
       (str/replace #"\s\s" " ")
       (str/trim)))
 
@@ -1801,7 +1802,9 @@
                                      children-list (->> @watched-children-state
                                                         (filter #(not= "" (:block/string %)))
                                                         (sort-by :block/order))
-                                     mapped (mapv #(task-instance-row % settings) children-list)
+                                     mapped (->> children-list
+                                                 (mapv #(task-instance-row % settings))
+                                                 (filterv #(not= "structure" (:kind %))))
                                      clock-context (clock-render-context page-title-val (mapv :uid mapped) (:workday-end settings))
                                      parsed (mapv #(parse-row-params % settings clock-context) mapped)
                                      filtered (filterv #(not= "" (:description %)) parsed)]
