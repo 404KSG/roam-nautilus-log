@@ -4,6 +4,10 @@
 
 ### Added
 
+- A one-click Tidy control now moves completed tasks and elapsed fixed events
+  to the front of the Plan with stable ordering. Active task priority, fixed
+  times, references, descendants, and spiral placement remain unchanged; the
+  native toast offers one conflict-safe Undo.
 - Modifier-clicking the Nautilus topbar trigger now routes the Primary Plan
   without changing normal click: Option/Alt-click locates it in the main window,
   while Shift-click opens or brings one deduplicated copy to the top of the right

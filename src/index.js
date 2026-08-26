@@ -11,6 +11,7 @@ import { readAllEntries, readBlockString, readEntriesForTaskUids } from "./timin
 import { createTimingRuntime } from "./timing-runtime";
 import { createTimingTopbar } from "./timing-topbar";
 import { createPlanWatchBridge } from "./plan-watch";
+import { createPlanTidy } from "./tidy-plan";
 import "../extension.css";
 
 const componentName = "Nautilus Log";
@@ -46,6 +47,7 @@ let timingRuntime = null;
 let timingTopbar = null;
 let timingCommands = null;
 let planWatchBridge = null;
+let planTidy = null;
 const rendererClockCacheMs = 15_000;
 const rendererClockCache = new Map();
 
@@ -530,6 +532,11 @@ function panelConfig(extensionAPI, language) {
 async function onload({ extensionAPI }) {
   planWatchBridge?.destroy();
   planWatchBridge = createPlanWatchBridge({ readString: readBlockString });
+  planTidy?.clear();
+  planTidy = createPlanTidy({
+    runningTaskUid: () => timingRuntime?.getSnapshot?.()?.entries
+      ?.find((entry) => entry?.running === true)?.taskUid || null,
+  });
   window.nautilusLogCore = logCore;
   window.nautilusLogTaskCore = timingCore;
   window.nautilusLogExtensionData = {
@@ -540,6 +547,7 @@ async function onload({ extensionAPI }) {
     resolveTaskInstance: resolveRendererTaskInstance,
     readPlan: planWatchBridge.read,
     watchPlan: planWatchBridge.subscribe,
+    tidyPlan: planTidy.run,
   };
   await setDefaultSettings(extensionAPI);
   await migratePreviewDefaults(extensionAPI);
@@ -572,6 +580,8 @@ function onunload() {
   stopTiming({ closeActive: false });
   planWatchBridge?.destroy();
   planWatchBridge = null;
+  planTidy?.clear();
+  planTidy = null;
   if (typeof window !== "undefined") {
     if (window.nautilusLogExtensionData) {
       window.nautilusLogExtensionData.running = false;
@@ -597,6 +607,7 @@ export {
   createTimingRuntime,
   createTimingCommands,
   createPlanWatchBridge,
+  createPlanTidy,
   resolveRendererTaskInstance,
   generateTemplateString,
   generateUpdatedRenderString,

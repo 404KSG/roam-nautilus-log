@@ -26,12 +26,78 @@ const {
   placeExternalLabels,
   radialTooltipGeometry,
   placeFloatingTooltip,
+  stableTidyOrder,
+  childOrderMoves,
   isCompactChartWidth,
   parseDurationToken,
   parseTimeRangeToken,
   alignIntervalToWindow,
   timelineDayState,
 } = require('../src/log-core');
+
+test('Tidy performs a stable settled-first partition without reprioritizing active work', () => {
+  const items = [
+    { uid: 'active-a', kind: 'task' },
+    { uid: 'done-a', kind: 'task' },
+    { uid: 'divider', kind: 'structure' },
+    { uid: 'past-event', kind: 'event' },
+    { uid: 'active-b', kind: 'task' },
+    { uid: 'future-event', kind: 'event' },
+  ];
+  const result = stableTidyOrder({ items, settledUids: ['done-a', 'past-event'] });
+
+  assert.deepEqual(result.map((item) => item.uid), [
+    'done-a',
+    'past-event',
+    'active-a',
+    'divider',
+    'active-b',
+    'future-event',
+  ]);
+  assert.deepEqual(
+    result.filter((item) => !['done-a', 'past-event'].includes(item.uid)).map((item) => item.uid),
+    ['active-a', 'divider', 'active-b', 'future-event'],
+  );
+  assert.deepEqual(
+    stableTidyOrder({ items: result, settledUids: ['done-a', 'past-event'] }),
+    result,
+    'running Tidy twice should be idempotent',
+  );
+});
+
+test('Tidy move planning rewrites only out-of-place siblings and reaches the target order', () => {
+  const current = ['done-a', 'active-a', 'done-b', 'active-b'];
+  const target = ['done-a', 'done-b', 'active-a', 'active-b'];
+  const moves = childOrderMoves({ currentUids: current, targetUids: target });
+  assert.deepEqual(moves, [{ uid: 'done-b', order: 1 }]);
+
+  const simulated = current.slice();
+  for (const move of moves) {
+    const from = simulated.indexOf(move.uid);
+    simulated.splice(move.order, 0, simulated.splice(from, 1)[0]);
+  }
+  assert.deepEqual(simulated, target);
+});
+
+test('Tidy keeps the flexible schedule fingerprint unchanged', () => {
+  const items = [
+    { uid: 'task-a', todo: true, duration: 30 },
+    { uid: 'done-task', todo: true, duration: 20, done: true },
+    { uid: 'past-event', meeting: true, start: 360, end: 420 },
+    { uid: 'task-b', todo: true, duration: 45 },
+    { uid: 'future-event', meeting: true, start: 720, end: 750 },
+  ];
+  const tidied = stableTidyOrder({ items, settledUids: ['done-task', 'past-event'] });
+  const schedule = (rows) => scheduleTasks({
+    startMinutes: 300,
+    endMinutes: 1260,
+    nowMinutes: 600,
+    tasks: rows.filter((item) => item.todo && !item.done),
+    fixedEvents: rows.filter((item) => item.meeting),
+  }).scheduledTasks.map(({ uid, start, end }) => ({ uid, start, end }));
+
+  assert.deepEqual(schedule(tidied), schedule(items));
+});
 
 test('shared syntax accepts every documented task duration form', () => {
   const cases = [
@@ -466,6 +532,7 @@ test('English UI settings localize all extension-owned status labels', () => {
     hideDone: 'Hide completed items',
     showDone: 'Show completed items',
     playback: 'Play back the day',
+    tidy: 'Tidy completed and elapsed items',
     collapse: 'Collapse Nautilus Log',
     expand: 'Expand Nautilus Log',
   });

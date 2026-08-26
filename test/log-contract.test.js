@@ -18,6 +18,7 @@ const timingTopbar = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-t
 const timingCore = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-core.js'), 'utf8');
 const timingRuntime = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-runtime.js'), 'utf8');
 const timingCommands = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-commands.js'), 'utf8');
+const tidyPlan = fs.readFileSync(path.join(__dirname, '..', 'src', 'tidy-plan.js'), 'utf8');
 
 function parenDepthBefore(source, targetIndex) {
   let depth = 0;
@@ -531,6 +532,21 @@ test('Log owns the previously tested controls and collapses without reserving ch
   assert.match(css, /\.nautilus-log-collapsed\s*\{[^}]*height:\s*0;/s);
   assert.match(css, /\.nautilus-log-collapsed \.nautilus-log-controls-top\s*\{[^}]*top:\s*-26px;/s);
   assert.doesNotMatch(css, /#roam-right-sidebar-content \.nautilus-log-container/);
+});
+
+test('Tidy is a stable, reversible direct-child action that does not rewrite schedule inputs', () => {
+  assert.match(component, /nautilus-log-tidy-btn/);
+  assert.match(component, /:settledUids settled-uids/);
+  assert.match(component, /not= "source" \(:status-origin %\)/);
+  assert.match(component, /\(:done-at %\)/);
+  assert.match(component, /<= \(:end event\) \(:elapsedThroughMinutes timeline-state\)/);
+  assert.match(entry, /tidyPlan: planTidy\.run/);
+  assert.match(tidyPlan, /stableTidyOrder/);
+  assert.match(tidyPlan, /childOrderMoves/);
+  assert.match(tidyPlan, /runningTaskUid/);
+  assert.match(tidyPlan, /The Plan changed after Tidy/);
+  assert.match(css, /\.nautilus-log-toast-action/);
+  assert.doesNotMatch(tidyPlan, /updateGraphBlock|deleteGraphBlock|createGraphBlock/);
 });
 
 test('Log uses an action-first two-row capacity ledger with controls plus legend right', () => {

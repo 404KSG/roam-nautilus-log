@@ -165,6 +165,13 @@ function resolveMutation(kind) {
   return typeof roam?.[legacyName] === 'function' ? roam[legacyName].bind(roam) : null;
 }
 
+function resolveMoveMutation() {
+  const roam = api();
+  const modern = roam?.data?.block?.move;
+  if (typeof modern === 'function') return modern.bind(roam.data.block);
+  return typeof roam?.moveBlock === 'function' ? roam.moveBlock.bind(roam) : null;
+}
+
 function generateUid() {
   return api()?.util?.generateUID?.() || Math.random().toString(36).slice(2, 11);
 }
@@ -325,6 +332,16 @@ export async function deleteGraphBlock(uid) {
   if (!remove) throw new Error('Roam block deletion is unavailable.');
   await remove({ block: { uid } });
   if (readBlockString(uid) !== null) throw new Error('Roam could not confirm the block deletion.');
+  return true;
+}
+
+export async function moveGraphBlock({ uid, parentUid, order }) {
+  if (!uid || !parentUid || !Number.isInteger(order) || order < 0) {
+    throw new Error('A block UID, parent UID, and non-negative order are required for moving.');
+  }
+  const move = resolveMoveMutation();
+  if (!move) throw new Error('Roam block moving is unavailable.');
+  await move({ location: { 'parent-uid': parentUid, order }, block: { uid } });
   return true;
 }
 
@@ -627,6 +644,33 @@ export function showToast(message, intent = 'warning') {
   } else {
     console[intent === 'danger' ? 'error' : 'warn'](`[Nautilus Log] ${message}`);
   }
+}
+
+export function showActionToast({ message, actionLabel, onAction, intent = 'success' } = {}) {
+  const renderToast = api()?.ui?.components?.renderToast;
+  const react = typeof window !== 'undefined' ? window.React : null;
+  if (typeof renderToast !== 'function' || typeof react?.createElement !== 'function') {
+    showToast([message, actionLabel].filter(Boolean).join(' · '), intent);
+    return;
+  }
+  const action = typeof onAction === 'function' && actionLabel
+    ? react.createElement('button', {
+      type: 'button',
+      className: 'nautilus-log-toast-action',
+      onClick: onAction,
+    }, actionLabel)
+    : null;
+  renderToast({
+    id: `nautilus-log-${Date.now()}`,
+    content: react.createElement(
+      'span',
+      { className: 'nautilus-log-toast-content' },
+      react.createElement('span', null, String(message || '')),
+      action,
+    ),
+    intent,
+    timeout: 6000,
+  });
 }
 
 export { pageTitleFor };

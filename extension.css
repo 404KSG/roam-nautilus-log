@@ -644,6 +644,36 @@
   outline: none;
 }
 
+.nautilus-log-toggle-btn:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.nautilus-log-toast-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nautilus-log-toast-action {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.nautilus-log-toast-action:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: 2px;
+}
+
 .bp3-dark .nautilus-log-toggle-btn:hover,
 .bp3-dark .nautilus-log-toggle-btn:focus-visible,
 .roam-app.rm-dark-theme .nautilus-log-toggle-btn:hover,

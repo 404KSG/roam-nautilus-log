@@ -66,6 +66,10 @@ Past gaps are factual schedule data, not a judgment that time was wasted.
 
 - **Eye:** show or hide completed items.
 - **Play:** replay the configured day without changing Roam blocks.
+- **Tidy:** move completed tasks and elapsed fixed events to the front while
+  preserving the exact relative order of active work. Tidy moves direct-child
+  wrappers by UID, never changes task text, times, references, or descendants,
+  and offers one Undo unless the Plan is edited again first.
 - **Collapse:** hide this chart instance while keeping its plan blocks visible.
 
 Hover or keyboard-focus a task/event slice to see its exact range and duration.

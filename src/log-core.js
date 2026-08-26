@@ -871,6 +871,7 @@ const UI_COPY = {
       hideDone: 'Hide completed items',
       showDone: 'Show completed items',
       playback: 'Play back the day',
+      tidy: 'Tidy completed and elapsed items',
       collapse: 'Collapse Nautilus Log',
       expand: 'Expand Nautilus Log',
     },
@@ -917,6 +918,7 @@ const UI_COPY = {
       hideDone: '隐藏已完成事项',
       showDone: '显示已完成事项',
       playback: '回放一整天',
+      tidy: '整理已完成任务与已过去事件',
       collapse: '折叠 Nautilus Log',
       expand: '展开 Nautilus Log',
     },
@@ -1437,6 +1439,47 @@ function placeFloatingTooltip({
   };
 }
 
+/**
+ * Move settled direct children to the front without changing the relative
+ * order inside either partition.  This is the central Tidy invariant: active
+ * flexible tasks keep the exact priority order consumed by scheduleTasks,
+ * while fixed events retain their explicit ranges.
+ */
+function stableTidyOrder({ items = [], settledUids = [] } = {}) {
+  const source = Array.isArray(items) ? items.slice() : [];
+  const settled = new Set((Array.isArray(settledUids) ? settledUids : [])
+    .filter((uid) => typeof uid === 'string' && uid));
+  if (settled.size === 0) return source;
+  return source.filter((item) => settled.has(item?.uid))
+    .concat(source.filter((item) => !settled.has(item?.uid)));
+}
+
+/**
+ * Produce deterministic move-to-index operations for one sibling list.  The
+ * simulated list is updated after every move so applying the returned moves
+ * in order reaches targetUids without rewriting blocks already in place.
+ */
+function childOrderMoves({ currentUids = [], targetUids = [] } = {}) {
+  const current = Array.isArray(currentUids) ? currentUids.slice() : [];
+  const target = Array.isArray(targetUids) ? targetUids.slice() : [];
+  if (current.length !== target.length
+      || new Set(current).size !== current.length
+      || new Set(target).size !== target.length
+      || current.some((uid) => !target.includes(uid))) {
+    return [];
+  }
+  const moves = [];
+  for (let order = 0; order < target.length; order += 1) {
+    if (current[order] === target[order]) continue;
+    const from = current.indexOf(target[order], order + 1);
+    if (from < 0) return [];
+    const [uid] = current.splice(from, 1);
+    current.splice(order, 0, uid);
+    moves.push({ uid, order });
+  }
+  return moves;
+}
+
 module.exports = {
   START_HOURS,
   END_HOURS,
@@ -1468,5 +1511,7 @@ module.exports = {
   placeExternalLabels,
   radialTooltipGeometry,
   placeFloatingTooltip,
+  stableTidyOrder,
+  childOrderMoves,
   isCompactChartWidth,
 };

@@ -714,7 +714,8 @@
          :duration-source (:durationSource done-slice)
          :actual-minutes (when (= "actual" (:durationSource done-slice)) actual-duration)
          :clock-session-count (:sessionCount actual-summary)
-         :planned-duration duration}
+         :planned-duration duration
+         :status-origin (get-in block-map [:task-instance :statusOrigin])}
         (assoc event-type true))))
 
 ;; --------------- fill day with events and todos ----------------------
@@ -1415,6 +1416,35 @@
       [:path {:d "M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"}]
       [:line {:x1 "1" :y1 "1" :x2 "23" :y2 "23"}]])])
 
+(defn tidy-button [block-uid settled-uids tidy-state settings copy]
+  [:button
+   {:on-click (fn []
+                (when-not @tidy-state
+                  (when-let [tidy (some-> js/window .-nautilusLogExtensionData .-tidyPlan)]
+                    (reset! tidy-state true)
+                    (-> (js/Promise.resolve
+                         (.call tidy nil
+                                (clj->js {:planUid block-uid
+                                          :settledUids settled-uids
+                                          :language (:language settings)})))
+                        (.catch (fn [error]
+                                  (.error js/console "[Nautilus Log] Tidy failed" error)))
+                        (.finally (fn [] (reset! tidy-state false)))))))
+    :class "nautilus-log-toggle-btn nautilus-log-tidy-btn"
+    :title (:tidy copy)
+    :aria-label (:tidy copy)
+    :aria-busy (if @tidy-state "true" "false")
+    :disabled @tidy-state}
+   ;; A restrained broom mark: the action is visible but uses the same quiet
+   ;; outline weight as the existing Eye, Playback, and Collapse controls.
+   [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none"
+          :stroke "currentColor" :stroke-width "2" :stroke-linecap "round"
+          :stroke-linejoin "round" :aria-hidden "true"}
+    [:path {:d "m21 3-9.5 9.5"}]
+    [:path {:d "m9.5 10.5 4 4"}]
+    [:path {:d "M8.2 12.2C4.7 13.1 3 15.8 3 20c4.2 0 6.9-1.7 7.8-5.2"}]
+    [:path {:d "M3.4 19.7c1.9-.8 3.4-2.2 4.3-4.1"}]]])
+
 (defn collapse-storage-key [block-uid]
   (str "nautilus-log:collapsed:v1:" block-uid))
 
@@ -1702,10 +1732,11 @@
            [:span (:description event)]
            [:span {:class "nautilus-log-warning-message"} (localized-warning (:warning event) copy)]])]])))
 
-(defn log-controls [show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid copy show-debug-button?]
+(defn log-controls [show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid settled-uids tidy-state copy show-debug-button?]
   [:div {:class "nautilus-log-controls-top"}
    [switch-done-visibility-button show-done-state (:controls copy)]
    [playback-button settings now-time-atom playback-state-atom playback-frame-atom (:controls copy)]
+   [tidy-button block-uid settled-uids tidy-state settings (:controls copy)]
    [collapse-button collapsed-state block-uid (:controls copy)]
    (when show-debug-button? [switch-debug-button])])
 
@@ -1809,9 +1840,15 @@
                                      parsed (mapv #(parse-row-params % settings clock-context) mapped)
                                      filtered (filterv #(not= "" (:description %)) parsed)]
                                  (let [dones (filterv #(or (:done-at %) (and (:meeting %) (:done %))) filtered)
-                                       pendings (filterv #(not (or (:done-at %) (and (:meeting %) (:done %)))) filtered)]
-                                   [(add-start-after pendings) dones]))))
-               show-done-state (r/atom true)]
+                                       pendings (filterv #(not (or (:done-at %) (and (:meeting %) (:done %)))) filtered)
+                                       completed-uids (->> filtered
+                                                           (filter #(and (:done %)
+                                                                         (or (not= "source" (:status-origin %))
+                                                                             (:done-at %))))
+                                                           (mapv :uid))]
+                                   [(add-start-after pendings) dones completed-uids]))))
+               show-done-state (r/atom true)
+               tidy-state (r/atom false)]
     (case @*running?
       nil [:div {:class "nautilus-log-loading"} [:strong "Loading Nautilus Log..."]]
       false [:div {:class "nautilus-log-not-installed"}
@@ -1848,7 +1885,16 @@
                                     :showAvailableSlots true
                                     :showNow @daily-page-atom?})
                 plan-from-time (:scheduleFromMinutes timeline-state)
-                [text-events done-events] @*text-events
+                [text-events done-events completed-uids] @*text-events
+                expired-fixed-uids (->> text-events
+                                        (filter :meeting)
+                                        (filter (fn [event]
+                                                  (or (= "past" (:relation timeline-state))
+                                                      (and (= "today" (:relation timeline-state))
+                                                           (number? (:end event))
+                                                           (<= (:end event) (:elapsedThroughMinutes timeline-state))))))
+                                        (mapv :uid))
+                settled-uids (vec (distinct (concat completed-uids expired-fixed-uids)))
                 pending-tasks (vec (filter #(and (:todo %) (not (:done %))) text-events))
                 fixed-events (vec (filter #(and (:meeting %) (not (:done %))) text-events))
                 all-fixed-events (vec (concat fixed-events (filter :meeting done-events)))
@@ -1874,14 +1920,14 @@
                    :ref container-ref
                    :data-nautilus-log-block block-uid}
              (if @collapsed-state
-               [log-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid copy show-debug-button?]
+               [log-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid settled-uids tidy-state copy show-debug-button?]
                [:div {:class "nautilus-log-shell"}
                 [:header {:class (str "nautilus-log-header"
                                      (when @compact-state " nautilus-log-header--compact"))}
                  [:div {:class "nautilus-log-header-copy"}
                   [capacity-metrics-component capacity settings]]
                  [:div {:class "nautilus-log-header-actions"}
-                  [log-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid copy show-debug-button?]
+                  [log-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid settled-uids tidy-state copy show-debug-button?]
                   [html-legend-component copy]]]
                 (when @compact-state
                   [compact-overview-component capacity settings copy compact-overview-open-state])
