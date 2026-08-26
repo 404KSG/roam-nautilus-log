@@ -195,3 +195,55 @@ test('shared Plan snapshots hydrate bare references before any chart parses task
   assert.equal(task.statusOrigin, 'source');
   bridge.destroy();
 });
+
+test('shared Plan watcher tracks every exact source in a nested reference status chain', async () => {
+  const extension = await loadExtension('plan-watch-nested-source');
+  const callbacks = new Map();
+  const strings = new Map([
+    ['middle-source', '((deep-source))'],
+    ['deep-source', '{{[[TODO]]}} Reusable report 20m'],
+  ]);
+  const roam = {
+    data: {
+      pull: () => ({
+        ':block/string': '[[Nautilus Log]] renderer',
+        ':block/children': [{
+          ':block/uid': 'daily-wrapper',
+          ':block/string': '((middle-source))',
+          ':block/order': 0,
+          ':block/refs': [],
+        }],
+      }),
+      addPullWatch: async (pattern, entity, callback) => {
+        callbacks.set(`${pattern}|${entity}`, callback);
+      },
+      removePullWatch: async () => undefined,
+    },
+  };
+  const bridge = extension.createPlanWatchBridge({
+    roam,
+    readString: (uid) => strings.get(uid) || '',
+  });
+  const snapshots = [];
+  const stop = bridge.subscribe('plan', (snapshot) => snapshots.push(snapshot));
+  await Promise.resolve();
+
+  const deepWatch = [...callbacks.entries()]
+    .find(([key]) => key.endsWith('|[:block/uid "deep-source"]'))?.[1];
+  assert.equal(typeof deepWatch, 'function');
+
+  strings.set('deep-source', '{{[[DONE]]}} Reusable report 20m');
+  deepWatch(null, { ':block/string': strings.get('deep-source') });
+  const child = snapshots.at(-1)['block/children'][0];
+  const task = extension.resolveRendererTaskInstance({
+    uid: child['block/uid'],
+    localString: child['block/string'],
+    references: [],
+    fallbackMinutes: 15,
+  }, (uid) => strings.get(uid) || '');
+
+  assert.equal(task.status, 'DONE');
+  assert.equal(task.statusOwnerUid, 'deep-source');
+  stop();
+  bridge.destroy();
+});

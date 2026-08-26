@@ -374,6 +374,142 @@ test('referenced and plain daily instances can CLOCK and complete without mutati
   assert.match(blocks.get('task-b').string, /^\{\{\[\[DONE\]\]\}\} Plain task 20m/);
 });
 
+test('completing a bare source-owned TODO closes the wrapper CLOCK and completes the source owner', async (t) => {
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#source-owned-completion-${Date.now()}`;
+  const extension = await import(moduleUrl);
+  const { roam, blocks } = graphMock({
+    taskAString: '((source-a))',
+    taskBString: '{{[[DONE]]}} Beta 45m',
+  });
+  blocks.set('source-a', {
+    uid: 'source-a',
+    string: '{{[[TODO]]}} Reusable task 25m',
+    parentUid: 'outside-plan',
+    order: 0,
+  });
+  const settings = new Map([
+    ['todo-duration', 15],
+    ['workday-start', 5],
+    ['workday-end', 21],
+    ['timing-line-sidebar', false],
+    ['recent-retention-minutes', 45],
+  ]);
+  let current = new Date(2026, 7, 22, 10, 0);
+  global.window = {
+    roamAlphaAPI: roam,
+    setInterval: () => 99,
+    clearInterval: () => {},
+    setTimeout,
+    clearTimeout,
+  };
+  const runtime = extension.createTimingRuntime({
+    extensionAPI: {
+      settings: {
+        get: (key) => settings.get(key),
+        set: async (key, value) => settings.set(key, value),
+      },
+    },
+    now: () => new Date(current),
+  });
+  await runtime.initialize();
+  t.after(() => {
+    runtime.destroy();
+    delete global.window;
+  });
+
+  assert.equal(runtime.getSnapshot().planSnapshot.tasks[0].statusOwnerUid, 'source-a');
+  await runtime.startTask('task-a');
+  current = new Date(2026, 7, 22, 10, 5);
+  await runtime.completeTask('task-a');
+
+  assert.equal(blocks.get('task-a').string, '((source-a))');
+  assert.match(blocks.get('source-a').string, /^\{\{\[\[DONE\]\]\}\} Reusable task 25m/);
+  assert.equal(
+    [...blocks.values()].filter((block) => /^CLOCK:/.test(block.string) && !block.string.includes('--')).length,
+    0,
+  );
+  assert.deepEqual(
+    runtime.getSnapshot().dailyReview.rows.map(({ uid, state, actualMinutes }) => [uid, state, actualMinutes]),
+    [
+      ['task-a', 'compared', 5],
+      ['task-b', 'not-tracked', 0],
+    ],
+  );
+});
+
+test('a manual source TODO to DONE transition closes the active daily wrapper CLOCK and keeps today Review', async (t) => {
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#manual-source-completion-${Date.now()}`;
+  const extension = await import(moduleUrl);
+  const { roam, blocks } = graphMock({
+    taskAString: '((source-a))',
+    taskBString: '{{[[DONE]]}} Beta 45m',
+  });
+  blocks.set('source-a', {
+    uid: 'source-a',
+    string: '{{[[TODO]]}} Reusable task 25m',
+    parentUid: 'outside-plan',
+    order: 0,
+  });
+  const settings = new Map([
+    ['todo-duration', 15],
+    ['workday-start', 5],
+    ['workday-end', 21],
+    ['timing-line-sidebar', false],
+    ['recent-retention-minutes', 45],
+  ]);
+  let planListener = null;
+  let current = new Date(2026, 7, 22, 10, 0);
+  global.window = {
+    roamAlphaAPI: roam,
+    setInterval: () => 99,
+    clearInterval: () => {},
+    setTimeout,
+    clearTimeout,
+  };
+  const runtime = extension.createTimingRuntime({
+    extensionAPI: {
+      settings: {
+        get: (key) => settings.get(key),
+        set: async (key, value) => settings.set(key, value),
+      },
+    },
+    now: () => new Date(current),
+    watchPlan: (_uid, listener) => {
+      planListener = listener;
+      return () => {};
+    },
+  });
+  await runtime.initialize();
+  t.after(() => {
+    runtime.destroy();
+    delete global.window;
+  });
+
+  await runtime.startTask('task-a');
+  current = new Date(2026, 7, 22, 10, 7);
+  blocks.set('source-a', {
+    ...blocks.get('source-a'),
+    string: '{{[[DONE]]}} Reusable task 25m',
+  });
+  planListener();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.equal(
+    [...blocks.values()].filter((block) => /^CLOCK:/.test(block.string) && !block.string.includes('--')).length,
+    0,
+  );
+  assert.deepEqual(runtime.getSnapshot().planSnapshot.tasks, []);
+  assert.deepEqual(
+    runtime.getSnapshot().dailyReview.rows.map(({ uid, state, actualMinutes }) => [uid, state, actualMinutes]),
+    [
+      ['task-a', 'compared', 7],
+      ['task-b', 'not-tracked', 0],
+    ],
+  );
+});
+
 test('runtime serializes close-before-switch and close-before-complete', async (t) => {
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#timing-${Date.now()}`;

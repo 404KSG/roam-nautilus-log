@@ -132,7 +132,13 @@ export function createTimingRuntime({
     if (!planUid || typeof watchPlan !== 'function') return;
     stopPlanWatch = watchPlan(planUid, () => {
       if (!destroyed && snapshot.planSnapshot?.plan?.uid === planUid) {
-        void requestRefresh({ immediate: true });
+        void requestRefresh({ immediate: true }).then((next) => {
+          if (!next.entries.some((entry) => entry.running && entry.status === 'DONE')) return;
+          enqueue(async () => {
+            const entries = await closeDoneClocks(next.entries);
+            return refresh({ entries });
+          }).catch((error) => console.error('[Nautilus Log] source completion reconciliation failed', error));
+        });
       }
     }, { emitInitial: false });
   };
@@ -188,8 +194,8 @@ export function createTimingRuntime({
           execution: executionProjection(sourcePlanSnapshot, currentNow, extensionAPI),
         }
         : sourcePlanSnapshot;
-      const reviewTasks = planSnapshot?.reviewTasks || (planSnapshot?.plan
-        ? timingCore.projectReviewTasks(
+      const reviewTasks = planSnapshot?.reviewCandidates || planSnapshot?.reviewTasks || (planSnapshot?.plan
+        ? timingCore.projectReviewCandidates(
           planSnapshot.rows,
           planSnapshot.plan.uid,
           Number(extensionAPI.settings.get('todo-duration')) || 15,
@@ -456,11 +462,15 @@ export function createTimingRuntime({
   });
 
   const finishTask = (taskUid) => enqueue(async () => {
+    const task = snapshot.planSnapshot?.tasks?.find((candidate) => candidate.uid === taskUid);
+    if (!task || task.status !== 'TODO') {
+      throw new Error('Only an unfinished task in today’s Nautilus Plan can be completed.');
+    }
     const instant = now();
     const entries = snapshot.entries;
     const ownedRunning = entries.filter((entry) => entry.running && entry.taskUid === taskUid);
     await closeEntriesAt(ownedRunning, instant);
-    await completeTask(taskUid);
+    await completeTask(taskUid, task.statusOwnerUid || taskUid);
     if (ownedRunning.length > 0) await setPomodoro(null);
     return refresh();
   });

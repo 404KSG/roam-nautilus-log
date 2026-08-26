@@ -95,6 +95,20 @@ Only one CLOCK runs at a time. Switching tasks closes the previous CLOCK and ope
 next at the same instant. With **Keep Timing Line first in right sidebar** enabled,
 Clock In also opens or moves the active task to the top of Roam's sidebar.
 
+### Referenced task ownership
+
+- A bare `((source TODO))` keeps its TODO/DONE state in the real source block.
+  Completing it from Nautilus Log changes that source TODO to DONE; its CLOCK remains
+  under today's direct wrapper so Actual still belongs to today.
+- An explicit outer `TODO ((source))` owns today's state. Completing it changes only
+  the outer marker and never rewrites the reusable source.
+- A bare reference whose source was already DONE is absent from Plan and Review. If
+  the source becomes DONE after today's wrapper recorded Actual, Review keeps that
+  wrapper as today's completed work.
+- Nested reference chains follow the nearest explicit TODO/DONE owner. Nautilus Log
+  watches only the exact sources used by the Primary Plan; it does not add a graph-wide
+  status scan.
+
 Recent retention defaults to 45 minutes. The Pomodoro threshold defaults to 45
 minutes and changes the live signal without stopping work. When no task CLOCK is
 active, the panel-header stopwatch starts a standalone count-up POMO. It writes no

@@ -294,7 +294,7 @@ function resolveTaskInstance({
     const source = read(referenceUid);
     if (!source) return null;
     const status = taskStatus(source);
-    if (status) return status;
+    if (status) return { status, ownerUid: referenceUid };
     const nestedUid = referenceUids(source)[0] || null;
     return nestedUid
       ? resolveSourceStatus(nestedUid, [...stack, referenceUid])
@@ -305,7 +305,8 @@ function resolveTaskInstance({
   const sourceUid = refs[0] || null;
   const source = sourceUid ? resolveSource(sourceUid) : '';
   const explicitStatus = taskStatus(local);
-  const sourceStatus = sourceUid ? resolveSourceStatus(sourceUid) : null;
+  const sourceState = sourceUid ? resolveSourceStatus(sourceUid) : null;
+  const sourceStatus = sourceState?.status || null;
   const localDone = doneTime(local);
   const localProgress = taskProgress(local);
   const localDurations = durationTokens(local);
@@ -327,6 +328,7 @@ function resolveTaskInstance({
     .trim();
   const status = explicitStatus || sourceStatus || 'TODO';
   const statusOrigin = explicitStatus ? 'local' : sourceStatus ? 'source' : 'implicit';
+  const statusOwnerUid = explicitStatus ? uid : sourceState?.ownerUid || uid;
   const marker = `{{[[${status}]]}}`;
   const rangeToken = range?.text || '';
   const progressToken = localProgress > 0 ? `d${localProgress}%` : '';
@@ -346,6 +348,7 @@ function resolveTaskInstance({
     title: taskTitle(body),
     status,
     statusOrigin,
+    statusOwnerUid,
     explicitStatus,
     plannedMinutes: planned,
     progress: localProgress,
@@ -427,8 +430,16 @@ function projectPlan(rows = [], planUid, fallbackMinutes = 15) {
     .filter((task) => task.status === 'TODO');
 }
 
+function projectReviewCandidates(rows = [], planUid, fallbackMinutes = 15) {
+  // Keep source-completed wrappers as lightweight candidates until today's
+  // wrapper-owned CLOCK data is known. buildDailyReview then excludes an
+  // inherited DONE source with no same-day Actual, while preserving a task
+  // that was genuinely worked on and completed today.
+  return projectDirectTasks(rows, planUid, fallbackMinutes);
+}
+
 function projectReviewTasks(rows = [], planUid, fallbackMinutes = 15) {
-  return projectDirectTasks(rows, planUid, fallbackMinutes)
+  return projectReviewCandidates(rows, planUid, fallbackMinutes)
     .filter((task) => !(task.status === 'DONE' && task.statusOrigin === 'source'));
 }
 
@@ -536,6 +547,7 @@ function buildDailyReview({ tasks = [], entries = [], now = new Date() } = {}) {
     const closedEntries = taskEntries.filter((entry) => !entry.running);
     const closedActual = actualMinutesToday(task.uid, closedEntries, now);
     const currentActual = actualMinutesToday(task.uid, taskEntries, now);
+    if (task.status === 'DONE' && task.statusOrigin === 'source' && currentActual <= 0) return null;
     const completed = task.status === 'DONE';
     const live = !completed && currentActual > 0 && taskEntries.some((entry) => entry.running);
     const comparable = completed && closedActual > 0;
@@ -555,7 +567,7 @@ function buildDailyReview({ tasks = [], entries = [], now = new Date() } = {}) {
       actualMinutes: actual,
       varianceMinutes: comparable ? actual - task.plannedMinutes : null,
     };
-  });
+  }).filter(Boolean);
 
   const compared = rows.filter((row) => row.state === 'compared');
   const planned = compared.reduce((total, row) => total + row.plannedMinutes, 0);
@@ -696,6 +708,7 @@ module.exports = {
   taskProgress,
   parseTimeRangeMinutes,
   projectPlan,
+  projectReviewCandidates,
   projectReviewTasks,
   projectFixedEvents,
   resolveBlockReferences,

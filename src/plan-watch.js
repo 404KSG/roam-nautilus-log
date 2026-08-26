@@ -93,13 +93,36 @@ function entityLookup(uid) {
   return `[:block/uid "${String(uid || '').replace(/["\\]/g, '')}"]`;
 }
 
-function referencedUids(snapshot) {
+function referencedUids(snapshot, readString, maxDepth = 8) {
   const result = new Set();
+  const supplied = new Map();
   for (const child of snapshot?.['block/children'] || []) {
-    const string = String(child?.['block/string'] || '');
-    for (const match of string.matchAll(new RegExp(BLOCK_REF_RE.source, BLOCK_REF_RE.flags))) {
-      if (match[1]) result.add(match[1]);
+    for (const reference of child?.['block/refs'] || []) {
+      const uid = reference?.['block/uid'];
+      if (uid) supplied.set(uid, String(reference?.['block/string'] || ''));
     }
+  }
+  const sourceCache = new Map(supplied);
+  const sourceString = (uid) => {
+    if (sourceCache.has(uid)) return sourceCache.get(uid);
+    let value = '';
+    try { value = typeof readString === 'function' ? readString(uid) : ''; }
+    catch (_error) { value = ''; }
+    sourceCache.set(uid, typeof value === 'string' ? value : '');
+    return sourceCache.get(uid);
+  };
+  const visit = (string, stack = []) => {
+    if (stack.length >= maxDepth) return;
+    for (const match of string.matchAll(new RegExp(BLOCK_REF_RE.source, BLOCK_REF_RE.flags))) {
+      const uid = match[1];
+      if (!uid || stack.includes(uid)) continue;
+      result.add(uid);
+      const nested = sourceString(uid);
+      if (nested) visit(nested, [...stack, uid]);
+    }
+  };
+  for (const child of snapshot?.['block/children'] || []) {
+    visit(String(child?.['block/string'] || ''));
   }
   return result;
 }
@@ -198,7 +221,7 @@ export function createPlanWatchBridge({
       .map((child) => child?.['block/uid'])
       .filter(Boolean));
     sync(entry.childWatches, childUids, CHILD_WATCH_PATTERN);
-    sync(entry.sourceWatches, referencedUids(entry.snapshot), SOURCE_WATCH_PATTERN);
+    sync(entry.sourceWatches, referencedUids(entry.snapshot, readReferencedString), SOURCE_WATCH_PATTERN);
   };
 
   const remove = (uid, entry) => {

@@ -88,6 +88,16 @@ Shift + 单击则会在 Roam 右侧边栏打开同一个 block，已存在时只
 开启 **Keep Timing Line first in right sidebar** 后，Clock In 还会把当前任务打开或移动
 到 Roam 右侧边栏顶部。
 
+### 引用任务的状态所有权
+
+- 裸 `((来源 TODO))` 的 TODO/DONE 状态由真实来源块拥有。从 Nautilus Log 完成任务时，
+  插件会把来源 TODO 改为 DONE；CLOCK 仍写在今天的直接外壳下，因此 Actual 仍属于今天。
+- 显式外层 `TODO ((来源))` 由今天的外层状态负责。完成时只修改外层标记，不改可复用来源。
+- 如果裸引用进入今天之前来源就已经 DONE，它不会进入 Plan 或 Review；如果来源是在今天
+  外壳已经产生 Actual 之后变为 DONE，Review 会保留这条今天真实做过的记录。
+- 多层引用沿引用链寻找最近的显式 TODO/DONE 所有者。插件只监听 Primary Plan 实际使用的
+  精确来源块，不增加全图状态扫描。
+
 Recent 默认保留 45 分钟。Pomodoro 阈值默认 45 分钟，只改变实时提示，不会停止工作。
 遗忘计时提醒默认 120 分钟，也不会自动停止或删除 CLOCK。填写 `0` 可以关闭 Recent
 或遗忘计时提醒。

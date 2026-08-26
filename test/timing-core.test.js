@@ -111,6 +111,7 @@ test('a bare reference chain inherits the nearest explicit source status', () =>
       title: task.title,
       status: task.status,
       statusOrigin: task.statusOrigin,
+      statusOwnerUid: task.statusOwnerUid,
       plannedMinutes: task.plannedMinutes,
       doneAt: task.doneAt,
     },
@@ -118,6 +119,7 @@ test('a bare reference chain inherits the nearest explicit source status', () =>
       title: 'Reusable report',
       status: 'DONE',
       statusOrigin: 'source',
+      statusOwnerUid: 'completed-source',
       plannedMinutes: 15,
       doneAt: null,
     },
@@ -167,6 +169,7 @@ test('a bare reference to reusable TODO content stays pending with source-owned 
     {
       status: task.status,
       statusOrigin: task.statusOrigin,
+      statusOwnerUid: task.statusOwnerUid,
       explicitStatus: task.explicitStatus,
       plannedMinutes: task.plannedMinutes,
       title: task.title,
@@ -174,6 +177,7 @@ test('a bare reference to reusable TODO content stays pending with source-owned 
     {
       status: 'TODO',
       statusOrigin: 'source',
+      statusOwnerUid: 'source-task',
       explicitStatus: null,
       plannedMinutes: 40,
       title: 'Reusable draft',
@@ -203,7 +207,7 @@ test('plain direct children are implicit pending tasks while fixed events remain
   );
 });
 
-test('Review excludes source-completed bare references but keeps locally completed instances', () => {
+test('Review keeps source-completed candidates only when the daily wrapper has today Actual', () => {
   const source = '{{[[DONE]]}} Reusable task 15m d09:11';
   const references = [{ uid: 'source-task', string: source }];
   const rows = [
@@ -212,8 +216,9 @@ test('Review excludes source-completed bare references but keeps locally complet
     { uid: 'today-done', parentUid: 'plan', order: 2, string: '{{[[DONE]]}} ((source-task)) 25m d10:20', references },
   ];
 
+  const candidates = timing.projectReviewCandidates(rows, 'plan');
   assert.deepEqual(
-    timing.projectReviewTasks(rows, 'plan').map(({ uid, status, statusOrigin, plannedMinutes, doneAt }) => ({
+    candidates.map(({ uid, status, statusOrigin, plannedMinutes, doneAt }) => ({
       uid,
       status,
       statusOrigin,
@@ -221,8 +226,34 @@ test('Review excludes source-completed bare references but keeps locally complet
       doneAt,
     })),
     [
+      { uid: 'inherited', status: 'DONE', statusOrigin: 'source', plannedMinutes: 15, doneAt: null },
       { uid: 'reopened', status: 'TODO', statusOrigin: 'local', plannedMinutes: 15, doneAt: null },
       { uid: 'today-done', status: 'DONE', statusOrigin: 'local', plannedMinutes: 25, doneAt: 620 },
+    ],
+  );
+
+  assert.deepEqual(
+    timing.buildDailyReview({ tasks: candidates, entries: [], now: new Date(2026, 7, 22, 12, 0) })
+      .rows.map(({ uid }) => uid),
+    ['reopened', 'today-done'],
+  );
+
+  const reviewWithActual = timing.buildDailyReview({
+    tasks: candidates,
+    entries: [{
+      taskUid: 'inherited',
+      start: new Date(2026, 7, 22, 9, 0),
+      end: new Date(2026, 7, 22, 9, 10),
+      running: false,
+    }],
+    now: new Date(2026, 7, 22, 12, 0),
+  });
+  assert.deepEqual(
+    reviewWithActual.rows.map(({ uid, state, actualMinutes }) => [uid, state, actualMinutes]),
+    [
+      ['inherited', 'compared', 10],
+      ['reopened', 'not-started', 0],
+      ['today-done', 'not-tracked', 0],
     ],
   );
 });

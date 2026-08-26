@@ -191,6 +191,7 @@ export function readPrimaryPlan(date = new Date(), fallbackMinutes = 15) {
     plan: null,
     rows: [],
     tasks: [],
+    reviewCandidates: [],
     reviewTasks: [],
     fixedEvents: [],
   };
@@ -227,6 +228,7 @@ export function readPrimaryPlan(date = new Date(), fallbackMinutes = 15) {
     plan,
     rows: projected,
     tasks: plan ? timingCore.projectPlan(projected, plan.uid, fallbackMinutes) : [],
+    reviewCandidates: plan ? timingCore.projectReviewCandidates(projected, plan.uid, fallbackMinutes) : [],
     reviewTasks: plan ? timingCore.projectReviewTasks(projected, plan.uid, fallbackMinutes) : [],
     fixedEvents: plan ? timingCore.projectFixedEvents(projected, plan.uid) : [],
   };
@@ -383,15 +385,16 @@ export async function deleteClock(entry) {
   return true;
 }
 
-export async function completeTask(taskUid) {
-  const before = readBlockString(taskUid);
+export async function completeTask(taskUid, statusOwnerUid = taskUid) {
+  const targetUid = statusOwnerUid || taskUid;
+  const before = readBlockString(targetUid);
   const status = timingCore.taskStatus(before);
   if (status === 'DONE') throw new Error('This daily task instance is already complete.');
   const after = status === 'TODO'
     ? before.replace(/\{\{\[\[TODO\]\]\}\}|\{\{TODO\}\}/i, '{{[[DONE]]}}')
     : `{{[[DONE]]}} ${before}`.trim();
-  await updateGraphBlock(taskUid, after);
-  if (timingCore.taskStatus(readBlockString(taskUid)) !== 'DONE') {
+  await updateGraphBlock(targetUid, after);
+  if (timingCore.taskStatus(readBlockString(targetUid)) !== 'DONE') {
     throw new Error('Task completion could not be confirmed.');
   }
   return true;
