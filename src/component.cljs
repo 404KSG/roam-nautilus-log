@@ -1435,16 +1435,17 @@
     :aria-label (:tidy copy)
     :aria-busy (if @tidy-state "true" "false")
     :disabled @tidy-state}
-   ;; A compact diagonal sweep mark derived from the reference broom silhouette.
-   ;; The broad solid source is reduced to the same quiet outline language as
-   ;; the neighboring Eye, Playback, and Collapse controls.
+   ;; Preserve the reference brush's long handle, rounded shoulder, and split
+   ;; bristles while reducing its heavy silhouette to the same quiet outline
+   ;; language as the neighboring Eye, Playback, and Collapse controls.
    [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none"
           :stroke "currentColor" :stroke-width "2" :stroke-linecap "round"
           :stroke-linejoin "round" :aria-hidden "true"}
-    [:path {:d "M19.25 2.75 14.7 11.1"}]
-    [:path {:d "m13.3 10.4 5.1 2.9"}]
-    [:path {:d "M13.2 12.5c-2.1 3-5.6 4.7-10.2 5 3.2 2.7 7 4.1 11.3 4.2l3.7-6.5"}]
-    [:path {:d "M7.7 17.1c1 1.1 2.3 1.9 3.8 2.4"}]]])
+    [:g {:transform "rotate(45 12 12)"}
+     [:path {:d "M10.25 10V3.5a1.75 1.75 0 0 1 3.5 0V10"}]
+     [:path {:d "M8 14a4 4 0 0 1 8 0"}]
+     [:path {:d "M8 14v7h8v-7"}]
+     [:path {:d "M10.7 17.25V21M13.3 17.25V21"}]]]])
 
 (defn collapse-storage-key [block-uid]
   (str "nautilus-log:collapsed:v1:" block-uid))
