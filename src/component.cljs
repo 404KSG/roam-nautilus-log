@@ -1435,21 +1435,15 @@
     :aria-label (:tidy copy)
     :aria-busy (if @tidy-state "true" "false")
     :disabled @tidy-state}
-   ;; Use the supplied Lucide broom-sparkles glyph without reshaping it; only
+   ;; Use the supplied Lucide brush-cleaning glyph without reshaping it; only
    ;; the rendered size follows the neighboring chart controls.
    [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none"
           :stroke "currentColor" :stroke-width "2" :stroke-linecap "round"
           :stroke-linejoin "round" :aria-hidden "true"}
-    [:path {:d "M11 2v2"}]
-    [:path {:d "M12 3h-2"}]
-    [:path {:d "M13.5 10.5 22 2"}]
-    [:path {:d "M14.734 13.841a2 2 0 00-.314-2.42L12.58 9.58a2 2 0 00-2.421-.314l-7.657 4.461A1 1 0 002.3 15.3l6.403 6.403a1 1 0 001.571-.204z"}]
-    [:path {:d "M20 15v4"}]
-    [:path {:d "M22 17h-4"}]
-    [:path {:d "M4 4v4"}]
-    [:path {:d "m5 18 2-2"}]
-    [:path {:d "M6 6H2"}]
-    [:path {:d "m7.699 10.7 5.602 5.601"}]]])
+    [:path {:d "m16 22-1-4"}]
+    [:path {:d "M19 14a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2h-3a1 1 0 0 1-1-1V4a2 2 0 0 0-4 0v5a1 1 0 0 1-1 1H6a2 2 0 0 0-2 2v1a1 1 0 0 0 1 1"}]
+    [:path {:d "M19 14H5l-1.973 6.767A1 1 0 0 0 4 22h16a1 1 0 0 0 .973-1.233z"}]
+    [:path {:d "m8 22 1-4"}]]])
 
 (defn collapse-storage-key [block-uid]
   (str "nautilus-log:collapsed:v1:" block-uid))

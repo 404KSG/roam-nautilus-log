@@ -19,7 +19,7 @@
 
 ### Changed
 
-- The Tidy control now uses the supplied Lucide `broom-sparkles` glyph at the
+- The Tidy control now uses the supplied Lucide `brush-cleaning` glyph at the
   same quiet 18px outline weight and interaction surface as the neighboring
   chart controls.
 - Spiral depth is based on hours elapsed from the configured start, preserving
