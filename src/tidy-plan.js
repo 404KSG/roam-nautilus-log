@@ -4,6 +4,7 @@ import {
   readChildren,
   showActionToast,
   showToast,
+  updateGraphBlockOpen,
 } from './timing-roam';
 
 const COPY = {
@@ -51,17 +52,30 @@ export function createPlanTidy({
   notify = showToast,
   notifyAction = showActionToast,
   runningTaskUid = () => null,
+  setOpen = updateGraphBlockOpen,
 } = {}) {
   const undoStates = new Map();
 
   const applyTarget = async (planUid, currentUids, targetUids) => {
+    const outlineState = new Map(read(planUid)
+      .filter((child) => child?.uid && typeof child?.open === 'boolean')
+      .map((child) => [child.uid, child.open]));
     const moves = logCore.childOrderMoves({ currentUids, targetUids });
     for (const operation of moves) {
       await move({ uid: operation.uid, parentUid: planUid, order: operation.order });
     }
-    const confirmed = uidOrder(read(planUid));
-    if (!equalOrder(confirmed, targetUids)) {
+    const confirmedChildren = read(planUid);
+    if (!equalOrder(uidOrder(confirmedChildren), targetUids)) {
       throw new Error('Roam could not confirm the final Tidy order.');
+    }
+    // Roam may recreate moved outline rows and collapse their descendants.
+    // Restore only states that actually changed, preserving the user's live
+    // working context without issuing writes for every sibling.
+    for (const child of confirmedChildren) {
+      const previousOpen = outlineState.get(child?.uid);
+      if (typeof previousOpen === 'boolean' && child?.open !== previousOpen) {
+        await setOpen(child.uid, previousOpen);
+      }
     }
     return moves;
   };

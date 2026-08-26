@@ -30,6 +30,10 @@
 
 ### Fixed
 
+- Tidy now treats every visibly completed direct child—including a bare
+  reference whose source is already DONE—as settled, while continuing to move
+  only today's wrapper. Reordering also preserves each Block's existing
+  expanded or collapsed outline state instead of folding active work.
 - The Nautilus topbar shortcut hint now appears reliably on hover and keyboard
   focus, even while a timer is refreshing the trigger state, using the same
   compact surface, pointer, and light/dark treatment as Roam's native popovers.

@@ -1842,9 +1842,11 @@
                                  (let [dones (filterv #(or (:done-at %) (and (:meeting %) (:done %))) filtered)
                                        pendings (filterv #(not (or (:done-at %) (and (:meeting %) (:done %)))) filtered)
                                        completed-uids (->> filtered
-                                                           (filter #(and (:done %)
-                                                                         (or (not= "source" (:status-origin %))
-                                                                             (:done-at %))))
+                                                           ;; Tidy reflects the visible outline state, not
+                                                           ;; today's Review ownership. A bare reference to
+                                                           ;; a DONE source is still visibly settled and its
+                                                           ;; local wrapper should move with other DONE rows.
+                                                           (filter :done)
                                                            (mapv :uid))]
                                    [(add-start-after pendings) dones completed-uids]))))
                show-done-state (r/atom true)

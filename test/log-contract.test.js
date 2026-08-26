@@ -539,16 +539,18 @@ test('Tidy is a stable, reversible direct-child action that does not rewrite sch
   assert.match(component, /Lucide Brush Cleaning geometry/);
   assert.match(component, /M19 14H5l-1\.973 6\.767/);
   assert.match(component, /:settledUids settled-uids/);
-  assert.match(component, /not= "source" \(:status-origin %\)/);
-  assert.match(component, /\(:done-at %\)/);
+  assert.match(component, /\(filter :done\)/);
+  assert.doesNotMatch(component, /not= "source" \(:status-origin %\)/);
   assert.match(component, /<= \(:end event\) \(:elapsedThroughMinutes timeline-state\)/);
   assert.match(entry, /tidyPlan: planTidy\.run/);
   assert.match(tidyPlan, /stableTidyOrder/);
   assert.match(tidyPlan, /childOrderMoves/);
+  assert.match(tidyPlan, /setOpen/);
   assert.match(tidyPlan, /runningTaskUid/);
   assert.match(tidyPlan, /The Plan changed after Tidy/);
   assert.match(css, /\.nautilus-log-toast-action/);
-  assert.doesNotMatch(tidyPlan, /updateGraphBlock|deleteGraphBlock|createGraphBlock/);
+  assert.match(tidyPlan, /updateGraphBlockOpen/);
+  assert.doesNotMatch(tidyPlan, /deleteGraphBlock|createGraphBlock/);
 });
 
 test('Log uses an action-first two-row capacity ledger with controls plus legend right', () => {

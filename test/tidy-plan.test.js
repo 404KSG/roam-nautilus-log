@@ -8,24 +8,33 @@ async function loadExtension(label) {
   return import(`data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#${label}-${Date.now()}`);
 }
 
-function tidyHarness(extension, { runningTaskUid = null } = {}) {
+function tidyHarness(extension, {
+  runningTaskUid = null,
+  collapseOnMove = false,
+  expandedUids = [],
+} = {}) {
   let rows = [
     { uid: 'active-a', string: '{{[[TODO]]}} A', order: 0 },
     { uid: 'done-a', string: '{{[[DONE]]}} Done A', order: 1 },
     { uid: 'divider', string: '---', order: 2 },
     { uid: 'past-event', string: '05:00-06:00 Event', order: 3 },
     { uid: 'active-b', string: '{{[[TODO]]}} B', order: 4 },
-  ];
+  ].map((row) => ({ ...row, open: expandedUids.includes(row.uid) }));
   const notices = [];
   const actions = [];
   const read = () => rows.map((row, order) => ({ ...row, order }));
   const move = async ({ uid, order }) => {
     const from = rows.findIndex((row) => row.uid === uid);
     rows.splice(order, 0, rows.splice(from, 1)[0]);
+    if (collapseOnMove) rows = rows.map((row) => ({ ...row, open: false }));
+  };
+  const setOpen = async (uid, open) => {
+    rows = rows.map((row) => (row.uid === uid ? { ...row, open } : row));
   };
   const tidy = extension.createPlanTidy({
     read,
     move,
+    setOpen,
     runningTaskUid: () => runningTaskUid,
     notify: (message, intent) => notices.push({ message, intent }),
     notifyAction: (options) => actions.push(options),
@@ -103,4 +112,22 @@ test('Plan Tidy refuses Undo after an intervening outline change', async () => {
   assert.equal(outcome.reason, 'changed');
   assert.deepEqual(harness.read().map((row) => row.uid), changedOrder);
   assert.equal(harness.notices.at(-1).intent, 'warning');
+});
+
+test('Plan Tidy restores the user\'s expanded direct blocks after Roam rerenders moves', async () => {
+  const extension = await loadExtension('tidy-open-state');
+  const harness = tidyHarness(extension, {
+    collapseOnMove: true,
+    expandedUids: ['done-a', 'active-a'],
+  });
+
+  await harness.tidy.tidy({
+    planUid: 'plan',
+    settledUids: ['done-a', 'past-event'],
+  });
+
+  const openByUid = Object.fromEntries(harness.read().map((row) => [row.uid, row.open]));
+  assert.equal(openByUid['done-a'], true);
+  assert.equal(openByUid['active-a'], true);
+  assert.equal(openByUid['active-b'], false);
 });

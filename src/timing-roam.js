@@ -299,15 +299,21 @@ export function getFocusedBlockUid() {
 
 export function readChildren(uid) {
   if (!uid) return [];
-  return query(`[:find ?uid ?string ?order
+  return query(`[:find ?uid ?string ?order ?open
     :in $ ?parent
     :where
     [?p :block/uid ?parent]
     [?p :block/children ?c]
     [?c :block/uid ?uid]
     [?c :block/string ?string]
-    [?c :block/order ?order]]`, uid)
-    .map(([childUid, string, order]) => ({ uid: childUid, string, order }))
+    [?c :block/order ?order]
+    [(get-else $ ?c :block/open false) ?open]]`, uid)
+    .map(([childUid, string, order, open]) => ({
+      uid: childUid,
+      string,
+      order,
+      open: open === true,
+    }))
     .filter((child) => child.uid && typeof child.string === 'string')
     .sort((left, right) => left.order - right.order);
 }
@@ -324,6 +330,14 @@ export async function updateGraphBlock(uid, string) {
   const update = resolveMutation('update');
   if (!update) throw new Error('Roam block update is unavailable.');
   await update({ block: { uid, string } });
+}
+
+export async function updateGraphBlockOpen(uid, open) {
+  if (!uid) throw new Error('A block UID is required for updating its outline state.');
+  const update = resolveMutation('update');
+  if (!update) throw new Error('Roam block updating is unavailable.');
+  await update({ block: { uid, open: open === true } });
+  return true;
 }
 
 export async function deleteGraphBlock(uid) {
