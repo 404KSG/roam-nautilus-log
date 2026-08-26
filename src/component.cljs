@@ -1435,15 +1435,15 @@
     :aria-label (:tidy copy)
     :aria-busy (if @tidy-state "true" "false")
     :disabled @tidy-state}
-   ;; A restrained broom mark: the action is visible but uses the same quiet
-   ;; outline weight as the existing Eye, Playback, and Collapse controls.
+   ;; Lucide Brush Cleaning geometry, rendered inline so it inherits the same
+   ;; quiet size, color, and outline weight as the neighboring controls.
    [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none"
           :stroke "currentColor" :stroke-width "2" :stroke-linecap "round"
           :stroke-linejoin "round" :aria-hidden "true"}
-    [:path {:d "m21 3-9.5 9.5"}]
-    [:path {:d "m9.5 10.5 4 4"}]
-    [:path {:d "M8.2 12.2C4.7 13.1 3 15.8 3 20c4.2 0 6.9-1.7 7.8-5.2"}]
-    [:path {:d "M3.4 19.7c1.9-.8 3.4-2.2 4.3-4.1"}]]])
+    [:path {:d "m16 22-1-4"}]
+    [:path {:d "M19 14a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2h-3a1 1 0 0 1-1-1V4a2 2 0 0 0-4 0v5a1 1 0 0 1-1 1H6a2 2 0 0 0-2 2v1a1 1 0 0 0 1 1"}]
+    [:path {:d "M19 14H5l-1.973 6.767A1 1 0 0 0 4 22h16a1 1 0 0 0 .973-1.233z"}]
+    [:path {:d "m8 22 1-4"}]]])
 
 (defn collapse-storage-key [block-uid]
   (str "nautilus-log:collapsed:v1:" block-uid))

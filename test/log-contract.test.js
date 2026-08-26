@@ -536,6 +536,8 @@ test('Log owns the previously tested controls and collapses without reserving ch
 
 test('Tidy is a stable, reversible direct-child action that does not rewrite schedule inputs', () => {
   assert.match(component, /nautilus-log-tidy-btn/);
+  assert.match(component, /Lucide Brush Cleaning geometry/);
+  assert.match(component, /M19 14H5l-1\.973 6\.767/);
   assert.match(component, /:settledUids settled-uids/);
   assert.match(component, /not= "source" \(:status-origin %\)/);
   assert.match(component, /\(:done-at %\)/);
