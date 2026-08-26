@@ -536,10 +536,11 @@ test('Log owns the previously tested controls and collapses without reserving ch
 
 test('Tidy is a stable, reversible direct-child action that does not rewrite schedule inputs', () => {
   assert.match(component, /nautilus-log-tidy-btn/);
-  assert.match(component, /reference brush's long handle, rounded shoulder, and split/);
-  assert.match(component, /rotate\(45 12 12\)/);
-  assert.match(component, /M10\.25 10V3\.5a1\.75 1\.75 0 0 1 3\.5 0V10/);
-  assert.match(component, /M10\.7 17\.25V21M13\.3 17\.25V21/);
+  assert.match(component, /supplied Lucide broom-sparkles glyph without reshaping/);
+  assert.match(component, /M13\.5 10\.5 22 2/);
+  assert.match(component, /M14\.734 13\.841a2 2 0 00-\.314-2\.42/);
+  assert.match(component, /M20 15v4/);
+  assert.match(component, /M22 17h-4/);
   assert.match(component, /:settledUids settled-uids/);
   assert.match(component, /\(filter :done\)/);
   assert.doesNotMatch(component, /not= "source" \(:status-origin %\)/);

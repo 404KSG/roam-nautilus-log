@@ -1435,17 +1435,21 @@
     :aria-label (:tidy copy)
     :aria-busy (if @tidy-state "true" "false")
     :disabled @tidy-state}
-   ;; Preserve the reference brush's long handle, rounded shoulder, and split
-   ;; bristles while reducing its heavy silhouette to the same quiet outline
-   ;; language as the neighboring Eye, Playback, and Collapse controls.
+   ;; Use the supplied Lucide broom-sparkles glyph without reshaping it; only
+   ;; the rendered size follows the neighboring chart controls.
    [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none"
           :stroke "currentColor" :stroke-width "2" :stroke-linecap "round"
           :stroke-linejoin "round" :aria-hidden "true"}
-    [:g {:transform "rotate(45 12 12)"}
-     [:path {:d "M10.25 10V3.5a1.75 1.75 0 0 1 3.5 0V10"}]
-     [:path {:d "M8 14a4 4 0 0 1 8 0"}]
-     [:path {:d "M8 14v7h8v-7"}]
-     [:path {:d "M10.7 17.25V21M13.3 17.25V21"}]]]])
+    [:path {:d "M11 2v2"}]
+    [:path {:d "M12 3h-2"}]
+    [:path {:d "M13.5 10.5 22 2"}]
+    [:path {:d "M14.734 13.841a2 2 0 00-.314-2.42L12.58 9.58a2 2 0 00-2.421-.314l-7.657 4.461A1 1 0 002.3 15.3l6.403 6.403a1 1 0 001.571-.204z"}]
+    [:path {:d "M20 15v4"}]
+    [:path {:d "M22 17h-4"}]
+    [:path {:d "M4 4v4"}]
+    [:path {:d "m5 18 2-2"}]
+    [:path {:d "M6 6H2"}]
+    [:path {:d "m7.699 10.7 5.602 5.601"}]]])
 
 (defn collapse-storage-key [block-uid]
   (str "nautilus-log:collapsed:v1:" block-uid))
