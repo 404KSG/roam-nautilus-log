@@ -7,6 +7,7 @@
   --nautilus-log-spiral: #888;
   --nautilus-log-line: rgba(25, 25, 25, 0.09);
   --nautilus-log-hover: rgba(25, 25, 25, 0.05);
+  --nautilus-log-positive: #4f9f7b;
   --nautilus-log-warning: #c96c00;
   --nautilus-log-event: #c58a00;
   --nautilus-log-event-fill: #fee18a;
@@ -30,6 +31,7 @@
   --nautilus-log-spiral: #aaa;
   --nautilus-log-line: rgba(255, 255, 255, 0.1);
   --nautilus-log-hover: rgba(255, 255, 255, 0.08);
+  --nautilus-log-positive: #70c49f;
   --nautilus-log-warning: #f4b75d;
   --nautilus-log-event: #f2c14e;
   --nautilus-log-event-fill: #6d570f;
@@ -44,6 +46,10 @@
   --nautilus-log-past-event-fill: rgba(242, 193, 78, 0.23);
   --nautilus-log-slot-hover: rgba(199, 207, 214, 0.09);
   --nautilus-log-slot-stroke: rgba(199, 207, 214, 0.54);
+}
+
+.dark {
+  --nautilus-log-positive: #70c49f;
 }
 
 .nautilus-log-container {
@@ -194,7 +200,11 @@
   font-weight: 500;
 }
 
-.nautilus-log-metric-percent--warning {
+.nautilus-log-metric-percent--positive .nautilus-log-metric-value {
+  color: var(--nautilus-log-positive);
+}
+
+.nautilus-log-metric-percent--warning .nautilus-log-metric-value {
   color: var(--nautilus-log-warning);
 }
 
@@ -1105,6 +1115,14 @@
   font-weight: 500;
 }
 
+.nautilus-log-timing__capacity-token.is-positive .nautilus-log-timing__capacity-value {
+  color: var(--nautilus-log-positive);
+}
+
+.nautilus-log-timing__capacity-token.is-warning .nautilus-log-timing__capacity-value {
+  color: var(--nautilus-log-warning);
+}
+
 .nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__mode-separator,
 .nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__pomodoro-label,
 .nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__threads,
@@ -1313,6 +1331,18 @@
 
 .nautilus-log-timing__capacity-part.is-warning,
 .nautilus-log-timing__capacity-part.is-warning strong {
+  color: #ad690f;
+}
+
+.nautilus-log-timing__capacity-part.is-positive.is-left strong {
+  color: var(--nautilus-log-positive);
+}
+
+.nautilus-log-timing__capacity-part.is-warning.is-left {
+  color: inherit;
+}
+
+.nautilus-log-timing__capacity-part.is-warning.is-left strong {
   color: #ad690f;
 }
 
@@ -1629,6 +1659,11 @@ button.nautilus-log-timing__plan-heading:focus-visible {
 .bp3-dark .nautilus-log-timing__row.is-unscheduled .nautilus-log-timing__row-meta,
 .dark .nautilus-log-timing__row.is-unscheduled .nautilus-log-timing__row-meta {
   color: #d89a46;
+}
+
+.bp3-dark .nautilus-log-timing__capacity-part.is-warning.is-left,
+.dark .nautilus-log-timing__capacity-part.is-warning.is-left {
+  color: inherit;
 }
 
 /* Preserve the complete three-view switcher in unusually narrow Roam

@@ -84,7 +84,11 @@ function capacitySummary(execution = {}, language = 'en') {
       label: status.summaryLabel,
       warning: status.tone === 'warning',
     },
-    left: { value: planned.percent, label: planned.percentLabel },
+    left: {
+      value: planned.percent,
+      label: planned.percentLabel,
+      tone: planned.percentTone,
+    },
   };
 }
 

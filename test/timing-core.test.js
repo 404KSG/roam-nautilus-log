@@ -570,7 +570,7 @@ test('Plan capacity summary shares the chart allocation language', () => {
   }, 'en'), {
     planned: { value: '2h35m', label: 'planned' },
     status: { value: '26m', label: 'free', warning: false },
-    left: { value: '14%', label: 'left' },
+    left: { value: '14%', label: 'left', tone: 'positive' },
   });
 
   assert.deepEqual(timing.capacitySummary({
@@ -580,7 +580,7 @@ test('Plan capacity summary shares the chart allocation language', () => {
   }, 'en'), {
     planned: { value: '3h20m', label: 'planned' },
     status: { value: '20m', label: 'over', warning: true },
-    left: { value: '0%', label: 'left' },
+    left: { value: '0%', label: 'left', tone: 'warning' },
   });
 
   assert.deepEqual(timing.capacitySummary({
@@ -590,7 +590,15 @@ test('Plan capacity summary shares the chart allocation language', () => {
   }, 'en'), {
     planned: { value: '2h35m', label: 'planned' },
     status: { value: '30m', label: 'no slot', warning: true },
-    left: { value: '14%', label: 'left' },
+    left: { value: '14%', label: 'left', tone: 'warning' },
+  });
+
+  assert.deepEqual(timing.capacitySummary({
+    availableMinutes: 180,
+    totalAvailableMinutes: 540,
+    demandMinutes: 180,
+  }, 'en').left, {
+    value: '0%', label: 'left', tone: 'neutral',
   });
 });
 

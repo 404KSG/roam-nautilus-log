@@ -137,7 +137,8 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     const summaryText = `${summary.planned.value} ${summary.planned.label} · ${summary.status.value} ${summary.status.label} · ${summary.left.value} ${summary.left.label}`;
     separator.hidden = false;
     capacity.hidden = false;
-    capacity.classList.remove('is-warning');
+    capacity.classList.toggle('is-positive', summary.left.tone === 'positive');
+    capacity.classList.toggle('is-warning', summary.left.tone === 'warning');
     capacity.querySelector('.nautilus-log-timing__capacity-value').textContent = summary.left.value;
     capacity.title = summaryText;
     trigger.setAttribute('aria-label', `${ariaLabel}, ${summaryText}`);
@@ -292,10 +293,10 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     const strip = element('div', 'nautilus-log-timing__capacity');
     strip.setAttribute('aria-label', text.label);
     const metric = element('span', 'nautilus-log-timing__capacity-metric');
-    const part = ({ value, label }, warning = false) => {
+    const part = ({ value, label }, { tone = 'neutral', left = false } = {}) => {
       const node = element(
         'span',
-        `nautilus-log-timing__capacity-part${warning ? ' is-warning' : ''}`,
+        `nautilus-log-timing__capacity-part${tone !== 'neutral' ? ` is-${tone}` : ''}${left ? ' is-left' : ''}`,
       );
       node.append(element('strong', '', value), ` ${label}`);
       return node;
@@ -303,9 +304,9 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     metric.append(
       part(summary.planned),
       ' · ',
-      part(summary.status, summary.status.warning),
+      part(summary.status, { tone: summary.status.warning ? 'warning' : 'neutral' }),
       ' · ',
-      part(summary.left),
+      part(summary.left, { tone: summary.left.tone, left: true }),
     );
     strip.append(metric);
     return strip;

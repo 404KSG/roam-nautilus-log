@@ -965,9 +965,22 @@ function capacityMetrics({ capacity = {}, language = 'en' } = {}) {
   const fullDayAvailableMinutes = Number.isFinite(totalAvailableMinutes) && totalAvailableMinutes > 0
     ? totalAvailableMinutes
     : availableMinutes;
-  const leftPercent = fullDayAvailableMinutes > 0
-    ? `${Math.round((freeMinutes / fullDayAvailableMinutes) * 100)}%`
-    : '0%';
+  const roundedLeftPercent = fullDayAvailableMinutes > 0
+    ? Math.round((freeMinutes / fullDayAvailableMinutes) * 100)
+    : 0;
+  // Preserve the distinction between a tiny real buffer and an exact fit:
+  // positive capacity never renders as 0%, while invalid inputs cannot push
+  // the compact indicator outside its 0–100% contract.
+  const leftPercentValue = Math.min(
+    100,
+    freeMinutes > 0 ? Math.max(1, roundedLeftPercent) : 0,
+  );
+  const leftPercent = `${leftPercentValue}%`;
+  const percentTone = capacity.overloadMinutes > 0 || capacity.unplacedMinutes > 0
+    ? 'warning'
+    : freeMinutes > 0
+      ? 'positive'
+      : 'neutral';
   const available = markBurning({
     key: 'available',
     label: copy.available,
@@ -993,7 +1006,7 @@ function capacityMetrics({ capacity = {}, language = 'en' } = {}) {
     summaryLabel: allocation.planned,
     percent: leftPercent,
     percentLabel: allocation.left,
-    percentTone: 'neutral',
+    percentTone,
     tone: 'neutral',
   };
   let status;

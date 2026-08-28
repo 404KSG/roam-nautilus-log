@@ -562,7 +562,7 @@ test('English UI settings localize all extension-owned status labels', () => {
       capacity: { availableMinutes: 0, fixedMinutes: 90, demandMinutes: 30, overloadMinutes: 30, slackMinutes: 0, unplacedMinutes: 30 },
     }),
     {
-      planned: { key: 'demand', label: 'Planned', value: '30m', summaryLabel: 'planned', percent: '0%', percentLabel: 'left', percentTone: 'neutral', tone: 'neutral' },
+      planned: { key: 'demand', label: 'Planned', value: '30m', summaryLabel: 'planned', percent: '0%', percentLabel: 'left', percentTone: 'warning', tone: 'neutral' },
       status: { key: 'overload', label: 'Overload', value: '30m', summaryLabel: 'over', tone: 'warning' },
       available: { key: 'available', label: 'Available', value: '0m', tone: 'neutral' },
       events: { key: 'events', label: 'Events', value: '1h30m', tone: 'event' },
@@ -603,7 +603,7 @@ test('capacity summary reports current free time as a share of full-day flexible
       language: 'en',
       capacity: { availableMinutes: 540, totalAvailableMinutes: 540, fixedMinutes: 420, demandMinutes: 105, overloadMinutes: 0, slackMinutes: 435, unplacedMinutes: 0 },
     }).planned,
-    { key: 'demand', label: 'Planned', value: '1h45m', summaryLabel: 'planned', percent: '81%', percentLabel: 'left', percentTone: 'neutral', tone: 'neutral' },
+    { key: 'demand', label: 'Planned', value: '1h45m', summaryLabel: 'planned', percent: '81%', percentLabel: 'left', percentTone: 'positive', tone: 'neutral' },
   );
 
   const lateDayDemand = capacityMetrics({
@@ -614,17 +614,39 @@ test('capacity summary reports current free time as a share of full-day flexible
 
   const overloadedDemand = capacityMetrics({
       language: 'en',
-      capacity: { availableMinutes: 90, demandMinutes: 105 },
+      capacity: { availableMinutes: 90, demandMinutes: 105, overloadMinutes: 15 },
     }).planned;
   assert.equal(overloadedDemand.percent, '0%');
   assert.equal(overloadedDemand.percentLabel, 'left');
-  assert.equal(overloadedDemand.percentTone, 'neutral');
+  assert.equal(overloadedDemand.percentTone, 'warning');
+
+  const exactDemand = capacityMetrics({
+    language: 'en',
+    capacity: { availableMinutes: 90, totalAvailableMinutes: 540, demandMinutes: 90 },
+  }).planned;
+  assert.equal(exactDemand.percent, '0%');
+  assert.equal(exactDemand.percentTone, 'neutral');
+
+  const tinyPositiveDemand = capacityMetrics({
+    language: 'en',
+    capacity: { availableMinutes: 2, totalAvailableMinutes: 540, demandMinutes: 0 },
+  }).planned;
+  assert.equal(tinyPositiveDemand.percent, '1%');
+  assert.equal(tinyPositiveDemand.percentTone, 'positive');
+
+  const fragmentedDemand = capacityMetrics({
+    language: 'en',
+    capacity: { availableMinutes: 60, totalAvailableMinutes: 540, demandMinutes: 45, unplacedMinutes: 30 },
+  }).planned;
+  assert.equal(fragmentedDemand.percent, '3%');
+  assert.equal(fragmentedDemand.percentTone, 'warning');
 
   const emptyDemand = capacityMetrics({
     language: 'en',
     capacity: { availableMinutes: 90, demandMinutes: 0, slackMinutes: 90 },
   }).planned;
   assert.equal(emptyDemand.percent, '100%');
+  assert.equal(emptyDemand.percentTone, 'positive');
 });
 
 test('runtime extension settings override stale or nested render arguments', () => {

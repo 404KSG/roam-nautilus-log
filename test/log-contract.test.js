@@ -402,7 +402,7 @@ test('the global capacity token yields topbar space to Roam search', () => {
   assert.doesNotMatch(timingTopbar, /readAllEntries|readPrimaryPlan/);
 });
 
-test('the global capacity token stays neutral and shows only the percentage', () => {
+test('the global capacity token shows only the percentage and mirrors its semantic tone', () => {
   const triggerNodesStart = timingTopbar.indexOf('const triggerNodes');
   const triggerNodesEnd = timingTopbar.indexOf('const updateTriggerCapacity', triggerNodesStart);
   const updateStart = triggerNodesEnd;
@@ -412,9 +412,15 @@ test('the global capacity token stays neutral and shows only the percentage', ()
 
   assert.match(triggerNodesSource, /element\('span', 'nautilus-log-timing__capacity-value'\)/);
   assert.doesNotMatch(triggerNodesSource, /nautilus-log-timing__capacity-label/);
-  assert.match(updateSource, /capacity\.classList\.remove\('is-warning'\)/);
-  assert.doesNotMatch(updateSource, /capacity\.classList\.toggle\('is-warning'/);
-  assert.doesNotMatch(css, /nautilus-log-timing__capacity-token\.is-warning/);
+  assert.match(updateSource, /capacity\.classList\.toggle\('is-positive'/);
+  assert.match(updateSource, /capacity\.classList\.toggle\('is-warning'/);
+  assert.match(css, /nautilus-log-timing__capacity-token\.is-positive/);
+  assert.match(css, /nautilus-log-timing__capacity-token\.is-warning/);
+  assert.match(css, /--nautilus-log-positive/);
+  assert.match(css, /nautilus-log-metric-percent--positive \.nautilus-log-metric-value/);
+  assert.match(css, /nautilus-log-metric-percent--warning \.nautilus-log-metric-value/);
+  assert.match(css, /nautilus-log-timing__capacity-part\.is-positive\.is-left strong/);
+  assert.doesNotMatch(css, /nautilus-log-metric-percent--positive\s*\{/);
 });
 
 test('responsive observers rebind when Roam replaces the topbar or search surface', () => {
