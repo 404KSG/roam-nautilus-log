@@ -1,0 +1,65 @@
+- Automation-owned synthetic page. Do not add personal notes here.
+- Plain text group 01
+    - Alpha 01
+    - Bravo 01
+    - Charlie 01
+    - Delta 01
+    - Echo 01
+- TODO group 02
+    - {{[[TODO]]}} Alpha 02
+    - {{[[TODO]]}} Bravo 02
+    - {{[[DONE]]}} Charlie 02
+    - Delta 02 with **bold text**
+    - Echo 02 with __italic text__
+- Nested group 03
+    - Alpha 03
+        - Alpha 03 detail A
+        - Alpha 03 detail B
+    - Bravo 03
+    - Charlie 03
+    - Delta 03
+- Plain text group 04
+    - Alpha 04
+    - Bravo 04
+    - Charlie 04
+    - Delta 04
+    - Echo 04
+- TODO group 05
+    - {{[[TODO]]}} Alpha 05
+    - {{[[TODO]]}} Bravo 05
+    - {{[[DONE]]}} Charlie 05
+    - Delta 05 with `inline code`
+    - Echo 05
+- Nested group 06
+    - Alpha 06
+        - Alpha 06 detail A
+        - Alpha 06 detail B
+    - Bravo 06
+    - Charlie 06
+    - Delta 06
+- Plain text group 07
+    - Alpha 07
+    - Bravo 07
+    - Charlie 07
+    - Delta 07
+    - Echo 07
+- TODO group 08
+    - {{[[TODO]]}} Alpha 08
+    - {{[[TODO]]}} Bravo 08
+    - {{[[DONE]]}} Charlie 08
+    - Delta 08 with ^^highlight^^
+    - Echo 08
+- Nested group 09
+    - Alpha 09
+        - Alpha 09 detail A
+        - Alpha 09 detail B
+    - Bravo 09
+    - Charlie 09
+    - Delta 09
+- Plain text group 10
+    - Alpha 10
+    - Bravo 10
+    - Charlie 10
+    - Delta 10
+    - Echo 10
+- PERF ENTER TARGET

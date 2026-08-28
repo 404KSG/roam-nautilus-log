@@ -1,0 +1,23 @@
+{
+  "graphSlug": "exuberantia",
+  "pageUid": "REPLACE_WITH_LAB_PAGE_UID",
+  "targetUid": "REPLACE_WITH_TARGET_BLOCK_UID",
+  "authStatePath": ".auth/roam.json",
+  "warmups": 5,
+  "rounds": 5,
+  "sampleTimeoutMs": 8000,
+  "variants": [
+    {
+      "id": "baseline",
+      "type": "baseline"
+    },
+    {
+      "id": "without-global-font",
+      "type": "disable-style",
+      "styleTextIncludes": "/* Global Font */",
+      "expectedMatches": 1,
+      "expectedTextHash": "REPLACE_AFTER_INSPECT",
+      "expectedRuleCount": 1
+    }
+  ]
+}

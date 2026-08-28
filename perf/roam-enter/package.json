@@ -1,0 +1,15 @@
+{
+  "name": "nautilus-log-roam-enter-perf",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "auth": "node src/auth.mjs",
+    "inspect": "node src/run.mjs --mode inspect",
+    "smoke": "node src/run.mjs --mode smoke",
+    "benchmark": "node src/run.mjs --mode benchmark"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}

@@ -6,7 +6,11 @@
   "scripts": {
     "build": "webpack",
     "watch": "webpack --watch",
-    "test": "npm run build && node --test test/*.test.js"
+    "test": "npm run build && node --test test/*.test.js",
+    "perf:enter:auth": "npm --prefix perf/roam-enter run auth",
+    "perf:enter:inspect": "npm --prefix perf/roam-enter run inspect",
+    "perf:enter:smoke": "npm --prefix perf/roam-enter run smoke",
+    "perf:enter": "npm --prefix perf/roam-enter run benchmark"
   },
   "license": "MIT",
   "author": "404KSG",
