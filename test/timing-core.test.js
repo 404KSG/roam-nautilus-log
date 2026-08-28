@@ -569,7 +569,7 @@ test('Plan capacity summary shares the chart allocation language', () => {
     slackMinutes: 26,
   }, 'en'), {
     planned: { value: '2h35m', label: 'planned' },
-    status: { value: '26m', label: 'free', warning: false },
+    status: { value: '26m', label: 'free', tone: 'positive', warning: false },
     left: { value: '14%', label: 'left', tone: 'positive' },
   });
 
@@ -579,7 +579,7 @@ test('Plan capacity summary shares the chart allocation language', () => {
     overloadMinutes: 20,
   }, 'en'), {
     planned: { value: '3h20m', label: 'planned' },
-    status: { value: '20m', label: 'over', warning: true },
+    status: { value: '20m', label: 'over', tone: 'warning', warning: true },
     left: { value: '0%', label: 'left', tone: 'warning' },
   });
 
@@ -589,7 +589,7 @@ test('Plan capacity summary shares the chart allocation language', () => {
     unplacedMinutes: 30,
   }, 'en'), {
     planned: { value: '2h35m', label: 'planned' },
-    status: { value: '30m', label: 'no slot', warning: true },
+    status: { value: '30m', label: 'no slot', tone: 'warning', warning: true },
     left: { value: '14%', label: 'left', tone: 'warning' },
   });
 
@@ -600,6 +600,12 @@ test('Plan capacity summary shares the chart allocation language', () => {
   }, 'en').left, {
     value: '0%', label: 'left', tone: 'neutral',
   });
+
+  assert.equal(timing.capacitySummary({
+    availableMinutes: 180,
+    totalAvailableMinutes: 540,
+    demandMinutes: 180,
+  }, 'en').status.tone, 'neutral');
 });
 
 test('topbar density uses stable leading space and can recover from icon mode', () => {

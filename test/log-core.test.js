@@ -649,6 +649,29 @@ test('capacity summary reports current free time as a share of full-day flexible
   assert.equal(emptyDemand.percentTone, 'positive');
 });
 
+test('free capacity reuses the Left semantic state without coloring its label', () => {
+  const positive = capacityMetrics({
+    language: 'en',
+    capacity: { availableMinutes: 120, totalAvailableMinutes: 540, demandMinutes: 30 },
+  });
+  assert.equal(positive.status.value, '1h30m');
+  assert.equal(positive.status.summaryLabel, 'free');
+  assert.equal(positive.status.tone, 'positive');
+
+  const exact = capacityMetrics({
+    language: 'en',
+    capacity: { availableMinutes: 120, totalAvailableMinutes: 540, demandMinutes: 120 },
+  });
+  assert.equal(exact.status.value, '0m');
+  assert.equal(exact.status.tone, 'neutral');
+
+  const fragmented = capacityMetrics({
+    language: 'en',
+    capacity: { availableMinutes: 120, totalAvailableMinutes: 540, demandMinutes: 90, unplacedMinutes: 30 },
+  });
+  assert.equal(fragmented.status.tone, 'warning');
+});
+
 test('runtime extension settings override stale or nested render arguments', () => {
   assert.deepEqual(
     resolveRendererSettings({

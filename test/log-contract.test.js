@@ -419,8 +419,10 @@ test('the global capacity token shows only the percentage and mirrors its semant
   assert.match(css, /--nautilus-log-positive/);
   assert.match(css, /nautilus-log-metric-percent--positive \.nautilus-log-metric-value/);
   assert.match(css, /nautilus-log-metric-percent--warning \.nautilus-log-metric-value/);
-  assert.match(css, /nautilus-log-timing__capacity-part\.is-positive\.is-left strong/);
+  assert.match(css, /nautilus-log-metric--positive \.nautilus-log-metric-value/);
+  assert.match(css, /nautilus-log-timing__capacity-part\.is-positive strong/);
   assert.doesNotMatch(css, /nautilus-log-metric-percent--positive\s*\{/);
+  assert.doesNotMatch(css, /nautilus-log-metric--positive \.nautilus-log-metric-summary-label/);
 });
 
 test('responsive observers rebind when Roam replaces the topbar or search surface', () => {

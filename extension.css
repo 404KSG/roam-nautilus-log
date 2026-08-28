@@ -204,6 +204,10 @@
   color: var(--nautilus-log-positive);
 }
 
+.nautilus-log-metric--positive .nautilus-log-metric-value {
+  color: var(--nautilus-log-positive);
+}
+
 .nautilus-log-metric-percent--warning .nautilus-log-metric-value {
   color: var(--nautilus-log-warning);
 }
@@ -1334,7 +1338,7 @@
   color: #ad690f;
 }
 
-.nautilus-log-timing__capacity-part.is-positive.is-left strong {
+.nautilus-log-timing__capacity-part.is-positive strong {
   color: var(--nautilus-log-positive);
 }
 

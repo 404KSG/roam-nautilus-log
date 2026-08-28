@@ -1032,7 +1032,7 @@ function capacityMetrics({ capacity = {}, language = 'en' } = {}) {
       label: copy.remaining,
       value: formatDuration(freeMinutes),
       summaryLabel: allocation.free,
-      tone: 'neutral',
+      tone: freeMinutes > 0 ? 'positive' : 'neutral',
     };
   }
   // The first row answers the planning question (planned, free/over, and left),

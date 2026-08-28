@@ -82,6 +82,7 @@ function capacitySummary(execution = {}, language = 'en') {
     status: {
       value: status.value,
       label: status.summaryLabel,
+      tone: status.tone,
       warning: status.tone === 'warning',
     },
     left: {

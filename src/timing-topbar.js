@@ -304,7 +304,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     metric.append(
       part(summary.planned),
       ' · ',
-      part(summary.status, { tone: summary.status.warning ? 'warning' : 'neutral' }),
+      part(summary.status, { tone: summary.status.tone }),
       ' · ',
       part(summary.left, { tone: summary.left.tone, left: true }),
     );
