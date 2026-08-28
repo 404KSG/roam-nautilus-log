@@ -1,5 +1,5 @@
 {
-  "graphSlug": "exuberantia",
+  "graphSlug": "EXUBERANTIA",
   "pageUid": "REPLACE_WITH_LAB_PAGE_UID",
   "targetUid": "REPLACE_WITH_TARGET_BLOCK_UID",
   "authStatePath": ".auth/roam.json",
@@ -12,12 +12,12 @@
       "type": "baseline"
     },
     {
-      "id": "without-global-font",
-      "type": "disable-style",
-      "styleTextIncludes": "/* Global Font */",
-      "expectedMatches": 1,
-      "expectedTextHash": "REPLACE_AFTER_INSPECT",
-      "expectedRuleCount": 1
+      "id": "without-candidate",
+      "type": "exclude-roam-css-block",
+      "sourceBlockUid": "REPLACE_WITH_CSS_BLOCK_UID",
+      "expectedSourceHash": "REPLACE_WITH_SOURCE_HASH",
+      "styleTextIncludes": "/* CANDIDATE MARKER */",
+      "expectedMatches": 1
     }
   ]
 }

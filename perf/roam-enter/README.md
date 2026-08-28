@@ -32,7 +32,7 @@ npm run smoke
 npm run benchmark
 ```
 
-`inspect` writes a non-sensitive style inventory. Copy the candidate style's `textHash` and `ruleCount` into `expectedTextHash` and `expectedRuleCount` before a formal benchmark. This prevents a combined or changed stylesheet from being mistaken for the intended CSS block.
+`inspect` writes a non-sensitive style inventory. A currently active standalone style can be disabled only when its `textHash` and `ruleCount` are pinned. A CSS block that is currently off can be injected in browser memory by pinning its Roam block UID and source hash. An enabled block inside Roam's merged stylesheet can be excluded from an in-memory replacement stylesheet only when its UID, source hash, marker, and unique match count are pinned. These guards prevent a combined or changed stylesheet from being mistaken for the intended CSS block.
 
 `smoke` verifies the full create/measure/delete transaction once. `benchmark` refuses an unfingerprinted candidate, discards warmups, and uses an interleaved A-B-B-A schedule, reporting median and P75.
 

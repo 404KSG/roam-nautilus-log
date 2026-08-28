@@ -108,3 +108,46 @@ test("validateConfig rejects an invalid candidate fingerprint", () => {
     /expectedRuleCount/,
   );
 });
+
+test("validateConfig accepts a fingerprinted Roam CSS block injection", () => {
+  const config = validateConfig({
+    graphSlug: "EXUBERANTIA",
+    pageUid: "page-uid",
+    targetUid: "target-uid",
+    variants: [
+      { id: "baseline", type: "baseline" },
+      {
+        id: "with-font",
+        type: "inject-roam-css-block",
+        sourceBlockUid: "css-block",
+        expectedSourceHash: "abcd1234",
+        styleTextIncludes: "/* Global Font */",
+      },
+    ],
+  });
+
+  assert.equal(config.variants[1].sourceBlockUid, "css-block");
+  assert.equal(config.variants[1].expectedSourceHash, "abcd1234");
+});
+
+test("validateConfig accepts excluding one fingerprinted block from merged Roam CSS", () => {
+  const config = validateConfig({
+    graphSlug: "EXUBERANTIA",
+    pageUid: "page-uid",
+    targetUid: "target-uid",
+    variants: [
+      { id: "baseline", type: "baseline" },
+      {
+        id: "without-bullet-breathing",
+        type: "exclude-roam-css-block",
+        sourceBlockUid: "css-block",
+        expectedSourceHash: "abcd1234",
+        styleTextIncludes: "/* Roam bullet breathing */",
+        expectedMatches: 1,
+      },
+    ],
+  });
+
+  assert.equal(config.variants[1].type, "exclude-roam-css-block");
+  assert.equal(config.variants[1].expectedMatches, 1);
+});

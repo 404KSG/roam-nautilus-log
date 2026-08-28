@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
@@ -15,6 +15,20 @@ const graphUrl = `https://roamresearch.com/#/app/${encodeURIComponent(config.gra
 
 await mkdir(dirname(authPath), { recursive: true });
 
+async function saveCompactAuthState(context) {
+  const state = await context.storageState({ indexedDB: true });
+  const compact = {
+    cookies: state.cookies ?? [],
+    origins: (state.origins ?? []).map((origin) => ({
+      ...origin,
+      indexedDB: (origin.indexedDB ?? [])
+        .filter((database) => database.name.startsWith("firebase")),
+    })),
+  };
+  await writeFile(authPath, JSON.stringify(compact), { mode: 0o600 });
+  await chmod(authPath, 0o600);
+}
+
 const browser = await chromium.launch({ headless: false });
 const context = await browser.newContext();
 const page = await context.newPage();
@@ -26,14 +40,23 @@ try {
   output.write("确认已经打开 CSS Performance Lab 页面后，回到终端按 Enter。\n\n");
   await prompt.question("");
 
+  // Save the authenticated browser state before route validation. If Roam's
+  // page structure changes, the user should not have to log in again merely
+  // because the lab-page assertion needs maintenance.
+  await saveCompactAuthState(context);
+
+  await page.goto(graphUrl, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(
-    () => Boolean(document.querySelector(".roam-app") && window.roamAlphaAPI),
-    undefined,
-    { timeout: 30_000 },
+    (targetUid) => Boolean(
+      window.roamAlphaAPI
+      && (document.getElementById(`block-input-${targetUid}`)
+        || document.querySelector(`[data-block-uid="${CSS.escape(targetUid)}"]`)),
+    ),
+    config.targetUid,
+    { timeout: 60_000 },
   );
 
-  await context.storageState({ path: authPath, indexedDB: true });
-  await chmod(authPath, 0o600);
+  await saveCompactAuthState(context);
   output.write(`认证状态已保存到 ${authPath}\n`);
 } finally {
   prompt.close();

@@ -40,14 +40,21 @@ try {
 }
 
 if (mode === "benchmark") {
-  const candidate = config.variants.find((variant) => variant.type === "disable-style");
-  if (
-    candidate.expectedMatches !== 1
-    || !candidate.expectedTextHash
-    || !Number.isInteger(candidate.expectedRuleCount)
-  ) {
+  const candidate = config.variants.find((variant) => variant.type !== "baseline");
+  const safeDisable = candidate.type === "disable-style"
+    && candidate.expectedMatches === 1
+    && candidate.expectedTextHash
+    && Number.isInteger(candidate.expectedRuleCount);
+  const safeInjection = candidate.type === "inject-roam-css-block"
+    && candidate.sourceBlockUid
+    && candidate.expectedSourceHash;
+  const safeExclusion = candidate.type === "exclude-roam-css-block"
+    && candidate.sourceBlockUid
+    && candidate.expectedSourceHash
+    && candidate.expectedMatches === 1;
+  if (!safeDisable && !safeInjection && !safeExclusion) {
     throw new Error(
-      "A formal benchmark requires one exact candidate style plus expectedTextHash and expectedRuleCount from inspect mode.",
+      "A formal benchmark requires an exact fingerprint for its CSS candidate.",
     );
   }
 }
@@ -59,6 +66,10 @@ function createTimestamp() {
 async function restoreStyles(page) {
   return page.evaluate(() => {
     let restored = 0;
+    for (const style of document.querySelectorAll("style[data-roam-perf-injected]")) {
+      style.remove();
+      restored += 1;
+    }
     for (const style of document.querySelectorAll("style[data-roam-perf-original-media]")) {
       const original = style.dataset.roamPerfOriginalMedia;
       if (original === "__NONE__") {
@@ -78,6 +89,125 @@ async function applyVariant(page, variant) {
 
   if (variant.type === "baseline") {
     return { id: variant.id, matchedStyles: 0 };
+  }
+
+  if (variant.type === "inject-roam-css-block") {
+    const result = await page.evaluate(({
+      sourceBlockUid,
+      expectedSourceHash,
+      marker,
+    }) => {
+      const hashText = (text) => {
+        let hash = 0x811c9dc5;
+        for (let index = 0; index < text.length; index += 1) {
+          hash ^= text.charCodeAt(index);
+          hash = Math.imul(hash, 0x01000193);
+        }
+        return (hash >>> 0).toString(16).padStart(8, "0");
+      };
+      const pulled = window.roamAlphaAPI.pull(
+        "[:block/string]",
+        [":block/uid", sourceBlockUid],
+      );
+      const source = pulled?.[":block/string"] ?? "";
+      const sourceHash = hashText(source);
+      if (!source || sourceHash !== expectedSourceHash) {
+        throw new Error(
+          `CSS source block changed: ${sourceHash}; expected ${expectedSourceHash}`,
+        );
+      }
+      const css = source
+        .replace(/^```[^\n]*\n?/, "")
+        .replace(/\n?```\s*$/, "");
+      if (!css.includes(marker)) {
+        throw new Error(`CSS source block no longer contains marker: ${marker}`);
+      }
+      const style = document.createElement("style");
+      style.dataset.roamPerfInjected = sourceBlockUid;
+      style.textContent = css;
+      document.head.append(style);
+      return {
+        sourceBlockUid,
+        sourceHash,
+        injectedLength: css.length,
+      };
+    }, {
+      sourceBlockUid: variant.sourceBlockUid,
+      expectedSourceHash: variant.expectedSourceHash,
+      marker: variant.styleTextIncludes,
+    });
+    return { id: variant.id, ...result };
+  }
+
+  if (variant.type === "exclude-roam-css-block") {
+    const result = await page.evaluate(({
+      sourceBlockUid,
+      expectedSourceHash,
+      marker,
+      expectedMatches,
+    }) => {
+      const hashText = (text) => {
+        let hash = 0x811c9dc5;
+        for (let index = 0; index < text.length; index += 1) {
+          hash ^= text.charCodeAt(index);
+          hash = Math.imul(hash, 0x01000193);
+        }
+        return (hash >>> 0).toString(16).padStart(8, "0");
+      };
+      const pulled = window.roamAlphaAPI.pull(
+        "[:block/string]",
+        [":block/uid", sourceBlockUid],
+      );
+      const source = pulled?.[":block/string"] ?? "";
+      const sourceHash = hashText(source);
+      if (!source || sourceHash !== expectedSourceHash) {
+        throw new Error(
+          `CSS source block changed: ${sourceHash}; expected ${expectedSourceHash}`,
+        );
+      }
+      const css = source
+        .replace(/^```[^\n]*\n?/, "")
+        .replace(/\n?```\s*$/, "");
+      if (!css.includes(marker)) {
+        throw new Error(`CSS source block no longer contains marker: ${marker}`);
+      }
+
+      const matches = [...document.querySelectorAll("style")]
+        .filter((style) => (style.textContent ?? "").includes(css));
+      if (matches.length !== expectedMatches) {
+        throw new Error(
+          `Exact CSS block matched ${matches.length} style nodes; expected ${expectedMatches}`,
+        );
+      }
+
+      const original = matches[0];
+      const originalText = original.textContent ?? "";
+      const firstIndex = originalText.indexOf(css);
+      const secondIndex = originalText.indexOf(css, firstIndex + css.length);
+      if (firstIndex < 0 || secondIndex >= 0) {
+        throw new Error("CSS block must occur exactly once inside the matched style");
+      }
+
+      const replacement = document.createElement("style");
+      replacement.dataset.roamPerfInjected = `without:${sourceBlockUid}`;
+      replacement.textContent = `${originalText.slice(0, firstIndex)}${originalText.slice(firstIndex + css.length)}`;
+      original.insertAdjacentElement("afterend", replacement);
+      original.dataset.roamPerfOriginalMedia = original.getAttribute("media") ?? "__NONE__";
+      original.setAttribute("media", "not all");
+
+      return {
+        sourceBlockUid,
+        sourceHash,
+        excludedLength: css.length,
+        matchedStyles: matches.length,
+      };
+    }, {
+      sourceBlockUid: variant.sourceBlockUid,
+      expectedSourceHash: variant.expectedSourceHash,
+      marker: variant.styleTextIncludes,
+      expectedMatches: variant.expectedMatches,
+    });
+    return { id: variant.id, ...result };
   }
 
   const result = await page.evaluate(({
@@ -147,25 +277,28 @@ async function waitForLab(page) {
       const routeMatches = location.hash.includes(`/page/${pageUid}`);
       return Boolean(
         routeMatches
-        && document.querySelector(".roam-app")
         && window.roamAlphaAPI
         && (document.getElementById(`block-input-${targetUid}`)
-          || document.querySelector(`[data-uid="${CSS.escape(targetUid)}"]`)),
+          || document.querySelector(`[data-block-uid="${CSS.escape(targetUid)}"]`)),
       );
     },
     { pageUid: config.pageUid, targetUid: config.targetUid },
-    { timeout: 30_000 },
+    { timeout: 60_000 },
   );
 }
 
 async function focusTarget(page) {
-  const target = page.locator(`#block-input-${config.targetUid}`);
+  const target = page.locator(
+    `[data-block-uid="${config.targetUid}"] .rm-block__input`,
+  );
   if (await target.count() !== 1) {
-    throw new Error(`Expected one target textarea for ${config.targetUid}`);
+    throw new Error(`Expected one target block input for ${config.targetUid}`);
   }
   await target.click();
   await page.waitForFunction(
-    (targetUid) => document.activeElement?.id === `block-input-${targetUid}`,
+    (targetUid) => document.activeElement
+      ?.closest("[data-block-uid]")
+      ?.getAttribute("data-block-uid") === targetUid,
     config.targetUid,
   );
 }
@@ -176,8 +309,8 @@ async function installMeasurementProbe(page) {
     if (!root) throw new Error("Missing .roam-article root");
 
     const uniqueUids = () => new Set(
-      [...root.querySelectorAll("[data-uid]")]
-        .map((element) => element.getAttribute("data-uid"))
+      [...root.querySelectorAll("[data-block-uid]")]
+        .map((element) => element.getAttribute("data-block-uid"))
         .filter(Boolean),
     );
 
@@ -231,9 +364,9 @@ async function installMeasurementProbe(page) {
         }
 
         const active = document.activeElement;
-        const activeUid = active?.id?.startsWith("block-input-")
-          ? active.id.slice("block-input-".length)
-          : active?.closest?.("[data-uid]")?.getAttribute("data-uid");
+        const activeUid = active
+          ?.closest?.("[data-block-uid]")
+          ?.getAttribute("data-block-uid");
 
         if (activeUid && activeUid !== targetUid && !initialUids.has(activeUid)) {
           requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -269,34 +402,139 @@ async function installMeasurementProbe(page) {
 }
 
 async function cleanupSample(page, newUid, expectedCount) {
-  await page.evaluate(async (uid) => {
-    await window.roamAlphaAPI.deleteBlock({ block: { uid } });
-  }, newUid);
+  const undoShortcut = process.platform === "darwin" ? "Meta+KeyZ" : "Control+KeyZ";
+  let cleanupMethod = "undo";
 
-  await page.waitForFunction(({ uid, expected }) => {
-    const graphBlock = window.roamAlphaAPI.pull("[:block/uid]", [":block/uid", uid]);
-    const root = document.querySelector(".roam-article");
-    const count = new Set(
-      [...(root?.querySelectorAll("[data-uid]") ?? [])]
-        .map((element) => element.getAttribute("data-uid"))
-        .filter(Boolean),
-    ).size;
-    return !graphBlock && count === expected;
-  }, { uid: newUid, expected: expectedCount }, { timeout: sampleTimeoutMs });
+  // Revert the user-level Enter transaction instead of racing a second graph
+  // delete transaction against Roam sync. The newly created blank is still the
+  // active editor here, so native Undo restores the exact pre-sample state.
+  await page.keyboard.press(undoShortcut);
+
+  try {
+    await page.waitForFunction(({ uid, expected }) => {
+      const graphBlock = window.roamAlphaAPI.pull("[:block/uid]", [":block/uid", uid]);
+      const root = document.querySelector(".roam-article");
+      const count = new Set(
+        [...(root?.querySelectorAll("[data-block-uid]") ?? [])]
+          .map((element) => element.getAttribute("data-block-uid"))
+          .filter(Boolean),
+      ).size;
+      return !graphBlock && count === expected;
+    }, { uid: newUid, expected: expectedCount }, { timeout: 2000 });
+  } catch {
+    // Defensive fallback for a browser/platform where the Roam undo shortcut
+    // is unavailable. Focus a stable block before the exact API deletion.
+    cleanupMethod = "delete-fallback";
+    await focusTarget(page);
+    await page.evaluate(async (uid) => {
+      await window.roamAlphaAPI.deleteBlock({ block: { uid } });
+    }, newUid);
+    await page.waitForFunction(({ uid, expected }) => {
+      const graphBlock = window.roamAlphaAPI.pull("[:block/uid]", [":block/uid", uid]);
+      const root = document.querySelector(".roam-article");
+      const count = new Set(
+        [...(root?.querySelectorAll("[data-block-uid]") ?? [])]
+          .map((element) => element.getAttribute("data-block-uid"))
+          .filter(Boolean),
+      ).size;
+      return !graphBlock && count === expected;
+    }, { uid: newUid, expected: expectedCount }, { timeout: sampleTimeoutMs });
+  }
 
   return page.evaluate(({ uid, expected }) => {
     const graphBlock = window.roamAlphaAPI.pull("[:block/uid]", [":block/uid", uid]);
     const root = document.querySelector(".roam-article");
     const afterCleanupCount = new Set(
-      [...(root?.querySelectorAll("[data-uid]") ?? [])]
-        .map((element) => element.getAttribute("data-uid"))
+      [...(root?.querySelectorAll("[data-block-uid]") ?? [])]
+        .map((element) => element.getAttribute("data-block-uid"))
         .filter(Boolean),
     ).size;
     return {
       cleanupVerified: !graphBlock && afterCleanupCount === expected,
       afterCleanupCount,
     };
-  }, { uid: newUid, expected: expectedCount });
+  }, { uid: newUid, expected: expectedCount }).then((result) => ({
+    ...result,
+    cleanupMethod,
+  }));
+}
+
+async function readDirectPageChildren(page) {
+  return page.evaluate((pageUid) => {
+    const pulled = window.roamAlphaAPI.pull(
+      "[:block/uid {:block/children [:block/uid :block/string {:block/children [:block/uid]}]}]",
+      [":block/uid", pageUid],
+    );
+    return (pulled?.[":block/children"] ?? []).map((child) => ({
+      uid: child[":block/uid"],
+      string: child[":block/string"] ?? "",
+      childCount: (child[":block/children"] ?? []).length,
+    }));
+  }, config.pageUid);
+}
+
+async function cleanupSessionArtifacts(page, initialChildren) {
+  const initialUids = new Set(initialChildren.map((child) => child.uid));
+  const removedUids = [];
+  let stablePasses = 0;
+
+  await focusTarget(page);
+
+  for (let pass = 0; pass < 8 && stablePasses < 2; pass += 1) {
+    await page.waitForTimeout(300);
+    const currentChildren = await readDirectPageChildren(page);
+    const currentUids = new Set(currentChildren.map((child) => child.uid));
+    const missingInitial = [...initialUids].filter((uid) => !currentUids.has(uid));
+    if (missingInitial.length > 0) {
+      throw new Error(
+        `Session cleanup detected missing fixture blocks: ${missingInitial.join(", ")}`,
+      );
+    }
+
+    const unexpected = currentChildren.filter((child) => !initialUids.has(child.uid));
+    const unsafe = unexpected.filter(
+      (child) => child.string.trim() !== "" || child.childCount !== 0,
+    );
+    if (unsafe.length > 0) {
+      throw new Error(
+        `Session cleanup refused non-empty unexpected blocks: ${unsafe.map((child) => child.uid).join(", ")}`,
+      );
+    }
+
+    if (unexpected.length === 0) {
+      stablePasses += 1;
+      continue;
+    }
+
+    stablePasses = 0;
+    for (const child of unexpected) {
+      await page.evaluate(async (uid) => {
+        await window.roamAlphaAPI.deleteBlock({ block: { uid } });
+      }, child.uid);
+      removedUids.push(child.uid);
+    }
+    await focusTarget(page);
+  }
+
+  const finalChildren = await readDirectPageChildren(page);
+  const finalUids = new Set(finalChildren.map((child) => child.uid));
+  const unexpectedFinal = finalChildren.filter((child) => !initialUids.has(child.uid));
+  const missingFinal = [...initialUids].filter((uid) => !finalUids.has(uid));
+  const cleanupVerified = stablePasses >= 2
+    && unexpectedFinal.length === 0
+    && missingFinal.length === 0;
+  if (!cleanupVerified) {
+    throw new Error(
+      `Session cleanup did not stabilize; unexpected=${unexpectedFinal.map((child) => child.uid).join(",")}; missing=${missingFinal.join(",")}`,
+    );
+  }
+
+  return {
+    cleanupVerified,
+    initialDirectChildCount: initialChildren.length,
+    finalDirectChildCount: finalChildren.length,
+    removedUids: [...new Set(removedUids)],
+  };
 }
 
 async function recoverCreatedBlock(page) {
@@ -304,16 +542,16 @@ async function recoverCreatedBlock(page) {
     const root = document.querySelector(".roam-article");
     const initialUids = new Set(window.__roamEnterPerfInitialUids ?? []);
     const currentUids = new Set(
-      [...(root?.querySelectorAll("[data-uid]") ?? [])]
-        .map((element) => element.getAttribute("data-uid"))
+      [...(root?.querySelectorAll("[data-block-uid]") ?? [])]
+        .map((element) => element.getAttribute("data-block-uid"))
         .filter(Boolean),
     );
     const createdUids = [...currentUids]
       .filter((uid) => uid !== targetUid && !initialUids.has(uid));
     const active = document.activeElement;
-    const activeUid = active?.id?.startsWith("block-input-")
-      ? active.id.slice("block-input-".length)
-      : active?.closest?.("[data-uid]")?.getAttribute("data-uid");
+    const activeUid = active
+      ?.closest?.("[data-block-uid]")
+      ?.getAttribute("data-block-uid");
 
     if (activeUid && createdUids.includes(activeUid)) {
       return { newUid: activeUid, beforeCount: initialUids.size };
@@ -331,6 +569,12 @@ async function takeSample(page, variant, phase, index) {
 
   try {
     await applyVariant(page, variant);
+    // Keep stylesheet parsing/recalculation outside the trusted Enter window.
+    // Two animation frames allow the replacement stylesheet to become the
+    // browser's settled render state before focus and keydown measurement.
+    await page.evaluate(() => new Promise((resolveFrame) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolveFrame));
+    }));
     await focusTarget(page);
     await installMeasurementProbe(page);
     await page.keyboard.press("Enter");
@@ -429,9 +673,14 @@ const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ storageState: authPath });
 const page = await context.newPage();
 let outputPath;
+let initialPageChildren = null;
+let sessionGuard = null;
+let sessionGuardError = null;
+let runError = null;
 
 try {
   await waitForLab(page);
+  initialPageChildren = await readDirectPageChildren(page);
 
   if (mode === "inspect") {
     const inventory = await inspectStyles(page);
@@ -462,6 +711,8 @@ try {
       }
     }
 
+    sessionGuard = await cleanupSessionArtifacts(page, initialPageChildren);
+
     const result = {
       generatedAt: new Date().toISOString(),
       mode,
@@ -471,12 +722,22 @@ try {
       configFile: basename(configPath),
       summary: summarizeSamples(samples),
       samples,
+      sessionGuard,
     };
     outputPath = await writeResult(mode, result);
     process.stdout.write(`${JSON.stringify(result.summary, null, 2)}\n`);
   }
+} catch (error) {
+  runError = error;
 } finally {
   try {
+    if (mode !== "inspect" && initialPageChildren) {
+      try {
+        sessionGuard = await cleanupSessionArtifacts(page, initialPageChildren);
+      } catch (error) {
+        sessionGuardError = error;
+      }
+    }
     await restoreStyles(page);
   } finally {
     await context.close();
@@ -484,4 +745,81 @@ try {
   }
 }
 
-process.stdout.write(`Result: ${outputPath}\n`);
+let postContextGuard = null;
+let postContextGuardError = null;
+if (mode !== "inspect" && initialPageChildren) {
+  const verificationBrowser = await chromium.launch({ headless: true });
+  const verificationPasses = [];
+  const removedUids = [];
+  try {
+    for (let pass = 0; pass < 3; pass += 1) {
+      const verificationContext = await verificationBrowser.newContext({
+        storageState: authPath,
+      });
+      const verificationPage = await verificationContext.newPage();
+      let guard;
+      try {
+        await waitForLab(verificationPage);
+        guard = await cleanupSessionArtifacts(
+          verificationPage,
+          initialPageChildren,
+        );
+        removedUids.push(...guard.removedUids);
+
+        // Keep the verifier alive long enough for Roam's async graph sync to
+        // publish a cleanup before a new context checks server-backed state.
+        await verificationPage.waitForTimeout(3000);
+        const settledGuard = await cleanupSessionArtifacts(
+          verificationPage,
+          initialPageChildren,
+        );
+        removedUids.push(...settledGuard.removedUids);
+        guard = {
+          ...settledGuard,
+          removedUids: [...new Set([
+            ...guard.removedUids,
+            ...settledGuard.removedUids,
+          ])],
+        };
+      } finally {
+        await verificationContext.close();
+      }
+
+      verificationPasses.push(guard);
+      if (pass > 0 && guard.removedUids.length === 0) {
+        postContextGuard = {
+          cleanupVerified: true,
+          initialDirectChildCount: guard.initialDirectChildCount,
+          finalDirectChildCount: guard.finalDirectChildCount,
+          removedUids: [...new Set(removedUids)],
+          verificationPasses: verificationPasses.length,
+        };
+        break;
+      }
+    }
+
+    if (!postContextGuard) {
+      throw new Error(
+        "Post-context cleanup did not reach a clean read-only verification pass",
+      );
+    }
+  } catch (error) {
+    postContextGuardError = error;
+  } finally {
+    await verificationBrowser.close();
+  }
+
+  if (outputPath && postContextGuard) {
+    const result = JSON.parse(await readFile(outputPath, "utf8"));
+    result.postContextGuard = postContextGuard;
+    await writeFile(outputPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  }
+}
+
+if (postContextGuardError || sessionGuardError || runError) {
+  throw postContextGuardError ?? sessionGuardError ?? runError;
+}
+
+if (outputPath) {
+  process.stdout.write(`Result: ${outputPath}\n`);
+}

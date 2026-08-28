@@ -162,6 +162,42 @@ export function validateConfig(input) {
       return variant;
     }
 
+    if (variant.type === "inject-roam-css-block") {
+      variant.sourceBlockUid = assertNonEmptyString(
+        rawVariant.sourceBlockUid,
+        `variants[${index}].sourceBlockUid`,
+      );
+      variant.expectedSourceHash = assertNonEmptyString(
+        rawVariant.expectedSourceHash,
+        `variants[${index}].expectedSourceHash`,
+      );
+      variant.styleTextIncludes = assertNonEmptyString(
+        rawVariant.styleTextIncludes,
+        `variants[${index}].styleTextIncludes`,
+      );
+      return variant;
+    }
+
+    if (variant.type === "exclude-roam-css-block") {
+      variant.sourceBlockUid = assertNonEmptyString(
+        rawVariant.sourceBlockUid,
+        `variants[${index}].sourceBlockUid`,
+      );
+      variant.expectedSourceHash = assertNonEmptyString(
+        rawVariant.expectedSourceHash,
+        `variants[${index}].expectedSourceHash`,
+      );
+      variant.styleTextIncludes = assertNonEmptyString(
+        rawVariant.styleTextIncludes,
+        `variants[${index}].styleTextIncludes`,
+      );
+      variant.expectedMatches = assertPositiveInteger(
+        rawVariant.expectedMatches,
+        `variants[${index}].expectedMatches`,
+      );
+      return variant;
+    }
+
     throw new TypeError(`unsupported variant type: ${variant.type}`);
   });
 
