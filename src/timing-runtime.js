@@ -10,6 +10,8 @@ import {
   openTaskInMainWindow,
   openTaskInRightSidebar,
   openPrimaryPlan,
+  pageTitleFor,
+  projectPrimaryPlanPull,
   readAllEntries,
   readEntriesForTaskUids,
   readBlockString,
@@ -21,7 +23,7 @@ import {
 
 const POMODORO_STATE_KEY = 'actual-time-pomodoro-state';
 const STANDALONE_POMODORO_STATE_KEY = 'standalone-pomodoro-state';
-const REFRESH_INTERVAL_MS = 15_000;
+const RECOVERY_REFRESH_INTERVAL_MS = 5 * 60_000;
 
 function executionProjection(planSnapshot, currentNow, extensionAPI) {
   if (!planSnapshot?.plan) return null;
@@ -87,11 +89,14 @@ function currentStandalonePomodoro(extensionAPI, focused) {
 export function createTimingRuntime({
   extensionAPI,
   now = () => new Date(),
+  wallNow = () => Date.now(),
   scheduleMutationStart = scheduleNextTask,
   watchPlan = null,
+  readPlan = null,
 }) {
   let destroyed = false;
   let ticker = null;
+  let removeVisibilityListener = null;
   let cancelSidebarWarmup = null;
   let refreshHandle = null;
   let refreshHandleKind = null;
@@ -103,6 +108,8 @@ export function createTimingRuntime({
   let standaloneClearPromise = null;
   let watchedPlanUid = null;
   let stopPlanWatch = null;
+  let watchedPlanRefreshHandle = null;
+  let pendingWatchedPlanPull = null;
   let snapshot = {
     revision: 0,
     status: 'loading',
@@ -130,16 +137,45 @@ export function createTimingRuntime({
     stopPlanWatch = null;
     watchedPlanUid = planUid;
     if (!planUid || typeof watchPlan !== 'function') return;
-    stopPlanWatch = watchPlan(planUid, () => {
-      if (!destroyed && snapshot.planSnapshot?.plan?.uid === planUid) {
+    stopPlanWatch = watchPlan(planUid, (planPull) => {
+      if (destroyed || snapshot.planSnapshot?.plan?.uid !== planUid) return;
+      if (!planPull) {
+        // Compatibility fallback for custom watch adapters that only signal
+        // invalidation. The built-in bridge always supplies the direct Pull.
         void requestRefresh({ immediate: true }).then((next) => {
           if (!next.entries.some((entry) => entry.running && entry.status === 'DONE')) return;
           enqueue(async () => {
             const entries = await closeDoneClocks(next.entries);
-            return refresh({ entries });
+            return refresh({ planSnapshot: next.planSnapshot, entries });
           }).catch((error) => console.error('[Nautilus Log] source completion reconciliation failed', error));
         });
+        return;
       }
+      pendingWatchedPlanPull = planPull;
+      if (watchedPlanRefreshHandle !== null) return;
+      // Roam can emit several Pull Watch callbacks for one edit. Leave the
+      // trusted input stack first, then project only the newest cheap Plan
+      // Pull. This keeps Enter free of Daily-page and LOGBOOK queries.
+      watchedPlanRefreshHandle = window.setTimeout(() => {
+        watchedPlanRefreshHandle = null;
+        const latestPull = pendingWatchedPlanPull;
+        pendingWatchedPlanPull = null;
+        if (destroyed || snapshot.planSnapshot?.plan?.uid !== planUid) return;
+        const planSnapshot = projectPrimaryPlanPull(
+          latestPull,
+          snapshot.planSnapshot,
+          Number(extensionAPI.settings.get('todo-duration')) || 15,
+        );
+        const next = refresh({
+          planSnapshot: planSnapshot || snapshot.planSnapshot,
+          entries: snapshot.entries,
+        });
+        if (!next.entries.some((entry) => entry.running && entry.status === 'DONE')) return;
+        enqueue(async () => {
+          const entries = await closeDoneClocks(next.entries);
+          return refresh({ planSnapshot: next.planSnapshot, entries });
+        }).catch((error) => console.error('[Nautilus Log] source completion reconciliation failed', error));
+      }, 0);
     }, { emitInitial: false });
   };
 
@@ -181,12 +217,33 @@ export function createTimingRuntime({
     return standaloneClearPromise;
   };
 
+  const readAuthoritativePlan = (currentNow) => {
+    const previous = snapshot.planSnapshot;
+    const currentPageTitle = pageTitleFor(currentNow);
+    const reusablePlanUid = previous?.pageTitle === currentPageTitle
+      ? previous?.plan?.uid
+      : null;
+    if (reusablePlanUid && typeof readPlan === 'function') {
+      try {
+        const projected = projectPrimaryPlanPull(
+          readPlan(reusablePlanUid),
+          previous,
+          Number(extensionAPI.settings.get('todo-duration')) || 15,
+        );
+        if (timingCore.isNautilusComponent(projected?.plan?.string)) return projected;
+      } catch (error) {
+        console.debug('[Nautilus Log] cached Primary Plan pull unavailable', error);
+      }
+    }
+    return readPrimaryPlan(currentNow, Number(extensionAPI.settings.get('todo-duration')) || 15);
+  };
+
   const refresh = ({ notice = '', planSnapshot: suppliedPlanSnapshot, entries: suppliedEntries } = {}) => {
     if (destroyed) return snapshot;
     try {
       const currentNow = now();
       const sourcePlanSnapshot = suppliedPlanSnapshot === undefined
-        ? readPrimaryPlan(currentNow, Number(extensionAPI.settings.get('todo-duration')) || 15)
+        ? readAuthoritativePlan(currentNow)
         : suppliedPlanSnapshot;
       const planSnapshot = sourcePlanSnapshot
         ? {
@@ -282,7 +339,10 @@ export function createTimingRuntime({
       refreshRunner = run;
       if (!immediate && typeof window.requestIdleCallback === 'function') {
         refreshHandleKind = 'idle';
-        refreshHandle = window.requestIdleCallback(run, { timeout: 1200 });
+        // Recovery is background work. A forced idle timeout can fire while
+        // the user is typing and recreate the exact intermittent Enter stall
+        // this scheduler is meant to avoid.
+        refreshHandle = window.requestIdleCallback(run);
       } else {
         refreshHandleKind = 'timeout';
         refreshHandle = window.setTimeout(run, 0);
@@ -346,7 +406,11 @@ export function createTimingRuntime({
       try {
         return await operation();
       } catch (error) {
-        refresh({ notice: error.message || 'The graph change could not be confirmed.' });
+        refresh({
+          notice: error.message || 'The graph change could not be confirmed.',
+          planSnapshot: snapshot.planSnapshot,
+          entries: snapshot.entries,
+        });
         throw error;
       }
     });
@@ -450,15 +514,11 @@ export function createTimingRuntime({
     const running = entries.filter((entry) => entry.running);
     if (running.length === 0) {
       await setPomodoro(null);
-      const next = refresh({ planSnapshot: snapshot.planSnapshot, entries });
-      void requestRefresh();
-      return next;
+      return refresh({ planSnapshot: snapshot.planSnapshot, entries });
     }
     const updatedEntries = await closeEntriesAt(entries, now());
     await setPomodoro(timingCore.nextPomodoroState(snapshot.pomodoro, { action: 'stop' }));
-    const next = refresh({ planSnapshot: snapshot.planSnapshot, entries: updatedEntries });
-    void requestRefresh();
-    return next;
+    return refresh({ planSnapshot: snapshot.planSnapshot, entries: updatedEntries });
   });
 
   const finishTask = (taskUid) => enqueue(async () => {
@@ -469,10 +529,13 @@ export function createTimingRuntime({
     const instant = now();
     const entries = snapshot.entries;
     const ownedRunning = entries.filter((entry) => entry.running && entry.taskUid === taskUid);
-    await closeEntriesAt(ownedRunning, instant);
+    const updatedEntries = await closeEntriesAt(entries, instant);
     await completeTask(taskUid, task.statusOwnerUid || taskUid);
     if (ownedRunning.length > 0) await setPomodoro(null);
-    return refresh();
+    return refresh({
+      planSnapshot: readAuthoritativePlan(instant),
+      entries: updatedEntries,
+    });
   });
 
   const deleteCurrentClock = (taskUid) => enqueue(async () => {
@@ -482,7 +545,10 @@ export function createTimingRuntime({
     }
     await deleteClock(focused);
     await setPomodoro(null);
-    return refresh();
+    return refresh({
+      planSnapshot: snapshot.planSnapshot,
+      entries: snapshot.entries.filter((entry) => entry.clockUid !== focused.clockUid),
+    });
   });
 
   const startStandalonePomodoro = () => enqueue(async () => {
@@ -522,33 +588,48 @@ export function createTimingRuntime({
         if (!destroyed) void warmRightSidebarWindowCache();
       });
     }
-    let lastGraphRefresh = Date.now();
+    let lastGraphRefresh = wallNow();
+    const reconcileDoneClocks = (next, label) => {
+      if (!next.entries.some((entry) => entry.running && entry.status === 'DONE')) return;
+      enqueue(async () => {
+        const entries = await closeDoneClocks(next.entries);
+        return refresh({ planSnapshot: next.planSnapshot, entries });
+      }).catch((error) => console.error(`[Nautilus Log] ${label} reconciliation failed`, error));
+    };
+    const scheduleRecoveryRefresh = (label = 'background') => {
+      if (destroyed || (typeof document !== 'undefined' && document.visibilityState === 'hidden')) return;
+      lastGraphRefresh = wallNow();
+      void requestRefresh().then((next) => reconcileDoneClocks(next, label));
+    };
     ticker = window.setInterval(() => {
       if (destroyed) return;
       snapshot = { ...snapshot, now: now() };
-      if (Date.now() - lastGraphRefresh >= REFRESH_INTERVAL_MS) {
-        lastGraphRefresh = Date.now();
-        void requestRefresh().then((next) => {
-          if (next.entries.some((entry) => entry.running && entry.status === 'DONE')) {
-            enqueue(async () => {
-              const entries = await closeDoneClocks(next.entries);
-              return refresh({ entries });
-            }).catch((error) => console.error('[Nautilus Log] DONE clock reconciliation failed', error));
-          }
-        });
-      } else {
-        publish();
+      // The one-second lane is pure UI time. Publish first and never make a
+      // graph query part of a visible elapsed-time tick.
+      publish();
+      if (wallNow() - lastGraphRefresh >= RECOVERY_REFRESH_INTERVAL_MS) {
+        scheduleRecoveryRefresh('DONE clock');
       }
     }, 1000);
+    if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+      let wasHidden = document.visibilityState === 'hidden';
+      const onVisibilityChange = () => {
+        const hidden = document.visibilityState === 'hidden';
+        if (wasHidden && !hidden) scheduleRecoveryRefresh('visibility');
+        wasHidden = hidden;
+      };
+      document.addEventListener('visibilitychange', onVisibilityChange);
+      removeVisibilityListener = () => document.removeEventListener('visibilitychange', onVisibilityChange);
+    }
     return snapshot;
   };
 
   const disable = () => enqueue(async () => {
     const entries = snapshot.entries;
-    await closeEntriesAt(entries, now());
+    const updatedEntries = await closeEntriesAt(entries, now());
     await setPomodoro(null);
     await setStandalonePomodoro(null);
-    refresh();
+    refresh({ planSnapshot: snapshot.planSnapshot, entries: updatedEntries });
     destroy();
     return true;
   });
@@ -558,6 +639,11 @@ export function createTimingRuntime({
     destroyed = true;
     if (ticker !== null) window.clearInterval(ticker);
     ticker = null;
+    removeVisibilityListener?.();
+    removeVisibilityListener = null;
+    if (watchedPlanRefreshHandle !== null) window.clearTimeout(watchedPlanRefreshHandle);
+    watchedPlanRefreshHandle = null;
+    pendingWatchedPlanPull = null;
     cancelSidebarWarmup?.();
     cancelSidebarWarmup = null;
     stopPlanWatch?.();

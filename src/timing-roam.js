@@ -54,6 +54,11 @@ const TASK_ENTRIES_QUERY = `[:find ?clock-uid ?clock-string ?drawer-string ?task
   [(get-else $ ?t :block/page "") ?p]
   [(get-else $ ?p :node/title "") ?page-title]]`;
 
+const TASK_LOGBOOK_PULL_PATTERN = `[:block/string
+  {:block/page [:node/title]}
+  {:block/children [:block/uid :block/string
+    {:block/children [:block/uid :block/string]}]}]`;
+
 function api() {
   return typeof window !== 'undefined' ? window.roamAlphaAPI : null;
 }
@@ -241,6 +246,74 @@ export function readPrimaryPlan(date = new Date(), fallbackMinutes = 15) {
   };
 }
 
+/**
+ * Project the shared direct Plan Pull into the execution-layer shape without
+ * rescanning the whole Daily Note. The Pull watcher already hydrates exact
+ * block references, so one cheap entity Pull is sufficient for Plan, Review,
+ * capacity, and fixed-event projections.
+ */
+export function projectPrimaryPlanPull(pullSnapshot, previous = null, fallbackMinutes = 15) {
+  const value = pullSnapshot && typeof pullSnapshot === 'object' ? pullSnapshot : null;
+  const planUid = String(
+    value?.['block/uid']
+      ?? value?.[':block/uid']
+      ?? previous?.plan?.uid
+      ?? '',
+  );
+  if (!value || !planUid) return null;
+  const planString = String(
+    value['block/string']
+      ?? value[':block/string']
+      ?? previous?.plan?.string
+      ?? '',
+  );
+  const childrenValue = value['block/children'] ?? value[':block/children'] ?? [];
+  const children = Array.isArray(childrenValue) ? childrenValue : [];
+  const pageUid = previous?.pageUid || null;
+  const rows = children.map((child) => {
+    const uid = String(child?.['block/uid'] ?? child?.[':block/uid'] ?? '');
+    const string = String(child?.['block/string'] ?? child?.[':block/string'] ?? '');
+    const order = Number(child?.['block/order'] ?? child?.[':block/order'] ?? 0) || 0;
+    const referencesValue = child?.['block/refs'] ?? child?.[':block/refs'] ?? [];
+    const references = (Array.isArray(referencesValue) ? referencesValue : [])
+      .map((reference) => ({
+        uid: String(reference?.['block/uid'] ?? reference?.[':block/uid'] ?? ''),
+        string: String(reference?.['block/string'] ?? reference?.[':block/string'] ?? ''),
+      }))
+      .filter((reference) => reference.uid);
+    return {
+      pageUid,
+      uid,
+      string,
+      order,
+      parentUid: planUid,
+      references,
+      taskInstance: timingCore.resolveTaskInstance({
+        uid,
+        localString: string,
+        references,
+        readString: readBlockString,
+        fallbackMinutes,
+      }),
+    };
+  }).filter((row) => row.uid);
+  const plan = {
+    ...(previous?.plan || {}),
+    uid: planUid,
+    string: planString,
+  };
+  return {
+    pageTitle: previous?.pageTitle || '',
+    pageUid,
+    plan,
+    rows,
+    tasks: timingCore.projectPlan(rows, planUid, fallbackMinutes),
+    reviewCandidates: timingCore.projectReviewCandidates(rows, planUid, fallbackMinutes),
+    reviewTasks: timingCore.projectReviewTasks(rows, planUid, fallbackMinutes),
+    fixedEvents: timingCore.projectFixedEvents(rows, planUid),
+  };
+}
+
 function normalizeEntryRows(rows) {
   return rows
     .map(([clockUid, clockString, drawerString, taskUid, taskString, pageTitle]) => {
@@ -268,6 +341,47 @@ export function readAllEntries() {
 export function readEntriesForTaskUids(taskUids = []) {
   const uids = [...new Set((Array.isArray(taskUids) ? taskUids : []).filter(Boolean))];
   if (uids.length === 0) return [];
+  const roam = api();
+  const pull = roam?.data?.pull || roam?.pull;
+  if (typeof pull === 'function') {
+    const owner = pull === roam?.data?.pull ? roam.data : roam;
+    try {
+      const rows = uids.flatMap((taskUid) => {
+        const entity = pull.call(owner, TASK_LOGBOOK_PULL_PATTERN, [':block/uid', taskUid]);
+        if (!entity) return [];
+        const taskString = String(
+          entity[':block/string'] ?? entity['block/string'] ?? entity.string ?? '',
+        );
+        const page = entity[':block/page'] ?? entity['block/page'] ?? entity.page ?? null;
+        const pageTitle = String(
+          page?.[':node/title'] ?? page?.['node/title'] ?? page?.title ?? '',
+        );
+        const taskChildren = normalizeSequence(
+          entity[':block/children'] ?? entity['block/children'] ?? entity.children ?? [],
+        ) || [];
+        return taskChildren.flatMap((drawer) => {
+          const drawerString = String(
+            drawer?.[':block/string'] ?? drawer?.['block/string'] ?? drawer?.string ?? '',
+          );
+          if (!DRAWER_RE.test(drawerString)) return [];
+          const clocks = normalizeSequence(
+            drawer?.[':block/children'] ?? drawer?.['block/children'] ?? drawer?.children ?? [],
+          ) || [];
+          return clocks.map((clock) => [
+            clock?.[':block/uid'] ?? clock?.['block/uid'] ?? clock?.uid ?? '',
+            clock?.[':block/string'] ?? clock?.['block/string'] ?? clock?.string ?? '',
+            drawerString,
+            taskUid,
+            taskString,
+            pageTitle,
+          ]);
+        });
+      });
+      return normalizeEntryRows(rows);
+    } catch (error) {
+      console.debug('[Nautilus Log] scoped LOGBOOK Pull unavailable; using compatibility query', error);
+    }
+  }
   return normalizeEntryRows(query(TASK_ENTRIES_QUERY, uids, DRAWER_QUERY_STRINGS));
 }
 

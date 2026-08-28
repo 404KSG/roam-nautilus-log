@@ -209,6 +209,7 @@ async function startTiming(extensionAPI) {
   if (timingRuntime || typeof document === "undefined") return true;
   const runtime = createTimingRuntime({
     extensionAPI,
+    readPlan: planWatchBridge?.read,
     watchPlan: planWatchBridge?.subscribe,
   });
   let topbar = null;

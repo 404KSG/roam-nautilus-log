@@ -71,10 +71,27 @@ function graphMock({
     },
     q,
     data: {
-      pull: (_pattern, lookup) => {
+      pull: (pattern, lookup) => {
         trace.push(`pull:${lookup?.[1] || ''}`);
         const block = blocks.get(lookup?.[1]);
-        return block ? { ':block/string': block.string } : null;
+        if (!block) return null;
+        const entity = { ':block/string': block.string };
+        if (pattern.includes(':block/page')) {
+          entity[':block/page'] = { ':node/title': 'August 22nd, 2026' };
+        }
+        if (pattern.includes(':block/children')) {
+          entity[':block/children'] = children(block.uid).map((child) => ({
+            ':block/uid': child.uid,
+            ':block/string': child.string,
+            ':block/order': child.order,
+            ':block/children': children(child.uid).map((grandchild) => ({
+              ':block/uid': grandchild.uid,
+              ':block/string': grandchild.string,
+              ':block/order': grandchild.order,
+            })),
+          }));
+        }
+        return entity;
       },
     },
     createBlock: async ({ location, block }) => {
@@ -250,7 +267,7 @@ test('Plan Pull Watch refreshes capacity immediately when a moved wrapper reopen
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#watched-status-${Date.now()}`;
   const extension = await import(moduleUrl);
-  const { roam, blocks } = graphMock({
+  const { roam, blocks, trace } = graphMock({
     taskAString: '((source-a))',
     taskBString: '{{[[DONE]]}} Beta 45m',
   });
@@ -298,17 +315,171 @@ test('Plan Pull Watch refreshes capacity immediately when a moved wrapper reopen
   });
 
   assert.equal(runtime.getSnapshot().planSnapshot.execution.demandMinutes, 0);
+  const planQueriesBeforeWatch = trace.filter((entry) => entry === 'query:plan').length;
+  const entryQueriesBeforeWatch = trace.filter((entry) => entry === 'query:scoped-entries').length;
   blocks.set('task-a', {
     ...blocks.get('task-a'),
     string: '{{[[TODO]]}} ((source-a))',
   });
-  planListener();
+  planListener({
+    'block/uid': 'plan',
+    'block/string': blocks.get('plan').string,
+    'block/children': ['task-a', 'task-b', 'event'].map((uid) => ({
+      'block/uid': uid,
+      'block/string': blocks.get(uid).string,
+      'block/order': blocks.get(uid).order,
+      'block/refs': uid === 'task-a'
+        ? [{ 'block/uid': 'source-a', 'block/string': blocks.get('source-a').string }]
+        : [],
+    })),
+  });
   await new Promise((resolve) => setTimeout(resolve, 5));
 
   assert.equal(runtime.getSnapshot().planSnapshot.execution.demandMinutes, 15);
   assert.equal(runtime.getSnapshot().planSnapshot.tasks[0].statusOrigin, 'local');
+  assert.equal(trace.filter((entry) => entry === 'query:plan').length, planQueriesBeforeWatch);
+  assert.equal(trace.filter((entry) => entry === 'query:scoped-entries').length, entryQueriesBeforeWatch);
   runtime.destroy();
   assert.equal(stopped, true);
+});
+
+test('authoritative recovery reuses the Primary Plan Pull and reads CLOCK only from relevant tasks', async (t) => {
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#scoped-recovery-${Date.now()}`;
+  const extension = await import(moduleUrl);
+  const { roam, blocks, trace } = graphMock();
+  blocks.set('drawer-a', { uid: 'drawer-a', string: 'LOGBOOK::', parentUid: 'task-a', order: 0 });
+  blocks.set('clock-a', {
+    uid: 'clock-a',
+    string: 'CLOCK: [2026-08-22 Sat 09:00]--[2026-08-22 Sat 09:20] => 0:20',
+    parentUid: 'drawer-a',
+    order: 0,
+  });
+  const settings = new Map([
+    ['todo-duration', 15],
+    ['workday-start', 5],
+    ['workday-end', 21],
+    ['timing-line-sidebar', false],
+    ['recent-retention-minutes', 45],
+  ]);
+  global.window = {
+    roamAlphaAPI: roam,
+    setInterval: () => 99,
+    clearInterval: () => {},
+    setTimeout,
+    clearTimeout,
+  };
+  const runtime = extension.createTimingRuntime({
+    extensionAPI: {
+      settings: {
+        get: (key) => settings.get(key),
+        set: async (key, value) => settings.set(key, value),
+      },
+    },
+    now: () => new Date(2026, 7, 22, 10, 0),
+    readPlan: () => ({
+      'block/uid': 'plan',
+      'block/string': blocks.get('plan').string,
+      'block/children': ['task-a', 'task-b', 'event'].map((uid) => ({
+        'block/uid': uid,
+        'block/string': blocks.get(uid).string,
+        'block/order': blocks.get(uid).order,
+        'block/refs': [],
+      })),
+    }),
+  });
+  await runtime.initialize();
+  t.after(() => {
+    runtime.destroy();
+    delete global.window;
+  });
+
+  trace.length = 0;
+  await runtime.requestRefresh({ immediate: true });
+
+  assert.equal(runtime.getSnapshot().entries.length, 1);
+  assert.equal(runtime.getSnapshot().entries[0].clockUid, 'clock-a');
+  assert.equal(trace.includes('query:plan'), false);
+  assert.equal(trace.includes('query:scoped-entries'), false);
+  assert.equal(trace.includes('pull:task-a'), true);
+  assert.equal(trace.includes('pull:task-b'), true);
+});
+
+test('one-second Timing ticks stay graph-free and recovery waits for a real idle period', async (t) => {
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#tick-lanes-${Date.now()}`;
+  const extension = await import(moduleUrl);
+  const { roam, blocks, trace } = graphMock();
+  const settings = new Map([
+    ['todo-duration', 15],
+    ['workday-start', 5],
+    ['workday-end', 21],
+    ['timing-line-sidebar', false],
+    ['recent-retention-minutes', 45],
+  ]);
+  let tick = null;
+  let idleCallback = null;
+  let idleOptions = 'not-called';
+  let wallTime = 0;
+  global.window = {
+    roamAlphaAPI: roam,
+    setInterval: (callback) => {
+      tick = callback;
+      return 99;
+    },
+    clearInterval: () => {},
+    setTimeout,
+    clearTimeout,
+    requestIdleCallback: (callback, options) => {
+      idleCallback = callback;
+      idleOptions = options;
+      return 101;
+    },
+    cancelIdleCallback: () => {},
+  };
+  const runtime = extension.createTimingRuntime({
+    extensionAPI: {
+      settings: {
+        get: (key) => settings.get(key),
+        set: async (key, value) => settings.set(key, value),
+      },
+    },
+    now: () => new Date(2026, 7, 22, 10, 0),
+    wallNow: () => wallTime,
+    readPlan: () => ({
+      'block/uid': 'plan',
+      'block/string': blocks.get('plan').string,
+      'block/children': ['task-a', 'task-b', 'event'].map((uid) => ({
+        'block/uid': uid,
+        'block/string': blocks.get(uid).string,
+        'block/order': blocks.get(uid).order,
+        'block/refs': [],
+      })),
+    }),
+  });
+  await runtime.initialize();
+  t.after(() => {
+    runtime.destroy();
+    delete global.window;
+  });
+
+  trace.length = 0;
+  wallTime = 15_001;
+  tick();
+  assert.deepEqual(trace, []);
+  assert.equal(idleCallback, null);
+
+  wallTime = 300_000;
+  tick();
+  assert.deepEqual(trace, []);
+  assert.equal(typeof idleCallback, 'function');
+  assert.equal(idleOptions, undefined);
+
+  idleCallback();
+  await Promise.resolve();
+  assert.equal(trace.includes('query:plan'), false);
+  assert.equal(trace.includes('query:scoped-entries'), false);
+  assert.equal(trace.includes('pull:task-a'), true);
 });
 
 test('referenced and plain daily instances can CLOCK and complete without mutating their source', async (t) => {
@@ -584,7 +755,11 @@ test('runtime serializes close-before-switch and close-before-complete', async (
   trace.length = 0;
   runtime.refresh();
   assert.equal(trace.filter((entry) => entry === 'query:entries').length, 0);
-  assert.equal(trace.filter((entry) => entry === 'query:scoped-entries').length, 1);
+  assert.equal(
+    trace.filter((entry) => entry === 'query:scoped-entries').length,
+    0,
+    'a cached render refresh must not reread CLOCK history',
+  );
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(trace.includes('sidebar:getWindows'), true, 'startup should warm the sidebar cache read-only');
   assert.equal(trace.includes('sidebar:open'), false, 'cache warmup must not open the sidebar');
