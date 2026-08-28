@@ -17,6 +17,17 @@ function readArgument(name, fallback) {
 }
 
 const mode = readArgument("--mode", "smoke");
+const runtimeDestroyGlobal = readArgument("--destroy-global", null);
+const runtimeRemoveKeydownListener = readArgument(
+  "--remove-keydown-listener",
+  null,
+);
+const domStressCopies = Number(readArgument("--dom-stress-copies", "0"));
+const smokeSamples = Number(readArgument("--smoke-samples", "1"));
+const blockedResourceSubstring = readArgument(
+  "--block-resource-substring",
+  null,
+);
 const configPath = resolve(rootDir, readArgument(
   "--config",
   process.env.ROAM_PERF_CONFIG ?? "config.local.json",
@@ -25,10 +36,15 @@ const config = validateConfig(JSON.parse(await readFile(configPath, "utf8")));
 const authPath = resolve(rootDir, config.authStatePath ?? ".auth/roam.json");
 const resultsDir = resolve(rootDir, config.resultsDir ?? "results");
 const sampleTimeoutMs = config.sampleTimeoutMs ?? 8000;
+const runtimeReadyGlobals = config.runtimeReadyGlobals ?? [];
+const runtimeSettleMs = config.runtimeSettleMs ?? 0;
 const graphUrl = `https://roamresearch.com/#/app/${encodeURIComponent(config.graphSlug)}/page/${encodeURIComponent(config.pageUid)}`;
 
 if (!new Set(["inspect", "smoke", "benchmark"]).has(mode)) {
   throw new Error(`Unsupported mode: ${mode}`);
+}
+if (!Number.isInteger(smokeSamples) || smokeSamples < 1) {
+  throw new Error(`--smoke-samples must be a positive integer; received ${smokeSamples}`);
 }
 
 try {
@@ -285,6 +301,16 @@ async function waitForLab(page) {
     { pageUid: config.pageUid, targetUid: config.targetUid },
     { timeout: 60_000 },
   );
+  if (runtimeReadyGlobals.length > 0) {
+    await page.waitForFunction(
+      (globals) => globals.every((key) => Boolean(window[key])),
+      runtimeReadyGlobals,
+      { timeout: 60_000 },
+    );
+  }
+  if (runtimeSettleMs > 0) {
+    await page.waitForTimeout(runtimeSettleMs);
+  }
 }
 
 async function focusTarget(page) {
@@ -303,6 +329,87 @@ async function focusTarget(page) {
   );
 }
 
+async function installDomStress(page, copies) {
+  if (!Number.isInteger(copies) || copies < 1) return null;
+  return page.evaluate(({ targetUid, count }) => {
+    document.getElementById("roam-enter-perf-dom-stress")?.remove();
+    const article = document.querySelector(".roam-article");
+    const source = article?.querySelector(`[data-block-uid="${CSS.escape(targetUid)}"]`);
+    if (!article || !source) throw new Error("Missing DOM stress source block");
+
+    const host = document.createElement("div");
+    host.id = "roam-enter-perf-dom-stress";
+    host.setAttribute("aria-hidden", "true");
+    host.style.pointerEvents = "none";
+    const fragment = document.createDocumentFragment();
+    for (let index = 0; index < count; index += 1) {
+      const clone = source.cloneNode(true);
+      clone.dataset.blockUid = `perf-stress-${index}`;
+      clone.querySelectorAll("[id]").forEach((element) => element.removeAttribute("id"));
+      clone.querySelectorAll("textarea, input, button, a").forEach((element) => {
+        element.tabIndex = -1;
+      });
+      fragment.append(clone);
+    }
+    host.append(fragment);
+    article.append(host);
+    return {
+      copies: count,
+      elementCount: host.querySelectorAll("*").length,
+    };
+  }, { targetUid: config.targetUid, count: copies });
+}
+
+async function removeDomStress(page) {
+  return page.evaluate(() => {
+    const host = document.getElementById("roam-enter-perf-dom-stress");
+    if (!host) return false;
+    host.remove();
+    return true;
+  });
+}
+
+async function destroyRuntimeGlobal(page, globalKey) {
+  return page.evaluate((key) => {
+    const runtime = window[key];
+    if (!runtime || typeof runtime.destroy !== "function") {
+      throw new Error(`Runtime global is not destroyable: ${key}`);
+    }
+    runtime.destroy();
+    return {
+      globalKey: key,
+      removed: !window[key],
+    };
+  }, globalKey);
+}
+
+async function removeRuntimeKeydownListener(page, candidate) {
+  return page.evaluate((candidateId) => {
+    const entries = (window.__roamEnterListenerRegistry ?? [])
+      .filter((entry) => entry.target === document && entry.type === "keydown");
+    const matches = entries.filter((entry) => {
+      const source = String(entry.listener);
+      if (candidateId === "todo-trigger") {
+        return source.includes('startsWith("{{[[DONE]]}}")')
+          && source.includes('startsWith("{{[[TODO]]}}")');
+      }
+      return false;
+    });
+    if (matches.length !== 1) {
+      throw new Error(
+        `Keydown candidate ${candidateId} matched ${matches.length} listeners; expected 1`,
+      );
+    }
+    const [entry] = matches;
+    document.removeEventListener("keydown", entry.listener, entry.options);
+    return {
+      candidateId,
+      matched: matches.length,
+      listener: String(entry.listener).replaceAll(/\s+/g, " ").slice(0, 240),
+    };
+  }, candidate);
+}
+
 async function installMeasurementProbe(page) {
   await page.evaluate(({ targetUid, timeoutMs }) => {
     const root = document.querySelector(".roam-article");
@@ -319,33 +426,98 @@ async function installMeasurementProbe(page) {
     window.__roamEnterPerfInitialUids = [...initialUids];
     let keydownAt = null;
     let keydownTrusted = false;
+    let eventDispatchCompletedAt = null;
     let eventTiming = null;
-    let observer = null;
+    let eventObserver = null;
+    let longTaskObserver = null;
+    let animationFrameObserver = null;
+    const longTasks = [];
+    const longAnimationFrames = [];
     let settled = false;
 
+    const collectEventTiming = (entries) => {
+      const candidates = entries
+        .filter((entry) => entry.name === "keydown")
+        .filter((entry) => keydownAt === null || entry.startTime >= keydownAt - 5);
+      const candidate = candidates.at(-1);
+      if (!candidate) return;
+      eventTiming = {
+        durationMs: candidate.duration,
+        inputDelayMs: candidate.processingStart - candidate.startTime,
+        processingMs: candidate.processingEnd - candidate.processingStart,
+        presentationMs: Math.max(0, candidate.duration - (
+          candidate.processingEnd - candidate.startTime
+        )),
+      };
+    };
+
     try {
-      observer = new PerformanceObserver((list) => {
-        const entries = list.getEntries();
-        const candidate = entries.find((entry) => entry.name === "keydown");
-        if (candidate) {
-          eventTiming = {
-            durationMs: candidate.duration,
-            inputDelayMs: candidate.processingStart - candidate.startTime,
-            processingMs: candidate.processingEnd - candidate.processingStart,
-            presentationMs: Math.max(0, candidate.duration - (
-              candidate.processingEnd - candidate.startTime
-            )),
-          };
+      eventObserver = new PerformanceObserver((list) => {
+        collectEventTiming(list.getEntries());
+      });
+      eventObserver.observe({ type: "event", buffered: false, durationThreshold: 0 });
+    } catch {
+      eventObserver = null;
+    }
+
+    try {
+      longTaskObserver = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          longTasks.push({
+            startTimeMs: entry.startTime,
+            durationMs: entry.duration,
+          });
         }
       });
-      observer.observe({ type: "event", buffered: false, durationThreshold: 0 });
+      longTaskObserver.observe({ type: "longtask", buffered: false });
     } catch {
-      observer = null;
+      longTaskObserver = null;
+    }
+
+    try {
+      animationFrameObserver = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          longAnimationFrames.push({
+            startTimeMs: entry.startTime,
+            durationMs: entry.duration,
+            blockingDurationMs: entry.blockingDuration,
+            renderStartMs: entry.renderStart,
+            styleAndLayoutStartMs: entry.styleAndLayoutStart,
+            scripts: (entry.scripts ?? []).map((script) => {
+              let sourceURL = script.sourceURL || null;
+              try {
+                if (sourceURL) {
+                  const url = new URL(sourceURL, location.href);
+                  sourceURL = `${url.origin}${url.pathname}`;
+                }
+              } catch {
+                sourceURL = null;
+              }
+              return {
+                durationMs: script.duration,
+                forcedStyleAndLayoutDurationMs: script.forcedStyleAndLayoutDuration,
+                invoker: script.invoker,
+                invokerType: script.invokerType,
+                functionName: script.functionName,
+                sourceURL,
+              };
+            }),
+          });
+        }
+      });
+      animationFrameObserver.observe({
+        type: "long-animation-frame",
+        buffered: false,
+      });
+    } catch {
+      animationFrameObserver = null;
     }
 
     const completion = new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        observer?.disconnect();
+        eventObserver?.disconnect();
+        longTaskObserver?.disconnect();
+        animationFrameObserver?.disconnect();
         reject(new Error(`Enter milestone timed out after ${timeoutMs}ms`));
       }, timeoutMs);
 
@@ -353,7 +525,9 @@ async function installMeasurementProbe(page) {
         if (settled) return;
         settled = true;
         clearTimeout(timeout);
-        observer?.disconnect();
+        eventObserver?.disconnect();
+        longTaskObserver?.disconnect();
+        animationFrameObserver?.disconnect();
         resolve(value);
       };
 
@@ -369,18 +543,61 @@ async function installMeasurementProbe(page) {
           ?.getAttribute("data-block-uid");
 
         if (activeUid && activeUid !== targetUid && !initialUids.has(activeUid)) {
-          requestAnimationFrame(() => requestAnimationFrame(() => {
-            const afterUids = uniqueUids();
-            finish({
-              appDurationMs: performance.now() - keydownAt,
-              keydownTrusted,
-              oldUid: targetUid,
-              newUid: activeUid,
-              beforeCount: initialCount,
-              afterCreateCount: afterUids.size,
-              eventTiming,
+          const focusDetectedAt = performance.now();
+          requestAnimationFrame(() => {
+            const firstPaintFrameAt = performance.now();
+            requestAnimationFrame(() => {
+              const secondPaintFrameAt = performance.now();
+              collectEventTiming(eventObserver?.takeRecords?.() ?? []);
+              for (const entry of longTaskObserver?.takeRecords?.() ?? []) {
+                longTasks.push({
+                  startTimeMs: entry.startTime,
+                  durationMs: entry.duration,
+                });
+              }
+              for (const entry of animationFrameObserver?.takeRecords?.() ?? []) {
+                longAnimationFrames.push({
+                  startTimeMs: entry.startTime,
+                  durationMs: entry.duration,
+                  blockingDurationMs: entry.blockingDuration,
+                  renderStartMs: entry.renderStart,
+                  styleAndLayoutStartMs: entry.styleAndLayoutStart,
+                  scripts: (entry.scripts ?? []).map((script) => ({
+                    durationMs: script.duration,
+                    forcedStyleAndLayoutDurationMs: script.forcedStyleAndLayoutDuration,
+                    invoker: script.invoker,
+                    invokerType: script.invokerType,
+                    functionName: script.functionName,
+                    sourceURL: script.sourceURL || null,
+                  })),
+                });
+              }
+              const afterUids = uniqueUids();
+              finish({
+                appDurationMs: secondPaintFrameAt - keydownAt,
+                eventDispatchCompletedMs: eventDispatchCompletedAt === null
+                  ? null
+                  : eventDispatchCompletedAt - keydownAt,
+                focusDetectedMs: focusDetectedAt - keydownAt,
+                firstPaintFrameMs: firstPaintFrameAt - keydownAt,
+                secondPaintFrameMs: secondPaintFrameAt - keydownAt,
+                keydownTrusted,
+                oldUid: targetUid,
+                newUid: activeUid,
+                beforeCount: initialCount,
+                afterCreateCount: afterUids.size,
+                eventTiming,
+                longTasks: longTasks.filter((entry) => (
+                  entry.startTimeMs + entry.durationMs >= keydownAt
+                  && entry.startTimeMs <= secondPaintFrameAt
+                )),
+                longAnimationFrames: longAnimationFrames.filter((entry) => (
+                  entry.startTimeMs + entry.durationMs >= keydownAt
+                  && entry.startTimeMs <= secondPaintFrameAt
+                )),
+              });
             });
-          }));
+          });
           return;
         }
 
@@ -391,6 +608,9 @@ async function installMeasurementProbe(page) {
         if (event.key === "Enter" && keydownAt === null) {
           keydownTrusted = event.isTrusted;
           keydownAt = performance.now();
+          queueMicrotask(() => {
+            eventDispatchCompletedAt = performance.now();
+          });
         }
       }, { capture: true, once: true });
 
@@ -662,6 +882,54 @@ async function inspectStyles(page) {
   });
 }
 
+async function inspectRuntime(page) {
+  return page.evaluate(() => {
+    const sanitizeUrl = (value) => {
+      try {
+        const url = new URL(value, location.href);
+        return `${url.origin}${url.pathname}`;
+      } catch {
+        return null;
+      }
+    };
+
+    const resources = performance.getEntriesByType("resource")
+      .filter((entry) => [
+        "script",
+        "fetch",
+        "xmlhttprequest",
+      ].includes(entry.initiatorType))
+      .map((entry) => ({
+        type: entry.initiatorType,
+        url: sanitizeUrl(entry.name),
+        durationMs: entry.duration,
+        transferSize: entry.transferSize,
+      }))
+      .filter((entry) => Boolean(entry.url));
+
+    return {
+      supportedPerformanceEntryTypes: PerformanceObserver.supportedEntryTypes ?? [],
+      scriptTags: [...document.scripts]
+        .map((script) => sanitizeUrl(script.src))
+        .filter(Boolean),
+      resources,
+      diagnosticGlobals: Object.keys(window)
+        .filter((key) => /(?:roam|nautilus|scroll|sidebar|extension)/i.test(key))
+        .filter((key) => !key.startsWith("webpack"))
+        .sort(),
+      documentKeydownListeners: (window.__roamEnterListenerRegistry ?? [])
+        .filter((entry) => entry.target === document && entry.type === "keydown")
+        .map((entry, index) => ({
+          index,
+          capture: typeof entry.options === "boolean"
+            ? entry.options
+            : Boolean(entry.options?.capture),
+          listener: String(entry.listener).replaceAll(/\s+/g, " ").slice(0, 800),
+        })),
+    };
+  });
+}
+
 async function writeResult(kind, result) {
   await mkdir(resultsDir, { recursive: true });
   const path = resolve(resultsDir, `${createTimestamp()}-${kind}.json`);
@@ -671,6 +939,43 @@ async function writeResult(kind, result) {
 
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ storageState: authPath });
+const blockedResources = [];
+if (blockedResourceSubstring) {
+  await context.route("**/*", async (route) => {
+    const url = route.request().url();
+    if (url.includes(blockedResourceSubstring)) {
+      blockedResources.push(url);
+      const stylesheet = /extension\.css(?:$|\?)/.test(url);
+      await route.fulfill({
+        status: 200,
+        contentType: stylesheet ? "text/css" : "application/javascript",
+        body: stylesheet
+          ? ""
+          : "export default { onload() {}, onunload() {} };",
+      });
+      return;
+    }
+    await route.continue();
+  });
+}
+if (mode === "inspect" || runtimeRemoveKeydownListener) {
+  await context.addInitScript(() => {
+    const registry = [];
+    const original = EventTarget.prototype.addEventListener;
+    Object.defineProperty(window, "__roamEnterListenerRegistry", {
+      value: registry,
+      configurable: true,
+    });
+    EventTarget.prototype.addEventListener = function addEventListener(
+      type,
+      listener,
+      options,
+    ) {
+      registry.push({ target: this, type, listener, options });
+      return original.call(this, type, listener, options);
+    };
+  });
+}
 const page = await context.newPage();
 let outputPath;
 let initialPageChildren = null;
@@ -680,24 +985,59 @@ let runError = null;
 
 try {
   await waitForLab(page);
+  let runtimeDestroy = null;
+  let removedKeydownListener = null;
+  if (runtimeDestroyGlobal) {
+    runtimeDestroy = await destroyRuntimeGlobal(page, runtimeDestroyGlobal);
+    await page.evaluate(() => new Promise((resolveFrame) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolveFrame));
+    }));
+  }
+  if (runtimeRemoveKeydownListener) {
+    removedKeydownListener = await removeRuntimeKeydownListener(
+      page,
+      runtimeRemoveKeydownListener,
+    );
+    await page.evaluate(() => new Promise((resolveFrame) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolveFrame));
+    }));
+  }
+  const domStress = await installDomStress(page, domStressCopies);
+  if (domStress) {
+    await page.evaluate(() => new Promise((resolveFrame) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolveFrame));
+    }));
+  }
   initialPageChildren = await readDirectPageChildren(page);
 
   if (mode === "inspect") {
     const inventory = await inspectStyles(page);
+    const runtimeAtReady = await inspectRuntime(page);
+    await page.waitForTimeout(10_000);
+    const runtimeAfterTenSeconds = await inspectRuntime(page);
     outputPath = await writeResult("style-inventory", {
       generatedAt: new Date().toISOString(),
       graphSlug: config.graphSlug,
       pageUid: config.pageUid,
       targetUid: config.targetUid,
       styles: inventory,
+      runtimeAtReady,
+      runtimeAfterTenSeconds,
     });
   } else {
+    if (blockedResourceSubstring && blockedResources.length === 0) {
+      throw new Error(
+        `Blocked resource fingerprint did not match any request: ${blockedResourceSubstring}`,
+      );
+    }
     const baseline = config.variants.find((variant) => variant.type === "baseline");
     const candidate = config.variants.find((variant) => variant.type !== "baseline");
     const samples = [];
 
     if (mode === "smoke") {
-      samples.push(await takeSample(page, baseline, "smoke", 0));
+      for (let index = 0; index < smokeSamples; index += 1) {
+        samples.push(await takeSample(page, baseline, "smoke", index));
+      }
     } else {
       for (let index = 0; index < config.warmups; index += 1) {
         const variant = index % 2 === 0 ? baseline : candidate;
@@ -719,6 +1059,11 @@ try {
       graphSlug: config.graphSlug,
       pageUid: config.pageUid,
       targetUid: config.targetUid,
+      runtimeDestroy,
+      removedKeydownListener,
+      blockedResourceSubstring,
+      blockedResources: [...new Set(blockedResources)],
+      domStress,
       configFile: basename(configPath),
       summary: summarizeSamples(samples),
       samples,
@@ -739,6 +1084,7 @@ try {
       }
     }
     await restoreStyles(page);
+    await removeDomStress(page);
   } finally {
     await context.close();
     await browser.close();

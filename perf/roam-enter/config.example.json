@@ -6,6 +6,10 @@
   "warmups": 5,
   "rounds": 5,
   "sampleTimeoutMs": 8000,
+  "runtimeReadyGlobals": [
+    "RoamExtensionTools"
+  ],
+  "runtimeSettleMs": 1000,
   "variants": [
     {
       "id": "baseline",

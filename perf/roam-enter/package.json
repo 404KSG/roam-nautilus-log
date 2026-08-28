@@ -6,6 +6,7 @@
     "test": "node --test test/*.test.mjs",
     "auth": "node src/auth.mjs",
     "inspect": "node src/run.mjs --mode inspect",
+    "inspect:page-style": "node src/inspect-page-style.mjs",
     "smoke": "node src/run.mjs --mode smoke",
     "benchmark": "node src/run.mjs --mode benchmark"
   },
