@@ -1446,24 +1446,27 @@
      [:path {:d "M19 14H5l-1.973 6.767A1 1 0 0 0 4 22h16a1 1 0 0 0 .973-1.233z"}]
      [:path {:d "m8 22 1-4"}]]]])
 
-(defn collapse-storage-key [block-uid]
-  (str "nautilus-log:collapsed:v1:" block-uid))
+(defn collapse-context-key [render-context]
+  (if (= render-context :sidebar) "sidebar" "main"))
 
-(defn read-collapsed-state [block-uid]
+(defn collapse-storage-key [block-uid render-context]
+  (str "nautilus-log:collapsed:v2:" block-uid ":" (collapse-context-key render-context)))
+
+(defn read-collapsed-state [block-uid render-context]
   (try
-    (= "true" (.getItem js/localStorage (collapse-storage-key block-uid)))
+    (= "true" (.getItem js/localStorage (collapse-storage-key block-uid render-context)))
     (catch :default _e false)))
 
-(defn write-collapsed-state [block-uid value]
+(defn write-collapsed-state [block-uid render-context value]
   (try
-    (.setItem js/localStorage (collapse-storage-key block-uid) (str value))
+    (.setItem js/localStorage (collapse-storage-key block-uid render-context) (str value))
     (catch :default _e nil)))
 
-(defn collapse-button [collapsed-state block-uid copy]
+(defn collapse-button [collapsed-state block-uid render-context copy]
   [:button
    {:on-click #(let [next (not @collapsed-state)]
                  (reset! collapsed-state next)
-                 (write-collapsed-state block-uid next))
+                 (write-collapsed-state block-uid render-context next))
     :class "nautilus-log-toggle-btn nautilus-log-collapse-btn"
     :title (if @collapsed-state (:expand copy) (:collapse copy))
     :aria-label (if @collapsed-state (:expand copy) (:collapse copy))}
@@ -1733,15 +1736,15 @@
            [:span (:description event)]
            [:span {:class "nautilus-log-warning-message"} (localized-warning (:warning event) copy)]])]])))
 
-(defn log-controls [show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid settled-uids tidy-state copy show-debug-button?]
+(defn log-controls [show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid render-context settled-uids tidy-state copy show-debug-button?]
   [:div {:class "nautilus-log-controls-top"}
    [switch-done-visibility-button show-done-state (:controls copy)]
    [playback-button settings now-time-atom playback-state-atom playback-frame-atom (:controls copy)]
    [tidy-button block-uid settled-uids tidy-state settings (:controls copy)]
-   [collapse-button collapsed-state block-uid (:controls copy)]
+   [collapse-button collapsed-state block-uid render-context (:controls copy)]
    (when show-debug-button? [switch-debug-button])])
 
-(defn render-context-probe [render-context-state compact-list-open-state]
+(defn render-context-probe [render-context-state compact-list-open-state collapsed-state block-uid]
   [:span
    {:class "nautilus-log-context-probe"
     :aria-hidden "true"
@@ -1764,6 +1767,8 @@
                (when (nil? @compact-list-open-state)
                  (reset! compact-list-open-state (not sidebar?)))
                (when (not= @render-context-state next-state)
+                 (when (not= next-state :suppressed)
+                   (reset! collapsed-state (read-collapsed-state block-uid next-state)))
                  (reset! render-context-state next-state)))))}])
 
 (defn compact-chart-width? [width]
@@ -1807,7 +1812,7 @@
                now-time-atom (r/atom (now-minutes))
                playback-state-atom (r/atom false)
                playback-frame-atom (r/atom nil)
-               collapsed-state (r/atom (read-collapsed-state block-uid))
+               collapsed-state (r/atom false)
                render-context-state (r/atom :pending)
                compact-list-open-state (r/atom nil)
                compact-overview-open-state (r/atom false)
@@ -1858,7 +1863,7 @@
              [:strong {:style {:color "red"}} "Extension not installed. To use Nautilus Log, install it from Roam Depot."]]
       (cond
         (= :pending @render-context-state)
-        [render-context-probe render-context-state compact-list-open-state]
+        [render-context-probe render-context-state compact-list-open-state collapsed-state block-uid]
 
         (= :suppressed @render-context-state)
         [:span {:class "nautilus-log-context-probe" :aria-hidden "true"}]
@@ -1923,14 +1928,14 @@
                    :ref container-ref
                    :data-nautilus-log-block block-uid}
              (if @collapsed-state
-               [log-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid settled-uids tidy-state copy show-debug-button?]
+               [log-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid @render-context-state settled-uids tidy-state copy show-debug-button?]
                [:div {:class "nautilus-log-shell"}
                 [:header {:class (str "nautilus-log-header"
                                      (when @compact-state " nautilus-log-header--compact"))}
                  [:div {:class "nautilus-log-header-copy"}
                   [capacity-metrics-component capacity settings]]
                  [:div {:class "nautilus-log-header-actions"}
-                  [log-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid settled-uids tidy-state copy show-debug-button?]
+                  [log-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid @render-context-state settled-uids tidy-state copy show-debug-button?]
                   [html-legend-component copy]]]
                 (when @compact-state
                   [compact-overview-component capacity settings copy compact-overview-open-state])

@@ -18,6 +18,7 @@ const timingTopbar = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-t
 const timingCore = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-core.js'), 'utf8');
 const timingRuntime = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-runtime.js'), 'utf8');
 const timingCommands = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-commands.js'), 'utf8');
+const timingRoam = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-roam.js'), 'utf8');
 const tidyPlan = fs.readFileSync(path.join(__dirname, '..', 'src', 'tidy-plan.js'), 'utf8');
 
 function parenDepthBefore(source, targetIndex) {
@@ -537,6 +538,27 @@ test('Log owns the previously tested controls and collapses without reserving ch
   assert.match(component, /M3 9h18/);
   assert.match(component, /m9 13 3 3 3-3/);
   assert.doesNotMatch(component, /"▸" "▾"/);
+  assert.match(
+    component,
+    /nautilus-log:collapsed:v2:[\s\S]*collapse-context-key/,
+    'main-window and right-sidebar renders must not share one collapse preference',
+  );
+  assert.match(
+    component,
+    /render-context-probe render-context-state compact-list-open-state collapsed-state block-uid/,
+    'the renderer must restore collapse state only after its surface is known',
+  );
+  assert.match(
+    component,
+    /collapse-button collapsed-state block-uid render-context/,
+    'manual collapse writes must be scoped to the current render surface',
+  );
+  assert.doesNotMatch(component, /nautilus-log:collapsed:v1:/);
+  assert.doesNotMatch(
+    timingRoam,
+    /openPrimaryPlan[\s\S]{0,900}(?:collapsed|collapse-storage|localStorage)/,
+    'locating a plan must remain navigation-only',
+  );
   assert.match(css, /\.nautilus-log-collapsed\s*\{[^}]*height:\s*0;/s);
   assert.match(css, /\.nautilus-log-collapsed \.nautilus-log-controls-top\s*\{[^}]*top:\s*-26px;/s);
   assert.doesNotMatch(css, /#roam-right-sidebar-content \.nautilus-log-container/);
