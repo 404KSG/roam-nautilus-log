@@ -61,6 +61,8 @@
 
 - **眼睛：** 显示或隐藏已完成事项。
 - **播放：** 回放所配置的一天，不修改 Roam block。
+- **Calendar：** 开启可选 Google Calendar 同步后，导入当前图表 Daily Note 日期中的
+  定时忙碌事件。Option/Alt + 点击只会强制刷新 Google 托管字段。
 - **整理：** 将已完成任务和已过去固定事件稳定移动到列表最前面，同时保持活动任务的
   相对优先级完全不变。整理只按 UID 移动直属外壳，不修改文本、时间、引用或后代 block；
   若整理后没有继续编辑计划，可撤销一次。
@@ -129,6 +131,9 @@ Todo Trigger 是可选工具。它追加的完成时间可以提供 `dHH:MM` 锚
 | Legend Max Length | 22 |
 | Default Todo Duration | 15 分钟 |
 | Urgent Trigger Word | 空 |
+| Google Calendar · 可选 | 关闭 |
+| Google OAuth Client ID | 空 |
+| Calendar IDs | `primary` |
 | 执行层 · 进阶 | 关闭 |
 | Keep Timing Line first in right sidebar | 开启 |
 | Pomodoro Threshold | 45 分钟 |
@@ -144,6 +149,10 @@ Nautilus Log 稳定的 renderer 身份识别组件，不依赖这个标签。
 05:00–21:00。
 
 只有开启 **执行层 · 进阶** 后，设置面板才会展开执行层的其他选项。
+
+只有开启 Google Calendar 可选开关后，设置面板才会展开它的配置。插件只申请 Calendar
+事件与日历列表的只读权限；每次点击只读取当前图表日期，不设定时器、不后台轮询，也不
+预取未来 7 天。详见 [Google Calendar 同步说明](./google-calendar-sync.md)。
 
 ## 命令
 

@@ -66,6 +66,9 @@ Past gaps are factual schedule data, not a judgment that time was wasted.
 
 - **Eye:** show or hide completed items.
 - **Play:** replay the configured day without changing Roam blocks.
+- **Calendar:** when optional Google Calendar sync is enabled, import timed busy
+  events for this chart's Daily Note. Option/Alt-click force-refreshes only the
+  Google-managed strings.
 - **Tidy:** move completed tasks and elapsed fixed events to the front while
   preserving the exact relative order of active work. Tidy moves direct-child
   wrappers by UID, never changes task text, times, references, or descendants,
@@ -148,6 +151,9 @@ but ordinary planning and completion do not require it.
 | Legend Max Length | 22 |
 | Default Todo Duration | 15 minutes |
 | Urgent Trigger Word | Empty |
+| Google Calendar · Optional | Off |
+| Google OAuth Client ID | Empty |
+| Calendar IDs | `primary` |
 | Execution Layer · Advanced | Off |
 | Keep Timing Line first in right sidebar | On |
 | Pomodoro Threshold | 45 minutes |
@@ -166,6 +172,11 @@ component appears. Existing templates keep working and the default remains
 
 Execution-specific settings are revealed only while **Execution Layer · Advanced** is
 enabled.
+
+Google Calendar settings are revealed only while its optional switch is enabled.
+The extension requests the read-only Calendar events and calendar-list scopes.
+Each click reads only the selected chart date; there is no timer, background poll,
+or seven-day prefetch. See [Google Calendar sync](./google-calendar-sync.md).
 
 ## Commands
 

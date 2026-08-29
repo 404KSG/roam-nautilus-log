@@ -220,6 +220,12 @@ function resolveRendererSettings({ runtime = {}, args = [] } = {}) {
     'workday-start-hour': schedule.startHour,
     'workday-end-hour': schedule.endHour,
     'custom-color-1-tag': trigger === undefined || trigger === null ? '' : String(trigger),
+    ...(Object.prototype.hasOwnProperty.call(runtime, 'google-calendar-enabled')
+      ? { 'google-calendar-enabled': runtime['google-calendar-enabled'] === true }
+      : {}),
+    ...(Object.prototype.hasOwnProperty.call(runtime, 'google-calendar-configured')
+      ? { 'google-calendar-configured': runtime['google-calendar-configured'] === true }
+      : {}),
     language: runtime.language === 'zh' ? 'zh' : 'en',
   };
 }
@@ -871,6 +877,15 @@ const UI_COPY = {
       hideDone: 'Hide completed items',
       showDone: 'Show completed items',
       playback: 'Play back the day',
+      calendar: 'Sync Google Calendar',
+      calendarForce: 'Option-click to force-refresh Google fields',
+      calendarSetup: 'Add a Google OAuth Client ID in Nautilus Log settings',
+      calendarSyncing: 'Syncing Google Calendar…',
+      calendarSynced: 'Google Calendar synced',
+      calendarCreated: 'new',
+      calendarUpdated: 'updated',
+      calendarRemoved: 'removed',
+      calendarLocalKept: 'local kept',
       tidy: 'Tidy completed and elapsed items',
       collapse: 'Collapse Nautilus Log',
       expand: 'Expand Nautilus Log',
@@ -918,6 +933,15 @@ const UI_COPY = {
       hideDone: '隐藏已完成事项',
       showDone: '显示已完成事项',
       playback: '回放一整天',
+      calendar: '同步 Google Calendar',
+      calendarForce: '按住 Option 点击可强制刷新 Google 字段',
+      calendarSetup: '请先在 Nautilus Log 设置中填写 Google OAuth Client ID',
+      calendarSyncing: '正在同步 Google Calendar…',
+      calendarSynced: 'Google Calendar 已同步',
+      calendarCreated: '新增',
+      calendarUpdated: '更新',
+      calendarRemoved: '移除',
+      calendarLocalKept: '保留本地修改',
       tidy: '整理已完成任务与已过去事件',
       collapse: '折叠 Nautilus Log',
       expand: '展开 Nautilus Log',

@@ -663,6 +663,16 @@
   opacity: 0.48;
 }
 
+.nautilus-log-calendar-btn > .bp3-icon {
+  align-items: center;
+  display: inline-flex;
+  font-size: 16px;
+  height: 18px;
+  justify-content: center;
+  line-height: 1;
+  width: 18px;
+}
+
 .nautilus-log-toast-content {
   display: inline-flex;
   align-items: center;

@@ -1,8 +1,16 @@
 # Changelog
 
-## Unreleased
+## 1.1.0 — 2026-08-30
 
 ### Added
+
+- Optional, read-only Google Calendar sync now imports timed busy events into
+  the exact date and Nautilus Plan represented by the clicked chart. The new
+  control uses Blueprint's native Calendar glyph, contacts Google only from a
+  user click, and keeps short-lived OAuth access tokens in memory.
+- Imported events use a compact managed subtree for source links, location, and
+  a shortened description. Normal sync preserves Roam edits; Option/Alt-click
+  force-refreshes managed strings while user-created descendants remain safe.
 
 - A one-click Tidy control now moves completed tasks and elapsed fixed events
   to the front of the Plan with stable ordering. Active task priority, fixed

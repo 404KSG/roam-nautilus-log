@@ -15,6 +15,8 @@ test('calendar id input is compact, unique, and defaults to primary', async () =
     'team@example.com',
   ]);
   assert.deepEqual(extension.parseGoogleCalendarIds(''), ['primary']);
+  assert.equal(extension.isGoogleOAuthClientId('123-abc.apps.googleusercontent.com'), true);
+  assert.equal(extension.isGoogleOAuthClientId('not-a-client-id'), false);
 });
 
 test('Google client requests a memory-only token and follows event pagination', async () => {
@@ -80,6 +82,8 @@ test('calendar runtime syncs only the explicitly clicked Nautilus date and plan'
     ['google-oauth-client-id', 'client-id.apps.googleusercontent.com'],
     ['google-calendar-ids', 'primary,team@example.com'],
     ['google-calendar-sync-state', JSON.stringify({ version: 1, events: {} })],
+    ['workday-start', 21],
+    ['workday-end', 2],
   ]);
   const clientCalls = [];
   const reconcileCalls = [];
@@ -100,8 +104,8 @@ test('calendar runtime syncs only the explicitly clicked Nautilus date and plan'
             id: 'meeting-1',
             status: 'confirmed',
             summary: 'Weekly meeting',
-            start: { dateTime: '2026-08-30T09:30:00+08:00' },
-            end: { dateTime: '2026-08-30T10:00:00+08:00' },
+            start: { dateTime: '2026-08-31T01:00:00+08:00' },
+            end: { dateTime: '2026-08-31T01:30:00+08:00' },
           }],
         }];
       },
@@ -122,11 +126,13 @@ test('calendar runtime syncs only the explicitly clicked Nautilus date and plan'
   });
 
   assert.deepEqual(clientCalls[0].calendarIds, ['primary', 'team@example.com']);
-  assert.equal(new Date(clientCalls[0].timeMin).getHours(), 0);
+  assert.equal(new Date(clientCalls[0].timeMin).getHours(), 21);
+  assert.equal(new Date(clientCalls[0].timeMin).getDate(), 30);
+  assert.equal(new Date(clientCalls[0].timeMax).getHours(), 2);
   assert.equal(new Date(clientCalls[0].timeMax).getDate(), 31);
   assert.equal(reconcileCalls[0].planUid, 'tomorrow-plan');
   assert.equal(reconcileCalls[0].force, true);
-  assert.equal(reconcileCalls[0].events[0].parentString, '09:30–10:00 Weekly meeting');
+  assert.equal(reconcileCalls[0].events[0].parentString, '01:00–01:30 Weekly meeting');
   assert.equal(result.created, 1);
 });
 

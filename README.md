@@ -29,8 +29,8 @@ fill suitable gaps from the current moment. Tasks that cannot fit appear in
 
 ## Quick start
 
-1. During Depot review, install [Draft PR #1430](https://github.com/Roam-Research/roam-depot/pull/1430)
-   with ShortHand `404KSG+roam-nautilus-log+1430`.
+1. Install **Nautilus Log** from Roam Depot. While an update is under review,
+   use the ShortHand shown in that Depot pull request.
 2. On today's Daily Note, type `;;` and choose **Nautilus Log**.
 3. Add fixed events and TODOs as direct children.
 4. Order the tasks and give each one a rough duration.
@@ -44,6 +44,21 @@ fill suitable gaps from the current moment. Tasks that cannot fit appear in
 
 Durations support `30m`, `30min`, `1h`, and `1h30m`. Untimed tasks use the
 configured default.
+
+## Optional Google Calendar sync
+
+Enable **Google Calendar · Optional** to import timed, busy events into the date
+of the Nautilus chart you clicked. The Blueprint Calendar control performs a
+manual, read-only sync; it never polls in the background or creates Daily Notes.
+
+Normal click preserves Roam text you changed. Option/Alt-click force-refreshes
+Google-managed strings while leaving user-created children alone. All-day,
+free/transparent, and declined events are ignored. Setup requires your own Google
+Web OAuth Client ID with `https://roamresearch.com` as an Authorized JavaScript
+origin; short-lived access tokens remain in memory only.
+
+See [Google Calendar sync](./docs/google-calendar-sync.md) for the block shape,
+OAuth setup, scopes, and merge rules.
 
 ## Optional Execution Layer
 

@@ -137,6 +137,7 @@ test('cancelled untouched imports are removed, while locally extended events rem
 
   const result = await reconciler.sync({
     planUid: 'plan-today',
+    force: true,
     events: [
       { key: 'primary:meeting-1', calendarId: 'primary', eventId: 'meeting-1', status: 'cancelled' },
       { key: 'primary:meeting-2', calendarId: 'primary', eventId: 'meeting-2', status: 'cancelled' },
@@ -147,6 +148,41 @@ test('cancelled untouched imports are removed, while locally extended events rem
   assert.equal(result.localKept, 1);
   assert.equal(graph.read(first.parent.uid), null);
   assert.equal(graph.read(second.parent.uid), '11:00–11:30 Interview');
+});
+
+test('force refresh never deletes user descendants attached to a managed detail', async () => {
+  const extension = await loadExtension('calendar-force-detail');
+  const graph = graphHarness();
+  const reconciler = extension.createCalendarReconciler(graph);
+  await reconciler.sync({ planUid: 'plan-today', events: [meeting()] });
+  const mapping = graph.state().events['primary:meeting-1'];
+  const noteUid = await graph.create({
+    parentUid: mapping.details.location.uid,
+    string: 'Directions I want to keep',
+  });
+
+  const result = await reconciler.sync({
+    planUid: 'plan-today',
+    force: true,
+    events: [meeting({ details: { location: '', description: 'Review Q3 launch plan.' } })],
+  });
+
+  assert.equal(result.localKept, 1);
+  assert.equal(graph.read(mapping.details.location.uid), 'Meeting Room 3');
+  assert.equal(graph.read(noteUid), 'Directions I want to keep');
+
+  const cancelled = await reconciler.sync({
+    planUid: 'plan-today',
+    events: [{
+      key: 'primary:meeting-1',
+      calendarId: 'primary',
+      eventId: 'meeting-1',
+      status: 'cancelled',
+    }],
+  });
+  assert.equal(cancelled.localKept, 1);
+  assert.equal(graph.read(mapping.parent.uid), '09:30–10:00 Weekly meeting');
+  assert.equal(graph.read(noteUid), 'Directions I want to keep');
 });
 
 test('a moved event follows the clicked date plan without duplicating its block', async () => {
@@ -165,4 +201,27 @@ test('a moved event follows the clicked date plan without duplicating its block'
   assert.equal(graph.children('plan-today').length, 0);
   assert.deepEqual(graph.children('plan-tomorrow').map((row) => row.uid), [parentUid]);
   assert.equal(graph.state().events['primary:meeting-1'].planUid, 'plan-tomorrow');
+});
+
+test('cancellation treats a user-moved managed source as local structure', async () => {
+  const extension = await loadExtension('calendar-moved-source');
+  const graph = graphHarness();
+  const reconciler = extension.createCalendarReconciler(graph);
+  await reconciler.sync({ planUid: 'plan-today', events: [meeting()] });
+  const mapping = graph.state().events['primary:meeting-1'];
+  await graph.move({ uid: mapping.source.uid, parentUid: 'plan-today', order: 1 });
+
+  const result = await reconciler.sync({
+    planUid: 'plan-today',
+    events: [{
+      key: 'primary:meeting-1',
+      calendarId: 'primary',
+      eventId: 'meeting-1',
+      status: 'cancelled',
+    }],
+  });
+
+  assert.equal(result.localKept, 1);
+  assert.equal(graph.read(mapping.parent.uid), '09:30–10:00 Weekly meeting');
+  assert.equal(graph.read(mapping.source.uid), mapping.source.lastSynced);
 });

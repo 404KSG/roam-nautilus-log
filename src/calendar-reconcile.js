@@ -122,6 +122,9 @@ export function createCalendarReconciler({
       };
     }
     if (decision.action === 'delete') {
+      if (children(mapping.uid).length > 0) {
+        return { mapping, changed: false, localKept: true };
+      }
       await remove(mapping.uid);
       return { mapping: null, changed: true, localKept: false };
     }
@@ -137,13 +140,20 @@ export function createCalendarReconciler({
     if (!mapping?.source?.uid || read(mapping.source.uid) !== mapping.source.lastSynced) return false;
     for (const detail of Object.values(mapping.details || {})) {
       if (!detail?.uid || read(detail.uid) !== detail.lastSynced) return false;
+      if (children(detail.uid).length > 0) return false;
     }
+    const parentChildren = children(mapping.parent.uid);
     const managedParentChildren = new Set([mapping.source.uid]);
-    if (children(mapping.parent.uid).some((child) => !managedParentChildren.has(child?.uid))) return false;
+    if (!parentChildren.some((child) => child?.uid === mapping.source.uid)) return false;
+    if (parentChildren.some((child) => !managedParentChildren.has(child?.uid))) return false;
+    const sourceChildren = children(mapping.source.uid);
     const managedDetailChildren = new Set(
       Object.values(mapping.details || {}).map((detail) => detail?.uid).filter(Boolean),
     );
-    return !children(mapping.source.uid).some((child) => !managedDetailChildren.has(child?.uid));
+    for (const detailUid of managedDetailChildren) {
+      if (!sourceChildren.some((child) => child?.uid === detailUid)) return false;
+    }
+    return !sourceChildren.some((child) => !managedDetailChildren.has(child?.uid));
   };
 
   const updateEvent = async (planUid, event, mapping, force) => {
@@ -226,7 +236,7 @@ export function createCalendarReconciler({
           summary.skipped += 1;
           continue;
         }
-        if (force || hasOnlyUntouchedManagedContent(existing)) {
+        if (hasOnlyUntouchedManagedContent(existing)) {
           await remove(existing.parent.uid);
           delete state.events[event.key];
           summary.removed += 1;

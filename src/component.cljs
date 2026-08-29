@@ -1446,6 +1446,51 @@
      [:path {:d "M19 14H5l-1.973 6.767A1 1 0 0 0 4 22h16a1 1 0 0 0 .973-1.233z"}]
      [:path {:d "m8 22 1-4"}]]]])
 
+(defn calendar-result-title [result copy]
+  (let [summary (js->clj result :keywordize-keys true)]
+    (str (:calendarSynced copy)
+         " · " (or (:created summary) 0) " " (:calendarCreated copy)
+         " · " (or (:updated summary) 0) " " (:calendarUpdated copy)
+         " · " (or (:removed summary) 0) " " (:calendarRemoved copy)
+         (when (pos? (or (:localKept summary) 0))
+           (str " · " (:localKept summary) " " (:calendarLocalKept copy))))))
+
+(defn calendar-button [block-uid page-title-val calendar-state settings copy]
+  (when (:google-calendar-enabled settings)
+    (let [busy? (:busy @calendar-state)
+          configured? (:google-calendar-configured settings)
+          default-title (str (:calendar copy) " · " (:calendarForce copy))
+          title (cond
+                  (not configured?) (:calendarSetup copy)
+                  busy? (:calendarSyncing copy)
+                  (:title @calendar-state) (:title @calendar-state)
+                  :else default-title)]
+      [:button
+       {:on-click (fn [event]
+                    (when (and configured? (not busy?))
+                      (when-let [sync-calendar (some-> js/window .-nautilusLogExtensionData .-syncCalendarPlan)]
+                        (reset! calendar-state {:busy true :title nil})
+                        (-> (js/Promise.resolve
+                             (.call sync-calendar nil
+                                    (clj->js {:planUid block-uid
+                                              :pageTitle page-title-val
+                                              :force (.-altKey event)})))
+                            (.then (fn [result]
+                                     (reset! calendar-state
+                                             {:busy false
+                                              :title (calendar-result-title result copy)})))
+                            (.catch (fn [error]
+                                      (.error js/console "[Nautilus Log] Google Calendar sync failed" error)
+                                      (reset! calendar-state
+                                              {:busy false
+                                               :title (or (.-message error) (str error))})))))))
+        :class "nautilus-log-toggle-btn nautilus-log-calendar-btn"
+        :title title
+        :aria-label title
+        :aria-busy (if busy? "true" "false")
+        :disabled (or busy? (not configured?))}
+       [:span {:class "bp3-icon bp3-icon-calendar" :aria-hidden "true"}]])))
+
 (defn collapse-context-key [render-context]
   (if (= render-context :sidebar) "sidebar" "main"))
 
@@ -1582,6 +1627,11 @@
        :allocation {:planned "planned" :free "free" :over "over" :noSlot "no slot" :left "left"}
        :legend {:urgent "Urgent" :event "Event" :task "Task"}
        :controls {:hideDone "Hide completed items" :showDone "Show completed items" :playback "Play back the day"
+                  :calendar "Sync Google Calendar" :calendarForce "Option-click to force-refresh Google fields"
+                  :calendarSetup "Add a Google OAuth Client ID in Nautilus Log settings"
+                  :calendarSyncing "Syncing Google Calendar…" :calendarSynced "Google Calendar synced"
+                  :calendarCreated "new" :calendarUpdated "updated" :calendarRemoved "removed"
+                  :calendarLocalKept "local kept"
                   :collapse "Collapse Nautilus Log" :expand "Expand Nautilus Log"}
        :panels {:overview "Overview" :overflow "Unscheduled today" :warnings "Schedule warnings" :schedule "Schedule" :item "item" :items "items"}
        :tooltips {:task "Task" :event "Event" :available "Available slot" :availableNow "Available now"}
@@ -1736,10 +1786,11 @@
            [:span (:description event)]
            [:span {:class "nautilus-log-warning-message"} (localized-warning (:warning event) copy)]])]])))
 
-(defn log-controls [show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid render-context settled-uids tidy-state copy show-debug-button?]
+(defn log-controls [show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid page-title-val render-context settled-uids tidy-state calendar-state copy show-debug-button?]
   [:div {:class "nautilus-log-controls-top"}
    [switch-done-visibility-button show-done-state (:controls copy)]
    [playback-button settings now-time-atom playback-state-atom playback-frame-atom (:controls copy)]
+   [calendar-button block-uid page-title-val calendar-state settings (:controls copy)]
    [tidy-button block-uid settled-uids tidy-state settings (:controls copy)]
    [collapse-button collapsed-state block-uid render-context (:controls copy)]
    (when show-debug-button? [switch-debug-button])])
@@ -1856,7 +1907,8 @@
                                                            (mapv :uid))]
                                    [(add-start-after pendings) dones completed-uids]))))
                show-done-state (r/atom true)
-               tidy-state (r/atom false)]
+               tidy-state (r/atom false)
+               calendar-state (r/atom {:busy false :title nil})]
     (case @*running?
       nil [:div {:class "nautilus-log-loading"} [:strong "Loading Nautilus Log..."]]
       false [:div {:class "nautilus-log-not-installed"}
@@ -1928,14 +1980,14 @@
                    :ref container-ref
                    :data-nautilus-log-block block-uid}
              (if @collapsed-state
-               [log-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid @render-context-state settled-uids tidy-state copy show-debug-button?]
+               [log-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid page-title-val @render-context-state settled-uids tidy-state calendar-state copy show-debug-button?]
                [:div {:class "nautilus-log-shell"}
                 [:header {:class (str "nautilus-log-header"
                                      (when @compact-state " nautilus-log-header--compact"))}
                  [:div {:class "nautilus-log-header-copy"}
                   [capacity-metrics-component capacity settings]]
                  [:div {:class "nautilus-log-header-actions"}
-                  [log-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid @render-context-state settled-uids tidy-state copy show-debug-button?]
+                  [log-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid page-title-val @render-context-state settled-uids tidy-state calendar-state copy show-debug-button?]
                   [html-legend-component copy]]]
                 (when @compact-state
                   [compact-overview-component capacity settings copy compact-overview-open-state])

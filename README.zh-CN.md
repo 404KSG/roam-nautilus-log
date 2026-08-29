@@ -24,8 +24,8 @@
 
 ## 快速开始
 
-1. Depot 审核期间，通过 [Draft PR #1430](https://github.com/Roam-Research/roam-depot/pull/1430)
-   使用 ShortHand `404KSG+roam-nautilus-log+1430` 安装。
+1. 从 Roam Depot 安装 **Nautilus Log**；更新处于审核阶段时，使用对应 Depot PR
+   中给出的 ShortHand。
 2. 在今天的 Daily Note 输入 `;;`，选择 **Nautilus Log**。
 3. 把固定事件和 TODO 写成组件的直接子级。
 4. 排列任务，并为每项任务填写粗略时长。
@@ -38,6 +38,20 @@
 ```
 
 时长支持 `30m`、`30min`、`1h` 和 `1h30m`。没有时长的任务使用设置中的默认值。
+
+## 可选 Google Calendar 同步
+
+开启 **Google Calendar · 可选** 后，可把定时且标记为忙碌的事件导入到当前点击的
+Nautilus 图表日期。Blueprint Calendar 按钮只执行手动、只读同步；不会后台轮询，也不会
+自动创建 Daily Note。
+
+普通点击会保护你在 Roam 中改写的文字；Option/Alt + 点击只强制刷新 Google 托管字段，
+仍保留用户自己创建的子 block。全天事件、空闲/透明事件和已拒绝事件不会导入。配置需要
+你自己的 Google Web OAuth Client ID，并把 `https://roamresearch.com` 添加为 Authorized
+JavaScript origin；短期访问令牌只留在内存中。
+
+块结构、OAuth 设置、权限范围与合并规则详见
+[Google Calendar 同步说明](./docs/google-calendar-sync.md)。
 
 ## 可选执行层
 
