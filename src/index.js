@@ -13,6 +13,16 @@ import { createTimingTopbar } from "./timing-topbar";
 import { createPlanWatchBridge } from "./plan-watch";
 import { createPlanTidy } from "./tidy-plan";
 import { createTidyCommands, settledUidsForTidy } from "./tidy-commands";
+import {
+  decideCalendarManagedChange,
+  normalizeGoogleCalendarEvents,
+} from "./calendar-core";
+import { createCalendarReconciler } from "./calendar-reconcile";
+import {
+  createGoogleCalendarClient,
+  parseGoogleCalendarIds,
+} from "./calendar-google";
+import { createCalendarRuntime } from "./calendar-runtime";
 import "../extension.css";
 
 const componentName = "Nautilus Log";
@@ -627,6 +637,12 @@ export {
   panelConfig,
   defaults,
   executionDefaults,
+  normalizeGoogleCalendarEvents,
+  decideCalendarManagedChange,
+  createCalendarReconciler,
+  createGoogleCalendarClient,
+  parseGoogleCalendarIds,
+  createCalendarRuntime,
 };
 
 export default { onload, onunload };

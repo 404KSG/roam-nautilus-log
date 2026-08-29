@@ -1,0 +1,254 @@
+import { decideCalendarManagedChange } from './calendar-core';
+import {
+  createGraphBlock,
+  deleteGraphBlock,
+  moveGraphBlock,
+  readBlockString,
+  readChildren,
+  updateGraphBlock,
+} from './timing-roam';
+
+const DETAIL_KEYS = ['location', 'description'];
+
+function emptyState() {
+  return { version: 1, events: {} };
+}
+
+function normalizeState(value) {
+  const candidate = value && typeof value === 'object' ? value : {};
+  return {
+    version: 1,
+    events: candidate.events && typeof candidate.events === 'object'
+      ? { ...candidate.events }
+      : {},
+  };
+}
+
+function defaultMove({ uid, parentUid }) {
+  return moveGraphBlock({ uid, parentUid, order: readChildren(parentUid).length });
+}
+
+function managedBlock(uid, lastSynced) {
+  return { uid, lastSynced: String(lastSynced ?? '') };
+}
+
+function detailsFor(event) {
+  const details = event?.details && typeof event.details === 'object' ? event.details : {};
+  return Object.fromEntries(DETAIL_KEYS.map((key) => [key, String(details[key] ?? '')]));
+}
+
+function resultSummary() {
+  return { created: 0, updated: 0, removed: 0, localKept: 0, skipped: 0 };
+}
+
+/**
+ * Reconcile normalized Google events into a single explicitly selected
+ * Nautilus plan. The mapping makes writes incremental and lets normal sync
+ * distinguish Google-owned strings from user edits without rendering badges.
+ */
+export function createCalendarReconciler({
+  read = readBlockString,
+  children = readChildren,
+  create = createGraphBlock,
+  update = updateGraphBlock,
+  remove = deleteGraphBlock,
+  move = defaultMove,
+  loadState = emptyState,
+  saveState = async () => {},
+} = {}) {
+  const createManagedBlock = async ({ parentUid, string, order = 'last' }) => {
+    const uid = await create({ parentUid, order, string, open: false });
+    return managedBlock(uid, string);
+  };
+
+  const createEvent = async (planUid, event) => {
+    const parent = await createManagedBlock({
+      parentUid: planUid,
+      string: event.parentString,
+    });
+    const source = await createManagedBlock({
+      parentUid: parent.uid,
+      order: 0,
+      string: event.sourceString,
+    });
+    const details = {};
+    for (const key of DETAIL_KEYS) {
+      const value = detailsFor(event)[key];
+      if (!value) continue;
+      details[key] = await createManagedBlock({ parentUid: source.uid, string: value });
+    }
+    return {
+      key: event.key,
+      calendarId: event.calendarId,
+      eventId: event.eventId,
+      planUid,
+      parent,
+      source,
+      details,
+    };
+  };
+
+  const updateManagedBlock = async ({ mapping, parentUid, incoming, force }) => {
+    if (!mapping?.uid) {
+      if (!incoming) return { mapping: null, changed: false, localKept: false };
+      return {
+        mapping: await createManagedBlock({ parentUid, string: incoming }),
+        changed: true,
+        localKept: false,
+      };
+    }
+    const current = read(mapping.uid);
+    if (current === null || current === undefined) {
+      if (!force) return { mapping, changed: false, localKept: true };
+      if (!incoming) return { mapping: null, changed: false, localKept: false };
+      return {
+        mapping: await createManagedBlock({ parentUid, string: incoming }),
+        changed: true,
+        localKept: false,
+      };
+    }
+    const decision = decideCalendarManagedChange({
+      lastSynced: mapping.lastSynced,
+      current,
+      incoming,
+      force,
+    });
+    if (decision.action === 'update') {
+      await update(mapping.uid, decision.value);
+      return {
+        mapping: managedBlock(mapping.uid, decision.value),
+        changed: true,
+        localKept: false,
+      };
+    }
+    if (decision.action === 'delete') {
+      await remove(mapping.uid);
+      return { mapping: null, changed: true, localKept: false };
+    }
+    return {
+      mapping,
+      changed: false,
+      localKept: decision.action === 'keep-local',
+    };
+  };
+
+  const hasOnlyUntouchedManagedContent = (mapping) => {
+    if (!mapping?.parent?.uid || read(mapping.parent.uid) !== mapping.parent.lastSynced) return false;
+    if (!mapping?.source?.uid || read(mapping.source.uid) !== mapping.source.lastSynced) return false;
+    for (const detail of Object.values(mapping.details || {})) {
+      if (!detail?.uid || read(detail.uid) !== detail.lastSynced) return false;
+    }
+    const managedParentChildren = new Set([mapping.source.uid]);
+    if (children(mapping.parent.uid).some((child) => !managedParentChildren.has(child?.uid))) return false;
+    const managedDetailChildren = new Set(
+      Object.values(mapping.details || {}).map((detail) => detail?.uid).filter(Boolean),
+    );
+    return !children(mapping.source.uid).some((child) => !managedDetailChildren.has(child?.uid));
+  };
+
+  const updateEvent = async (planUid, event, mapping, force) => {
+    let changed = false;
+    let localKept = false;
+    if (mapping.planUid !== planUid) {
+      const currentParent = read(mapping.parent?.uid);
+      if (force || currentParent === mapping.parent?.lastSynced) {
+        await move({
+          uid: mapping.parent.uid,
+          parentUid: planUid,
+          order: children(planUid).length,
+        });
+        mapping = { ...mapping, planUid };
+        changed = true;
+      } else {
+        localKept = true;
+      }
+    }
+
+    const parentResult = await updateManagedBlock({
+      mapping: mapping.parent,
+      parentUid: planUid,
+      incoming: event.parentString,
+      force,
+    });
+    mapping = { ...mapping, parent: parentResult.mapping };
+    changed ||= parentResult.changed;
+    localKept ||= parentResult.localKept;
+
+    const sourceResult = await updateManagedBlock({
+      mapping: mapping.source,
+      parentUid: mapping.parent.uid,
+      incoming: event.sourceString,
+      force,
+    });
+    mapping = { ...mapping, source: sourceResult.mapping };
+    changed ||= sourceResult.changed;
+    localKept ||= sourceResult.localKept;
+
+    const nextDetails = { ...(mapping.details || {}) };
+    const incomingDetails = detailsFor(event);
+    for (const key of DETAIL_KEYS) {
+      const detailResult = await updateManagedBlock({
+        mapping: nextDetails[key],
+        parentUid: mapping.source.uid,
+        incoming: incomingDetails[key],
+        force,
+      });
+      if (detailResult.mapping) nextDetails[key] = detailResult.mapping;
+      else delete nextDetails[key];
+      changed ||= detailResult.changed;
+      localKept ||= detailResult.localKept;
+    }
+
+    return {
+      mapping: {
+        ...mapping,
+        calendarId: event.calendarId,
+        eventId: event.eventId,
+        details: nextDetails,
+      },
+      changed,
+      localKept,
+    };
+  };
+
+  const sync = async ({ planUid, events = [], force = false } = {}) => {
+    if (!planUid) throw new Error('A Nautilus Log Plan UID is required for Calendar sync.');
+    const state = normalizeState(await loadState());
+    const summary = resultSummary();
+    for (const event of Array.isArray(events) ? events : []) {
+      if (!event?.key) {
+        summary.skipped += 1;
+        continue;
+      }
+      const existing = state.events[event.key];
+      if (event.status === 'cancelled') {
+        if (!existing) {
+          summary.skipped += 1;
+          continue;
+        }
+        if (force || hasOnlyUntouchedManagedContent(existing)) {
+          await remove(existing.parent.uid);
+          delete state.events[event.key];
+          summary.removed += 1;
+        } else {
+          summary.localKept += 1;
+        }
+        continue;
+      }
+      if (!existing) {
+        state.events[event.key] = await createEvent(planUid, event);
+        summary.created += 1;
+        continue;
+      }
+      const outcome = await updateEvent(planUid, event, existing, force === true);
+      state.events[event.key] = outcome.mapping;
+      if (outcome.changed) summary.updated += 1;
+      if (outcome.localKept) summary.localKept += 1;
+      if (!outcome.changed && !outcome.localKept) summary.skipped += 1;
+    }
+    await saveState(state);
+    return summary;
+  };
+
+  return { sync };
+}
