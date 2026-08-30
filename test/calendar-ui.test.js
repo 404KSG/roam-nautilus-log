@@ -71,11 +71,18 @@ test('Calendar settings communicate progress and recoverable failure without ano
   assert.match(failed.description, /could not connect/i);
 });
 
-test('Calendar control uses a Blueprint calendar glyph instead of a custom SVG', () => {
+test('Calendar control keeps its Blueprint calendar glyph and spins only while syncing', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'component.cljs'), 'utf8');
-  assert.match(source, /bp3-icon bp3-icon-calendar/);
+  const css = fs.readFileSync(path.join(__dirname, '..', 'extension.css'), 'utf8');
+  assert.match(source, /"bp3-icon-calendar"/);
   const calendarFunction = source.match(/\(defn calendar-button[\s\S]*?\n\(defn /)?.[0] || '';
   assert.match(calendarFunction, /and \(:google-calendar-enabled settings\)[\s\S]*:google-calendar-configured/);
+  assert.match(calendarFunction, /bp3-icon-refresh nautilus-log-calendar-spinner/);
+  assert.match(calendarFunction, /:aria-busy \(if busy\? "true" "false"\)/);
+  assert.match(calendarFunction, /:disabled busy\?/);
+  assert.match(calendarFunction, /:data-nautilus-tooltip title/);
   assert.doesNotMatch(calendarFunction, /\[:svg/);
   assert.doesNotMatch(calendarFunction, /calendarSetup/);
+  assert.match(css, /\.nautilus-log-calendar-spinner\s*\{[^}]*animation:\s*nautilus-log-calendar-spin 0\.75s linear infinite;/s);
+  assert.match(css, /@keyframes nautilus-log-calendar-spin\s*\{[^}]*rotate\(360deg\)/s);
 });

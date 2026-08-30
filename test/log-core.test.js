@@ -531,7 +531,6 @@ test('English UI settings localize all extension-owned status labels', () => {
   assert.deepEqual(copy.controls, {
     hideDone: 'Hide completed items',
     showDone: 'Show completed items',
-    playback: 'Play back the day',
     calendar: 'Sync Google Calendar',
     calendarForce: 'Option-click to force-refresh Google fields',
     calendarSetup: 'Connect Google Calendar in Nautilus Log settings',

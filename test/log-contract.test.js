@@ -20,6 +20,7 @@ const timingRuntime = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-
 const timingCommands = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-commands.js'), 'utf8');
 const timingRoam = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-roam.js'), 'utf8');
 const tidyPlan = fs.readFileSync(path.join(__dirname, '..', 'src', 'tidy-plan.js'), 'utf8');
+const logCore = fs.readFileSync(path.join(__dirname, '..', 'src', 'log-core.js'), 'utf8');
 
 function parenDepthBefore(source, targetIndex) {
   let depth = 0;
@@ -576,14 +577,14 @@ test('Tidy is a stable, reversible direct-child action that does not rewrite sch
     component.indexOf('(defn switch-done-visibility-button'),
     component.indexOf('(defn tidy-button')
   );
-  const playbackSource = component.slice(
-    component.indexOf('(defn playback-button'),
+  const collapseSource = component.slice(
+    component.indexOf('(defn collapse-button'),
     component.indexOf('(defn switch-debug-button')
   );
   assert.doesNotMatch(visibilitySource, /:width "16" :height "16"/);
   assert.match(visibilitySource, /:width "18" :height "18"/);
-  assert.doesNotMatch(playbackSource, /:width "16" :height "16"/);
-  assert.match(playbackSource, /:width "18" :height "18"/);
+  assert.doesNotMatch(collapseSource, /:width "16" :height "16"/);
+  assert.match(collapseSource, /:width "18" :height "18"/);
   assert.match(component, /:settledUids settled-uids/);
   assert.match(component, /\(filter :done\)/);
   assert.doesNotMatch(component, /not= "source" \(:status-origin %\)/);
@@ -599,6 +600,18 @@ test('Tidy is a stable, reversible direct-child action that does not rewrite sch
   assert.match(css, /\.nautilus-log-toast-action/);
   assert.match(tidyPlan, /updateGraphBlockOpen/);
   assert.doesNotMatch(tidyPlan, /deleteGraphBlock|createGraphBlock/);
+});
+
+test('Log keeps four quiet action controls with reliable hover help and no playback mode', () => {
+  assert.doesNotMatch(component, /\(defn playback-button/);
+  assert.doesNotMatch(component, /playback-state-atom|playback-frame-atom|requestAnimationFrame/);
+  assert.doesNotMatch(logCore, /playback\s*=/);
+  assert.doesNotMatch(css, /nautilus-log-playback-active|nautilus-log-slice-pop-in/);
+  assert.equal((component.match(/:data-nautilus-tooltip/g) || []).length, 4);
+  assert.match(css, /\.nautilus-log-toggle-btn\s*\{[\s\S]*?width:\s*32px !important;[\s\S]*?height:\s*32px !important;[\s\S]*?padding:\s*7px !important;/);
+  assert.match(css, /\.nautilus-log-toggle-btn\[data-nautilus-tooltip\]::after/);
+  assert.match(css, /\.nautilus-log-toggle-btn\[data-nautilus-tooltip\]:hover::after/);
+  assert.match(css, /\.nautilus-log-toggle-btn\[data-nautilus-tooltip\]:focus-visible::after/);
 });
 
 test('Log uses an action-first two-row capacity ledger with controls plus legend right', () => {

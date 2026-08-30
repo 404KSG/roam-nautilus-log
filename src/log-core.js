@@ -308,7 +308,6 @@ function timelineDayState({
   startMinutes,
   endMinutes,
   nowMinutes,
-  playback = false,
 } = {}) {
   const start = asNumber(startMinutes);
   const end = asNumber(endMinutes);
@@ -319,9 +318,8 @@ function timelineDayState({
   const currentDay = localDayOrdinal(currentDate);
   const rawNow = asNumber(nowMinutes);
   const dayDelta = displayDay === null || currentDay === null ? 0 : currentDay - displayDay;
-  const simulated = playback === true;
   const timelineMinutes = Number.isFinite(rawNow)
-    ? (simulated ? rawNow : rawNow + dayDelta * 1440)
+    ? rawNow + dayDelta * 1440
     : safeStart;
   const sameCalendarDay = displayDay !== null && currentDay !== null && dayDelta === 0;
   const nextDayCarryover = displayDay !== null && currentDay !== null
@@ -340,13 +338,13 @@ function timelineDayState({
   return {
     relation,
     timelineMinutes,
-    scheduleFromMinutes: past && !simulated ? safeStart : (today || simulated ? cursor : safeStart),
-    capacityFromMinutes: past && !simulated ? safeEnd : (today || simulated ? cursor : safeStart),
-    elapsedThroughMinutes: past && !simulated ? safeEnd : (today || simulated ? cursor : safeStart),
+    scheduleFromMinutes: past ? safeStart : (today ? cursor : safeStart),
+    capacityFromMinutes: past ? safeEnd : (today ? cursor : safeStart),
+    elapsedThroughMinutes: past ? safeEnd : (today ? cursor : safeStart),
     interactive: today,
-    showElapsed: past || today || simulated,
-    showAvailableSlots: !past || simulated,
-    showNow: (today || simulated)
+    showElapsed: past || today,
+    showAvailableSlots: !past,
+    showNow: today
       && Number.isFinite(timelineMinutes)
       && timelineMinutes >= safeStart
       && timelineMinutes < safeEnd,
@@ -876,7 +874,6 @@ const UI_COPY = {
     controls: {
       hideDone: 'Hide completed items',
       showDone: 'Show completed items',
-      playback: 'Play back the day',
       calendar: 'Sync Google Calendar',
       calendarForce: 'Option-click to force-refresh Google fields',
       calendarSetup: 'Connect Google Calendar in Nautilus Log settings',
@@ -932,7 +929,6 @@ const UI_COPY = {
     controls: {
       hideDone: '隐藏已完成事项',
       showDone: '显示已完成事项',
-      playback: '回放一整天',
       calendar: '同步 Google Calendar',
       calendarForce: '按住 Option 点击可强制刷新 Google 字段',
       calendarSetup: '请先在 Nautilus Log 设置中连接 Google Calendar',

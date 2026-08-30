@@ -1259,13 +1259,13 @@
             :aria-label (str slot-label ". " time-range ". " duration)}
            (timeline-tooltip-geometry (:start slot) (:end slot) center))))
 
-(defn available-slot-component [events daily-page? playback? timeline-minute inner-radius center settings hover-info-state copy]
+(defn available-slot-component [events daily-page? timeline-minute inner-radius center settings hover-info-state copy]
   (let [slots (or (log-core-call "availableSlotGroups"
                                  {:events events
                                   :startMinutes (:workday-start settings)
                                   :endMinutes (:workday-end settings)
                                   :nowMinutes timeline-minute
-                                  :clampToNow (or daily-page? playback?)})
+                                  :clampToNow daily-page?})
                   [])]
     [:g {:class "nautilus-log-available-slots"}
      (for [slot slots
@@ -1292,7 +1292,7 @@
                       center)
                   :vector-effect "non-scaling-stroke"}])])]))
 
-(defn show-events [events-state show-done-atom? playback-state-atom now-time-atom page-title dimensions settings compact? copy compact-open-state hover-info-state block-uid timeline-state]
+(defn show-events [events-state show-done-atom? now-time-atom page-title dimensions settings compact? copy compact-open-state hover-info-state block-uid timeline-state]
   (let [[events done-todos] events-state
         old-width (js/Math.round (:width dimensions))
         old-height (js/Math.round (:height dimensions))
@@ -1320,7 +1320,7 @@
            :width "100%"
            :style {:max-width (str suggested-width "px")}
            :xmlns "http://www.w3.org/2000/svg"
-           :class (str "nautilus-log-svg" (when @playback-state-atom " nautilus-log-playback-active"))
+           :class "nautilus-log-svg"
            :font-family font-family
            :font-size font-size}
      [:g
@@ -1332,7 +1332,7 @@
       all-slice-components         ;; zobrazení všech událostí
       [snail-blueprint-component snail-template-color snail-inner-radius center settings elapsed-page? timeline-minute]
       (when (and hover-enabled? (:showAvailableSlots timeline-state))
-        [available-slot-component events interactive? @playback-state-atom timeline-minute snail-inner-radius center settings hover-info-state copy])
+        [available-slot-component events interactive? timeline-minute snail-inner-radius center settings hover-info-state copy])
       (when now-visible?
         (let [visible-now timeline-minute
               now-angle (min->angle visible-now)
@@ -1403,18 +1403,19 @@
             minutes)))
 
 (defn switch-done-visibility-button [show-done-state copy]
-  [:button
-   {:on-click #(swap! show-done-state not)
-    :class "nautilus-log-toggle-btn"
-    :title (if @show-done-state (:hideDone copy) (:showDone copy))
-    :aria-label (if @show-done-state (:hideDone copy) (:showDone copy))}
-   (if @show-done-state
-     [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}
-      [:path {:d "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"}]
-      [:circle {:cx "12" :cy "12" :r "3"}]]
-     [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}
-      [:path {:d "M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"}]
-      [:line {:x1 "1" :y1 "1" :x2 "23" :y2 "23"}]])])
+  (let [label (if @show-done-state (:hideDone copy) (:showDone copy))]
+    [:button
+     {:on-click #(swap! show-done-state not)
+      :class "nautilus-log-toggle-btn"
+      :data-nautilus-tooltip label
+      :aria-label label}
+     (if @show-done-state
+       [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}
+        [:path {:d "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"}]
+        [:circle {:cx "12" :cy "12" :r "3"}]]
+       [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}
+        [:path {:d "M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"}]
+        [:line {:x1 "1" :y1 "1" :x2 "23" :y2 "23"}]])]))
 
 (defn tidy-button [block-uid settled-uids tidy-state settings copy]
   [:button
@@ -1431,7 +1432,7 @@
                                   (.error js/console "[Nautilus Log] Tidy failed" error)))
                         (.finally (fn [] (reset! tidy-state false)))))))
     :class "nautilus-log-toggle-btn nautilus-log-tidy-btn"
-    :title (:tidy copy)
+    :data-nautilus-tooltip (:tidy copy)
     :aria-label (:tidy copy)
     :aria-busy (if @tidy-state "true" "false")
     :disabled @tidy-state}
@@ -1484,11 +1485,15 @@
                                               {:busy false
                                                :title (or (.-message error) (str error))})))))))
         :class "nautilus-log-toggle-btn nautilus-log-calendar-btn"
-        :title title
+        :data-nautilus-tooltip title
         :aria-label title
         :aria-busy (if busy? "true" "false")
         :disabled busy?}
-       [:span {:class "bp3-icon bp3-icon-calendar" :aria-hidden "true"}]])))
+       [:span {:class (str "bp3-icon "
+                           (if busy?
+                             "bp3-icon-refresh nautilus-log-calendar-spinner"
+                             "bp3-icon-calendar"))
+               :aria-hidden "true"}]])))
 
 (defn collapse-context-key [render-context]
   (if (= render-context :sidebar) "sidebar" "main"))
@@ -1512,7 +1517,7 @@
                  (reset! collapsed-state next)
                  (write-collapsed-state block-uid render-context next))
     :class "nautilus-log-toggle-btn nautilus-log-collapse-btn"
-    :title (if @collapsed-state (:expand copy) (:collapse copy))
+    :data-nautilus-tooltip (if @collapsed-state (:expand copy) (:collapse copy))
     :aria-label (if @collapsed-state (:expand copy) (:collapse copy))}
    [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none"
           :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"
@@ -1520,32 +1525,6 @@
     [:rect {:x "3" :y "4" :width "18" :height "16" :rx "2.5"}]
     [:path {:d "M3 9h18"}]
     [:path {:d (if @collapsed-state "m9 13 3 3 3-3" "m9 16 3-3 3 3")}]]])
-
-(defn playback-button [settings now-time-atom playback-state-atom playback-frame-atom copy]
-  [:button
-   {:on-click #(when-not @playback-state-atom
-                 (reset! playback-state-atom true)
-                 (let [start-time (js/performance.now)
-                       duration 6000.0]
-                   (letfn [(tick [now]
-                             (let [elapsed (- now start-time)
-                                   progress (min 1.0 (/ elapsed duration))
-                                   w-start (:workday-start settings)
-                                   simulated-minute (int (+ w-start (* progress (- (:workday-end settings) w-start))))]
-                               (reset! now-time-atom simulated-minute)
-                               (if (< progress 1.0)
-                                 (reset! playback-frame-atom (js/requestAnimationFrame tick))
-                                 (do
-                                   (reset! playback-frame-atom nil)
-                                   (reset! playback-state-atom false)
-                                   (reset-now-time-atom now-time-atom)))))]
-                     (reset! playback-frame-atom (js/requestAnimationFrame tick)))))
-    :class "nautilus-log-toggle-btn"
-    :title (:playback copy)
-    :aria-label (:playback copy)
-    :disabled @playback-state-atom}
-   [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}
-    [:polygon {:points "5 3 19 12 5 21 5 3"}]]])
 
 (defn switch-debug-button [] ;; debug button
   [:button {:on-click #(swap! debug-state-atom not)    
@@ -1625,7 +1604,7 @@
                   :burningAvailable "Flexible time is elapsing" :burningEvents "Event time is elapsing" :now "Current time"}
        :allocation {:planned "planned" :free "free" :over "over" :noSlot "no slot" :left "left"}
        :legend {:urgent "Urgent" :event "Event" :task "Task"}
-       :controls {:hideDone "Hide completed items" :showDone "Show completed items" :playback "Play back the day"
+       :controls {:hideDone "Hide completed items" :showDone "Show completed items"
                   :calendar "Sync Google Calendar" :calendarForce "Option-click to force-refresh Google fields"
                   :calendarSetup "Connect Google Calendar and sync this date"
                   :calendarSyncing "Syncing Google Calendar…" :calendarSynced "Google Calendar synced"
@@ -1785,10 +1764,9 @@
            [:span (:description event)]
            [:span {:class "nautilus-log-warning-message"} (localized-warning (:warning event) copy)]])]])))
 
-(defn log-controls [show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid page-title-val render-context settled-uids tidy-state calendar-state copy show-debug-button?]
+(defn log-controls [show-done-state settings collapsed-state block-uid page-title-val render-context settled-uids tidy-state calendar-state copy show-debug-button?]
   [:div {:class "nautilus-log-controls-top"}
    [switch-done-visibility-button show-done-state (:controls copy)]
-   [playback-button settings now-time-atom playback-state-atom playback-frame-atom (:controls copy)]
    [calendar-button block-uid page-title-val calendar-state settings (:controls copy)]
    [tidy-button block-uid settled-uids tidy-state settings (:controls copy)]
    [collapse-button collapsed-state block-uid render-context (:controls copy)]
@@ -1860,8 +1838,6 @@
                                    (reset! settings-state (resolve-render-settings args)))
                _settings-listener (.addEventListener js/window settings-event-name settings-listener)
                now-time-atom (r/atom (now-minutes))
-               playback-state-atom (r/atom false)
-               playback-frame-atom (r/atom nil)
                collapsed-state (r/atom false)
                render-context-state (r/atom :pending)
                compact-list-open-state (r/atom nil)
@@ -1874,8 +1850,7 @@
                daily-page-atom? (r/atom (daily-page? block-uid))
                clock-interval (js/setInterval
                                (fn []
-                                 (when-not @playback-state-atom
-                                   (reset-now-time-atom now-time-atom))
+                                 (reset-now-time-atom now-time-atom)
                                  (let [next-daily-page-state (daily-page? block-uid)]
                                    (when (not= @daily-page-atom? next-daily-page-state)
                                      (reset! daily-page-atom? next-daily-page-state))))
@@ -1921,7 +1896,7 @@
 
         :else
         (do
-          (when-not @playback-state-atom (reset-now-time-atom now-time-atom))
+          (reset-now-time-atom now-time-atom)
           (let [settings @settings-state
                 copy (ui-copy settings)
                 dimensions {:width (if mobile? mob-width desk-width)
@@ -1932,8 +1907,7 @@
                                                     :currentDate (.now js/Date)
                                                     :startMinutes (:workday-start settings)
                                                     :endMinutes (:workday-end settings)
-                                                    :nowMinutes @now-time-atom
-                                                    :playback @playback-state-atom})
+                                                    :nowMinutes @now-time-atom})
                                    {:relation (if @daily-page-atom? "today" "other")
                                     :timelineMinutes @now-time-atom
                                     :scheduleFromMinutes (if @daily-page-atom? @now-time-atom (:workday-start settings))
@@ -1979,19 +1953,19 @@
                    :ref container-ref
                    :data-nautilus-log-block block-uid}
              (if @collapsed-state
-               [log-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid page-title-val @render-context-state settled-uids tidy-state calendar-state copy show-debug-button?]
+               [log-controls show-done-state settings collapsed-state block-uid page-title-val @render-context-state settled-uids tidy-state calendar-state copy show-debug-button?]
                [:div {:class "nautilus-log-shell"}
                 [:header {:class (str "nautilus-log-header"
                                      (when @compact-state " nautilus-log-header--compact"))}
                  [:div {:class "nautilus-log-header-copy"}
                   [capacity-metrics-component capacity settings]]
                  [:div {:class "nautilus-log-header-actions"}
-                  [log-controls show-done-state settings now-time-atom playback-state-atom playback-frame-atom collapsed-state block-uid page-title-val @render-context-state settled-uids tidy-state calendar-state copy show-debug-button?]
+                  [log-controls show-done-state settings collapsed-state block-uid page-title-val @render-context-state settled-uids tidy-state calendar-state copy show-debug-button?]
                   [html-legend-component copy]]]
                 (when @compact-state
                   [compact-overview-component capacity settings copy compact-overview-open-state])
                 [:div {:class "nautilus-log-content"}
-                 [show-events events-state show-done-state playback-state-atom now-time-atom page-title-val dimensions settings @compact-state copy compact-list-open-state hover-info-state block-uid timeline-state]
+                 [show-events events-state show-done-state now-time-atom page-title-val dimensions settings @compact-state copy compact-list-open-state hover-info-state block-uid timeline-state]
                  [overflow-panel capacity copy]
                  [schedule-warning-panel text-events copy]]])]))))
     (finally
@@ -2003,6 +1977,4 @@
           (.call stop-plan-watch nil)
           (catch :default _e nil)))
       (when-let [resize-observer @resize-observer-state]
-        (.disconnect resize-observer))
-      (when @playback-frame-atom
-        (js/cancelAnimationFrame @playback-frame-atom)))))
+        (.disconnect resize-observer)))))

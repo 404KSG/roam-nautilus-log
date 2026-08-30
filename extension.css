@@ -625,6 +625,9 @@
 }
 
 .nautilus-log-toggle-btn {
+  --nautilus-log-control-tooltip-bg: #fff;
+  --nautilus-log-control-tooltip-border: rgba(16, 22, 26, 0.2);
+  --nautilus-log-control-tooltip-text: #182026;
   appearance: none;
   box-sizing: border-box;
   width: 32px !important;
@@ -648,7 +651,71 @@
   justify-content: center;
   line-height: 0;
   font: inherit;
+  overflow: visible;
+  position: relative;
   transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.nautilus-log-toggle-btn[data-nautilus-tooltip]::before,
+.nautilus-log-toggle-btn[data-nautilus-tooltip]::after {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity 90ms ease, transform 90ms ease, visibility 0s linear 90ms;
+  visibility: hidden;
+  z-index: 10060;
+}
+
+.nautilus-log-toggle-btn[data-nautilus-tooltip]::before {
+  background: var(--nautilus-log-control-tooltip-bg);
+  border-left: 1px solid var(--nautilus-log-control-tooltip-border);
+  border-top: 1px solid var(--nautilus-log-control-tooltip-border);
+  content: "";
+  height: 8px;
+  right: 11px;
+  top: calc(100% + 5px);
+  transform: rotate(45deg) translateY(-2px);
+  width: 8px;
+}
+
+.nautilus-log-toggle-btn[data-nautilus-tooltip]::after {
+  background: var(--nautilus-log-control-tooltip-bg);
+  border: 1px solid var(--nautilus-log-control-tooltip-border);
+  border-radius: 3px;
+  box-shadow: 0 2px 4px rgba(16, 22, 26, 0.18), 0 8px 24px rgba(16, 22, 26, 0.12);
+  color: var(--nautilus-log-control-tooltip-text);
+  content: attr(data-nautilus-tooltip);
+  font-family: var(--nl-exec-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  max-width: min(260px, calc(100vw - 24px));
+  padding: 7px 9px;
+  right: 0;
+  text-align: left;
+  top: calc(100% + 9px);
+  transform: translateY(-2px);
+  white-space: normal;
+  width: max-content;
+}
+
+.nautilus-log-toggle-btn[data-nautilus-tooltip]:hover::before,
+.nautilus-log-toggle-btn[data-nautilus-tooltip]:hover::after,
+.nautilus-log-toggle-btn[data-nautilus-tooltip]:focus-visible::before,
+.nautilus-log-toggle-btn[data-nautilus-tooltip]:focus-visible::after {
+  opacity: 1;
+  transition-delay: 160ms;
+  visibility: visible;
+}
+
+.nautilus-log-toggle-btn[data-nautilus-tooltip]:hover::before,
+.nautilus-log-toggle-btn[data-nautilus-tooltip]:focus-visible::before {
+  transform: rotate(45deg) translateY(0);
+}
+
+.nautilus-log-toggle-btn[data-nautilus-tooltip]:hover::after,
+.nautilus-log-toggle-btn[data-nautilus-tooltip]:focus-visible::after {
+  transform: translateY(0);
 }
 
 .nautilus-log-toggle-btn:hover,
@@ -671,6 +738,14 @@
   justify-content: center;
   line-height: 1;
   width: 18px;
+}
+
+.nautilus-log-calendar-spinner {
+  animation: nautilus-log-calendar-spin 0.75s linear infinite;
+}
+
+@keyframes nautilus-log-calendar-spin {
+  to { transform: rotate(360deg); }
 }
 
 .nautilus-log-toast-content {
@@ -704,6 +779,13 @@
 .roam-app.rm-dark-theme .nautilus-log-toggle-btn:focus-visible {
   background-color: rgba(255, 255, 255, 0.1) !important;
   color: #fff;
+}
+
+.bp3-dark .nautilus-log-toggle-btn,
+.roam-app.rm-dark-theme .nautilus-log-toggle-btn {
+  --nautilus-log-control-tooltip-bg: #293742;
+  --nautilus-log-control-tooltip-border: rgba(245, 248, 250, 0.2);
+  --nautilus-log-control-tooltip-text: #f5f8fa;
 }
 
 .nautilus-log-overflow-panel,
@@ -847,19 +929,6 @@
     margin-left: 4px;
     margin-right: 4px;
   }
-}
-
-.nautilus-log-playback-active .nautilus-log-slice,
-.nautilus-log-playback-active .nautilus-log-slice-group text,
-.nautilus-log-playback-active .nautilus-log-link-line {
-  opacity: 0;
-  animation: nautilus-log-slice-pop-in 0.35s ease forwards;
-  animation-delay: var(--pb-delay, 0s);
-}
-
-@keyframes nautilus-log-slice-pop-in {
-  from { opacity: 0; transform: translateY(2px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 
 @media (prefers-reduced-motion: reduce) {

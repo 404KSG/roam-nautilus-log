@@ -27,6 +27,12 @@
 
 ### Changed
 
+- The four remaining chart controls keep their existing geometry and visual
+  treatment while gaining reliable localized hover and keyboard-focus help.
+  Calendar temporarily swaps to a rotating Blueprint refresh glyph only while
+  a real synchronization request is pending.
+- The non-essential day Playback control and its simulated clock path have
+  been removed; the real NOW needle and normal minute refresh are unchanged.
 - Tidy now collapses only expanded settled items after ordering while preserving
   unfinished outline choices; Undo restores both order and only the outline
   states changed by Tidy.
