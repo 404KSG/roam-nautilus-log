@@ -1,6 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { handleRequest, encryptRefreshToken, decryptRefreshToken } from '../src/worker.mjs';
+
+const workerConfig = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
+
+test('production and Preview OAuth callbacks stay explicit and exact', () => {
+  assert.match(
+    workerConfig,
+    /GOOGLE_OAUTH_REDIRECT_URI = "https:\/\/nautilus-log-auth\.kidsseeghosts\.workers\.dev\/oauth\/callback"/,
+  );
+  assert.match(
+    workerConfig,
+    /GOOGLE_OAUTH_REDIRECT_URI = "https:\/\/nautilus-log-auth-preview\.kidsseeghosts\.workers\.dev\/oauth\/callback"/,
+  );
+  assert.match(
+    workerConfig,
+    /OAUTH_CALLBACK_FORWARD_URL = "https:\/\/nautilus-log-auth\.kidsseeghosts\.workers\.dev\/oauth\/callback"/,
+  );
+});
 
 class MemoryD1 {
   constructor() {
