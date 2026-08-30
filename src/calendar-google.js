@@ -109,27 +109,56 @@ export function createGoogleCalendarClient({
     return items;
   };
 
-  const listTasks = async ({ taskListId, date }) => {
+  const listTaskPages = async ({ taskListId, configureQuery }) => {
     const items = [];
     let pageToken = '';
-    const { dueMin, dueMax } = taskDayBounds(date);
     do {
       const url = new URL(
         `${GOOGLE_TASKS_API}/lists/${encodeURIComponent(taskListId)}/tasks`,
       );
-      url.searchParams.set('dueMin', dueMin);
-      url.searchParams.set('dueMax', dueMax);
       url.searchParams.set('showAssigned', 'true');
-      url.searchParams.set('showCompleted', 'true');
-      url.searchParams.set('showDeleted', 'true');
-      url.searchParams.set('showHidden', 'true');
       url.searchParams.set('maxResults', '100');
+      configureQuery(url.searchParams);
       if (pageToken) url.searchParams.set('pageToken', pageToken);
       const payload = await fetchJson(url.href, true, 'Google Tasks');
       items.push(...(Array.isArray(payload.items) ? payload.items : []));
       pageToken = payload.nextPageToken || '';
     } while (pageToken);
     return items;
+  };
+
+  const listTasks = async ({ taskListId, date }) => {
+    const { dueMin, dueMax } = taskDayBounds(date);
+    // Google Calendar can schedule a Google Task at a concrete local time,
+    // while the public Tasks API exposes only its date. Applying dueMin /
+    // dueMax before reading the task can therefore omit otherwise valid
+    // scheduled tasks. Read active tasks without that server-side date gate,
+    // then let normalizeGoogleTasks keep only the selected local date.
+    const [activeTasks, datedLifecycleTasks] = await Promise.all([
+      listTaskPages({
+        taskListId,
+        configureQuery: (query) => {
+          query.set('showCompleted', 'false');
+          query.set('showDeleted', 'false');
+          query.set('showHidden', 'false');
+        },
+      }),
+      listTaskPages({
+        taskListId,
+        configureQuery: (query) => {
+          query.set('dueMin', dueMin);
+          query.set('dueMax', dueMax);
+          query.set('showCompleted', 'true');
+          query.set('showDeleted', 'true');
+          query.set('showHidden', 'true');
+        },
+      }),
+    ]);
+    const byId = new Map();
+    for (const task of [...activeTasks, ...datedLifecycleTasks]) {
+      if (task?.id) byId.set(task.id, task);
+    }
+    return [...byId.values()];
   };
 
   const readRange = async ({ calendarIds, timeMin, timeMax } = {}) => {

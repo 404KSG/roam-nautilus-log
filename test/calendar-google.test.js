@@ -52,7 +52,7 @@ test('Calendar reads carry the authorized primary account into every event batch
   assert.ok(requests.every((request) => request.authorization === 'Bearer access-token'));
 });
 
-test('Google Tasks reads every list for one exact due date with completed and deleted rows', async () => {
+test('Google Tasks reads active rows without a due gate and merges dated lifecycle rows', async () => {
   const extension = await loadExtension('google-tasks-client');
   const requests = [];
   const client = extension.createGoogleCalendarClient({
@@ -66,12 +66,21 @@ test('Google Tasks reads every list for one exact due date with completed and de
       let payload;
       if (parsed.pathname.endsWith('/users/@me/lists')) {
         payload = { items: [{ id: 'work-list', title: 'Work Tasks' }] };
-      } else if (parsed.searchParams.get('pageToken') === 'next-task-page') {
-        payload = { items: [{ id: 'task-2', status: 'completed' }] };
+      } else if (!parsed.searchParams.has('dueMin')) {
+        payload = {
+          items: [{
+            id: 'task-1',
+            status: 'needsAction',
+            due: '2026-08-30T00:00:00.000Z',
+          }],
+        };
       } else {
         payload = {
-          items: [{ id: 'task-1', status: 'needsAction' }],
-          nextPageToken: 'next-task-page',
+          items: [{
+            id: 'task-2',
+            status: 'completed',
+            due: '2026-08-30T00:00:00.000Z',
+          }],
         };
       }
       return new Response(JSON.stringify(payload), {
@@ -86,15 +95,32 @@ test('Google Tasks reads every list for one exact due date with completed and de
   assert.deepEqual(batches, [{
     taskList: { id: 'work-list', title: 'Work Tasks' },
     tasks: [
-      { id: 'task-1', status: 'needsAction' },
-      { id: 'task-2', status: 'completed' },
+      {
+        id: 'task-1',
+        status: 'needsAction',
+        due: '2026-08-30T00:00:00.000Z',
+      },
+      {
+        id: 'task-2',
+        status: 'completed',
+        due: '2026-08-30T00:00:00.000Z',
+      },
     ],
   }]);
-  const taskRequest = requests.find(({ parsed }) => parsed.pathname.includes('/lists/work-list/tasks'));
-  assert.equal(taskRequest.parsed.searchParams.get('dueMin'), '2026-08-30T00:00:00.000Z');
-  assert.equal(taskRequest.parsed.searchParams.get('dueMax'), '2026-08-30T23:59:59.999Z');
-  assert.equal(taskRequest.parsed.searchParams.get('showCompleted'), 'true');
-  assert.equal(taskRequest.parsed.searchParams.get('showDeleted'), 'true');
-  assert.equal(taskRequest.parsed.searchParams.get('showHidden'), 'true');
+  const taskRequests = requests.filter(({ parsed }) => (
+    parsed.pathname.includes('/lists/work-list/tasks')
+  ));
+  assert.equal(taskRequests.length, 2);
+  const activeRequest = taskRequests.find(({ parsed }) => !parsed.searchParams.has('dueMin'));
+  assert.equal(activeRequest.parsed.searchParams.has('dueMax'), false);
+  assert.equal(activeRequest.parsed.searchParams.get('showCompleted'), 'false');
+  assert.equal(activeRequest.parsed.searchParams.get('showDeleted'), 'false');
+  assert.equal(activeRequest.parsed.searchParams.get('showHidden'), 'false');
+  const lifecycleRequest = taskRequests.find(({ parsed }) => parsed.searchParams.has('dueMin'));
+  assert.equal(lifecycleRequest.parsed.searchParams.get('dueMin'), '2026-08-30T00:00:00.000Z');
+  assert.equal(lifecycleRequest.parsed.searchParams.get('dueMax'), '2026-08-30T23:59:59.999Z');
+  assert.equal(lifecycleRequest.parsed.searchParams.get('showCompleted'), 'true');
+  assert.equal(lifecycleRequest.parsed.searchParams.get('showDeleted'), 'true');
+  assert.equal(lifecycleRequest.parsed.searchParams.get('showHidden'), 'true');
   assert.equal(requests.every(({ options }) => options.headers.Authorization === 'Bearer access-token'), true);
 });
