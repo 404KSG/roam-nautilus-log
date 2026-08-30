@@ -15,10 +15,34 @@ function jsonResponse(payload, status = 200) {
   });
 }
 
-test('persistent Google authorization restores a saved connection without loading Google Identity', async () => {
+function fakeOAuthWindow() {
+  const listeners = new Set();
+  const popup = {
+    closed: false,
+    url: '',
+    location: { replace(url) { popup.url = url; } },
+    close() { popup.closed = true; },
+  };
+  return {
+    popup,
+    windowImpl: {
+      crypto: globalThis.crypto,
+      location: { origin: 'https://roamresearch.com' },
+      addEventListener(type, listener) { if (type === 'message') listeners.add(listener); },
+      removeEventListener(type, listener) { if (type === 'message') listeners.delete(listener); },
+      setInterval() { return 1; },
+      clearInterval() {},
+    },
+    emit(data, origin = 'https://auth.example.com') {
+      for (const listener of [...listeners]) listener({ data, origin });
+    },
+  };
+}
+
+test('persistent Google authorization restores a saved connection without opening a popup', async () => {
   const extension = await loadExtension('calendar-auth-restore');
   const requests = [];
-  let identityLoads = 0;
+  let popupOpens = 0;
   let now = 1_000;
   const auth = extension.createPersistentGoogleAuthClient({
     serviceUrl: 'https://auth.example.com',
@@ -27,7 +51,7 @@ test('persistent Google authorization restores a saved connection without loadin
       requests.push({ url, options });
       return jsonResponse({ accessToken: 'access-1', expiresIn: 3600 });
     },
-    identityLoader: async () => { identityLoads += 1; return {}; },
+    popupOpen: () => { popupOpens += 1; return null; },
     now: () => now,
   });
 
@@ -36,69 +60,64 @@ test('persistent Google authorization restores a saved connection without loadin
   assert.equal(requests.length, 1);
   assert.match(requests[0].url, /\/token$/);
   assert.equal(JSON.parse(requests[0].options.body).connectionId, 'saved-id');
-  assert.equal(identityLoads, 0);
+  assert.equal(popupOpens, 0);
 
   now += 3_700_000;
   assert.equal(await auth.authorize({ interactive: false }), 'access-1');
   assert.equal(requests.length, 2);
 });
 
-test('first Calendar action uses Google popup code model, saves an opaque credential, and continues', async () => {
+test('first Calendar action uses the hosted OAuth popup, saves an opaque credential, and continues', async () => {
   const extension = await loadExtension('calendar-auth-connect');
   let saved = null;
-  let googleConfig = null;
   const requests = [];
-  const oauth2 = {
-    initCodeClient(config) {
-      googleConfig = config;
-      return { requestCode: () => config.callback({ code: 'one-time-google-code' }) };
-    },
-  };
+  const browser = fakeOAuthWindow();
   const auth = extension.createPersistentGoogleAuthClient({
     serviceUrl: 'https://auth.example.com',
     loadConnection: () => saved,
     saveConnection: async (connection) => { saved = connection; },
     clearConnection: async () => { saved = null; },
-    identityLoader: async () => oauth2,
+    windowImpl: browser.windowImpl,
+    popupOpen: () => browser.popup,
     fetchImpl: async (url, options) => {
       requests.push({ url, options });
-      if (url.endsWith('/config')) return jsonResponse({ clientId: 'public-client-id' });
-      if (url.endsWith('/exchange')) {
-        return jsonResponse({
-          connection: { id: 'new-id', secret: 'new-secret' },
-          accessToken: 'new-access',
-          expiresIn: 3600,
-        });
-      }
+      if (url.endsWith('/config')) return jsonResponse({ authorizeUrl: 'https://auth.example.com/authorize' });
       throw new Error(`Unexpected URL: ${url}`);
     },
   });
 
-  assert.equal(await auth.authorize(), 'new-access');
-  assert.equal(googleConfig.client_id, 'public-client-id');
-  assert.equal(googleConfig.ux_mode, 'popup');
-  assert.match(googleConfig.scope, /calendar\.events\.readonly/);
+  const pending = auth.authorize();
+  while (!browser.popup.url) await new Promise((resolve) => setImmediate(resolve));
+  const authorizeUrl = new URL(browser.popup.url);
+  assert.equal(authorizeUrl.searchParams.get('origin'), 'https://roamresearch.com');
+  const nonce = authorizeUrl.searchParams.get('nonce');
+  browser.emit({
+    type: 'nautilus-google-oauth-v1',
+    nonce,
+    connection: { id: 'new-id', secret: 'new-secret' },
+    accessToken: 'new-access',
+    expiresIn: 3600,
+  });
+  assert.equal(await pending, 'new-access');
   assert.deepEqual(saved, { version: 1, id: 'new-id', secret: 'new-secret' });
-  const exchange = requests.find((request) => request.url.endsWith('/exchange'));
-  assert.equal(exchange.options.headers['X-Requested-With'], 'XmlHttpRequest');
-  assert.deepEqual(JSON.parse(exchange.options.body), { code: 'one-time-google-code' });
+  assert.equal(requests.some((request) => request.url.endsWith('/exchange')), false);
 });
 
 test('revoked persistent connection is cleared without opening Google during restore', async () => {
   const extension = await loadExtension('calendar-auth-revoked');
   let saved = { id: 'revoked-id', secret: 'revoked-secret' };
-  let identityLoads = 0;
+  let popupOpens = 0;
   const auth = extension.createPersistentGoogleAuthClient({
     serviceUrl: 'https://auth.example.com',
     loadConnection: () => saved,
     clearConnection: async () => { saved = null; },
     fetchImpl: async () => jsonResponse({ code: 'reconnect_required', message: 'Reconnect.' }, 401),
-    identityLoader: async () => { identityLoads += 1; return {}; },
+    popupOpen: () => { popupOpens += 1; return null; },
   });
 
   assert.equal(await auth.prepare(), false);
   assert.equal(saved, null);
-  assert.equal(identityLoads, 0);
+  assert.equal(popupOpens, 0);
 });
 
 test('transient token-service errors retain the saved connection', async () => {
@@ -135,37 +154,34 @@ test('failed remote disconnect retains the local connection', async () => {
 
 test('destroy rejects a pending popup flow and prevents late credential persistence', async () => {
   const extension = await loadExtension('calendar-auth-destroy');
-  let callback = null;
   let saved = null;
+  const browser = fakeOAuthWindow();
   const auth = extension.createPersistentGoogleAuthClient({
     serviceUrl: 'https://auth.example.com',
     loadConnection: () => saved,
     saveConnection: async (value) => { saved = value; },
     clearConnection: async () => { saved = null; },
-    identityLoader: async () => ({
-      initCodeClient(config) {
-        callback = config.callback;
-        return { requestCode() {} };
-      },
-    }),
+    windowImpl: browser.windowImpl,
+    popupOpen: () => browser.popup,
     fetchImpl: async (url) => {
-      if (url.endsWith('/config')) return jsonResponse({ clientId: 'public-client-id' });
-      if (url.endsWith('/exchange')) {
-        return jsonResponse({
-          connection: { id: 'late-id', secret: 'late-secret' },
-          accessToken: 'late-access',
-          expiresIn: 3600,
-        });
-      }
+      if (url.endsWith('/config')) return jsonResponse({ authorizeUrl: 'https://auth.example.com/authorize' });
       throw new Error(`Unexpected URL: ${url}`);
     },
   });
 
   const pending = auth.authorize();
-  while (!callback) await new Promise((resolve) => setImmediate(resolve));
+  while (!browser.popup.url) await new Promise((resolve) => setImmediate(resolve));
+  const nonce = new URL(browser.popup.url).searchParams.get('nonce');
   auth.destroy();
   await assert.rejects(pending, /cancelled/);
-  await callback({ code: 'late-code' });
+  browser.emit({
+    type: 'nautilus-google-oauth-v1',
+    nonce,
+    connection: { id: 'late-id', secret: 'late-secret' },
+    accessToken: 'late-access',
+    expiresIn: 3600,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(saved, null);
 });
 
@@ -174,33 +190,19 @@ test('an interactive click recovers from a simultaneous revoked silent restore i
   let saved = { id: 'revoked-id', secret: 'revoked-secret' };
   let resolveRefresh;
   let popupRequests = 0;
+  const browser = fakeOAuthWindow();
   const auth = extension.createPersistentGoogleAuthClient({
     serviceUrl: 'https://auth.example.com',
     loadConnection: () => saved,
     saveConnection: async (connection) => { saved = connection; },
     clearConnection: async () => { saved = null; },
-    identityLoader: async () => ({
-      initCodeClient(config) {
-        return {
-          requestCode() {
-            popupRequests += 1;
-            config.callback({ code: 'new-code' });
-          },
-        };
-      },
-    }),
+    windowImpl: browser.windowImpl,
+    popupOpen: () => { popupRequests += 1; return browser.popup; },
     fetchImpl: async (url) => {
       if (url.endsWith('/token')) {
         return new Promise((resolve) => { resolveRefresh = () => resolve(jsonResponse({ code: 'reconnect_required' }, 401)); });
       }
-      if (url.endsWith('/config')) return jsonResponse({ clientId: 'public-client-id' });
-      if (url.endsWith('/exchange')) {
-        return jsonResponse({
-          connection: { id: 'new-id', secret: 'new-secret' },
-          accessToken: 'new-access',
-          expiresIn: 3600,
-        });
-      }
+      if (url.endsWith('/config')) return jsonResponse({ authorizeUrl: 'https://auth.example.com/authorize' });
       throw new Error(`Unexpected URL: ${url}`);
     },
   });
@@ -210,6 +212,15 @@ test('an interactive click recovers from a simultaneous revoked silent restore i
   const interactive = auth.authorize({ interactive: true });
   resolveRefresh();
   assert.equal(await silent, false);
+  while (!browser.popup.url) await new Promise((resolve) => setImmediate(resolve));
+  const nonce = new URL(browser.popup.url).searchParams.get('nonce');
+  browser.emit({
+    type: 'nautilus-google-oauth-v1',
+    nonce,
+    connection: { id: 'new-id', secret: 'new-secret' },
+    accessToken: 'new-access',
+    expiresIn: 3600,
+  });
   assert.equal(await interactive, 'new-access');
   assert.equal(popupRequests, 1);
 });

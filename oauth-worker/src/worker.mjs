@@ -1,5 +1,12 @@
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
+const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
+const GOOGLE_CALENDAR_SCOPES = [
+  'https://www.googleapis.com/auth/calendar.events.readonly',
+  'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+].join(' ');
+const OAUTH_MESSAGE_TYPE = 'nautilus-google-oauth-v1';
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -17,6 +24,10 @@ function base64UrlToBytes(value) {
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 }
 
+function base64UrlToText(value) {
+  return decoder.decode(base64UrlToBytes(value));
+}
+
 function randomToken(size = 32) {
   const bytes = new Uint8Array(size);
   crypto.getRandomValues(bytes);
@@ -26,6 +37,34 @@ function randomToken(size = 32) {
 async function sha256(value) {
   const digest = await crypto.subtle.digest('SHA-256', encoder.encode(String(value)));
   return bytesToBase64Url(new Uint8Array(digest));
+}
+
+async function oauthStateKey(env) {
+  const bytes = base64UrlToBytes(env.OAUTH_STATE_SECRET || '');
+  if (bytes.length !== 32) throw new Error('OAUTH_STATE_SECRET must contain 32 bytes.');
+  return crypto.subtle.importKey('raw', bytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+}
+
+async function signOAuthState(payload, env) {
+  const body = bytesToBase64Url(encoder.encode(JSON.stringify(payload)));
+  const signature = await crypto.subtle.sign('HMAC', await oauthStateKey(env), encoder.encode(body));
+  return `${body}.${bytesToBase64Url(new Uint8Array(signature))}`;
+}
+
+async function verifyOAuthState(value, env) {
+  const [body, signature, extra] = String(value || '').split('.');
+  if (!body || !signature || extra) return null;
+  const expected = await crypto.subtle.sign('HMAC', await oauthStateKey(env), encoder.encode(body));
+  if (!constantTimeEqual(bytesToBase64Url(new Uint8Array(expected)), signature)) return null;
+  try {
+    const payload = JSON.parse(base64UrlToText(body));
+    const issuedAt = Number(payload?.issuedAt);
+    if (!Number.isFinite(issuedAt) || issuedAt > Date.now() + 60_000) return null;
+    if (Date.now() - issuedAt > OAUTH_STATE_TTL_MS) return null;
+    return payload;
+  } catch (_error) {
+    return null;
+  }
 }
 
 function constantTimeEqual(left, right) {
@@ -66,6 +105,19 @@ function json(payload, status = 200, origin = '') {
       'Content-Type': 'application/json; charset=utf-8',
       'Cache-Control': 'no-store',
       ...corsHeaders(origin),
+    },
+  });
+}
+
+function html(document, status = 200) {
+  return new Response(document, {
+    status,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+      'Referrer-Policy': 'no-referrer',
+      'X-Content-Type-Options': 'nosniff',
     },
   });
 }
@@ -171,24 +223,81 @@ function encryptedTokenFromRow(connection) {
   };
 }
 
-function requireAjax(request) {
-  return String(request.headers.get('X-Requested-With') || '').toLowerCase() === 'xmlhttprequest';
+function oauthRedirectUri(request, env) {
+  const candidate = String(env.GOOGLE_OAUTH_REDIRECT_URI || '').trim()
+    || new URL('/oauth/callback', request.url).href;
+  const redirect = new URL(candidate);
+  if (redirect.protocol !== 'https:') throw new Error('Google OAuth callback must use HTTPS.');
+  return redirect.href;
 }
 
-async function config(_request, env, origin) {
-  const clientId = String(env.GOOGLE_CLIENT_ID || '').trim();
-  if (!clientId) return json({ code: 'not_configured', message: 'Google authorization is not configured.' }, 503, origin);
-  return json({ clientId }, 200, origin);
+function popupDocument(payload, targetOrigin) {
+  const serializedPayload = JSON.stringify(payload).replace(/</g, '\\u003c');
+  const serializedOrigin = JSON.stringify(targetOrigin).replace(/</g, '\\u003c');
+  return `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nautilus Log</title></head>
+<body style="font:14px system-ui,sans-serif;color:#5f6b7a;padding:24px">You can close this window.</body>
+<script>
+const payload = ${serializedPayload};
+if (window.opener) window.opener.postMessage(payload, ${serializedOrigin});
+window.close();
+</script>
+</html>`;
 }
 
-async function exchange(request, env, origin) {
-  if (!requireAjax(request)) {
-    return json({ code: 'invalid_request', message: 'Authorization request was rejected.' }, 400, origin);
+async function authorize(request, env) {
+  const url = new URL(request.url);
+  const origin = String(url.searchParams.get('origin') || '');
+  const nonce = String(url.searchParams.get('nonce') || '');
+  if (!parseAllowedOrigins(env).includes(origin) || !validOpaque(nonce)) {
+    return json({ code: 'invalid_authorization_request', message: 'Authorization request was rejected.' }, 400);
   }
-  const payload = await readJson(request);
-  const code = String(payload?.code || '').trim();
+  const clientId = String(env.GOOGLE_CLIENT_ID || '').trim();
+  if (!clientId) return json({ code: 'not_configured', message: 'Google authorization is not configured.' }, 503);
+  const state = await signOAuthState({ origin, nonce, issuedAt: Date.now() }, env);
+  const googleUrl = new URL(GOOGLE_AUTHORIZE_URL);
+  googleUrl.search = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: oauthRedirectUri(request, env),
+    response_type: 'code',
+    scope: GOOGLE_CALENDAR_SCOPES,
+    access_type: 'offline',
+    include_granted_scopes: 'true',
+    prompt: 'consent',
+    state,
+  }).toString();
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: googleUrl.href,
+      'Cache-Control': 'no-store',
+      'Referrer-Policy': 'no-referrer',
+    },
+  });
+}
+
+async function oauthCallback(request, env) {
+  const url = new URL(request.url);
+  const state = await verifyOAuthState(url.searchParams.get('state'), env);
+  if (!state || !parseAllowedOrigins(env).includes(state.origin) || !validOpaque(state.nonce)) {
+    return json({ code: 'invalid_state', message: 'Google authorization expired or was rejected.' }, 400);
+  }
+  const error = String(url.searchParams.get('error') || '');
+  if (error) {
+    return html(popupDocument({
+      type: OAUTH_MESSAGE_TYPE,
+      nonce: state.nonce,
+      error: error === 'access_denied' ? 'Google authorization was cancelled.' : 'Google authorization failed.',
+    }, state.origin));
+  }
+  const code = String(url.searchParams.get('code') || '').trim();
   if (!code || code.length > 4096) {
-    return json({ code: 'invalid_code', message: 'Google returned no valid authorization code.' }, 400, origin);
+    return html(popupDocument({
+      type: OAUTH_MESSAGE_TYPE,
+      nonce: state.nonce,
+      error: 'Google returned no valid authorization code.',
+    }, state.origin), 400);
   }
 
   let result;
@@ -197,29 +306,41 @@ async function exchange(request, env, origin) {
       code,
       client_id: env.GOOGLE_CLIENT_ID,
       client_secret: env.GOOGLE_CLIENT_SECRET,
-      redirect_uri: origin,
+      redirect_uri: oauthRedirectUri(request, env),
       grant_type: 'authorization_code',
     });
   } catch (_error) {
-    return json({ code: 'google_unavailable', message: 'Google authorization is temporarily unavailable.' }, 503, origin);
+    return html(popupDocument({
+      type: OAUTH_MESSAGE_TYPE,
+      nonce: state.nonce,
+      error: 'Google authorization is temporarily unavailable.',
+    }, state.origin), 503);
   }
-  if (!result.response.ok || !result.payload.access_token) {
-    return json({ code: 'exchange_failed', message: 'Google could not complete authorization.' }, 400, origin);
-  }
-  if (!result.payload.refresh_token) {
-    return json({
-      code: 'persistent_connection_unavailable',
-      message: 'Google did not return a persistent connection. Remove Nautilus Log from Google permissions and try again.',
-    }, 409, origin);
+  if (!result.response.ok || !result.payload.access_token || !result.payload.refresh_token) {
+    return html(popupDocument({
+      type: OAUTH_MESSAGE_TYPE,
+      nonce: state.nonce,
+      error: result.payload.refresh_token
+        ? 'Google could not complete authorization.'
+        : 'Google did not return a persistent connection. Remove Nautilus Log from Google permissions and try again.',
+    }, state.origin), 400);
   }
 
   const connection = await createConnection({ refreshToken: result.payload.refresh_token, env });
-  return json({
+  return html(popupDocument({
+    type: OAUTH_MESSAGE_TYPE,
+    nonce: state.nonce,
     connection,
     accessToken: result.payload.access_token,
     expiresIn: Number(result.payload.expires_in) || 0,
     tokenType: result.payload.token_type || 'Bearer',
-  }, 200, origin);
+  }, state.origin));
+}
+
+async function config(request, env, origin) {
+  const clientId = String(env.GOOGLE_CLIENT_ID || '').trim();
+  if (!clientId) return json({ code: 'not_configured', message: 'Google authorization is not configured.' }, 503, origin);
+  return json({ authorizeUrl: new URL('/authorize', request.url).href }, 200, origin);
 }
 
 async function refreshToken(request, env, origin) {
@@ -278,6 +399,12 @@ export async function handleRequest(request, env) {
   if (request.method === 'GET' && url.pathname === '/health') {
     return json({ ok: true, service: 'nautilus-google-auth' });
   }
+  try {
+    if (request.method === 'GET' && url.pathname === '/authorize') return authorize(request, env);
+    if (request.method === 'GET' && url.pathname === '/oauth/callback') return oauthCallback(request, env);
+  } catch (_error) {
+    return json({ code: 'service_error', message: 'Google Calendar connection failed.' }, 500);
+  }
 
   const origin = requestOrigin(request, env);
   if (request.method === 'OPTIONS') {
@@ -289,7 +416,6 @@ export async function handleRequest(request, env) {
 
   try {
     if (request.method === 'GET' && url.pathname === '/config') return config(request, env, origin);
-    if (request.method === 'POST' && url.pathname === '/exchange') return exchange(request, env, origin);
     if (request.method === 'POST' && url.pathname === '/token') return refreshToken(request, env, origin);
     if (request.method === 'POST' && url.pathname === '/disconnect') return disconnect(request, env, origin);
     return json({ code: 'not_found', message: 'Not found.' }, 404, origin);

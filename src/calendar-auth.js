@@ -1,11 +1,6 @@
 export const GOOGLE_AUTH_SERVICE_URL = 'https://nautilus-auth.kidsseeghosts.art';
 
-const GOOGLE_IDENTITY_SCRIPT = 'https://accounts.google.com/gsi/client';
-const GOOGLE_IDENTITY_PROMISE_KEY = '__nautilusGoogleIdentityPromise';
-const GOOGLE_CALENDAR_SCOPES = [
-  'https://www.googleapis.com/auth/calendar.events.readonly',
-  'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
-].join(' ');
+const OAUTH_MESSAGE_TYPE = 'nautilus-google-oauth-v1';
 
 function normalizeServiceUrl(value) {
   const url = new URL(String(value || ''));
@@ -39,39 +34,12 @@ function serviceError(payload, response, fallback) {
   return error;
 }
 
-function loadGoogleIdentity(windowImpl) {
-  const oauth2 = windowImpl?.google?.accounts?.oauth2;
-  if (oauth2?.initCodeClient) return Promise.resolve(oauth2);
-  if (!windowImpl?.document?.head) {
-    return Promise.reject(new Error('Google authorization requires a browser window.'));
-  }
-  if (windowImpl[GOOGLE_IDENTITY_PROMISE_KEY]) {
-    return windowImpl[GOOGLE_IDENTITY_PROMISE_KEY];
-  }
-
-  windowImpl[GOOGLE_IDENTITY_PROMISE_KEY] = new Promise((resolve, reject) => {
-    const existing = windowImpl.document.querySelector?.(`script[src="${GOOGLE_IDENTITY_SCRIPT}"]`);
-    const script = existing || windowImpl.document.createElement('script');
-    const finish = () => {
-      const loaded = windowImpl?.google?.accounts?.oauth2;
-      if (loaded?.initCodeClient) resolve(loaded);
-      else reject(new Error('Google authorization could not load.'));
-    };
-    const fail = () => reject(new Error('Google authorization could not load.'));
-    script.addEventListener?.('load', finish, { once: true });
-    script.addEventListener?.('error', fail, { once: true });
-    if (!existing) {
-      script.src = GOOGLE_IDENTITY_SCRIPT;
-      script.async = true;
-      script.defer = true;
-      script.referrerPolicy = 'no-referrer';
-      windowImpl.document.head.appendChild(script);
-    }
-  }).catch((error) => {
-    delete windowImpl[GOOGLE_IDENTITY_PROMISE_KEY];
-    throw error;
-  });
-  return windowImpl[GOOGLE_IDENTITY_PROMISE_KEY];
+function randomNonce(windowImpl) {
+  const cryptoImpl = windowImpl?.crypto || globalThis.crypto;
+  if (!cryptoImpl?.getRandomValues) throw new Error('Google authorization requires secure randomness.');
+  const bytes = new Uint8Array(24);
+  cryptoImpl.getRandomValues(bytes);
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
 }
 
 export function createPersistentGoogleAuthClient({
@@ -81,7 +49,11 @@ export function createPersistentGoogleAuthClient({
   clearConnection = async () => {},
   fetchImpl = typeof fetch === 'function' ? fetch.bind(globalThis) : null,
   windowImpl = typeof window !== 'undefined' ? window : null,
-  identityLoader = () => loadGoogleIdentity(windowImpl),
+  popupOpen = (url) => windowImpl?.open?.(
+    url,
+    'nautilus-google-calendar-oauth',
+    'popup=yes,width=520,height=680,resizable=yes,scrollbars=yes',
+  ),
   now = Date.now,
   onConnectionChange = () => {},
 } = {}) {
@@ -91,8 +63,7 @@ export function createPersistentGoogleAuthClient({
   let accessExpiresAt = 0;
   let refreshRequest = null;
   let connectRequest = null;
-  let identityRequest = null;
-  let clientIdRequest = null;
+  let configRequest = null;
   let pendingConnectReject = null;
   let destroyed = false;
   let generation = 0;
@@ -146,28 +117,23 @@ export function createPersistentGoogleAuthClient({
 
   const prepareIdentity = async () => {
     assertActive();
-    if (!clientIdRequest) {
+    if (!configRequest) {
       const expectedGeneration = generation;
-      clientIdRequest = requestJson('/config', null, { method: 'GET', expectedGeneration })
+      configRequest = requestJson('/config', null, { method: 'GET', expectedGeneration })
         .then((payload) => {
-          const clientId = String(payload?.clientId || '').trim();
-          if (!clientId) throw new Error('Google authorization is not configured.');
-          return clientId;
+          const authorizeUrl = String(payload?.authorizeUrl || '').trim();
+          const parsed = new URL(authorizeUrl);
+          if (parsed.protocol !== 'https:') throw new Error('Google authorization is not configured.');
+          return { authorizeUrl: parsed.href, serviceOrigin: parsed.origin };
         })
         .catch((error) => {
-          clientIdRequest = null;
+          configRequest = null;
           throw error;
         });
     }
-    if (!identityRequest) {
-      identityRequest = Promise.resolve().then(identityLoader).catch((error) => {
-        identityRequest = null;
-        throw error;
-      });
-    }
-    const [clientId, oauth2] = await Promise.all([clientIdRequest, identityRequest]);
+    const config = await configRequest;
     assertActive();
-    return { clientId, oauth2 };
+    return config;
   };
 
   const connect = async () => {
@@ -175,29 +141,46 @@ export function createPersistentGoogleAuthClient({
     if (connectRequest) return connectRequest;
     const expectedGeneration = generation;
     const request = (async () => {
-      const { clientId, oauth2 } = await prepareIdentity();
-      assertActive(expectedGeneration);
+      const popup = popupOpen('about:blank');
+      if (!popup) throw new Error('Google authorization popup was blocked.');
+      let config;
+      try {
+        config = await prepareIdentity();
+        assertActive(expectedGeneration);
+      } catch (error) {
+        popup.close?.();
+        throw error;
+      }
       return new Promise((resolve, reject) => {
         let settled = false;
+        let closeTimer = null;
+        const nonce = randomNonce(windowImpl);
+        const cleanup = () => {
+          windowImpl?.removeEventListener?.('message', onMessage);
+          if (closeTimer !== null) {
+            (windowImpl?.clearInterval || clearInterval)(closeTimer);
+            closeTimer = null;
+          }
+        };
         const finish = (handler, value) => {
           if (settled) return;
           settled = true;
+          cleanup();
           pendingConnectReject = null;
+          popup.close?.();
           handler(value);
         };
         pendingConnectReject = (error) => finish(reject, error);
 
-        const callback = async (response = {}) => {
-          if (settled) return;
-          if (response.error || !response.code) {
-            finish(reject, new Error(response.error_description || response.error || 'Google authorization was cancelled.'));
-            return;
-          }
+        const onMessage = async (event = {}) => {
+          if (settled || event.origin !== config.serviceOrigin) return;
+          const response = event.data;
+          if (!response || response.type !== OAUTH_MESSAGE_TYPE || response.nonce !== nonce) return;
+          if (response.error) return finish(reject, new Error(response.error));
           try {
             assertActive(expectedGeneration);
-            const result = await requestJson('/exchange', { code: response.code }, { expectedGeneration });
-            const connection = parseCalendarConnection(result.connection);
-            if (!connection || !result.accessToken) {
+            const connection = parseCalendarConnection(response.connection);
+            if (!connection || !response.accessToken) {
               throw new Error('Google authorization returned an invalid connection.');
             }
             assertActive(expectedGeneration);
@@ -206,8 +189,8 @@ export function createPersistentGoogleAuthClient({
               await clearConnection();
               assertActive(expectedGeneration);
             }
-            accessToken = result.accessToken;
-            accessExpiresAt = Number(now()) + Math.max(0, Number(result.expiresIn) || 0) * 1000;
+            accessToken = response.accessToken;
+            accessExpiresAt = Number(now()) + Math.max(0, Number(response.expiresIn) || 0) * 1000;
             onConnectionChange(true);
             finish(resolve, accessToken);
           } catch (error) {
@@ -216,19 +199,15 @@ export function createPersistentGoogleAuthClient({
         };
 
         try {
-          const codeClient = oauth2.initCodeClient({
-            client_id: clientId,
-            scope: GOOGLE_CALENDAR_SCOPES,
-            ux_mode: 'popup',
-            callback,
-            error_callback: (error = {}) => {
-              const message = error.type === 'popup_failed_to_open'
-                ? 'Google authorization popup was blocked.'
-                : 'Google authorization was cancelled.';
-              finish(reject, new Error(message));
-            },
-          });
-          codeClient.requestCode();
+          windowImpl?.addEventListener?.('message', onMessage);
+          const authorizeUrl = new URL(config.authorizeUrl);
+          authorizeUrl.searchParams.set('origin', windowImpl?.location?.origin || '');
+          authorizeUrl.searchParams.set('nonce', nonce);
+          if (popup.location?.replace) popup.location.replace(authorizeUrl.href);
+          else popup.location = authorizeUrl.href;
+          closeTimer = (windowImpl?.setInterval || setInterval)(() => {
+            if (popup.closed) finish(reject, new Error('Google authorization was cancelled.'));
+          }, 300);
         } catch (error) {
           finish(reject, error);
         }
@@ -280,6 +259,10 @@ export function createPersistentGoogleAuthClient({
   const authorize = async ({ interactive = true } = {}) => {
     assertActive();
     if (hasUsableAccessToken()) return accessToken;
+    const currentConnection = loadConnection();
+    if (!currentConnection?.then && !parseCalendarConnection(currentConnection)) {
+      return interactive ? connect() : '';
+    }
     const restored = await restore();
     if (restored || !interactive) return restored;
     return connect();

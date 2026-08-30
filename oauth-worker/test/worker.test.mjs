@@ -47,9 +47,28 @@ function env() {
     ALLOWED_ORIGINS: 'https://roamresearch.com',
     GOOGLE_CLIENT_ID: 'google-client-id',
     GOOGLE_CLIENT_SECRET: 'google-client-secret',
+    OAUTH_STATE_SECRET: base64Url(new Uint8Array(32).fill(11)),
     TOKEN_ENCRYPTION_KEY: base64Url(new Uint8Array(32).fill(7)),
     NAUTILUS_AUTH_DB: new MemoryD1(),
   };
+}
+
+async function beginAuthorization(bindings, nonce = 'n'.repeat(32)) {
+  const response = await handleRequest(new Request(
+    `https://auth.example.com/authorize?origin=${encodeURIComponent('https://roamresearch.com')}&nonce=${nonce}`,
+  ), bindings);
+  assert.equal(response.status, 302);
+  return { nonce, googleUrl: new URL(response.headers.get('Location')) };
+}
+
+async function finishAuthorization(bindings, state, code = 'one-time-google-code') {
+  const response = await handleRequest(new Request(
+    `https://auth.example.com/oauth/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`,
+  ), bindings);
+  const document = await response.text();
+  const match = document.match(/const payload = (.+);/);
+  assert.ok(match, 'OAuth callback should embed one popup payload.');
+  return { response, document, payload: JSON.parse(match[1]) };
 }
 
 function roamRequest(path, { method = 'POST', body, ajax = true } = {}) {
@@ -71,7 +90,7 @@ test('refresh token encryption round-trips and uses a random IV', async () => {
   assert.equal(await decryptRefreshToken(first, bindings), 'refresh-secret');
 });
 
-test('OAuth worker exchanges a GIS popup code, restores, and disconnects one opaque connection', { concurrency: false }, async () => {
+test('OAuth worker completes its hosted callback, restores, and disconnects one opaque connection', { concurrency: false }, async () => {
   const bindings = env();
   const originalFetch = globalThis.fetch;
   const googleRequests = [];
@@ -93,24 +112,35 @@ test('OAuth worker exchanges a GIS popup code, restores, and disconnects one opa
   try {
     const configResponse = await handleRequest(roamRequest('/config', { method: 'GET' }), bindings);
     assert.equal(configResponse.status, 200);
-    assert.deepEqual(await configResponse.json(), { clientId: 'google-client-id' });
+    assert.deepEqual(await configResponse.json(), { authorizeUrl: 'https://auth.example.com/authorize' });
 
-    const exchangeResponse = await handleRequest(roamRequest('/exchange', {
-      body: { code: 'one-time-google-code' },
-    }), bindings);
-    assert.equal(exchangeResponse.status, 200);
-    const exchange = await exchangeResponse.json();
-    assert.equal(exchange.accessToken, 'first-access');
-    assert.equal(Boolean(exchange.connection.id), true);
-    assert.equal(Boolean(exchange.connection.secret), true);
+    const started = await beginAuthorization(bindings);
+    assert.equal(started.googleUrl.origin, 'https://accounts.google.com');
+    assert.equal(started.googleUrl.searchParams.get('client_id'), 'google-client-id');
+    assert.equal(started.googleUrl.searchParams.get('redirect_uri'), 'https://auth.example.com/oauth/callback');
+    assert.equal(started.googleUrl.searchParams.get('access_type'), 'offline');
+    assert.equal(started.googleUrl.searchParams.get('prompt'), 'consent');
+    assert.match(started.googleUrl.searchParams.get('scope'), /calendar\.events\.readonly/);
+
+    const exchange = await finishAuthorization(
+      bindings,
+      started.googleUrl.searchParams.get('state'),
+    );
+    assert.equal(exchange.response.status, 200);
+    assert.equal(exchange.payload.type, 'nautilus-google-oauth-v1');
+    assert.equal(exchange.payload.nonce, started.nonce);
+    assert.equal(exchange.payload.accessToken, 'first-access');
+    assert.equal(Boolean(exchange.payload.connection.id), true);
+    assert.equal(Boolean(exchange.payload.connection.secret), true);
+    assert.match(exchange.document, /postMessage\(payload, "https:\/\/roamresearch\.com"\)/);
     const codeRequest = googleRequests.find((request) => request.url.includes('/token'));
     const codeParams = new URLSearchParams(codeRequest.options.body);
-    assert.equal(codeParams.get('redirect_uri'), 'https://roamresearch.com');
+    assert.equal(codeParams.get('redirect_uri'), 'https://auth.example.com/oauth/callback');
 
     const tokenResponse = await handleRequest(roamRequest('/token', {
       body: {
-        connectionId: exchange.connection.id,
-        connectionSecret: exchange.connection.secret,
+        connectionId: exchange.payload.connection.id,
+        connectionSecret: exchange.payload.connection.secret,
       },
     }), bindings);
     assert.equal(tokenResponse.status, 200);
@@ -122,15 +152,15 @@ test('OAuth worker exchanges a GIS popup code, restores, and disconnects one opa
 
     const disconnectResponse = await handleRequest(roamRequest('/disconnect', {
       body: {
-        connectionId: exchange.connection.id,
-        connectionSecret: exchange.connection.secret,
+        connectionId: exchange.payload.connection.id,
+        connectionSecret: exchange.payload.connection.secret,
       },
     }), bindings);
     assert.equal(disconnectResponse.status, 200);
     const afterDisconnect = await handleRequest(roamRequest('/token', {
       body: {
-        connectionId: exchange.connection.id,
-        connectionSecret: exchange.connection.secret,
+        connectionId: exchange.payload.connection.id,
+        connectionSecret: exchange.payload.connection.secret,
       },
     }), bindings);
     assert.equal(afterDisconnect.status, 401);
@@ -161,8 +191,9 @@ test('transient Google refresh failures preserve the connection', { concurrency:
   };
 
   try {
-    const connected = await handleRequest(roamRequest('/exchange', { body: { code: 'code' } }), bindings);
-    const { connection } = await connected.json();
+    const started = await beginAuthorization(bindings);
+    const connected = await finishAuthorization(bindings, started.googleUrl.searchParams.get('state'), 'code');
+    const { connection } = connected.payload;
     const first = await handleRequest(roamRequest('/token', {
       body: { connectionId: connection.id, connectionSecret: connection.secret },
     }), bindings);
@@ -193,8 +224,9 @@ test('invalid_grant deletes the unusable connection', { concurrency: false }, as
   };
 
   try {
-    const connected = await handleRequest(roamRequest('/exchange', { body: { code: 'code' } }), bindings);
-    const { connection } = await connected.json();
+    const started = await beginAuthorization(bindings);
+    const connected = await finishAuthorization(bindings, started.googleUrl.searchParams.get('state'), 'code');
+    const { connection } = connected.payload;
     const response = await handleRequest(roamRequest('/token', {
       body: { connectionId: connection.id, connectionSecret: connection.secret },
     }), bindings);
@@ -205,7 +237,7 @@ test('invalid_grant deletes the unusable connection', { concurrency: false }, as
   }
 });
 
-test('OAuth worker rejects non-Roam origins and non-AJAX code delivery', async () => {
+test('OAuth worker rejects non-Roam origins and invalid callback state', async () => {
   const badOrigin = await handleRequest(new Request('https://auth.example.com/token', {
     method: 'POST',
     headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/json' },
@@ -214,9 +246,13 @@ test('OAuth worker rejects non-Roam origins and non-AJAX code delivery', async (
   assert.equal(badOrigin.status, 403);
   assert.equal(badOrigin.headers.get('Access-Control-Allow-Origin'), null);
 
-  const missingAjax = await handleRequest(roamRequest('/exchange', {
-    body: { code: 'code' },
-    ajax: false,
-  }), env());
-  assert.equal(missingAjax.status, 400);
+  const badStart = await handleRequest(new Request(
+    `https://auth.example.com/authorize?origin=${encodeURIComponent('https://attacker.example')}&nonce=${'n'.repeat(32)}`,
+  ), env());
+  assert.equal(badStart.status, 400);
+
+  const badCallback = await handleRequest(new Request(
+    'https://auth.example.com/oauth/callback?code=code&state=invalid',
+  ), env());
+  assert.equal(badCallback.status, 400);
 });
