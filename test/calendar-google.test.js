@@ -124,3 +124,125 @@ test('Google Tasks reads active rows without a due gate and merges dated lifecyc
   assert.equal(lifecycleRequest.parsed.searchParams.get('showHidden'), 'true');
   assert.equal(requests.every(({ options }) => options.headers.Authorization === 'Bearer access-token'), true);
 });
+
+test('Google reads retry a bounded 429 response and then continue', async () => {
+  const extension = await loadExtension('google-retry-429');
+  let requests = 0;
+  const delays = [];
+  const client = extension.createGoogleCalendarClient({
+    authClient: { authorize: async () => 'access-token', destroy: () => {} },
+    retryDelays: [5, 10],
+    randomImpl: () => 0.5,
+    sleepImpl: async (delay) => { delays.push(delay); },
+    fetchImpl: async (url) => {
+      requests += 1;
+      if (requests === 1) {
+        return new Response(JSON.stringify({ error: { message: 'Slow down' } }), {
+          status: 429,
+          headers: { 'Content-Type': 'application/json', 'Retry-After': '0' },
+        });
+      }
+      const payload = String(url).includes('/calendarList')
+        ? { items: [{ id: 'connected@example.com', primary: true }] }
+        : { items: [] };
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  });
+
+  const result = await client.readRange({
+    calendarIds: ['primary'],
+    timeMin: '2026-08-30T00:00:00.000Z',
+    timeMax: '2026-08-31T00:00:00.000Z',
+  });
+
+  assert.equal(result.length, 1);
+  assert.equal(requests, 3);
+  assert.deepEqual(delays, [0]);
+});
+
+test('Google reads stop after two transient retries', async () => {
+  const extension = await loadExtension('google-retry-bounded');
+  let requests = 0;
+  const delays = [];
+  const client = extension.createGoogleCalendarClient({
+    authClient: { authorize: async () => 'access-token', destroy: () => {} },
+    retryDelays: [5, 10],
+    randomImpl: () => 0.5,
+    sleepImpl: async (delay) => { delays.push(delay); },
+    fetchImpl: async () => {
+      requests += 1;
+      return new Response(JSON.stringify({ error: { message: 'Temporarily unavailable' } }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  });
+
+  await assert.rejects(() => client.readRange({
+    calendarIds: ['primary'],
+    timeMin: '2026-08-30T00:00:00.000Z',
+    timeMax: '2026-08-31T00:00:00.000Z',
+  }), /Temporarily unavailable/);
+  assert.equal(requests, 3);
+  assert.deepEqual(delays, [5, 10]);
+});
+
+test('Google reads do not retry an ordinary client error', async () => {
+  const extension = await loadExtension('google-no-retry-400');
+  let requests = 0;
+  let sleeps = 0;
+  const client = extension.createGoogleCalendarClient({
+    authClient: { authorize: async () => 'access-token', destroy: () => {} },
+    sleepImpl: async () => { sleeps += 1; },
+    fetchImpl: async () => {
+      requests += 1;
+      return new Response(JSON.stringify({ error: { message: 'Bad request' } }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  });
+
+  await assert.rejects(() => client.readRange({
+    calendarIds: ['primary'],
+    timeMin: '2026-08-30T00:00:00.000Z',
+    timeMax: '2026-08-31T00:00:00.000Z',
+  }), /Bad request/);
+  assert.equal(requests, 1);
+  assert.equal(sleeps, 0);
+});
+
+test('cancelling Google sync aborts immediately without retrying', async () => {
+  const extension = await loadExtension('google-cancel-no-retry');
+  let requests = 0;
+  let sleeps = 0;
+  const client = extension.createGoogleCalendarClient({
+    authClient: { authorize: async () => 'access-token', destroy: () => {} },
+    sleepImpl: async () => { sleeps += 1; },
+    fetchImpl: async (_url, options) => {
+      requests += 1;
+      return new Promise((_resolve, reject) => {
+        options.signal.addEventListener('abort', () => {
+          const error = new Error('Aborted');
+          error.name = 'AbortError';
+          reject(error);
+        }, { once: true });
+      });
+    },
+  });
+
+  const pending = client.readRange({
+    calendarIds: ['primary'],
+    timeMin: '2026-08-30T00:00:00.000Z',
+    timeMax: '2026-08-31T00:00:00.000Z',
+  });
+  await Promise.resolve();
+  client.cancelSync();
+
+  await assert.rejects(() => pending, /sync was cancelled/);
+  assert.equal(requests, 1);
+  assert.equal(sleeps, 0);
+});

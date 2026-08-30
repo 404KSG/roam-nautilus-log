@@ -242,29 +242,56 @@ async function createOAuthSession({ origin, nonce, env }) {
   await cleanupExpiredSessions(env);
   const sessionId = randomToken(24);
   const sessionSecret = randomToken(32);
+  const codeVerifier = randomToken(48);
+  const codeChallenge = await sha256(codeVerifier);
+  const encryptedVerifier = await encryptRefreshToken(codeVerifier, env);
   const now = Date.now();
   await database(env).prepare(`
     INSERT INTO oauth_sessions
-      (id, secret_hash, origin, nonce, expires_at, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)
+      (id, secret_hash, origin, nonce, pkce_verifier_iv,
+       pkce_verifier_ciphertext, expires_at, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     sessionId,
     await sha256(sessionSecret),
     origin,
     nonce,
+    encryptedVerifier.iv,
+    encryptedVerifier.ciphertext,
     now + OAUTH_SESSION_TTL_MS,
     now,
   ).run();
-  return { sessionId, sessionSecret };
+  return { sessionId, sessionSecret, codeChallenge };
 }
 
 async function readOAuthSession(sessionId, env) {
   return database(env).prepare(`
     SELECT id, secret_hash, origin, nonce, result_iv, result_ciphertext,
-           connection_id, expires_at
+           connection_id, pkce_verifier_iv, pkce_verifier_ciphertext,
+           consumed_at, expires_at
     FROM oauth_sessions
     WHERE id = ?
   `).bind(sessionId).first();
+}
+
+async function consumeOAuthSession(state, env) {
+  if (!validOpaque(state?.sessionId)) return null;
+  const session = await readOAuthSession(state.sessionId, env);
+  const now = Date.now();
+  if (
+    !session
+    || session.origin !== state.origin
+    || session.nonce !== state.nonce
+    || Number(session.expires_at) < now
+    || session.consumed_at !== null && session.consumed_at !== undefined
+  ) return null;
+  const result = await database(env).prepare(`
+    UPDATE oauth_sessions
+    SET consumed_at = ?
+    WHERE id = ? AND consumed_at IS NULL AND expires_at >= ?
+  `).bind(now, session.id, now).run();
+  if (Number(result?.meta?.changes ?? result?.changes ?? 0) !== 1) return null;
+  return session;
 }
 
 async function deleteOAuthSession(sessionId, env) {
@@ -315,11 +342,11 @@ function oauthRedirectUri(request, env) {
   return redirect.href;
 }
 
-function googleAuthorizationUrl(request, env, state) {
+function googleAuthorizationUrl(request, env, state, codeChallenge = '') {
   const clientId = String(env.GOOGLE_CLIENT_ID || '').trim();
   if (!clientId) throw new Error('Google authorization is not configured.');
   const googleUrl = new URL(GOOGLE_AUTHORIZE_URL);
-  googleUrl.search = new URLSearchParams({
+  const params = {
     client_id: clientId,
     redirect_uri: oauthRedirectUri(request, env),
     response_type: 'code',
@@ -328,7 +355,12 @@ function googleAuthorizationUrl(request, env, state) {
     include_granted_scopes: 'true',
     prompt: 'consent',
     state,
-  }).toString();
+  };
+  if (codeChallenge) {
+    params.code_challenge = codeChallenge;
+    params.code_challenge_method = 'S256';
+  }
+  googleUrl.search = new URLSearchParams(params).toString();
   return googleUrl;
 }
 
@@ -458,10 +490,11 @@ function termsDocument() {
 }
 
 async function oauthCompletion(state, payload, env, status = 200) {
-  if (state.sessionId) {
+  if (state.delivery === 'desktop') {
     await completeOAuthSession(state.sessionId, payload, env);
     return html(desktopDocument(!payload.error), status);
   }
+  if (state.sessionId) await deleteOAuthSession(state.sessionId, env);
   return html(popupDocument(payload, state.origin), status);
 }
 
@@ -474,8 +507,15 @@ async function authorize(request, env) {
   }
   const clientId = String(env.GOOGLE_CLIENT_ID || '').trim();
   if (!clientId) return json({ code: 'not_configured', message: 'Google authorization is not configured.' }, 503);
-  const state = await signOAuthState(statePayload({ origin, nonce, issuedAt: Date.now() }, env), env);
-  const googleUrl = googleAuthorizationUrl(request, env, state);
+  const session = await createOAuthSession({ origin, nonce, env });
+  const state = await signOAuthState(statePayload({
+    origin,
+    nonce,
+    sessionId: session.sessionId,
+    delivery: 'popup',
+    issuedAt: Date.now(),
+  }, env), env);
+  const googleUrl = googleAuthorizationUrl(request, env, state, session.codeChallenge);
   return new Response(null, {
     status: 302,
     headers: {
@@ -500,11 +540,13 @@ async function createDesktopAuthorization(request, env, origin) {
     origin,
     nonce,
     sessionId: session.sessionId,
+    delivery: 'desktop',
     issuedAt: Date.now(),
   }, env), env);
   return json({
-    authorizeUrl: googleAuthorizationUrl(request, env, state).href,
-    ...session,
+    authorizeUrl: googleAuthorizationUrl(request, env, state, session.codeChallenge).href,
+    sessionId: session.sessionId,
+    sessionSecret: session.sessionSecret,
   }, 200, origin);
 }
 
@@ -540,6 +582,13 @@ async function oauthCallback(request, env) {
   if (!state || !parseAllowedOrigins(env).includes(state.origin) || !validOpaque(state.nonce)) {
     return json({ code: 'invalid_state', message: 'Google authorization expired or was rejected.' }, 400);
   }
+  // Signed states created immediately before this deployment did not have a
+  // session. Accept those only for the existing ten-minute state TTL; all new
+  // authorizations are backed by a one-time PKCE transaction.
+  const session = state.sessionId ? await consumeOAuthSession(state, env) : null;
+  if (state.sessionId && !session) {
+    return json({ code: 'invalid_state', message: 'Google authorization expired or was already used.' }, 400);
+  }
   const error = String(url.searchParams.get('error') || '');
   if (error) {
     return oauthCompletion(state, {
@@ -559,13 +608,20 @@ async function oauthCallback(request, env) {
 
   let result;
   try {
-    result = await googleToken({
+    const tokenRequest = {
       code,
       client_id: env.GOOGLE_CLIENT_ID,
       client_secret: env.GOOGLE_CLIENT_SECRET,
       redirect_uri: oauthRedirectUri(request, env),
       grant_type: 'authorization_code',
-    });
+    };
+    if (session?.pkce_verifier_iv && session?.pkce_verifier_ciphertext) {
+      tokenRequest.code_verifier = await decryptRefreshToken({
+        iv: session.pkce_verifier_iv,
+        ciphertext: session.pkce_verifier_ciphertext,
+      }, env);
+    }
+    result = await googleToken(tokenRequest);
   } catch (_error) {
     return oauthCompletion(state, {
       type: OAUTH_MESSAGE_TYPE,

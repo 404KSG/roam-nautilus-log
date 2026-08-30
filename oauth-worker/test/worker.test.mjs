@@ -25,7 +25,16 @@ class MemoryD1 {
             created_at: createdAt,
           });
         } else if (normalized.startsWith('INSERT INTO OAUTH_SESSIONS')) {
-          const [id, secretHash, origin, nonce, expiresAt, createdAt] = this.args;
+          const [
+            id,
+            secretHash,
+            origin,
+            nonce,
+            verifierIv,
+            verifierCiphertext,
+            expiresAt,
+            createdAt,
+          ] = this.args;
           database.sessions.set(id, {
             id,
             secret_hash: secretHash,
@@ -34,9 +43,20 @@ class MemoryD1 {
             result_iv: null,
             result_ciphertext: null,
             connection_id: null,
+            pkce_verifier_iv: verifierIv,
+            pkce_verifier_ciphertext: verifierCiphertext,
+            consumed_at: null,
             expires_at: expiresAt,
             created_at: createdAt,
           });
+        } else if (normalized.startsWith('UPDATE OAUTH_SESSIONS SET CONSUMED_AT')) {
+          const [consumedAt, id, minimumExpiry] = this.args;
+          const session = database.sessions.get(id);
+          if (!session || session.consumed_at !== null || session.expires_at < minimumExpiry) {
+            return { success: true, meta: { changes: 0 } };
+          }
+          session.consumed_at = consumedAt;
+          return { success: true, meta: { changes: 1 } };
         } else if (normalized.startsWith('UPDATE OAUTH_SESSIONS SET RESULT_IV')) {
           const [resultIv, resultCiphertext, connectionId, id] = this.args;
           const session = database.sessions.get(id);
@@ -68,7 +88,7 @@ class MemoryD1 {
         } else {
           throw new Error(`Unexpected D1 run: ${normalized}`);
         }
-        return { success: true };
+        return { success: true, meta: { changes: 1 } };
       },
       async first() {
         if (normalized.includes('FROM OAUTH_CONNECTIONS')) {
@@ -195,6 +215,8 @@ test('OAuth worker completes its hosted callback, restores, and disconnects one 
     assert.equal(started.googleUrl.searchParams.get('redirect_uri'), 'https://auth.example.com/oauth/callback');
     assert.equal(started.googleUrl.searchParams.get('access_type'), 'offline');
     assert.equal(started.googleUrl.searchParams.get('prompt'), 'consent');
+    assert.equal(started.googleUrl.searchParams.get('code_challenge_method'), 'S256');
+    assert.match(started.googleUrl.searchParams.get('code_challenge'), /^[A-Za-z0-9_-]{43}$/);
     assert.match(started.googleUrl.searchParams.get('scope'), /calendar\.events\.readonly/);
     assert.match(started.googleUrl.searchParams.get('scope'), /tasks\.readonly/);
 
@@ -213,6 +235,7 @@ test('OAuth worker completes its hosted callback, restores, and disconnects one 
     const codeRequest = googleRequests.find((request) => request.url.includes('/token'));
     const codeParams = new URLSearchParams(codeRequest.options.body);
     assert.equal(codeParams.get('redirect_uri'), 'https://auth.example.com/oauth/callback');
+    assert.match(codeParams.get('code_verifier'), /^[A-Za-z0-9_-]{64}$/);
 
     const tokenResponse = await handleRequest(roamRequest('/token', {
       body: {
@@ -266,6 +289,7 @@ test('OAuth worker returns a Desktop callback through one secret-bound polling s
     assert.equal(started.googleUrl.searchParams.get('client_id'), 'google-client-id');
     assert.match(started.sessionId, /^[A-Za-z0-9_-]{20,160}$/);
     assert.match(started.sessionSecret, /^[A-Za-z0-9_-]{20,160}$/);
+    assert.equal(started.googleUrl.searchParams.get('code_challenge_method'), 'S256');
 
     const pending = await handleRequest(roamRequest('/desktop/session/result', {
       body: { sessionId: started.sessionId, sessionSecret: started.sessionSecret },
@@ -296,6 +320,33 @@ test('OAuth worker returns a Desktop callback through one secret-bound polling s
     assert.equal(result.accessToken, 'desktop-access');
     assert.equal(result.connection.id.length > 20, true);
     assert.equal(bindings.NAUTILUS_AUTH_DB.sessions.has(started.sessionId), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('OAuth callback transaction can be consumed only once', { concurrency: false }, async () => {
+  const bindings = env();
+  const originalFetch = globalThis.fetch;
+  let exchangeCount = 0;
+  globalThis.fetch = async () => {
+    exchangeCount += 1;
+    return new Response(JSON.stringify({
+      access_token: 'first-access',
+      refresh_token: 'refresh-secret',
+      expires_in: 3600,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+
+  try {
+    const started = await beginDesktopAuthorization(bindings);
+    const state = started.googleUrl.searchParams.get('state');
+    const first = await finishAuthorization(bindings, state, 'first-code', false);
+    assert.equal(first.response.status, 200);
+    const second = await finishAuthorization(bindings, state, 'second-code', false);
+    assert.equal(second.response.status, 400);
+    assert.match(second.document, /already used/);
+    assert.equal(exchangeCount, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }

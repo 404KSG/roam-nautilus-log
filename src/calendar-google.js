@@ -2,6 +2,9 @@ import { createPersistentGoogleAuthClient } from './calendar-auth';
 
 const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 const GOOGLE_TASKS_API = 'https://tasks.googleapis.com/tasks/v1';
+const TRANSIENT_GOOGLE_STATUSES = new Set([429, 500, 502, 503, 504]);
+const DEFAULT_RETRY_DELAYS = [250, 750];
+const MAX_RETRY_AFTER_MS = 2000;
 
 export function parseGoogleCalendarIds(value) {
   const ids = String(value ?? '')
@@ -26,39 +29,90 @@ function taskDayBounds(date) {
   };
 }
 
+function retryAfterMs(response, now = Date.now()) {
+  const value = String(response?.headers?.get?.('Retry-After') || '').trim();
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(MAX_RETRY_AFTER_MS, seconds * 1000);
+  }
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return null;
+  return Math.min(MAX_RETRY_AFTER_MS, Math.max(0, timestamp - now));
+}
+
+function syncCancelled(error, signal) {
+  return signal?.aborted === true || error?.name === 'AbortError';
+}
+
 export function createGoogleCalendarClient({
   authClient,
   authClientFactory = createPersistentGoogleAuthClient,
   authOptions = {},
   fetchImpl = typeof fetch === 'function' ? fetch.bind(globalThis) : null,
+  sleepImpl = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+  randomImpl = Math.random,
+  retryDelays = DEFAULT_RETRY_DELAYS,
 } = {}) {
   if (typeof fetchImpl !== 'function') throw new Error('Google Calendar requires the Fetch API.');
   const authorization = authClient || authClientFactory(authOptions);
   const controller = typeof AbortController === 'function' ? new AbortController() : null;
   let destroyed = false;
 
-  const fetchJson = async (url, retry = true, service = 'Google Calendar') => {
+  const fetchJson = async (url, refreshOnUnauthorized = true, service = 'Google Calendar') => {
     if (destroyed) throw new Error('Google Calendar sync was cancelled.');
-    const accessToken = await authorization.authorize({ interactive: true });
+    let accessToken = await authorization.authorize({ interactive: true });
     if (!accessToken) throw new Error('Google Calendar must be connected.');
-    let response = await fetchImpl(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      signal: controller?.signal,
-    });
-    if (response.status === 401 && retry) {
-      authorization.invalidateAccessToken?.();
-      let refreshed = await authorization.authorize({ interactive: false });
-      if (!refreshed) refreshed = await authorization.authorize({ interactive: true });
-      if (refreshed) {
+    let refreshedOnce = false;
+    let retryIndex = 0;
+    const boundedDelays = Array.isArray(retryDelays) ? retryDelays.slice(0, 2) : DEFAULT_RETRY_DELAYS;
+
+    while (true) {
+      let response;
+      try {
         response = await fetchImpl(url, {
-          headers: { Authorization: `Bearer ${refreshed}` },
+          headers: { Authorization: `Bearer ${accessToken}` },
           signal: controller?.signal,
         });
+      } catch (error) {
+        if (destroyed || syncCancelled(error, controller?.signal)) {
+          throw new Error('Google Calendar sync was cancelled.');
+        }
+        if (retryIndex >= boundedDelays.length) throw error;
+        const baseDelay = Math.max(0, Number(boundedDelays[retryIndex]) || 0);
+        retryIndex += 1;
+        const jitter = 0.8 + (Math.max(0, Math.min(1, Number(randomImpl()) || 0)) * 0.4);
+        await sleepImpl(Math.round(baseDelay * jitter));
+        continue;
       }
+
+      if (response.status === 401 && refreshOnUnauthorized && !refreshedOnce) {
+        refreshedOnce = true;
+        authorization.invalidateAccessToken?.();
+        let refreshed = await authorization.authorize({ interactive: false });
+        if (!refreshed) refreshed = await authorization.authorize({ interactive: true });
+        if (refreshed) {
+          accessToken = refreshed;
+          continue;
+        }
+      }
+
+      if (TRANSIENT_GOOGLE_STATUSES.has(response.status) && retryIndex < boundedDelays.length) {
+        const configured = Math.max(0, Number(boundedDelays[retryIndex]) || 0);
+        retryIndex += 1;
+        const requested = retryAfterMs(response);
+        const baseDelay = requested === null ? configured : requested;
+        const jitter = requested === null
+          ? 0.8 + (Math.max(0, Math.min(1, Number(randomImpl()) || 0)) * 0.4)
+          : 1;
+        await sleepImpl(Math.round(baseDelay * jitter));
+        continue;
+      }
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(apiErrorMessage(payload, response, service));
+      return payload;
     }
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(apiErrorMessage(payload, response, service));
-    return payload;
   };
 
   const listCalendarEntries = async () => {

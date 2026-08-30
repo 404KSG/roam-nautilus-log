@@ -119,6 +119,7 @@ test('recurring instances use a stable original-start key and cancelled events r
     eventId: 'cancelled-1',
     resourceType: 'calendar-event',
     status: 'cancelled',
+    dateKey: '',
   });
 });
 
@@ -166,6 +167,7 @@ test('dated Google Tasks become flexible TODO or DONE rows without inventing fix
     taskId: 'pending-1',
     resourceType: 'google-task',
     status: 'needsAction',
+    dateKey: '2026-08-30',
     parentString: '{{[[TODO]]}} Submit report 25m · Google Calendar',
     sourceString: 'Google Tasks · My Tasks · [Open](https://tasks.google.com/task/pending-1)',
     detailStrings: ['Attach the final PDF.'],
@@ -181,6 +183,7 @@ test('dated Google Tasks become flexible TODO or DONE rows without inventing fix
     taskId: 'deleted-1',
     resourceType: 'google-task',
     status: 'cancelled',
+    dateKey: '',
   });
 });
 

@@ -49,6 +49,7 @@ function graphHarness() {
     move,
     loadState: () => state,
     saveState: async (next) => { state = structuredClone(next); },
+    setState: (next) => { state = structuredClone(next); },
     state: () => state,
   };
 }
@@ -276,4 +277,74 @@ test('one Google Task is updated in place across pending, completed, and deleted
   assert.equal(removed.removed, 1);
   assert.equal(graph.read(parentUid), null);
   assert.equal(graph.state().events['task:my-tasks:task-1'], undefined);
+});
+
+test('mapping state migrates in place and prunes only old missing Roam parents', async () => {
+  const extension = await loadExtension('calendar-state-maintenance');
+  const graph = graphHarness();
+  const now = 200 * 24 * 60 * 60 * 1000;
+  graph.setState({
+    version: 1,
+    events: {
+      orphan: {
+        planUid: 'plan-today',
+        parent: { uid: 'missing-parent', lastSynced: 'Missing' },
+        lastSeenAt: 1,
+      },
+      live: {
+        planUid: 'plan-today',
+        parent: { uid: 'live-parent', lastSynced: 'Live import' },
+        lastSeenAt: 1,
+      },
+    },
+  });
+  graph.blocks.set('live-parent', {
+    uid: 'live-parent',
+    parentUid: 'plan-today',
+    order: 0,
+    string: 'Live import',
+  });
+  const reconciler = extension.createCalendarReconciler({
+    ...graph,
+    now: () => now,
+    orphanRetentionMs: 90 * 24 * 60 * 60 * 1000,
+  });
+
+  const result = await reconciler.sync({ planUid: 'plan-today', events: [] });
+
+  assert.deepEqual(result, {
+    created: 0,
+    updated: 0,
+    removed: 0,
+    localKept: 0,
+    skipped: 0,
+  });
+  assert.equal(graph.state().version, 2);
+  assert.equal(graph.state().events.orphan, undefined);
+  assert.equal(graph.state().events.live.parent.uid, 'live-parent');
+  assert.equal(graph.read('live-parent'), 'Live import');
+});
+
+test('a newly migrated orphan receives a grace period instead of disappearing immediately', async () => {
+  const extension = await loadExtension('calendar-state-migration-grace');
+  const graph = graphHarness();
+  const observedAt = 300 * 24 * 60 * 60 * 1000;
+  graph.setState({
+    version: 1,
+    events: {
+      orphan: {
+        planUid: 'plan-today',
+        parent: { uid: 'missing-parent', lastSynced: 'Missing' },
+      },
+    },
+  });
+  const reconciler = extension.createCalendarReconciler({
+    ...graph,
+    now: () => observedAt,
+  });
+
+  await reconciler.sync({ planUid: 'plan-today', events: [] });
+
+  assert.equal(graph.state().events.orphan.lastSeenAt, observedAt);
+  assert.equal(graph.state().version, 2);
 });

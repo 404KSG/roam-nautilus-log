@@ -151,6 +151,11 @@ export function normalizeGoogleCalendarEvents({ calendar = {}, events = [] } = {
         eventId: event.id,
         resourceType: 'calendar-event',
         status: 'cancelled',
+        dateKey: localDateKey(
+          event?.start?.dateTime
+          || event?.originalStartTime?.dateTime
+          || event?.originalStartTime?.date,
+        ),
       }];
     }
     if (event?.start?.date || event?.end?.date) return [];
@@ -168,6 +173,7 @@ export function normalizeGoogleCalendarEvents({ calendar = {}, events = [] } = {
       eventId: event.id,
       resourceType: 'calendar-event',
       status: event?.status || 'confirmed',
+      dateKey: localDateKey(event?.start?.dateTime),
       parentString: `${start}–${end} ${title}${sourceSuffix()}`,
       sourceString: sourceString(calendar, event),
       detailStrings: [location, description].filter(Boolean),
@@ -217,6 +223,7 @@ export function normalizeGoogleTasks({
         taskId: task.id,
         resourceType: 'google-task',
         status: 'cancelled',
+        dateKey: String(task?.due || '').slice(0, 10),
       }];
     }
 
@@ -239,6 +246,7 @@ export function normalizeGoogleTasks({
       taskId: task.id,
       resourceType: 'google-task',
       status: completed ? 'completed' : 'needsAction',
+      dateKey: dueDate,
       parentString: `${marker} ${title} ${duration}m${completionToken}${sourceSuffix()}`,
       sourceString: taskSourceString(taskList, task),
       detailStrings: [notes].filter(Boolean),

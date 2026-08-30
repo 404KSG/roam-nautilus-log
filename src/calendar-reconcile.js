@@ -12,18 +12,30 @@ import {
 } from './timing-roam';
 
 const DETAIL_KEYS = ['location', 'description'];
+const STATE_VERSION = 2;
+const DEFAULT_ORPHAN_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 
 function emptyState() {
-  return { version: 1, events: {} };
+  return { version: STATE_VERSION, events: {} };
 }
 
-function normalizeState(value) {
+function normalizeState(value, observedAt) {
   const candidate = value && typeof value === 'object' ? value : {};
+  const sourceEvents = candidate.events && typeof candidate.events === 'object'
+    ? candidate.events
+    : {};
+  const events = Object.fromEntries(Object.entries(sourceEvents).flatMap(([key, mapping]) => {
+    if (!mapping || typeof mapping !== 'object') return [];
+    const lastSeenAt = Number(mapping.lastSeenAt);
+    return [[key, {
+      ...mapping,
+      lastSeenAt: Number.isFinite(lastSeenAt) ? lastSeenAt : observedAt,
+      dateKey: String(mapping.dateKey || ''),
+    }]];
+  }));
   return {
-    version: 1,
-    events: candidate.events && typeof candidate.events === 'object'
-      ? { ...candidate.events }
-      : {},
+    version: STATE_VERSION,
+    events,
   };
 }
 
@@ -50,6 +62,14 @@ function ensureGoogleCalendarSource(value) {
   return text.endsWith(suffix) ? text : `${text} · ${GOOGLE_CALENDAR_SOURCE_SUFFIX}`;
 }
 
+function observedMapping(mapping, event, observedAt) {
+  return {
+    ...mapping,
+    dateKey: String(event?.dateKey || event?.dueDate || mapping?.dateKey || ''),
+    lastSeenAt: observedAt,
+  };
+}
+
 /**
  * Reconcile normalized Google events into a single explicitly selected
  * Nautilus plan. The mapping makes writes incremental and lets normal sync
@@ -64,6 +84,8 @@ export function createCalendarReconciler({
   move = defaultMove,
   loadState = emptyState,
   saveState = async () => {},
+  now = Date.now,
+  orphanRetentionMs = DEFAULT_ORPHAN_RETENTION_MS,
 } = {}) {
   const createManagedBlock = async ({ parentUid, string, order = 'last' }) => {
     const uid = await create({ parentUid, order, string, open: false });
@@ -252,7 +274,9 @@ export function createCalendarReconciler({
 
   const sync = async ({ planUid, events = [], force = false } = {}) => {
     if (!planUid) throw new Error('A Nautilus Log Plan UID is required for Calendar sync.');
-    const state = normalizeState(await loadState());
+    const clockValue = Number(now());
+    const observedAt = Number.isFinite(clockValue) ? clockValue : Date.now();
+    const state = normalizeState(await loadState(), observedAt);
     const summary = resultSummary();
     for (const event of Array.isArray(events) ? events : []) {
       if (!event?.key) {
@@ -270,20 +294,34 @@ export function createCalendarReconciler({
           delete state.events[event.key];
           summary.removed += 1;
         } else {
+          state.events[event.key] = observedMapping(existing, event, observedAt);
           summary.localKept += 1;
         }
         continue;
       }
       if (!existing) {
-        state.events[event.key] = await createEvent(planUid, event);
+        state.events[event.key] = observedMapping(
+          await createEvent(planUid, event),
+          event,
+          observedAt,
+        );
         summary.created += 1;
         continue;
       }
       const outcome = await updateEvent(planUid, event, existing, force === true);
-      state.events[event.key] = outcome.mapping;
+      state.events[event.key] = observedMapping(outcome.mapping, event, observedAt);
       if (outcome.changed) summary.updated += 1;
       if (outcome.localKept) summary.localKept += 1;
       if (!outcome.changed && !outcome.localKept) summary.skipped += 1;
+    }
+    const retention = Math.max(0, Number(orphanRetentionMs) || DEFAULT_ORPHAN_RETENTION_MS);
+    for (const [key, mapping] of Object.entries(state.events)) {
+      const lastSeenAt = Number(mapping?.lastSeenAt);
+      if (!Number.isFinite(lastSeenAt) || observedAt - lastSeenAt <= retention) continue;
+      const parentUid = mapping?.parent?.uid;
+      if (!parentUid || read(parentUid) === null || read(parentUid) === undefined) {
+        delete state.events[key];
+      }
     }
     await saveState(state);
     return summary;

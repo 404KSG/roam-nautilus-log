@@ -5,7 +5,7 @@ workers_dev = true
 
 [vars]
 ALLOWED_ORIGINS = "https://roamresearch.com"
-GOOGLE_OAUTH_REDIRECT_URI = "https://nautilus-log-auth-preview.kidsseeghosts.workers.dev/oauth/callback"
+GOOGLE_OAUTH_REDIRECT_URI = "https://nautilus-log-auth.kidsseeghosts.workers.dev/oauth/callback"
 OAUTH_ISSUER = "production"
 
 [[d1_databases]]
