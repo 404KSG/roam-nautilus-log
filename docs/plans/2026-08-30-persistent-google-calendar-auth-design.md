@@ -31,19 +31,19 @@ manager after the connection flow is verified.
 
 ## Architecture
 
-The extension opens the Nautilus authorization service's `/authorize` endpoint
-in a popup. The service validates the initiating Roam origin and nonce, signs a
-short-lived state value, and redirects to Google. Google returns its one-time
+In a browser, the extension opens the Nautilus authorization service's
+`/authorize` endpoint in a popup. In Roam Desktop, it first creates a
+secret-bound ten-minute handoff session, opens the real Google URL in the system
+browser, and polls only that session for completion. Google returns its one-time
 authorization code only to the service's exact HTTPS `/oauth/callback`. The
 service owns the OAuth client secret, exchanges the code, encrypts the refresh
-token at rest, and posts an opaque connection ID and secret back to the exact
-initiating Roam origin. The extension stores only that opaque credential in
-extension settings.
+token at rest, and returns an opaque connection ID and secret to the initiating
+Roam client. The extension stores only that opaque credential in settings.
 
-The signed state, exact callback, nonce, and origin-bound `postMessage` delivery
-form the authentication boundary. A public link, spoofable polling session, or
-CORS header alone is never treated as proof that the request came from the
-initiating Roam client.
+The signed state, exact callback, nonce, and either origin-bound `postMessage`
+or a high-entropy session secret form the authentication boundary. A public
+link, guessable polling session, or CORS header alone is never treated as proof
+that the request came from the initiating Roam client.
 
 On load or before a sync, the extension presents the opaque credential to the
 service. The service validates it, refreshes Google access, and returns only a
@@ -56,6 +56,9 @@ The service exposes only:
 - `GET /authorize`: validate and sign one short-lived connection request;
 - `GET /oauth/callback`: exchange Google's code and return one opaque connection
   to the initiating Roam origin;
+- `POST /desktop/session`: create one short-lived Desktop handoff and return the
+  real Google authorization URL;
+- `POST /desktop/session/result`: retrieve that result using its one-time secret;
 - `POST /token`: obtain a short-lived Google access token;
 - `POST /disconnect`: revoke and delete one connection;
 - `GET /health`: deployment diagnostics without secrets.
@@ -87,7 +90,10 @@ model.
 ## Performance contract
 
 - Disconnected: zero network work and no Google script.
-- Connect: one public config request followed by the hosted Google popup.
+- Browser Connect: one public config request followed by the hosted popup.
+- Desktop Connect: one session request, one result poll every 1.5 seconds only
+  while authorization is visibly in progress, and automatic expiry after ten
+  minutes.
 - Connected startup: one token refresh request.
 - Calendar reads: only on an explicit Calendar click.
 - No interval, calendar polling, DOM observer, or render-loop work is added.
@@ -96,9 +102,9 @@ model.
 
 - Unit-test token encryption, connection authentication, CORS, code exchange,
   transient refresh, invalid-grant cleanup, and disconnect.
-- Unit-test extension credential migration, hosted popup flow, silent restore,
-  startup/click races, unload cancellation, revoked fallback, and the absence
-  of public Client ID fields.
+- Unit-test extension credential migration, hosted browser popup, Desktop
+  system-browser handoff, silent restore, startup/click races, unload
+  cancellation, revoked fallback, and the absence of public Client ID fields.
 - Run the full extension build and test suite.
 - Deploy with separate Google OAuth and service environments for test and
   production, then exercise browser and Roam Desktop popup flows.

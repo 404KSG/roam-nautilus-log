@@ -7,6 +7,7 @@ const GOOGLE_CALENDAR_SCOPES = [
 ].join(' ');
 const OAUTH_MESSAGE_TYPE = 'nautilus-google-oauth-v1';
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+const OAUTH_SESSION_TTL_MS = 10 * 60 * 1000;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -208,6 +209,74 @@ async function deleteConnection(connectionId, env) {
     .run();
 }
 
+async function cleanupExpiredSessions(env) {
+  const expiredBefore = Date.now();
+  await database(env).prepare(`
+    DELETE FROM oauth_connections
+    WHERE id IN (
+      SELECT connection_id FROM oauth_sessions
+      WHERE expires_at < ? AND connection_id IS NOT NULL
+    )
+  `).bind(expiredBefore).run();
+  await database(env).prepare('DELETE FROM oauth_sessions WHERE expires_at < ?')
+    .bind(expiredBefore)
+    .run();
+}
+
+async function createOAuthSession({ origin, nonce, env }) {
+  await cleanupExpiredSessions(env);
+  const sessionId = randomToken(24);
+  const sessionSecret = randomToken(32);
+  const now = Date.now();
+  await database(env).prepare(`
+    INSERT INTO oauth_sessions
+      (id, secret_hash, origin, nonce, expires_at, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).bind(
+    sessionId,
+    await sha256(sessionSecret),
+    origin,
+    nonce,
+    now + OAUTH_SESSION_TTL_MS,
+    now,
+  ).run();
+  return { sessionId, sessionSecret };
+}
+
+async function readOAuthSession(sessionId, env) {
+  return database(env).prepare(`
+    SELECT id, secret_hash, origin, nonce, result_iv, result_ciphertext,
+           connection_id, expires_at
+    FROM oauth_sessions
+    WHERE id = ?
+  `).bind(sessionId).first();
+}
+
+async function deleteOAuthSession(sessionId, env) {
+  await database(env).prepare('DELETE FROM oauth_sessions WHERE id = ?')
+    .bind(sessionId)
+    .run();
+}
+
+async function completeOAuthSession(sessionId, payload, env) {
+  const session = await readOAuthSession(sessionId, env);
+  if (!session || Number(session.expires_at) < Date.now()) {
+    if (session) await deleteOAuthSession(sessionId, env);
+    throw new Error('Google authorization session expired.');
+  }
+  const encrypted = await encryptRefreshToken(JSON.stringify(payload), env);
+  await database(env).prepare(`
+    UPDATE oauth_sessions
+    SET result_iv = ?, result_ciphertext = ?, connection_id = ?
+    WHERE id = ?
+  `).bind(
+    encrypted.iv,
+    encrypted.ciphertext,
+    payload?.connection?.id || null,
+    sessionId,
+  ).run();
+}
+
 async function verifyConnection(payload, env) {
   if (!validOpaque(payload?.connectionId) || !validOpaque(payload?.connectionSecret)) return null;
   const connection = await readConnection(payload.connectionId, env);
@@ -231,6 +300,23 @@ function oauthRedirectUri(request, env) {
   return redirect.href;
 }
 
+function googleAuthorizationUrl(request, env, state) {
+  const clientId = String(env.GOOGLE_CLIENT_ID || '').trim();
+  if (!clientId) throw new Error('Google authorization is not configured.');
+  const googleUrl = new URL(GOOGLE_AUTHORIZE_URL);
+  googleUrl.search = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: oauthRedirectUri(request, env),
+    response_type: 'code',
+    scope: GOOGLE_CALENDAR_SCOPES,
+    access_type: 'offline',
+    include_granted_scopes: 'true',
+    prompt: 'consent',
+    state,
+  }).toString();
+  return googleUrl;
+}
+
 function popupDocument(payload, targetOrigin) {
   const serializedPayload = JSON.stringify(payload).replace(/</g, '\\u003c');
   const serializedOrigin = JSON.stringify(targetOrigin).replace(/</g, '\\u003c');
@@ -246,6 +332,26 @@ window.close();
 </html>`;
 }
 
+function desktopDocument(success) {
+  const title = success ? 'Google Calendar connected' : 'Google Calendar connection failed';
+  const message = success
+    ? 'Return to Roam Research. This tab can now be closed.'
+    : 'Return to Roam Research and try the connection again.';
+  return `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head>
+<body style="font:14px system-ui,sans-serif;color:#5f6b7a;padding:24px"><strong>${title}</strong><p>${message}</p></body>
+</html>`;
+}
+
+async function oauthCompletion(state, payload, env, status = 200) {
+  if (state.sessionId) {
+    await completeOAuthSession(state.sessionId, payload, env);
+    return html(desktopDocument(!payload.error), status);
+  }
+  return html(popupDocument(payload, state.origin), status);
+}
+
 async function authorize(request, env) {
   const url = new URL(request.url);
   const origin = String(url.searchParams.get('origin') || '');
@@ -256,17 +362,7 @@ async function authorize(request, env) {
   const clientId = String(env.GOOGLE_CLIENT_ID || '').trim();
   if (!clientId) return json({ code: 'not_configured', message: 'Google authorization is not configured.' }, 503);
   const state = await signOAuthState({ origin, nonce, issuedAt: Date.now() }, env);
-  const googleUrl = new URL(GOOGLE_AUTHORIZE_URL);
-  googleUrl.search = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: oauthRedirectUri(request, env),
-    response_type: 'code',
-    scope: GOOGLE_CALENDAR_SCOPES,
-    access_type: 'offline',
-    include_granted_scopes: 'true',
-    prompt: 'consent',
-    state,
-  }).toString();
+  const googleUrl = googleAuthorizationUrl(request, env, state);
   return new Response(null, {
     status: 302,
     headers: {
@@ -277,6 +373,54 @@ async function authorize(request, env) {
   });
 }
 
+async function createDesktopAuthorization(request, env, origin) {
+  const payload = await readJson(request);
+  const nonce = String(payload?.nonce || '');
+  if (!validOpaque(nonce)) {
+    return json({ code: 'invalid_authorization_request', message: 'Authorization request was rejected.' }, 400, origin);
+  }
+  if (!String(env.GOOGLE_CLIENT_ID || '').trim()) {
+    return json({ code: 'not_configured', message: 'Google authorization is not configured.' }, 503, origin);
+  }
+  const session = await createOAuthSession({ origin, nonce, env });
+  const state = await signOAuthState({
+    origin,
+    nonce,
+    sessionId: session.sessionId,
+    issuedAt: Date.now(),
+  }, env);
+  return json({
+    authorizeUrl: googleAuthorizationUrl(request, env, state).href,
+    ...session,
+  }, 200, origin);
+}
+
+async function desktopAuthorizationResult(request, env, origin) {
+  const payload = await readJson(request);
+  if (!validOpaque(payload?.sessionId) || !validOpaque(payload?.sessionSecret)) {
+    return json({ code: 'invalid_session', message: 'Google authorization session is invalid.' }, 401, origin);
+  }
+  const session = await readOAuthSession(payload.sessionId, env);
+  const secretHash = await sha256(payload.sessionSecret);
+  if (!session || session.origin !== origin || !constantTimeEqual(secretHash, session.secret_hash)) {
+    return json({ code: 'invalid_session', message: 'Google authorization session is invalid.' }, 401, origin);
+  }
+  if (Number(session.expires_at) < Date.now()) {
+    if (session.connection_id) await deleteConnection(session.connection_id, env);
+    await deleteOAuthSession(session.id, env);
+    return json({ code: 'session_expired', message: 'Google authorization timed out. Try again.' }, 410, origin);
+  }
+  if (!session.result_iv || !session.result_ciphertext) {
+    return json({ status: 'pending' }, 200, origin);
+  }
+  const result = JSON.parse(await decryptRefreshToken({
+    iv: session.result_iv,
+    ciphertext: session.result_ciphertext,
+  }, env));
+  await deleteOAuthSession(session.id, env);
+  return json({ status: 'complete', ...result }, 200, origin);
+}
+
 async function oauthCallback(request, env) {
   const url = new URL(request.url);
   const state = await verifyOAuthState(url.searchParams.get('state'), env);
@@ -285,19 +429,19 @@ async function oauthCallback(request, env) {
   }
   const error = String(url.searchParams.get('error') || '');
   if (error) {
-    return html(popupDocument({
+    return oauthCompletion(state, {
       type: OAUTH_MESSAGE_TYPE,
       nonce: state.nonce,
       error: error === 'access_denied' ? 'Google authorization was cancelled.' : 'Google authorization failed.',
-    }, state.origin));
+    }, env);
   }
   const code = String(url.searchParams.get('code') || '').trim();
   if (!code || code.length > 4096) {
-    return html(popupDocument({
+    return oauthCompletion(state, {
       type: OAUTH_MESSAGE_TYPE,
       nonce: state.nonce,
       error: 'Google returned no valid authorization code.',
-    }, state.origin), 400);
+    }, env, 400);
   }
 
   let result;
@@ -310,31 +454,36 @@ async function oauthCallback(request, env) {
       grant_type: 'authorization_code',
     });
   } catch (_error) {
-    return html(popupDocument({
+    return oauthCompletion(state, {
       type: OAUTH_MESSAGE_TYPE,
       nonce: state.nonce,
       error: 'Google authorization is temporarily unavailable.',
-    }, state.origin), 503);
+    }, env, 503);
   }
   if (!result.response.ok || !result.payload.access_token || !result.payload.refresh_token) {
-    return html(popupDocument({
+    return oauthCompletion(state, {
       type: OAUTH_MESSAGE_TYPE,
       nonce: state.nonce,
       error: result.payload.refresh_token
         ? 'Google could not complete authorization.'
         : 'Google did not return a persistent connection. Remove Nautilus Log from Google permissions and try again.',
-    }, state.origin), 400);
+    }, env, 400);
   }
 
   const connection = await createConnection({ refreshToken: result.payload.refresh_token, env });
-  return html(popupDocument({
-    type: OAUTH_MESSAGE_TYPE,
-    nonce: state.nonce,
-    connection,
-    accessToken: result.payload.access_token,
-    expiresIn: Number(result.payload.expires_in) || 0,
-    tokenType: result.payload.token_type || 'Bearer',
-  }, state.origin));
+  try {
+    return await oauthCompletion(state, {
+      type: OAUTH_MESSAGE_TYPE,
+      nonce: state.nonce,
+      connection,
+      accessToken: result.payload.access_token,
+      expiresIn: Number(result.payload.expires_in) || 0,
+      tokenType: result.payload.token_type || 'Bearer',
+    }, env);
+  } catch (_error) {
+    await deleteConnection(connection.id, env);
+    return html(desktopDocument(false), 500);
+  }
 }
 
 async function config(request, env, origin) {
@@ -416,6 +565,8 @@ export async function handleRequest(request, env) {
 
   try {
     if (request.method === 'GET' && url.pathname === '/config') return config(request, env, origin);
+    if (request.method === 'POST' && url.pathname === '/desktop/session') return createDesktopAuthorization(request, env, origin);
+    if (request.method === 'POST' && url.pathname === '/desktop/session/result') return desktopAuthorizationResult(request, env, origin);
     if (request.method === 'POST' && url.pathname === '/token') return refreshToken(request, env, origin);
     if (request.method === 'POST' && url.pathname === '/disconnect') return disconnect(request, env, origin);
     return json({ code: 'not_found', message: 'Not found.' }, 404, origin);

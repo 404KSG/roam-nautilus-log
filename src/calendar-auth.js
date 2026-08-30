@@ -1,4 +1,4 @@
-export const GOOGLE_AUTH_SERVICE_URL = 'https://nautilus-auth.kidsseeghosts.art';
+export const GOOGLE_AUTH_SERVICE_URL = 'https://nautilus-log-auth-preview.kidsseeghosts.workers.dev';
 
 const OAUTH_MESSAGE_TYPE = 'nautilus-google-oauth-v1';
 
@@ -42,6 +42,11 @@ function randomNonce(windowImpl) {
   return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
 }
 
+function validOpaque(value, min = 20, max = 160) {
+  const text = String(value || '');
+  return text.length >= min && text.length <= max && /^[A-Za-z0-9_-]+$/.test(text);
+}
+
 export function createPersistentGoogleAuthClient({
   serviceUrl = GOOGLE_AUTH_SERVICE_URL,
   loadConnection = () => null,
@@ -49,10 +54,12 @@ export function createPersistentGoogleAuthClient({
   clearConnection = async () => {},
   fetchImpl = typeof fetch === 'function' ? fetch.bind(globalThis) : null,
   windowImpl = typeof window !== 'undefined' ? window : null,
-  popupOpen = (url) => windowImpl?.open?.(
+  popupOpen = (url, target = 'nautilus-google-calendar-oauth') => windowImpl?.open?.(
     url,
-    'nautilus-google-calendar-oauth',
-    'popup=yes,width=520,height=680,resizable=yes,scrollbars=yes',
+    target,
+    target === '_blank'
+      ? undefined
+      : 'popup=yes,width=520,height=680,resizable=yes,scrollbars=yes',
   ),
   now = Date.now,
   onConnectionChange = () => {},
@@ -68,6 +75,7 @@ export function createPersistentGoogleAuthClient({
   let destroyed = false;
   let generation = 0;
   const activeRequests = new Set();
+  const desktop = windowImpl?.roamAlphaAPI?.platform?.isDesktop === true;
 
   const assertActive = (expectedGeneration = generation) => {
     if (destroyed || expectedGeneration !== generation) {
@@ -136,11 +144,78 @@ export function createPersistentGoogleAuthClient({
     return config;
   };
 
+  const acceptAuthorization = async (response, expectedGeneration) => {
+    assertActive(expectedGeneration);
+    const connection = parseCalendarConnection(response?.connection);
+    if (!connection || !response?.accessToken) {
+      throw new Error('Google authorization returned an invalid connection.');
+    }
+    await saveConnection(connection);
+    if (destroyed || expectedGeneration !== generation) {
+      await clearConnection();
+      assertActive(expectedGeneration);
+    }
+    accessToken = response.accessToken;
+    accessExpiresAt = Number(now()) + Math.max(0, Number(response.expiresIn) || 0) * 1000;
+    onConnectionChange(true);
+    return accessToken;
+  };
+
+  const connectDesktop = async (expectedGeneration) => {
+    const nonce = randomNonce(windowImpl);
+    const session = await requestJson('/desktop/session', { nonce }, { expectedGeneration });
+    const authorizeUrl = new URL(String(session?.authorizeUrl || ''));
+    if (authorizeUrl.protocol !== 'https:'
+        || !validOpaque(session?.sessionId)
+        || !validOpaque(session?.sessionSecret)) {
+      throw new Error('Google authorization returned an invalid Desktop session.');
+    }
+    popupOpen(authorizeUrl.href, '_blank');
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let pollTimer = null;
+      const finish = (handler, value) => {
+        if (settled) return;
+        settled = true;
+        if (pollTimer !== null) {
+          (windowImpl?.clearTimeout || clearTimeout)(pollTimer);
+          pollTimer = null;
+        }
+        pendingConnectReject = null;
+        handler(value);
+      };
+      pendingConnectReject = (error) => finish(reject, error);
+      const poll = async () => {
+        try {
+          assertActive(expectedGeneration);
+          const result = await requestJson('/desktop/session/result', {
+            sessionId: session.sessionId,
+            sessionSecret: session.sessionSecret,
+          }, { expectedGeneration });
+          if (result?.status === 'pending') {
+            pollTimer = (windowImpl?.setTimeout || setTimeout)(poll, 1500);
+            return;
+          }
+          if (result?.error) throw new Error(result.error);
+          if (result?.status !== 'complete') {
+            throw new Error('Google authorization returned an invalid Desktop result.');
+          }
+          finish(resolve, await acceptAuthorization(result, expectedGeneration));
+        } catch (error) {
+          finish(reject, error);
+        }
+      };
+      poll();
+    });
+  };
+
   const connect = async () => {
     assertActive();
     if (connectRequest) return connectRequest;
     const expectedGeneration = generation;
     const request = (async () => {
+      if (desktop) return connectDesktop(expectedGeneration);
       const popup = popupOpen('about:blank');
       if (!popup) throw new Error('Google authorization popup was blocked.');
       let config;
@@ -178,21 +253,7 @@ export function createPersistentGoogleAuthClient({
           if (!response || response.type !== OAUTH_MESSAGE_TYPE || response.nonce !== nonce) return;
           if (response.error) return finish(reject, new Error(response.error));
           try {
-            assertActive(expectedGeneration);
-            const connection = parseCalendarConnection(response.connection);
-            if (!connection || !response.accessToken) {
-              throw new Error('Google authorization returned an invalid connection.');
-            }
-            assertActive(expectedGeneration);
-            await saveConnection(connection);
-            if (destroyed || expectedGeneration !== generation) {
-              await clearConnection();
-              assertActive(expectedGeneration);
-            }
-            accessToken = response.accessToken;
-            accessExpiresAt = Number(now()) + Math.max(0, Number(response.expiresIn) || 0) * 1000;
-            onConnectionChange(true);
-            finish(resolve, accessToken);
+            finish(resolve, await acceptAuthorization(response, expectedGeneration));
           } catch (error) {
             finish(reject, error);
           }

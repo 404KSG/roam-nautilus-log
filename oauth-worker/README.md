@@ -22,11 +22,13 @@ Required configuration:
 - `ALLOWED_ORIGINS=https://roamresearch.com`;
 - `GOOGLE_OAUTH_REDIRECT_URI` set to the same exact Worker callback URL.
 
-Roam opens the Worker's `/authorize` endpoint in a popup. The Worker signs the
-short-lived request state, receives Google's code at `/oauth/callback`, stores
-the encrypted refresh token, and returns only the opaque connection plus the
-short-lived access token to the initiating Roam origin with `postMessage`.
-Calendar event data never passes through the Worker.
+Browser Roam opens the Worker's `/authorize` endpoint in a popup and receives
+the result through origin-bound `postMessage`. Roam Desktop creates a
+secret-bound `/desktop/session`, opens the real Google URL in the system
+browser, and polls `/desktop/session/result` only while authorization is in
+progress. Desktop handoff results are encrypted, expire after ten minutes, and
+are deleted as soon as Roam retrieves them. Calendar event data never passes
+through the Worker.
 
 Use separate Google Cloud projects, Worker deployments, D1 databases, and
 encryption keys for preview and production. Never commit secret values.

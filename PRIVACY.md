@@ -16,6 +16,10 @@ lists and calendar events.
   short-lived access tokens. It stores an encrypted Google refresh token, an
   opaque connection identifier, a one-way hash of the connection secret, and
   creation timestamps.
+- During Roam Desktop authorization, the service also keeps one encrypted,
+  secret-bound handoff result for at most ten minutes so the system browser can
+  return the connection to Roam. It contains no Calendar event data and is
+  deleted as soon as Roam retrieves it.
 - The extension stores the opaque connection ID and secret in Roam extension
   settings. Access tokens remain in memory.
 - Imported event blocks and the managed sync mapping remain in the user's Roam
@@ -36,6 +40,9 @@ disconnects the integration, revokes Google access, or the connection becomes
 invalid. Disabling the feature deletes the Nautilus service connection and asks
 Google to revoke it when Google is reachable. Imported Roam blocks are not
 deleted automatically because they belong to the user's graph.
+
+Incomplete Roam Desktop authorization sessions expire after ten minutes. Any
+unclaimed connection created for an expired session is deleted with it.
 
 ## Security
 

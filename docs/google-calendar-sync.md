@@ -24,11 +24,13 @@ Nautilus component. It never creates Daily Notes or future plans.
 ## Authentication boundary
 
 Nautilus Log owns its Google Web OAuth application. The **Connect Google
-Calendar** settings action opens the hosted Nautilus authorization flow. Google
-returns its one-time code to the authorization service's exact HTTPS callback;
-the service exchanges it, encrypts the refresh token at rest, and posts an
-opaque connection back only to the initiating Roam origin. The extension stores
-only that opaque connection ID and secret in extension settings.
+Calendar** settings action opens the hosted Nautilus authorization flow. In a
+browser, the callback returns directly to the initiating Roam window. In Roam
+Desktop, the real Google authorization URL opens in the system browser and Roam
+retrieves the result through a ten-minute, secret-bound handoff session. The
+service encrypts both refresh tokens and temporary Desktop handoff results at
+rest. The extension stores only the resulting opaque connection ID and secret
+in extension settings.
 
 On a later Roam load, the extension makes one request to restore a short-lived
 access token. Calendar REST requests still run directly from the Roam browser;
@@ -50,9 +52,10 @@ connection; only revoked or invalid credentials require consent again.
 5. Option/Alt-click remains the explicit Google-first refresh for managed
    strings. Use **Disconnect** in settings to revoke and delete the connection.
 
-The public extension uses Nautilus Log's verified production OAuth application.
-No Google Cloud setup, Client ID, secret, Calendar ID, or developer knowledge is
-required from a user.
+The Draft preview uses an isolated preview OAuth service; the public release
+will use Nautilus Log's verified production OAuth application. No Google Cloud
+setup, Client ID, secret, Calendar ID, or developer knowledge is required from
+a user.
 
 ## Sources
 

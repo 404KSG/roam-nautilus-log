@@ -13,6 +13,8 @@ about Google Cloud or OAuth.
   explain that access is read-only and uses the Primary calendar by default.
 - Connect opens Google's account and consent flow immediately. Success rebuilds
   the settings row as **Connected · Read-only · Primary calendar**.
+- Browser Roam uses a popup; Roam Desktop opens the real Google HTTPS page in
+  the system browser and returns through a short-lived secret-bound handoff.
 - Connected settings show **Disconnect**. Disconnect revokes and deletes the
   stored connection before returning to the disconnected state.
 - The Nautilus Calendar control appears only while a usable connection exists.

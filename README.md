@@ -50,8 +50,10 @@ configured default.
 Open Nautilus Log settings and click **Connect Google Calendar** to authorize
 your own account with read-only access. The row then reports **Connected ·
 Read-only · Primary calendar**, and the Blueprint Calendar control appears in
-the chart. It performs a manual sync for the clicked Nautilus date; it never
-polls in the background or creates Daily Notes.
+the chart. Roam Desktop opens the real Google page in the system browser and
+returns automatically to the waiting settings row. The Calendar control performs
+a manual sync for the clicked Nautilus date; it never polls Calendar in the
+background or creates Daily Notes.
 
 Normal click preserves Roam text you changed. Option/Alt-click force-refreshes
 Google-managed strings while leaving user-created children alone. All-day,

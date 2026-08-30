@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { handleRequest, encryptRefreshToken, decryptRefreshToken } from '../src/worker.mjs';
 
 class MemoryD1 {
-  constructor() { this.rows = new Map(); }
+  constructor() {
+    this.rows = new Map();
+    this.sessions = new Map();
+  }
 
   prepare(sql) {
     const database = this;
@@ -21,18 +24,60 @@ class MemoryD1 {
             refresh_token_ciphertext: ciphertext,
             created_at: createdAt,
           });
+        } else if (normalized.startsWith('INSERT INTO OAUTH_SESSIONS')) {
+          const [id, secretHash, origin, nonce, expiresAt, createdAt] = this.args;
+          database.sessions.set(id, {
+            id,
+            secret_hash: secretHash,
+            origin,
+            nonce,
+            result_iv: null,
+            result_ciphertext: null,
+            connection_id: null,
+            expires_at: expiresAt,
+            created_at: createdAt,
+          });
+        } else if (normalized.startsWith('UPDATE OAUTH_SESSIONS SET RESULT_IV')) {
+          const [resultIv, resultCiphertext, connectionId, id] = this.args;
+          const session = database.sessions.get(id);
+          if (session) {
+            session.result_iv = resultIv;
+            session.result_ciphertext = resultCiphertext;
+            session.connection_id = connectionId;
+          }
         } else if (normalized.startsWith('DELETE FROM OAUTH_CONNECTIONS')) {
-          database.rows.delete(this.args[0]);
+          if (normalized.includes('SELECT CONNECTION_ID FROM OAUTH_SESSIONS')) {
+            const cutoff = this.args[0];
+            for (const session of database.sessions.values()) {
+              if (session.expires_at < cutoff && session.connection_id) {
+                database.rows.delete(session.connection_id);
+              }
+            }
+          } else {
+            database.rows.delete(this.args[0]);
+          }
+        } else if (normalized.startsWith('DELETE FROM OAUTH_SESSIONS')) {
+          if (normalized.includes('WHERE EXPIRES_AT <')) {
+            const cutoff = this.args[0];
+            for (const [id, session] of database.sessions) {
+              if (session.expires_at < cutoff) database.sessions.delete(id);
+            }
+          } else {
+            database.sessions.delete(this.args[0]);
+          }
         } else {
           throw new Error(`Unexpected D1 run: ${normalized}`);
         }
         return { success: true };
       },
       async first() {
-        if (!normalized.startsWith('SELECT ID, SECRET_HASH')) {
-          throw new Error(`Unexpected D1 first: ${normalized}`);
+        if (normalized.includes('FROM OAUTH_CONNECTIONS')) {
+          return database.rows.get(this.args[0]) || null;
         }
-        return database.rows.get(this.args[0]) || null;
+        if (normalized.includes('FROM OAUTH_SESSIONS')) {
+          return database.sessions.get(this.args[0]) || null;
+        }
+        throw new Error(`Unexpected D1 first: ${normalized}`);
       },
     };
   }
@@ -61,14 +106,23 @@ async function beginAuthorization(bindings, nonce = 'n'.repeat(32)) {
   return { nonce, googleUrl: new URL(response.headers.get('Location')) };
 }
 
-async function finishAuthorization(bindings, state, code = 'one-time-google-code') {
+async function finishAuthorization(bindings, state, code = 'one-time-google-code', expectPayload = true) {
   const response = await handleRequest(new Request(
     `https://auth.example.com/oauth/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`,
   ), bindings);
   const document = await response.text();
   const match = document.match(/const payload = (.+);/);
-  assert.ok(match, 'OAuth callback should embed one popup payload.');
-  return { response, document, payload: JSON.parse(match[1]) };
+  if (expectPayload) assert.ok(match, 'OAuth callback should embed one popup payload.');
+  return { response, document, payload: match ? JSON.parse(match[1]) : null };
+}
+
+async function beginDesktopAuthorization(bindings, nonce = 'd'.repeat(32)) {
+  const response = await handleRequest(roamRequest('/desktop/session', {
+    body: { nonce },
+  }), bindings);
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  return { ...payload, nonce, googleUrl: new URL(payload.authorizeUrl) };
 }
 
 function roamRequest(path, { method = 'POST', body, ajax = true } = {}) {
@@ -165,6 +219,60 @@ test('OAuth worker completes its hosted callback, restores, and disconnects one 
     }), bindings);
     assert.equal(afterDisconnect.status, 401);
     assert.equal(googleRequests.some((request) => request.url.includes('/revoke')), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('OAuth worker returns a Desktop callback through one secret-bound polling session', { concurrency: false }, async () => {
+  const bindings = env();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, options) => {
+    const params = new URLSearchParams(options.body);
+    assert.equal(params.get('grant_type'), 'authorization_code');
+    return new Response(JSON.stringify({
+      access_token: 'desktop-access',
+      refresh_token: 'desktop-refresh',
+      expires_in: 3600,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+
+  try {
+    const started = await beginDesktopAuthorization(bindings);
+    assert.equal(started.googleUrl.origin, 'https://accounts.google.com');
+    assert.equal(started.googleUrl.searchParams.get('client_id'), 'google-client-id');
+    assert.match(started.sessionId, /^[A-Za-z0-9_-]{20,160}$/);
+    assert.match(started.sessionSecret, /^[A-Za-z0-9_-]{20,160}$/);
+
+    const pending = await handleRequest(roamRequest('/desktop/session/result', {
+      body: { sessionId: started.sessionId, sessionSecret: started.sessionSecret },
+    }), bindings);
+    assert.equal(pending.status, 200);
+    assert.deepEqual(await pending.json(), { status: 'pending' });
+
+    const callback = await finishAuthorization(
+      bindings,
+      started.googleUrl.searchParams.get('state'),
+      'desktop-code',
+      false,
+    );
+    assert.equal(callback.response.status, 200);
+    assert.doesNotMatch(callback.document, /desktop-access|desktop-secret|postMessage/);
+
+    const wrongSecret = await handleRequest(roamRequest('/desktop/session/result', {
+      body: { sessionId: started.sessionId, sessionSecret: 'x'.repeat(48) },
+    }), bindings);
+    assert.equal(wrongSecret.status, 401);
+
+    const completed = await handleRequest(roamRequest('/desktop/session/result', {
+      body: { sessionId: started.sessionId, sessionSecret: started.sessionSecret },
+    }), bindings);
+    assert.equal(completed.status, 200);
+    const result = await completed.json();
+    assert.equal(result.status, 'complete');
+    assert.equal(result.accessToken, 'desktop-access');
+    assert.equal(result.connection.id.length > 20, true);
+    assert.equal(bindings.NAUTILUS_AUTH_DB.sessions.has(started.sessionId), false);
   } finally {
     globalThis.fetch = originalFetch;
   }

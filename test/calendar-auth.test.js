@@ -103,6 +103,66 @@ test('first Calendar action uses the hosted OAuth popup, saves an opaque credent
   assert.equal(requests.some((request) => request.url.endsWith('/exchange')), false);
 });
 
+test('Roam Desktop opens a real Google URL and polls the hosted result without about:blank', async () => {
+  const extension = await loadExtension('calendar-auth-desktop');
+  let saved = null;
+  const opens = [];
+  const requests = [];
+  let resultPolls = 0;
+  const sessionId = 's'.repeat(32);
+  const sessionSecret = 'k'.repeat(48);
+  const auth = extension.createPersistentGoogleAuthClient({
+    serviceUrl: 'https://auth.example.com',
+    loadConnection: () => saved,
+    saveConnection: async (connection) => { saved = connection; },
+    clearConnection: async () => { saved = null; },
+    windowImpl: {
+      crypto: globalThis.crypto,
+      location: { origin: 'https://roamresearch.com' },
+      roamAlphaAPI: { platform: { isDesktop: true } },
+      setTimeout(callback) { queueMicrotask(callback); return 1; },
+      clearTimeout() {},
+    },
+    popupOpen: (url, target) => {
+      opens.push({ url, target });
+      return null;
+    },
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      if (url.endsWith('/desktop/session')) {
+        return jsonResponse({
+          authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=public-id',
+          sessionId,
+          sessionSecret,
+        });
+      }
+      if (url.endsWith('/desktop/session/result')) {
+        resultPolls += 1;
+        if (resultPolls === 1) return jsonResponse({ status: 'pending' });
+        return jsonResponse({
+          status: 'complete',
+          connection: { id: 'desktop-id', secret: 'desktop-secret' },
+          accessToken: 'desktop-access',
+          expiresIn: 3600,
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  assert.equal(await auth.authorize(), 'desktop-access');
+  assert.deepEqual(opens, [{
+    url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=public-id',
+    target: '_blank',
+  }]);
+  assert.equal(opens.some(({ url }) => url === 'about:blank'), false);
+  assert.deepEqual(saved, { version: 1, id: 'desktop-id', secret: 'desktop-secret' });
+  const createBody = JSON.parse(requests[0].options.body);
+  assert.match(createBody.nonce, /^[a-f0-9]{48}$/);
+  assert.equal(resultPolls, 2);
+  assert.deepEqual(JSON.parse(requests[2].options.body), { sessionId, sessionSecret });
+});
+
 test('revoked persistent connection is cleared without opening Google during restore', async () => {
   const extension = await loadExtension('calendar-auth-revoked');
   let saved = { id: 'revoked-id', secret: 'revoked-secret' };
