@@ -21,6 +21,7 @@ const {
   burningCapacityBucket,
   formatDuration,
   formatCapacitySummary,
+  calendarSyncResultModel,
   truncateTextToWidth,
   placeLabelTracks,
   placeExternalLabels,
@@ -42,6 +43,49 @@ test('Calendar provenance stays visible in Roam but is removed from chart labels
     '{{[[TODO]]}} Submit report 15m',
   );
   assert.equal(stripGoogleCalendarSourceSuffix('Ordinary local task'), 'Ordinary local task');
+});
+
+test('Calendar sync result copy hides zero counters and separates changes, inventory, and restore guidance', () => {
+  assert.deepEqual(calendarSyncResultModel({
+    language: 'en',
+    result: {
+      created: 0,
+      updated: 0,
+      removed: 0,
+      localKept: 2,
+      localDeleted: 2,
+      calendarEvents: 1,
+      tasks: 1,
+    },
+  }), {
+    header: 'Synced · Just now',
+    changes: 'No changes from Google',
+    local: '2 local deletions preserved',
+    inventory: '1 event · 1 task found',
+    restore: '⌥ Click Calendar to restore 2 items',
+    notes: [],
+  });
+
+  assert.deepEqual(calendarSyncResultModel({
+    language: 'en',
+    result: {
+      created: 1,
+      updated: 2,
+      removed: 0,
+      localKept: 1,
+      localChanged: 1,
+      calendarEvents: 3,
+      tasks: 2,
+      allDaySkipped: 1,
+    },
+  }), {
+    header: 'Synced · Just now',
+    changes: '1 added · 2 updated',
+    local: '1 local change preserved',
+    inventory: '3 events · 2 tasks found',
+    restore: '⌥ Click Calendar to restore Google fields',
+    notes: ['1 all-day skipped'],
+  });
 });
 
 test('Tidy performs a stable settled-first partition without reprioritizing active work', () => {
@@ -541,15 +585,31 @@ test('English UI settings localize all extension-owned status labels', () => {
     hideDone: 'Hide completed items',
     showDone: 'Show completed items',
     calendar: 'Sync Google Calendar',
-    calendarForce: 'Option-click to force-refresh Google fields',
+    calendarForce: '⌥ Click to restore Google-managed items',
     calendarSetup: 'Connect Google Calendar in Nautilus Log settings',
     calendarSyncing: 'Syncing Google Calendar…',
-    calendarSynced: 'Google Calendar synced',
-    calendarCreated: 'new',
+    calendarSynced: 'Synced',
+    calendarJustNow: 'Just now',
+    calendarNoChanges: 'No changes from Google',
+    calendarCreated: 'added',
     calendarUpdated: 'updated',
     calendarRemoved: 'removed',
-    calendarLocalKept: 'local kept',
+    calendarLocalDeletion: 'local deletion preserved',
+    calendarLocalDeletions: 'local deletions preserved',
+    calendarLocalChange: 'local change preserved',
+    calendarLocalChanges: 'local changes preserved',
+    calendarEvent: 'event',
+    calendarEvents: 'events',
+    calendarTask: 'task',
     calendarTasks: 'tasks',
+    calendarFound: 'found',
+    calendarNoItems: 'No events or tasks found',
+    calendarRestore: '⌥ Click Calendar to restore',
+    calendarRestoreFields: '⌥ Click Calendar to restore Google fields',
+    calendarItem: 'item',
+    calendarItems: 'items',
+    calendarSyncFailed: 'Sync failed',
+    calendarTryAgain: 'Click Calendar to try again',
     calendarAllDaySkipped: 'all-day skipped',
     calendarTasksPending: 'reconnect for Tasks',
     calendarTasksUnavailable: 'Tasks unavailable',

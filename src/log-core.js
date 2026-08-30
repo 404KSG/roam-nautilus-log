@@ -880,15 +880,31 @@ const UI_COPY = {
       hideDone: 'Hide completed items',
       showDone: 'Show completed items',
       calendar: 'Sync Google Calendar',
-      calendarForce: 'Option-click to force-refresh Google fields',
+      calendarForce: '⌥ Click to restore Google-managed items',
       calendarSetup: 'Connect Google Calendar in Nautilus Log settings',
       calendarSyncing: 'Syncing Google Calendar…',
-      calendarSynced: 'Google Calendar synced',
-      calendarCreated: 'new',
+      calendarSynced: 'Synced',
+      calendarJustNow: 'Just now',
+      calendarNoChanges: 'No changes from Google',
+      calendarCreated: 'added',
       calendarUpdated: 'updated',
       calendarRemoved: 'removed',
-      calendarLocalKept: 'local kept',
+      calendarLocalDeletion: 'local deletion preserved',
+      calendarLocalDeletions: 'local deletions preserved',
+      calendarLocalChange: 'local change preserved',
+      calendarLocalChanges: 'local changes preserved',
+      calendarEvent: 'event',
+      calendarEvents: 'events',
+      calendarTask: 'task',
       calendarTasks: 'tasks',
+      calendarFound: 'found',
+      calendarNoItems: 'No events or tasks found',
+      calendarRestore: '⌥ Click Calendar to restore',
+      calendarRestoreFields: '⌥ Click Calendar to restore Google fields',
+      calendarItem: 'item',
+      calendarItems: 'items',
+      calendarSyncFailed: 'Sync failed',
+      calendarTryAgain: 'Click Calendar to try again',
       calendarAllDaySkipped: 'all-day skipped',
       calendarTasksPending: 'reconnect for Tasks',
       calendarTasksUnavailable: 'Tasks unavailable',
@@ -939,15 +955,31 @@ const UI_COPY = {
       hideDone: '隐藏已完成事项',
       showDone: '显示已完成事项',
       calendar: '同步 Google Calendar',
-      calendarForce: '按住 Option 点击可强制刷新 Google 字段',
+      calendarForce: '⌥ 点击可恢复 Google 管理的内容',
       calendarSetup: '请先在 Nautilus Log 设置中连接 Google Calendar',
       calendarSyncing: '正在同步 Google Calendar…',
-      calendarSynced: 'Google Calendar 已同步',
+      calendarSynced: '已同步',
+      calendarJustNow: '刚刚',
+      calendarNoChanges: 'Google 端没有变化',
       calendarCreated: '新增',
       calendarUpdated: '更新',
       calendarRemoved: '移除',
-      calendarLocalKept: '保留本地修改',
-      calendarTasks: '项任务',
+      calendarLocalDeletion: '项本地删除已保留',
+      calendarLocalDeletions: '项本地删除已保留',
+      calendarLocalChange: '项本地修改已保留',
+      calendarLocalChanges: '项本地修改已保留',
+      calendarEvent: '个事件',
+      calendarEvents: '个事件',
+      calendarTask: '个任务',
+      calendarTasks: '个任务',
+      calendarFound: '已读取',
+      calendarNoItems: '未读取到事件或任务',
+      calendarRestore: '⌥ 点击 Calendar 恢复',
+      calendarRestoreFields: '⌥ 点击 Calendar 恢复 Google 字段',
+      calendarItem: '项',
+      calendarItems: '项',
+      calendarSyncFailed: '同步失败',
+      calendarTryAgain: '点击 Calendar 重试',
       calendarAllDaySkipped: '项全天内容已跳过',
       calendarTasksPending: '重新连接以同步 Tasks',
       calendarTasksUnavailable: 'Tasks 暂不可用',
@@ -978,6 +1010,99 @@ const UI_COPY = {
 
 function uiCopy(language = 'en') {
   return language === 'en' ? UI_COPY.en : UI_COPY.zh;
+}
+
+function calendarSyncCount(value) {
+  const count = Number(value);
+  return Number.isFinite(count) ? Math.max(0, Math.round(count)) : 0;
+}
+
+function calendarCountLabel(count, singular, plural, language) {
+  if (language === 'zh') return `${count}${count === 1 ? singular : plural}`;
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+/**
+ * Convert one raw Calendar reconciliation summary into the compact semantic
+ * rows rendered by the chart control. Zero change counters stay hidden; read
+ * inventory and locally preserved work remain separate so users can tell
+ * "nothing changed" from "nothing was found" without reading debug output.
+ */
+function calendarSyncResultModel({ result = {}, language = 'en' } = {}) {
+  const normalizedLanguage = language === 'zh' ? 'zh' : 'en';
+  const copy = uiCopy(normalizedLanguage).controls;
+  const created = calendarSyncCount(result.created);
+  const updated = calendarSyncCount(result.updated);
+  const removed = calendarSyncCount(result.removed);
+  const localKept = calendarSyncCount(result.localKept);
+  const localDeleted = Math.min(localKept, calendarSyncCount(result.localDeleted));
+  const explicitLocalChanged = calendarSyncCount(result.localChanged);
+  const localChanged = Math.max(explicitLocalChanged, localKept - localDeleted);
+  const events = calendarSyncCount(result.calendarEvents);
+  const tasks = calendarSyncCount(result.tasks);
+  const allDaySkipped = calendarSyncCount(result.allDaySkipped);
+
+  const changeParts = [
+    created > 0 ? `${created} ${copy.calendarCreated}` : '',
+    updated > 0 ? `${updated} ${copy.calendarUpdated}` : '',
+    removed > 0 ? `${removed} ${copy.calendarRemoved}` : '',
+  ].filter(Boolean);
+
+  const localParts = [
+    localDeleted > 0
+      ? calendarCountLabel(
+        localDeleted,
+        copy.calendarLocalDeletion,
+        copy.calendarLocalDeletions,
+        normalizedLanguage,
+      )
+      : '',
+    localChanged > 0
+      ? calendarCountLabel(
+        localChanged,
+        copy.calendarLocalChange,
+        copy.calendarLocalChanges,
+        normalizedLanguage,
+      )
+      : '',
+  ].filter(Boolean);
+
+  const inventoryParts = [
+    events > 0
+      ? calendarCountLabel(events, copy.calendarEvent, copy.calendarEvents, normalizedLanguage)
+      : '',
+    tasks > 0
+      ? calendarCountLabel(tasks, copy.calendarTask, copy.calendarTasks, normalizedLanguage)
+      : '',
+  ].filter(Boolean);
+  const inventory = inventoryParts.length > 0
+    ? normalizedLanguage === 'zh'
+      ? `${copy.calendarFound} ${inventoryParts.join(' · ')}`
+      : `${inventoryParts.join(' · ')} ${copy.calendarFound}`
+    : copy.calendarNoItems;
+
+  const notes = [
+    allDaySkipped > 0 ? `${allDaySkipped} ${copy.calendarAllDaySkipped}` : '',
+    result.taskAccessPending ? copy.calendarTasksPending : '',
+    result.tasksUnavailable ? copy.calendarTasksUnavailable : '',
+  ].filter(Boolean);
+
+  let restore = '';
+  if (localDeleted > 0 && localChanged === 0) {
+    const item = localDeleted === 1 ? copy.calendarItem : copy.calendarItems;
+    restore = `${copy.calendarRestore} ${localDeleted} ${item}`;
+  } else if (localKept > 0) {
+    restore = copy.calendarRestoreFields;
+  }
+
+  return {
+    header: `${copy.calendarSynced} · ${copy.calendarJustNow}`,
+    changes: changeParts.length > 0 ? changeParts.join(' · ') : copy.calendarNoChanges,
+    local: localParts.join(' · '),
+    inventory,
+    restore,
+    notes,
+  };
 }
 
 function capacityMetrics({ capacity = {}, language = 'en' } = {}) {
@@ -1551,6 +1676,7 @@ module.exports = {
   burningCapacityBucket,
   formatDuration,
   uiCopy,
+  calendarSyncResultModel,
   capacityMetrics,
   formatCapacitySummary,
   truncateTextToWidth,

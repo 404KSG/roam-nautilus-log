@@ -137,6 +137,30 @@ test('safe sync protects local edits and user children; force refresh updates on
   assert.equal(graph.read(noteUid), 'My follow-up notes');
 });
 
+test('safe sync reports a locally deleted import separately so the UI can offer an accurate restore hint', async () => {
+  const extension = await loadExtension('calendar-local-deletion');
+  const graph = graphHarness();
+  const reconciler = extension.createCalendarReconciler(graph);
+  await reconciler.sync({ planUid: 'plan-today', events: [meeting()] });
+  const mapping = graph.state().events['primary:meeting-1'];
+  await graph.remove(mapping.parent.uid);
+
+  const safe = await reconciler.sync({ planUid: 'plan-today', events: [meeting()] });
+  assert.equal(safe.localKept, 1);
+  assert.equal(safe.localDeleted, 1);
+  assert.equal(safe.localChanged, undefined);
+  assert.equal(graph.read(mapping.parent.uid), null);
+
+  const forced = await reconciler.sync({
+    planUid: 'plan-today',
+    events: [meeting()],
+    force: true,
+  });
+  assert.equal(forced.updated, 1);
+  assert.equal(forced.localKept, 0);
+  assert.equal(graph.children('plan-today').length, 1);
+});
+
 test('cancelled untouched imports are removed, while locally extended events remain', async () => {
   const extension = await loadExtension('calendar-cancel');
   const graph = graphHarness();

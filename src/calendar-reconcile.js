@@ -56,6 +56,12 @@ function resultSummary() {
   return { created: 0, updated: 0, removed: 0, localKept: 0, skipped: 0 };
 }
 
+function recordLocalPreservation(summary, deleted = false) {
+  summary.localKept += 1;
+  const key = deleted ? 'localDeleted' : 'localChanged';
+  summary[key] = Number(summary[key] || 0) + 1;
+}
+
 function ensureGoogleCalendarSource(value) {
   const text = String(value ?? '').trimEnd();
   const suffix = `· ${GOOGLE_CALENDAR_SOURCE_SUFFIX}`;
@@ -284,6 +290,9 @@ export function createCalendarReconciler({
         continue;
       }
       const existing = state.events[event.key];
+      const existingParent = existing?.parent?.uid ? read(existing.parent.uid) : null;
+      const locallyDeleted = Boolean(existing)
+        && (existingParent === null || existingParent === undefined);
       if (event.status === 'cancelled') {
         if (!existing) {
           summary.skipped += 1;
@@ -295,7 +304,7 @@ export function createCalendarReconciler({
           summary.removed += 1;
         } else {
           state.events[event.key] = observedMapping(existing, event, observedAt);
-          summary.localKept += 1;
+          recordLocalPreservation(summary, locallyDeleted);
         }
         continue;
       }
@@ -311,7 +320,7 @@ export function createCalendarReconciler({
       const outcome = await updateEvent(planUid, event, existing, force === true);
       state.events[event.key] = observedMapping(outcome.mapping, event, observedAt);
       if (outcome.changed) summary.updated += 1;
-      if (outcome.localKept) summary.localKept += 1;
+      if (outcome.localKept) recordLocalPreservation(summary, locallyDeleted);
       if (!outcome.changed && !outcome.localKept) summary.skipped += 1;
     }
     const retention = Math.max(0, Number(orphanRetentionMs) || DEFAULT_ORPHAN_RETENTION_MS);

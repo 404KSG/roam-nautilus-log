@@ -1447,61 +1447,110 @@
      [:path {:d "M19 14H5l-1.973 6.767A1 1 0 0 0 4 22h16a1 1 0 0 0 .973-1.233z"}]
      [:path {:d "m8 22 1-4"}]]]])
 
-(defn calendar-result-title [result copy]
-  (let [summary (js->clj result :keywordize-keys true)]
-    (str (:calendarSynced copy)
-         " · " (or (:created summary) 0) " " (:calendarCreated copy)
-         " · " (or (:updated summary) 0) " " (:calendarUpdated copy)
-         " · " (or (:removed summary) 0) " " (:calendarRemoved copy)
-         (when (pos? (or (:localKept summary) 0))
-           (str " · " (:localKept summary) " " (:calendarLocalKept copy)))
-         (when (pos? (or (:tasks summary) 0))
-           (str " · " (:tasks summary) " " (:calendarTasks copy)))
-         (when (pos? (or (:allDaySkipped summary) 0))
-           (str " · " (:allDaySkipped summary) " " (:calendarAllDaySkipped copy)))
-         (when (:taskAccessPending summary)
-           (str " · " (:calendarTasksPending copy)))
-         (when (:tasksUnavailable summary)
-           (str " · " (:calendarTasksUnavailable copy))))))
+(defn calendar-result-popover [result settings copy]
+  (let [model (or (log-core-call "calendarSyncResultModel"
+                                 {:result result :language (:language settings)})
+                  {:header (str (:calendarSynced copy) " · " (:calendarJustNow copy))
+                   :changes (:calendarNoChanges copy)
+                   :inventory (:calendarNoItems copy)
+                   :notes []})]
+    [:div {:class "nautilus-log-calendar-popover"
+           :role "status"
+           :aria-live "polite"}
+     [:div {:class "nautilus-log-calendar-popover__header"}
+      [:span {:class "nautilus-log-calendar-popover__status" :aria-hidden "true"} "✓"]
+      [:span (:header model)]]
+     [:div {:class "nautilus-log-calendar-popover__line"} (:changes model)]
+     (when (seq (:local model))
+       [:div {:class "nautilus-log-calendar-popover__line"} (:local model)])
+     [:div {:class "nautilus-log-calendar-popover__line nautilus-log-calendar-popover__line--muted"}
+      (:inventory model)]
+     (for [[index note] (map-indexed vector (:notes model))]
+       ^{:key (str "calendar-note-" index)}
+       [:div {:class "nautilus-log-calendar-popover__line nautilus-log-calendar-popover__line--muted"}
+        note])
+     (when (seq (:restore model))
+       [:div {:class "nautilus-log-calendar-popover__line nautilus-log-calendar-popover__line--hint"}
+        (:restore model)])]))
+
+(defn calendar-error-popover [message copy]
+  [:div {:class "nautilus-log-calendar-popover nautilus-log-calendar-popover--error"
+         :role "alert"}
+   [:div {:class "nautilus-log-calendar-popover__header"}
+    [:span {:class "nautilus-log-calendar-popover__status" :aria-hidden "true"} "!"]
+    [:span (:calendarSyncFailed copy)]]
+   [:div {:class "nautilus-log-calendar-popover__line"} message]
+   [:div {:class "nautilus-log-calendar-popover__line nautilus-log-calendar-popover__line--hint"}
+    (:calendarTryAgain copy)]])
 
 (defn calendar-button [block-uid page-title-val calendar-state settings copy]
   (when (and (:google-calendar-enabled settings)
              (:google-calendar-configured settings))
     (let [busy? (:busy @calendar-state)
-          default-title (str (:calendar copy) " · " (:calendarForce copy))
-          title (cond
-                  busy? (:calendarSyncing copy)
-                  (:title @calendar-state) (:title @calendar-state)
-                  :else default-title)]
-      [:button
-       {:on-click (fn [event]
-                    (when (not busy?)
-                      (when-let [sync-calendar (some-> js/window .-nautilusLogExtensionData .-syncCalendarPlan)]
-                        (reset! calendar-state {:busy true :title nil})
-                        (-> (js/Promise.resolve
-                             (.call sync-calendar nil
-                                    (clj->js {:planUid block-uid
-                                              :pageTitle page-title-val
-                                              :force (.-altKey event)})))
-                            (.then (fn [result]
-                                     (reset! calendar-state
-                                             {:busy false
-                                              :title (calendar-result-title result copy)})))
-                            (.catch (fn [error]
-                                      (.error js/console "[Nautilus Log] Google Calendar sync failed" error)
-                                      (reset! calendar-state
-                                              {:busy false
-                                               :title (or (.-message error) (str error))})))))))
-        :class "nautilus-log-toggle-btn nautilus-log-calendar-btn"
-        :data-nautilus-tooltip title
-        :aria-label title
-        :aria-busy (if busy? "true" "false")
-        :disabled busy?}
-       [:span {:class (str "bp3-icon "
-                           (if busy?
-                             "bp3-icon-refresh nautilus-log-calendar-spinner"
-                             "bp3-icon-calendar"))
-               :aria-hidden "true"}]])))
+          popover-open? (:open @calendar-state)
+          result (:result @calendar-state)
+          error (:error @calendar-state)
+          default-tooltip (str (:calendar copy) "\n" (:calendarForce copy))
+          tooltip (when-not popover-open?
+                    (if busy? (:calendarSyncing copy) default-tooltip))]
+      [:span
+       {:class "nautilus-log-calendar-control"
+        :on-mouse-enter #(swap! calendar-state assoc :hovered true)
+        :on-mouse-leave #(swap! calendar-state
+                                 (fn [state]
+                                   (assoc state
+                                          :hovered false
+                                          :open (and (:open state) (:focused state)))))}
+       [:button
+        {:on-click (fn [event]
+                     (when (not busy?)
+                       (when-let [sync-calendar (some-> js/window .-nautilusLogExtensionData .-syncCalendarPlan)]
+                         (swap! calendar-state assoc
+                                :busy true :result nil :error nil :open false)
+                         (-> (js/Promise.resolve
+                              (.call sync-calendar nil
+                                     (clj->js {:planUid block-uid
+                                               :pageTitle page-title-val
+                                               :force (.-altKey event)})))
+                             (.then (fn [sync-result]
+                                      (swap! calendar-state assoc
+                                             :busy false
+                                             :result (js->clj sync-result :keywordize-keys true)
+                                             :error nil
+                                             :open (boolean (or (:hovered @calendar-state)
+                                                                (:focused @calendar-state))))))
+                             (.catch (fn [sync-error]
+                                       (.error js/console "[Nautilus Log] Google Calendar sync failed" sync-error)
+                                       (swap! calendar-state assoc
+                                              :busy false
+                                              :result nil
+                                              :error (or (.-message sync-error) (str sync-error))
+                                              :open (boolean (or (:hovered @calendar-state)
+                                                                 (:focused @calendar-state))))))))))
+         :on-focus #(swap! calendar-state assoc :focused true)
+         :on-blur #(swap! calendar-state
+                          (fn [state]
+                            (assoc state
+                                   :focused false
+                                   :open (and (:open state) (:hovered state)))))
+         :on-key-down (fn [event]
+                        (when (= "Escape" (.-key event))
+                          (swap! calendar-state assoc :open false)))
+         :class "nautilus-log-toggle-btn nautilus-log-calendar-btn"
+         :data-nautilus-tooltip tooltip
+         :aria-label (if busy? (:calendarSyncing copy) default-tooltip)
+         :aria-busy (if busy? "true" "false")
+         :aria-expanded (if popover-open? "true" "false")
+         :disabled busy?}
+        [:span {:class (str "bp3-icon "
+                            (if busy?
+                              "bp3-icon-refresh nautilus-log-calendar-spinner"
+                              "bp3-icon-calendar"))
+                :aria-hidden "true"}]]
+       (when (and popover-open? result)
+         [calendar-result-popover result settings copy])
+       (when (and popover-open? error)
+         [calendar-error-popover error copy])])))
 
 (defn collapse-context-key [render-context]
   (if (= render-context :sidebar) "sidebar" "main"))
@@ -1613,12 +1662,20 @@
        :allocation {:planned "planned" :free "free" :over "over" :noSlot "no slot" :left "left"}
        :legend {:urgent "Urgent" :event "Event" :task "Task"}
        :controls {:hideDone "Hide completed items" :showDone "Show completed items"
-                  :calendar "Sync Google Calendar" :calendarForce "Option-click to force-refresh Google fields"
+                  :calendar "Sync Google Calendar" :calendarForce "⌥ Click to restore Google-managed items"
                   :calendarSetup "Connect Google Calendar and sync this date"
-                  :calendarSyncing "Syncing Google Calendar…" :calendarSynced "Google Calendar synced"
-                  :calendarCreated "new" :calendarUpdated "updated" :calendarRemoved "removed"
-                  :calendarLocalKept "local kept" :calendarTasks "tasks"
+                  :calendarSyncing "Syncing Google Calendar…" :calendarSynced "Synced"
+                  :calendarJustNow "Just now" :calendarNoChanges "No changes from Google"
+                  :calendarCreated "added" :calendarUpdated "updated" :calendarRemoved "removed"
+                  :calendarLocalDeletion "local deletion preserved" :calendarLocalDeletions "local deletions preserved"
+                  :calendarLocalChange "local change preserved" :calendarLocalChanges "local changes preserved"
+                  :calendarEvent "event" :calendarEvents "events" :calendarTask "task" :calendarTasks "tasks"
+                  :calendarFound "found" :calendarNoItems "No events or tasks found"
+                  :calendarRestore "⌥ Click Calendar to restore" :calendarRestoreFields "⌥ Click Calendar to restore Google fields"
+                  :calendarItem "item" :calendarItems "items"
+                  :calendarSyncFailed "Sync failed" :calendarTryAgain "Click Calendar to try again"
                   :calendarAllDaySkipped "all-day skipped" :calendarTasksPending "reconnect for Tasks"
+                  :calendarTasksUnavailable "Tasks unavailable"
                   :collapse "Collapse Nautilus Log" :expand "Expand Nautilus Log"}
        :panels {:overview "Overview" :overflow "Unscheduled today" :warnings "Schedule warnings" :schedule "Schedule" :item "item" :items "items"}
        :tooltips {:task "Task" :event "Event" :available "Available slot" :availableNow "Available now"}
@@ -1891,7 +1948,12 @@
                                    [(add-start-after pendings) dones completed-uids]))))
                show-done-state (r/atom true)
                tidy-state (r/atom false)
-               calendar-state (r/atom {:busy false :title nil})]
+               calendar-state (r/atom {:busy false
+                                       :hovered false
+                                       :focused false
+                                       :open false
+                                       :result nil
+                                       :error nil})]
     (case @*running?
       nil [:div {:class "nautilus-log-loading"} [:strong "Loading Nautilus Log..."]]
       false [:div {:class "nautilus-log-not-installed"}

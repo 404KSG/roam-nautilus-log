@@ -730,6 +730,23 @@
   opacity: 0.48;
 }
 
+.nautilus-log-calendar-control {
+  --nautilus-log-control-tooltip-bg: #fff;
+  --nautilus-log-control-tooltip-border: rgba(16, 22, 26, 0.2);
+  --nautilus-log-control-tooltip-text: #182026;
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 32px;
+  height: 32px;
+  justify-content: center;
+  position: relative;
+  width: 32px;
+}
+
+.nautilus-log-calendar-btn[data-nautilus-tooltip]::after {
+  white-space: pre-line;
+}
+
 .nautilus-log-calendar-btn > .bp3-icon {
   align-items: center;
   display: inline-flex;
@@ -738,6 +755,80 @@
   justify-content: center;
   line-height: 1;
   width: 18px;
+}
+
+.nautilus-log-calendar-popover {
+  background: var(--nautilus-log-control-tooltip-bg);
+  border: 1px solid var(--nautilus-log-control-tooltip-border);
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(16, 22, 26, 0.12), 0 8px 24px rgba(16, 22, 26, 0.1);
+  box-sizing: border-box;
+  color: var(--nautilus-log-control-tooltip-text);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--nl-exec-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  gap: 4px;
+  line-height: 1.3;
+  padding: 10px 12px;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  text-align: left;
+  top: calc(100% + 9px);
+  white-space: normal;
+  width: min(260px, calc(100vw - 24px));
+  z-index: 10070;
+}
+
+.nautilus-log-calendar-popover::before {
+  background: var(--nautilus-log-control-tooltip-bg);
+  border-left: 1px solid var(--nautilus-log-control-tooltip-border);
+  border-top: 1px solid var(--nautilus-log-control-tooltip-border);
+  content: "";
+  height: 8px;
+  position: absolute;
+  right: 11px;
+  top: -5px;
+  transform: rotate(45deg);
+  width: 8px;
+}
+
+.nautilus-log-calendar-popover__header {
+  align-items: baseline;
+  display: flex;
+  font-weight: 650;
+  gap: 5px;
+  min-width: 0;
+}
+
+.nautilus-log-calendar-popover__status {
+  color: var(--nautilus-log-positive);
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.nautilus-log-calendar-popover__line {
+  font-weight: 500;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.nautilus-log-calendar-popover__line--muted,
+.nautilus-log-calendar-popover__line--hint {
+  color: var(--nautilus-log-control-tooltip-text);
+  opacity: 0.64;
+}
+
+.nautilus-log-calendar-popover__line--hint {
+  font-weight: 550;
+  opacity: 0.72;
+}
+
+.nautilus-log-calendar-popover--error .nautilus-log-calendar-popover__status {
+  color: var(--nautilus-log-warning);
 }
 
 .nautilus-log-calendar-spinner {
@@ -783,6 +874,13 @@
 
 .bp3-dark .nautilus-log-toggle-btn,
 .roam-app.rm-dark-theme .nautilus-log-toggle-btn {
+  --nautilus-log-control-tooltip-bg: #293742;
+  --nautilus-log-control-tooltip-border: rgba(245, 248, 250, 0.2);
+  --nautilus-log-control-tooltip-text: #f5f8fa;
+}
+
+.bp3-dark .nautilus-log-calendar-control,
+.roam-app.rm-dark-theme .nautilus-log-calendar-control {
   --nautilus-log-control-tooltip-bg: #293742;
   --nautilus-log-control-tooltip-border: rgba(245, 248, 250, 0.2);
   --nautilus-log-control-tooltip-text: #f5f8fa;

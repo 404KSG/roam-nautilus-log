@@ -27,6 +27,10 @@
 
 ### Changed
 
+- Calendar sync feedback now uses a compact, anchored result popover instead
+  of one wrapping debug-style tooltip. Zero change counters stay hidden, event
+  and task inventory remain secondary, local deletions receive an explicit
+  restore hint, and the stable hover help always keeps Option-click discoverable.
 - The four remaining chart controls keep their existing geometry and visual
   treatment while gaining reliable localized hover and keyboard-focus help.
   Calendar temporarily swaps to a rotating Blueprint refresh glyph only while
