@@ -24,7 +24,7 @@ export function parseCalendarConnection(value) {
   const id = String(candidate.id || '').trim();
   const secret = String(candidate.secret || '').trim();
   if (!id || !secret) return null;
-  return { version: 1, id, secret };
+  return { version: Number(candidate.version) >= 2 ? 2 : 1, id, secret };
 }
 
 function serviceError(payload, response, fallback) {

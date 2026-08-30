@@ -1,6 +1,7 @@
 import { createPersistentGoogleAuthClient } from './calendar-auth';
 
 const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
+const GOOGLE_TASKS_API = 'https://tasks.googleapis.com/tasks/v1';
 
 export function parseGoogleCalendarIds(value) {
   const ids = String(value ?? '')
@@ -10,10 +11,19 @@ export function parseGoogleCalendarIds(value) {
   return [...new Set(ids.length ? ids : ['primary'])];
 }
 
-function apiErrorMessage(payload, response) {
+function apiErrorMessage(payload, response, service = 'Google Calendar') {
   return payload?.error?.message
     || payload?.error_description
-    || `Google Calendar request failed (${response?.status || 'unknown'}).`;
+    || `${service} request failed (${response?.status || 'unknown'}).`;
+}
+
+function taskDayBounds(date) {
+  const day = String(date || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error('Google Tasks requires a valid date.');
+  return {
+    dueMin: `${day}T00:00:00.000Z`,
+    dueMax: `${day}T23:59:59.999Z`,
+  };
 }
 
 export function createGoogleCalendarClient({
@@ -27,7 +37,7 @@ export function createGoogleCalendarClient({
   const controller = typeof AbortController === 'function' ? new AbortController() : null;
   let destroyed = false;
 
-  const fetchJson = async (url, retry = true) => {
+  const fetchJson = async (url, retry = true, service = 'Google Calendar') => {
     if (destroyed) throw new Error('Google Calendar sync was cancelled.');
     const accessToken = await authorization.authorize({ interactive: true });
     if (!accessToken) throw new Error('Google Calendar must be connected.');
@@ -47,7 +57,7 @@ export function createGoogleCalendarClient({
       }
     }
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(apiErrorMessage(payload, response));
+    if (!response.ok) throw new Error(apiErrorMessage(payload, response, service));
     return payload;
   };
 
@@ -85,6 +95,43 @@ export function createGoogleCalendarClient({
     return items;
   };
 
+  const listTaskLists = async () => {
+    const items = [];
+    let pageToken = '';
+    do {
+      const url = new URL(`${GOOGLE_TASKS_API}/users/@me/lists`);
+      url.searchParams.set('maxResults', '100');
+      if (pageToken) url.searchParams.set('pageToken', pageToken);
+      const payload = await fetchJson(url.href, true, 'Google Tasks');
+      items.push(...(Array.isArray(payload.items) ? payload.items : []));
+      pageToken = payload.nextPageToken || '';
+    } while (pageToken);
+    return items;
+  };
+
+  const listTasks = async ({ taskListId, date }) => {
+    const items = [];
+    let pageToken = '';
+    const { dueMin, dueMax } = taskDayBounds(date);
+    do {
+      const url = new URL(
+        `${GOOGLE_TASKS_API}/lists/${encodeURIComponent(taskListId)}/tasks`,
+      );
+      url.searchParams.set('dueMin', dueMin);
+      url.searchParams.set('dueMax', dueMax);
+      url.searchParams.set('showAssigned', 'true');
+      url.searchParams.set('showCompleted', 'true');
+      url.searchParams.set('showDeleted', 'true');
+      url.searchParams.set('showHidden', 'true');
+      url.searchParams.set('maxResults', '100');
+      if (pageToken) url.searchParams.set('pageToken', pageToken);
+      const payload = await fetchJson(url.href, true, 'Google Tasks');
+      items.push(...(Array.isArray(payload.items) ? payload.items : []));
+      pageToken = payload.nextPageToken || '';
+    } while (pageToken);
+    return items;
+  };
+
   const readRange = async ({ calendarIds, timeMin, timeMax } = {}) => {
     const selectedIds = parseGoogleCalendarIds(calendarIds);
     const entries = await listCalendarEntries();
@@ -107,6 +154,23 @@ export function createGoogleCalendarClient({
     return results;
   };
 
+  const readTasks = async ({ date } = {}) => {
+    const taskLists = await listTaskLists();
+    const results = [];
+    for (const taskList of taskLists) {
+      if (!taskList?.id) continue;
+      const tasks = await listTasks({ taskListId: taskList.id, date });
+      results.push({
+        taskList: {
+          id: taskList.id,
+          title: taskList.title || taskList.id,
+        },
+        tasks,
+      });
+    }
+    return results;
+  };
+
   const destroy = () => {
     destroyed = true;
     controller?.abort();
@@ -124,6 +188,7 @@ export function createGoogleCalendarClient({
     disconnect: authorization.disconnect,
     hasConnection: authorization.hasConnection,
     readRange,
+    readTasks,
     cancelSync,
     destroy,
   };

@@ -642,7 +642,7 @@
   (str/replace s #"\[([^\]]*?)\]\((.*?)\)" "$1"))
 
 (defn parse-rest [s]
-  (-> s
+  (-> (or (log-core-call "stripGoogleCalendarSourceSuffix" s) s)
       ;; Remove specific Roam markers (TODO, DONE, etc.)
       (str/replace #"\{\{\[\[TODO\]\]\}\}" "")
       (str/replace #"\{\{\[\[DONE\]\]\}\}" "")
@@ -1454,7 +1454,13 @@
          " · " (or (:updated summary) 0) " " (:calendarUpdated copy)
          " · " (or (:removed summary) 0) " " (:calendarRemoved copy)
          (when (pos? (or (:localKept summary) 0))
-           (str " · " (:localKept summary) " " (:calendarLocalKept copy))))))
+           (str " · " (:localKept summary) " " (:calendarLocalKept copy)))
+         (when (pos? (or (:tasks summary) 0))
+           (str " · " (:tasks summary) " " (:calendarTasks copy)))
+         (when (pos? (or (:allDaySkipped summary) 0))
+           (str " · " (:allDaySkipped summary) " " (:calendarAllDaySkipped copy)))
+         (when (:taskAccessPending summary)
+           (str " · " (:calendarTasksPending copy))))))
 
 (defn calendar-button [block-uid page-title-val calendar-state settings copy]
   (when (and (:google-calendar-enabled settings)
@@ -1609,7 +1615,8 @@
                   :calendarSetup "Connect Google Calendar and sync this date"
                   :calendarSyncing "Syncing Google Calendar…" :calendarSynced "Google Calendar synced"
                   :calendarCreated "new" :calendarUpdated "updated" :calendarRemoved "removed"
-                  :calendarLocalKept "local kept"
+                  :calendarLocalKept "local kept" :calendarTasks "tasks"
+                  :calendarAllDaySkipped "all-day skipped" :calendarTasksPending "reconnect for Tasks"
                   :collapse "Collapse Nautilus Log" :expand "Expand Nautilus Log"}
        :panels {:overview "Overview" :overflow "Unscheduled today" :warnings "Schedule warnings" :schedule "Schedule" :item "item" :items "items"}
        :tooltips {:task "Task" :event "Event" :available "Available slot" :availableNow "Available now"}

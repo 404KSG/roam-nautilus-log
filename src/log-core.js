@@ -11,6 +11,7 @@ const START_HOURS = Object.freeze(Array.from({ length: 24 }, (_value, hour) => h
 const END_HOURS = Object.freeze(Array.from({ length: 24 }, (_value, index) => index + 1));
 const DURATION_TOKEN_RE = /(?:^|\s)(\d+h(?:\d+(?:min|m))?|\d+(?:min|m))(?=\s|$)/i;
 const TIME_RANGE_TOKEN_RE = /(?:^|\s)(\d{1,2}(?::\d{1,2})?(?:\s*(?:am|pm))?\s*(?:-|–|až|to)\s*\d{1,2}(?::\d{1,2})?(?:\s*(?:am|pm))?)(?=\s|$)/i;
+const GOOGLE_CALENDAR_SOURCE_SUFFIX_RE = /\s*·\s*Google Calendar\s*$/i;
 
 function asNumber(value) {
   if (value === '' || value === null || value === undefined) return NaN;
@@ -33,6 +34,10 @@ function asTimestamp(value) {
 function cleanParsedText(text, token) {
   if (!token) return String(text ?? '');
   return String(text ?? '').replace(token, '').replace(/\s+/g, ' ').trim();
+}
+
+function stripGoogleCalendarSourceSuffix(value) {
+  return String(value ?? '').replace(GOOGLE_CALENDAR_SOURCE_SUFFIX_RE, '').trim();
 }
 
 function parseDurationToken({ text = '', fallback = 15 } = {}) {
@@ -883,6 +888,9 @@ const UI_COPY = {
       calendarUpdated: 'updated',
       calendarRemoved: 'removed',
       calendarLocalKept: 'local kept',
+      calendarTasks: 'tasks',
+      calendarAllDaySkipped: 'all-day skipped',
+      calendarTasksPending: 'reconnect for Tasks',
       tidy: 'Tidy completed and elapsed items',
       collapse: 'Collapse Nautilus Log',
       expand: 'Expand Nautilus Log',
@@ -938,6 +946,9 @@ const UI_COPY = {
       calendarUpdated: '更新',
       calendarRemoved: '移除',
       calendarLocalKept: '保留本地修改',
+      calendarTasks: '项任务',
+      calendarAllDaySkipped: '项全天内容已跳过',
+      calendarTasksPending: '重新连接以同步 Tasks',
       tidy: '整理已完成任务与已过去事件',
       collapse: '折叠 Nautilus Log',
       expand: '展开 Nautilus Log',
@@ -1519,6 +1530,7 @@ module.exports = {
   normalizeScheduleSettings,
   parseDurationToken,
   parseTimeRangeToken,
+  stripGoogleCalendarSourceSuffix,
   alignIntervalToWindow,
   resolveRendererSettings,
   hourlyGridSegments,

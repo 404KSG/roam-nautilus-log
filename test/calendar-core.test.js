@@ -55,7 +55,7 @@ test('Google events become compact fixed-event blocks and skip non-blocking rows
 
   assert.equal(rows.length, 1);
   assert.equal(rows[0].key, 'work@example.com:meeting-1');
-  assert.equal(rows[0].parentString, '09:30–10:00 Weekly meeting');
+  assert.equal(rows[0].parentString, '09:30–10:00 Weekly meeting · Google Calendar');
   assert.equal(
     rows[0].sourceString,
     'Google Calendar · Work · [Join](https://meet.google.com/abc-defg-hij) · [Open](https://calendar.google.com/event?eid=meeting-1)',
@@ -117,6 +117,69 @@ test('recurring instances use a stable original-start key and cancelled events r
     key: 'primary:cancelled-1',
     calendarId: 'primary',
     eventId: 'cancelled-1',
+    resourceType: 'calendar-event',
+    status: 'cancelled',
+  });
+});
+
+test('dated Google Tasks become flexible TODO or DONE rows without inventing fixed times', async () => {
+  const extension = await loadExtension('google-task-normalize');
+  const rows = extension.normalizeGoogleTasks({
+    taskList: { id: 'my-tasks', title: 'My Tasks' },
+    date: '2026-08-30',
+    defaultDuration: 25,
+    tasks: [
+      {
+        id: 'pending-1',
+        title: 'Submit report',
+        notes: 'Attach the final PDF.',
+        status: 'needsAction',
+        due: '2026-08-30T00:00:00.000Z',
+        webViewLink: 'https://tasks.google.com/task/pending-1',
+      },
+      {
+        id: 'completed-1',
+        title: 'Review document',
+        status: 'completed',
+        due: '2026-08-30T00:00:00.000Z',
+        completed: '2026-08-30T01:00:00.000Z',
+      },
+      {
+        id: 'undated',
+        title: 'Someday',
+        status: 'needsAction',
+      },
+      {
+        id: 'tomorrow',
+        title: 'Tomorrow',
+        status: 'needsAction',
+        due: '2026-08-31T00:00:00.000Z',
+      },
+      { id: 'deleted-1', deleted: true },
+    ],
+  });
+
+  assert.equal(rows.length, 3);
+  assert.deepEqual(rows[0], {
+    key: 'task:my-tasks:pending-1',
+    taskListId: 'my-tasks',
+    taskId: 'pending-1',
+    resourceType: 'google-task',
+    status: 'needsAction',
+    parentString: '{{[[TODO]]}} Submit report 25m · Google Calendar',
+    sourceString: 'Google Tasks · My Tasks · [Open](https://tasks.google.com/task/pending-1)',
+    detailStrings: ['Attach the final PDF.'],
+    details: { location: '', description: 'Attach the final PDF.' },
+    dueDate: '2026-08-30',
+    completed: '',
+    updated: '',
+  });
+  assert.match(rows[1].parentString, /^\{\{\[\[DONE\]\]\}\} Review document 25m d\d{2}:\d{2} · Google Calendar$/);
+  assert.deepEqual(rows[2], {
+    key: 'task:my-tasks:deleted-1',
+    taskListId: 'my-tasks',
+    taskId: 'deleted-1',
+    resourceType: 'google-task',
     status: 'cancelled',
   });
 });

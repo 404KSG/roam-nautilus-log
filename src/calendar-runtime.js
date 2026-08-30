@@ -1,4 +1,7 @@
-import { normalizeGoogleCalendarEvents } from './calendar-core';
+import {
+  normalizeGoogleCalendarEvents,
+  normalizeGoogleTasks,
+} from './calendar-core';
 import {
   createGoogleCalendarClient,
   parseGoogleCalendarIds,
@@ -25,6 +28,16 @@ function parseSyncState(value) {
 
 function defaultPageTitleToDate(pageTitle) {
   return window.roamAlphaAPI?.util?.pageTitleToDate?.(pageTitle);
+}
+
+function localDateKey(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) throw new Error('The Nautilus page date could not be resolved.');
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
 }
 
 function planRange(value, { startHour = 5, endHour = 21 } = {}) {
@@ -144,25 +157,54 @@ export function createCalendarRuntime({
     inFlight = true;
     const expectedGeneration = generation;
     try {
-      const range = planRange(pageTitleToDate(pageTitle), {
+      const pageDate = pageTitleToDate(pageTitle);
+      const range = planRange(pageDate, {
         startHour: extensionAPI.settings.get('workday-start'),
         endHour: extensionAPI.settings.get('workday-end'),
       });
+      const date = localDateKey(pageDate);
       const calendarIds = parseGoogleCalendarIds(
         extensionAPI.settings.get('google-calendar-ids'),
       );
-      const batches = await getClient().readRange({ calendarIds, ...range });
+      const activeClient = getClient();
+      const connection = parseCalendarConnection(extensionAPI.settings.get(CONNECTION_KEY));
+      const tasksAuthorized = Number(connection?.version) >= 2;
+      const [batches, taskBatches] = await Promise.all([
+        activeClient.readRange({ calendarIds, ...range }),
+        tasksAuthorized && typeof activeClient.readTasks === 'function'
+          ? activeClient.readTasks({ date })
+          : Promise.resolve([]),
+      ]);
       if (destroyed || expectedGeneration !== generation) {
         throw new Error('Google Calendar sync was cancelled.');
       }
-      const events = (Array.isArray(batches) ? batches : []).flatMap((batch) => (
+      const calendarEvents = (Array.isArray(batches) ? batches : []).flatMap((batch) => (
         normalizeGoogleCalendarEvents(batch)
       ));
-      const result = await reconciler.sync({ planUid, events, force: force === true });
+      const tasks = (Array.isArray(taskBatches) ? taskBatches : []).flatMap((batch) => (
+        normalizeGoogleTasks({
+          ...batch,
+          date,
+          defaultDuration: extensionAPI.settings.get('todo-duration'),
+        })
+      ));
+      const items = [...calendarEvents, ...tasks];
+      const result = await reconciler.sync({ planUid, events: items, force: force === true });
       if (destroyed || expectedGeneration !== generation) {
         throw new Error('Google Calendar sync was cancelled.');
       }
-      return result;
+      const allDaySkipped = (Array.isArray(batches) ? batches : []).reduce(
+        (total, batch) => total + (Array.isArray(batch?.events) ? batch.events : [])
+          .filter((event) => event?.start?.date || event?.end?.date).length,
+        0,
+      );
+      return {
+        ...result,
+        calendarEvents: calendarEvents.filter((item) => item.status !== 'cancelled').length,
+        tasks: tasks.filter((item) => item.status !== 'cancelled').length,
+        allDaySkipped,
+        taskAccessPending: !tasksAuthorized,
+      };
     } finally {
       inFlight = false;
     }
@@ -192,6 +234,12 @@ export function createCalendarRuntime({
     }
   };
 
+  const reconnect = async () => {
+    if (destroyed) throw new Error('Google Calendar connection is no longer available.');
+    await disconnect();
+    return connect();
+  };
+
   const destroy = () => {
     destroyed = true;
     generation += 1;
@@ -199,7 +247,16 @@ export function createCalendarRuntime({
     client = null;
   };
 
-  return { prepare, prepareIdentity, connect, syncPlan, disconnect, hasConnection, destroy };
+  return {
+    prepare,
+    prepareIdentity,
+    connect,
+    reconnect,
+    syncPlan,
+    disconnect,
+    hasConnection,
+    destroy,
+  };
 }
 
 export { CONNECTION_KEY, SYNC_STATE_KEY };

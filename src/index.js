@@ -16,6 +16,7 @@ import { createTidyCommands, settledUidsForTidy } from "./tidy-commands";
 import {
   decideCalendarManagedChange,
   normalizeGoogleCalendarEvents,
+  normalizeGoogleTasks,
 } from "./calendar-core";
 import { createCalendarReconciler } from "./calendar-reconcile";
 import {
@@ -162,9 +163,10 @@ function settingValue(extensionAPI, key) {
 }
 
 function runtimeSettings(extensionAPI) {
-  const calendarConfigured = Boolean(parseCalendarConnection(
+  const calendarConnection = parseCalendarConnection(
     extensionAPI.settings.get("google-calendar-connection"),
-  ));
+  );
+  const calendarConfigured = Boolean(calendarConnection);
   const calendarEnabled = extensionAPI.settings.get("google-calendar-enabled") === true
     && calendarConfigured;
   return {
@@ -179,6 +181,7 @@ function runtimeSettings(extensionAPI) {
     ),
     "google-calendar-enabled": calendarEnabled,
     "google-calendar-configured": calendarConfigured,
+    "google-calendar-tasks-configured": Number(calendarConnection?.version) >= 2,
     language: extensionAPI.settings.get("language") || "en",
   };
 }
@@ -355,10 +358,13 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
       calendarDisconnect: "断开连接",
       calendarConnecting: "正在连接…",
       calendarDisconnecting: "正在断开…",
+      calendarReconnecting: "正在重新连接…",
+      calendarReconnect: "重新连接",
       calendarRetry: "重试",
       calendarDisconnectedDesc: "未连接 · 选择你的 Google 账号并授予只读权限；默认使用主日历。",
       calendarConnectingDesc: "正在等待 Google 授权 · 请在弹出的窗口中选择你的账号。",
-      calendarConnectedDesc: "已连接 · 只读 · 主日历。使用图表中的 Calendar 按钮同步当前 Nautilus 日期。",
+      calendarConnectedDesc: "已连接 · 只读 · 主日历 + Google Tasks。使用图表中的 Calendar 按钮同步当前 Nautilus 日期。",
+      calendarUpgradeDesc: "Calendar 已连接 · 重新连接一次即可启用 Google Tasks 同步。",
       calendarDisconnectingDesc: "正在安全撤销 Google Calendar 连接…",
       calendarConnectFailedDesc: "未能连接 Google Calendar。没有保存不完整的连接，请重试。",
       calendarDisconnectFailedDesc: "未能断开连接；现有连接已保留，请重试。",
@@ -395,10 +401,13 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
       calendarDisconnect: "Disconnect",
       calendarConnecting: "Connecting…",
       calendarDisconnecting: "Disconnecting…",
+      calendarReconnecting: "Reconnecting…",
+      calendarReconnect: "Reconnect",
       calendarRetry: "Try again",
       calendarDisconnectedDesc: "Not connected · Choose your Google account and grant read-only access; Primary calendar is used by default.",
       calendarConnectingDesc: "Waiting for Google · Choose your Google account in the authorization window.",
-      calendarConnectedDesc: "Connected · Read-only · Primary calendar. Use the Calendar control in Nautilus to sync the current date.",
+      calendarConnectedDesc: "Connected · Read-only · Primary calendar + Google Tasks. Use the Calendar control in Nautilus to sync the current date.",
+      calendarUpgradeDesc: "Calendar is connected · Reconnect once to enable Google Tasks sync.",
       calendarDisconnectingDesc: "Securely removing the Google Calendar connection…",
       calendarConnectFailedDesc: "Google Calendar could not connect. No partial connection was saved; try again.",
       calendarDisconnectFailedDesc: "Google Calendar could not disconnect. The existing connection was kept; try again.",
@@ -447,32 +456,44 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
   };
 
   const executionEnabled = extensionAPI.settings.get("actual-time-tracking") === true;
-  const calendarConnected = Boolean(parseCalendarConnection(
+  const calendarConnection = parseCalendarConnection(
     extensionAPI.settings.get("google-calendar-connection"),
-  ));
+  );
+  const calendarConnected = Boolean(calendarConnection);
+  const calendarNeedsTaskUpgrade = calendarConnected && Number(calendarConnection?.version) < 2;
   const calendarAction = String(calendarUiState?.action || "");
   const calendarError = String(calendarUiState?.error || "");
-  const calendarBusy = calendarAction === "connecting" || calendarAction === "disconnecting";
+  const calendarBusy = calendarAction === "connecting"
+    || calendarAction === "disconnecting"
+    || calendarAction === "reconnecting";
   const calendarDescription = calendarAction === "connecting"
     ? labels.calendarConnectingDesc
     : calendarAction === "disconnecting"
       ? labels.calendarDisconnectingDesc
-      : calendarError === "connect"
-        ? labels.calendarConnectFailedDesc
-        : calendarError === "disconnect"
-          ? labels.calendarDisconnectFailedDesc
-          : calendarConnected
-            ? labels.calendarConnectedDesc
-            : labels.calendarDisconnectedDesc;
+      : calendarAction === "reconnecting"
+        ? labels.calendarConnectingDesc
+        : calendarError === "connect"
+          ? labels.calendarConnectFailedDesc
+          : calendarError === "disconnect"
+            ? labels.calendarDisconnectFailedDesc
+            : calendarNeedsTaskUpgrade
+              ? labels.calendarUpgradeDesc
+              : calendarConnected
+                ? labels.calendarConnectedDesc
+                : labels.calendarDisconnectedDesc;
   const calendarButtonContent = calendarAction === "connecting"
     ? labels.calendarConnecting
     : calendarAction === "disconnecting"
       ? labels.calendarDisconnecting
-      : calendarError === "connect"
-        ? labels.calendarRetry
-        : calendarConnected
-          ? labels.calendarDisconnect
-          : labels.calendarConnect;
+      : calendarAction === "reconnecting"
+        ? labels.calendarReconnecting
+        : calendarError === "connect"
+          ? labels.calendarRetry
+          : calendarNeedsTaskUpgrade
+            ? labels.calendarReconnect
+            : calendarConnected
+              ? labels.calendarDisconnect
+              : labels.calendarConnect;
   const executionSettings = [
     {
       id: "timing-line-sidebar",
@@ -600,11 +621,13 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
           class: `bp3-button bp3-minimal${calendarBusy ? " bp3-disabled" : ""}`,
           onClick: async () => {
             if (calendarBusy || calendarPanelState.action) return;
-            const disconnecting = Boolean(parseCalendarConnection(
+            const connection = parseCalendarConnection(
               extensionAPI.settings.get("google-calendar-connection"),
-            ));
+            );
+            const reconnecting = Boolean(connection) && Number(connection?.version) < 2;
+            const disconnecting = Boolean(connection) && !reconnecting;
             calendarPanelState = {
-              action: disconnecting ? "disconnecting" : "connecting",
+              action: reconnecting ? "reconnecting" : disconnecting ? "disconnecting" : "connecting",
               error: "",
             };
             const recreatePanel = () => extensionAPI.settings.panel.create(
@@ -613,16 +636,17 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
             recreatePanel();
             try {
               if (!calendarRuntime) throw new Error("Google Calendar connection is not ready.");
-              if (disconnecting) await calendarRuntime.disconnect();
+              if (reconnecting) await calendarRuntime.reconnect();
+              else if (disconnecting) await calendarRuntime.disconnect();
               else await calendarRuntime.connect();
               calendarPanelState = { action: "", error: "" };
             } catch (error) {
               calendarPanelState = {
                 action: "",
-                error: disconnecting ? "disconnect" : "connect",
+                error: disconnecting && !reconnecting ? "disconnect" : "connect",
               };
               console.warn(
-                `[Nautilus Log] Google Calendar ${disconnecting ? "disconnect" : "connect"} failed`,
+                `[Nautilus Log] Google Calendar ${disconnecting && !reconnecting ? "disconnect" : "connect"} failed`,
                 error,
               );
             } finally {
@@ -775,6 +799,7 @@ export {
   executionDefaults,
   calendarDefaults,
   normalizeGoogleCalendarEvents,
+  normalizeGoogleTasks,
   decideCalendarManagedChange,
   createCalendarReconciler,
   createGoogleCalendarClient,

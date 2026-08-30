@@ -31,9 +31,18 @@ const {
   isCompactChartWidth,
   parseDurationToken,
   parseTimeRangeToken,
+  stripGoogleCalendarSourceSuffix,
   alignIntervalToWindow,
   timelineDayState,
 } = require('../src/log-core');
+
+test('Calendar provenance stays visible in Roam but is removed from chart labels', () => {
+  assert.equal(
+    stripGoogleCalendarSourceSuffix('{{[[TODO]]}} Submit report 15m · Google Calendar'),
+    '{{[[TODO]]}} Submit report 15m',
+  );
+  assert.equal(stripGoogleCalendarSourceSuffix('Ordinary local task'), 'Ordinary local task');
+});
 
 test('Tidy performs a stable settled-first partition without reprioritizing active work', () => {
   const items = [
@@ -540,6 +549,9 @@ test('English UI settings localize all extension-owned status labels', () => {
     calendarUpdated: 'updated',
     calendarRemoved: 'removed',
     calendarLocalKept: 'local kept',
+    calendarTasks: 'tasks',
+    calendarAllDaySkipped: 'all-day skipped',
+    calendarTasksPending: 'reconnect for Tasks',
     tidy: 'Tidy completed and elapsed items',
     collapse: 'Collapse Nautilus Log',
     expand: 'Expand Nautilus Log',

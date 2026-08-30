@@ -49,20 +49,25 @@ configured default.
 
 Open Nautilus Log settings and click **Connect Google Calendar** to authorize
 your own account with read-only access. The row then reports **Connected ·
-Read-only · Primary calendar**, and the Blueprint Calendar control appears in
-the chart. Roam Desktop opens the real Google page in the system browser and
-returns automatically to the waiting settings row. The Calendar control performs
-a manual sync for the clicked Nautilus date; it never polls Calendar in the
-background or creates Daily Notes.
+Read-only · Primary calendar + Google Tasks**, and the Blueprint Calendar
+control appears in the chart. Roam Desktop opens the real Google page in the
+system browser and returns automatically to the waiting settings row. The
+Calendar control performs a manual sync for the clicked Nautilus date; it never
+polls Google in the background or creates Daily Notes.
 
-Normal click preserves Roam text you changed. Option/Alt-click force-refreshes
-Google-managed strings while leaving user-created children alone. All-day,
-free/transparent, and declined events are ignored. Nautilus normally restores
-the connection after a Roam reload; users never create or paste OAuth client
-IDs, secrets, or Calendar IDs. Calendar data is requested directly by the Roam
-client and never passes through the lightweight authorization service. Imported
-`Open` links preserve Google's original event target and prefer the connected
-Primary account when the browser has several Google sessions.
+Timed Calendar events become fixed events. Dated Google Tasks become flexible
+TODO/DONE rows using the configured default Todo duration because Google's
+public Tasks API exposes a due date, not a reliable time interval. Imported
+parent rows carry a quiet `· Google Calendar` source suffix; the chart removes
+that suffix from labels. Normal click preserves Roam text you changed.
+Option/Alt-click force-refreshes Google-managed strings while leaving
+user-created children alone. All-day, free/transparent, and declined events are
+ignored. Nautilus normally restores the connection after a Roam reload; users
+never create or paste OAuth client IDs, secrets, or Calendar IDs. Google data is
+requested directly by the Roam client and never passes through the lightweight
+authorization service. Imported `Open` links preserve Google's original event
+target and prefer the connected Primary account when the browser has several
+Google sessions.
 
 See [Google Calendar sync](./docs/google-calendar-sync.md) for the block shape,
 authorization, scopes, merge rules, and [privacy contract](./PRIVACY.md).

@@ -81,13 +81,15 @@ test('calendar runtime syncs only the explicitly clicked Nautilus date and plan'
   const extension = await loadExtension('calendar-runtime');
   const settings = new Map([
     ['google-calendar-enabled', true],
-    ['google-calendar-connection', JSON.stringify({ id: 'connection-id', secret: 'connection-secret' })],
+    ['google-calendar-connection', JSON.stringify({ version: 2, id: 'connection-id', secret: 'connection-secret' })],
     ['google-calendar-ids', 'primary,team@example.com'],
     ['google-calendar-sync-state', JSON.stringify({ version: 1, events: {} })],
     ['workday-start', 21],
     ['workday-end', 2],
+    ['todo-duration', 25],
   ]);
   const clientCalls = [];
+  const taskCalls = [];
   const reconcileCalls = [];
   const runtime = extension.createCalendarRuntime({
     extensionAPI: {
@@ -108,6 +110,24 @@ test('calendar runtime syncs only the explicitly clicked Nautilus date and plan'
             summary: 'Weekly meeting',
             start: { dateTime: '2026-08-31T01:00:00+08:00' },
             end: { dateTime: '2026-08-31T01:30:00+08:00' },
+          }, {
+            id: 'all-day-1',
+            status: 'confirmed',
+            summary: 'Holiday',
+            start: { date: '2026-08-30' },
+            end: { date: '2026-08-31' },
+          }],
+        }];
+      },
+      readTasks: async (options) => {
+        taskCalls.push(options);
+        return [{
+          taskList: { id: 'work-list', title: 'Work Tasks' },
+          tasks: [{
+            id: 'task-1',
+            title: 'Submit report',
+            status: 'needsAction',
+            due: '2026-08-30T00:00:00.000Z',
           }],
         }];
       },
@@ -116,7 +136,13 @@ test('calendar runtime syncs only the explicitly clicked Nautilus date and plan'
     reconcilerFactory: () => ({
       sync: async (options) => {
         reconcileCalls.push(options);
-        return { created: 1, updated: 0, removed: 0, localKept: 0, skipped: 0 };
+        return {
+          created: options.events.length,
+          updated: 0,
+          removed: 0,
+          localKept: 0,
+          skipped: 0,
+        };
       },
     }),
   });
@@ -132,10 +158,16 @@ test('calendar runtime syncs only the explicitly clicked Nautilus date and plan'
   assert.equal(new Date(clientCalls[0].timeMin).getDate(), 30);
   assert.equal(new Date(clientCalls[0].timeMax).getHours(), 2);
   assert.equal(new Date(clientCalls[0].timeMax).getDate(), 31);
+  assert.deepEqual(taskCalls, [{ date: '2026-08-30' }]);
   assert.equal(reconcileCalls[0].planUid, 'tomorrow-plan');
   assert.equal(reconcileCalls[0].force, true);
-  assert.equal(reconcileCalls[0].events[0].parentString, '01:00–01:30 Weekly meeting');
-  assert.equal(result.created, 1);
+  assert.equal(reconcileCalls[0].events[0].parentString, '01:00–01:30 Weekly meeting · Google Calendar');
+  assert.equal(reconcileCalls[0].events[1].parentString, '{{[[TODO]]}} Submit report 25m · Google Calendar');
+  assert.equal(result.created, 2);
+  assert.equal(result.tasks, 1);
+  assert.equal(result.calendarEvents, 1);
+  assert.equal(result.allDaySkipped, 1);
+  assert.equal(result.taskAccessPending, false);
 });
 
 test('calendar runtime stays inert when disabled and connects interactively when enabled', async () => {

@@ -1,9 +1,10 @@
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
 const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
-const GOOGLE_CALENDAR_SCOPES = [
+const GOOGLE_READONLY_SCOPES = [
   'https://www.googleapis.com/auth/calendar.events.readonly',
   'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+  'https://www.googleapis.com/auth/tasks.readonly',
 ].join(' ');
 const OAUTH_MESSAGE_TYPE = 'nautilus-google-oauth-v1';
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
@@ -192,7 +193,7 @@ async function createConnection({ refreshToken, env }) {
     encrypted.ciphertext,
     Date.now(),
   ).run();
-  return { version: 1, id: connectionId, secret: connectionSecret };
+  return { version: 2, id: connectionId, secret: connectionSecret };
 }
 
 async function readConnection(connectionId, env) {
@@ -308,7 +309,7 @@ function googleAuthorizationUrl(request, env, state) {
     client_id: clientId,
     redirect_uri: oauthRedirectUri(request, env),
     response_type: 'code',
-    scope: GOOGLE_CALENDAR_SCOPES,
+    scope: GOOGLE_READONLY_SCOPES,
     access_type: 'offline',
     include_granted_scopes: 'true',
     prompt: 'consent',

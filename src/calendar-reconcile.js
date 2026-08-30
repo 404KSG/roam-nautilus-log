@@ -1,4 +1,7 @@
-import { decideCalendarManagedChange } from './calendar-core';
+import {
+  decideCalendarManagedChange,
+  GOOGLE_CALENDAR_SOURCE_SUFFIX,
+} from './calendar-core';
 import {
   createGraphBlock,
   deleteGraphBlock,
@@ -41,6 +44,12 @@ function resultSummary() {
   return { created: 0, updated: 0, removed: 0, localKept: 0, skipped: 0 };
 }
 
+function ensureGoogleCalendarSource(value) {
+  const text = String(value ?? '').trimEnd();
+  const suffix = `· ${GOOGLE_CALENDAR_SOURCE_SUFFIX}`;
+  return text.endsWith(suffix) ? text : `${text} · ${GOOGLE_CALENDAR_SOURCE_SUFFIX}`;
+}
+
 /**
  * Reconcile normalized Google events into a single explicitly selected
  * Nautilus plan. The mapping makes writes incremental and lets normal sync
@@ -81,6 +90,9 @@ export function createCalendarReconciler({
       key: event.key,
       calendarId: event.calendarId,
       eventId: event.eventId,
+      taskListId: event.taskListId,
+      taskId: event.taskId,
+      resourceType: event.resourceType,
       planUid,
       parent,
       source,
@@ -88,7 +100,13 @@ export function createCalendarReconciler({
     };
   };
 
-  const updateManagedBlock = async ({ mapping, parentUid, incoming, force }) => {
+  const updateManagedBlock = async ({
+    mapping,
+    parentUid,
+    incoming,
+    force,
+    ensureSource = false,
+  }) => {
     if (!mapping?.uid) {
       if (!incoming) return { mapping: null, changed: false, localKept: false };
       return {
@@ -127,6 +145,13 @@ export function createCalendarReconciler({
       }
       await remove(mapping.uid);
       return { mapping: null, changed: true, localKept: false };
+    }
+    if (decision.action === 'keep-local' && ensureSource && incoming) {
+      const withSource = ensureGoogleCalendarSource(current);
+      if (withSource !== current) {
+        await update(mapping.uid, withSource);
+        return { mapping, changed: true, localKept: true };
+      }
     }
     return {
       mapping,
@@ -179,6 +204,7 @@ export function createCalendarReconciler({
       parentUid: planUid,
       incoming: event.parentString,
       force,
+      ensureSource: true,
     });
     mapping = { ...mapping, parent: parentResult.mapping };
     changed ||= parentResult.changed;
@@ -214,6 +240,9 @@ export function createCalendarReconciler({
         ...mapping,
         calendarId: event.calendarId,
         eventId: event.eventId,
+        taskListId: event.taskListId,
+        taskId: event.taskId,
+        resourceType: event.resourceType,
         details: nextDetails,
       },
       changed,

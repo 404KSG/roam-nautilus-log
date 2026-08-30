@@ -39,7 +39,7 @@ test('Calendar settings expose one explicit connection action and visible state'
   const connected = extension.panelConfig(settingsApi({
     language: 'en',
     'google-calendar-enabled': true,
-    'google-calendar-connection': JSON.stringify({ id: 'connection-id', secret: 'connection-secret' }),
+    'google-calendar-connection': JSON.stringify({ version: 2, id: 'connection-id', secret: 'connection-secret' }),
     'google-calendar-ids': 'primary',
   }), 'en');
   const disconnect = connected.settings.find(
@@ -51,6 +51,17 @@ test('Calendar settings expose one explicit connection action and visible state'
   assert.match(disconnect.description, /primary calendar/i);
   assert.equal(connected.settings.some((setting) => setting.id === 'google-oauth-client-id'), false);
   assert.equal(connected.settings.some((setting) => setting.id === 'google-calendar-ids'), false);
+
+  const legacy = extension.panelConfig(settingsApi({
+    language: 'en',
+    'google-calendar-enabled': true,
+    'google-calendar-connection': JSON.stringify({ version: 1, id: 'legacy-id', secret: 'legacy-secret' }),
+  }), 'en');
+  const reconnect = legacy.settings.find(
+    (setting) => setting.id === 'google-calendar-connection-action',
+  );
+  assert.equal(reconnect.action.content, 'Reconnect');
+  assert.match(reconnect.description, /Google Tasks/i);
 });
 
 test('Calendar settings communicate progress and recoverable failure without another surface', async () => {

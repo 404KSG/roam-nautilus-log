@@ -94,12 +94,12 @@ test('first Calendar action uses the hosted OAuth popup, saves an opaque credent
   browser.emit({
     type: 'nautilus-google-oauth-v1',
     nonce,
-    connection: { id: 'new-id', secret: 'new-secret' },
+    connection: { version: 2, id: 'new-id', secret: 'new-secret' },
     accessToken: 'new-access',
     expiresIn: 3600,
   });
   assert.equal(await pending, 'new-access');
-  assert.deepEqual(saved, { version: 1, id: 'new-id', secret: 'new-secret' });
+  assert.deepEqual(saved, { version: 2, id: 'new-id', secret: 'new-secret' });
   assert.equal(requests.some((request) => request.url.endsWith('/exchange')), false);
 });
 
@@ -141,7 +141,7 @@ test('Roam Desktop opens a real Google URL and polls the hosted result without a
         if (resultPolls === 1) return jsonResponse({ status: 'pending' });
         return jsonResponse({
           status: 'complete',
-          connection: { id: 'desktop-id', secret: 'desktop-secret' },
+          connection: { version: 2, id: 'desktop-id', secret: 'desktop-secret' },
           accessToken: 'desktop-access',
           expiresIn: 3600,
         });
@@ -156,7 +156,7 @@ test('Roam Desktop opens a real Google URL and polls the hosted result without a
     target: '_blank',
   }]);
   assert.equal(opens.some(({ url }) => url === 'about:blank'), false);
-  assert.deepEqual(saved, { version: 1, id: 'desktop-id', secret: 'desktop-secret' });
+  assert.deepEqual(saved, { version: 2, id: 'desktop-id', secret: 'desktop-secret' });
   const createBody = JSON.parse(requests[0].options.body);
   assert.match(createBody.nonce, /^[a-f0-9]{48}$/);
   assert.equal(resultPolls, 2);
@@ -237,7 +237,7 @@ test('destroy rejects a pending popup flow and prevents late credential persiste
   browser.emit({
     type: 'nautilus-google-oauth-v1',
     nonce,
-    connection: { id: 'late-id', secret: 'late-secret' },
+    connection: { version: 2, id: 'late-id', secret: 'late-secret' },
     accessToken: 'late-access',
     expiresIn: 3600,
   });
@@ -277,7 +277,7 @@ test('an interactive click recovers from a simultaneous revoked silent restore i
   browser.emit({
     type: 'nautilus-google-oauth-v1',
     nonce,
-    connection: { id: 'new-id', secret: 'new-secret' },
+    connection: { version: 2, id: 'new-id', secret: 'new-secret' },
     accessToken: 'new-access',
     expiresIn: 3600,
   });

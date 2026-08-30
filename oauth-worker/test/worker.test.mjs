@@ -175,6 +175,7 @@ test('OAuth worker completes its hosted callback, restores, and disconnects one 
     assert.equal(started.googleUrl.searchParams.get('access_type'), 'offline');
     assert.equal(started.googleUrl.searchParams.get('prompt'), 'consent');
     assert.match(started.googleUrl.searchParams.get('scope'), /calendar\.events\.readonly/);
+    assert.match(started.googleUrl.searchParams.get('scope'), /tasks\.readonly/);
 
     const exchange = await finishAuthorization(
       bindings,
@@ -186,6 +187,7 @@ test('OAuth worker completes its hosted callback, restores, and disconnects one 
     assert.equal(exchange.payload.accessToken, 'first-access');
     assert.equal(Boolean(exchange.payload.connection.id), true);
     assert.equal(Boolean(exchange.payload.connection.secret), true);
+    assert.equal(exchange.payload.connection.version, 2);
     assert.match(exchange.document, /postMessage\(payload, "https:\/\/roamresearch\.com"\)/);
     const codeRequest = googleRequests.find((request) => request.url.includes('/token'));
     const codeParams = new URLSearchParams(codeRequest.options.body);

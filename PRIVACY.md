@@ -4,14 +4,15 @@ Last updated: August 30, 2026
 
 Google Calendar integration is optional, disabled by default, read-only, and
 activated by the user. Nautilus Log requests only permission to read calendar
-lists and calendar events.
+lists, calendar events, Google Task lists, and Google Tasks.
 
 ## Data flow
 
-- Calendar lists and events are requested directly from Google by the Nautilus
-  Log extension running inside the user's Roam Research client.
-- Event titles, descriptions, locations, attendees, links, and times do not pass
-  through the Nautilus authorization service.
+- Calendar lists, events, Task lists, and Tasks are requested directly from
+  Google by the Nautilus Log extension running inside the user's Roam Research
+  client.
+- Event and Task titles, descriptions or notes, locations, attendees, links,
+  statuses, and times do not pass through the Nautilus authorization service.
 - The authorization service exchanges Google OAuth codes and refreshes
   short-lived access tokens. It stores an encrypted Google refresh token, an
   opaque connection identifier, a one-way hash of the connection secret, and
@@ -22,8 +23,8 @@ lists and calendar events.
   deleted as soon as Roam retrieves it.
 - The extension stores the opaque connection ID and secret in Roam extension
   settings. Access tokens remain in memory.
-- Imported event blocks and the managed sync mapping remain in the user's Roam
-  graph under the user's control.
+- Imported event or Task blocks and the managed sync mapping remain in the
+  user's Roam graph under the user's control.
 - When Google exposes the authorized Primary calendar identifier, an imported
   event's `Open` URL may include it as an encoded Google account hint. The
   original Google event link remains authoritative and is used unchanged when
@@ -31,11 +32,11 @@ lists and calendar events.
 
 ## Use and sharing
 
-Authorization data is used only to provide the Google Calendar sync requested
-by the user. Nautilus Log does not sell data, use Calendar data for advertising,
-train models on Calendar data, or share Calendar data with third parties. Google
-and the authorization-service hosting provider process the minimum network data
-required to provide OAuth and hosting.
+Authorization data is used only to provide the Google Calendar and Tasks sync
+requested by the user. Nautilus Log does not sell data, use Calendar or Tasks
+data for advertising, train models on that data, or share it with third parties.
+Google and the authorization-service hosting provider process the minimum
+network data required to provide OAuth and hosting.
 
 ## Retention and deletion
 

@@ -17,8 +17,8 @@ Required configuration:
   applied;
 - the Worker's exact `/oauth/callback` URL registered as an authorized redirect
   URI on the Google Web OAuth client;
-- Google Calendar API enabled and the two read-only Calendar scopes configured
-  on the consent screen;
+- Google Calendar API and Google Tasks API enabled, with the two Calendar
+  read-only scopes plus `tasks.readonly` configured on the consent screen;
 - `ALLOWED_ORIGINS=https://roamresearch.com`;
 - `GOOGLE_OAUTH_REDIRECT_URI` set to the same exact Worker callback URL.
 

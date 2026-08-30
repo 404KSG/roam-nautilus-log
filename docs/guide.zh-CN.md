@@ -62,7 +62,8 @@
 - **眼睛：** 显示或隐藏已完成事项。
 - **播放：** 回放所配置的一天，不修改 Roam block。
 - **Calendar：** 设置中的 Google Calendar 显示“已连接”后，导入当前图表 Daily Note
-  日期中的定时忙碌事件。Option/Alt + 点击只会强制刷新 Google 托管字段。
+  日期中的定时忙碌事件和有日期的 Google Tasks。Option/Alt + 点击只会强制刷新
+  Google 托管字段。
 - **整理：** 将已完成任务和已过去固定事件稳定移动到列表最前面，同时保持活动任务的
   相对优先级完全不变。整理只按 UID 移动直属外壳，不修改文本、时间、引用或后代 block；
   若整理后没有继续编辑计划，可撤销一次。
@@ -149,9 +150,11 @@ Nautilus Log 稳定的 renderer 身份识别组件，不依赖这个标签。
 只有开启 **执行层 · 进阶** 后，设置面板才会展开执行层的其他选项。
 
 Google Calendar 通过一个明确的连接状态行配置：点击 **连接**，选择自己的 Google
-账号并批准只读权限。设置中会持续显示“已连接”和“断开连接”；用户不需要填写任何
-开发者凭据或 Calendar ID。每次图表点击只读取当前日期，不设定时器、不后台轮询，也不
-预取未来 7 天。详见 [Google Calendar 同步说明](./google-calendar-sync.md)。
+账号并批准 Calendar 与 Tasks 的只读权限。设置中会持续显示“已连接”和“断开连接”；
+用户不需要填写任何开发者凭据或 Calendar ID。每次图表点击只读取当前日期，不设定时器、
+不后台轮询，也不预取未来 7 天。定时 Calendar 事件保持为固定事件；有日期的 Tasks 会
+按“默认 Todo 时长”导入为弹性 TODO/DONE。详见
+[Google Calendar 同步说明](./google-calendar-sync.md)。
 
 ## 命令
 

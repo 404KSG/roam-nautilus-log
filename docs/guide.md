@@ -67,8 +67,8 @@ Past gaps are factual schedule data, not a judgment that time was wasted.
 - **Eye:** show or hide completed items.
 - **Play:** replay the configured day without changing Roam blocks.
 - **Calendar:** after Google Calendar reports Connected in Settings, import
-  timed busy events for this chart's Daily Note. Option/Alt-click force-refreshes
-  only the Google-managed strings.
+  timed busy events and dated Google Tasks for this chart's Daily Note.
+  Option/Alt-click force-refreshes only the Google-managed strings.
 - **Tidy:** move completed tasks and elapsed fixed events to the front while
   preserving the exact relative order of active work. Tidy moves direct-child
   wrappers by UID, never changes task text, times, references, or descendants,
@@ -172,10 +172,12 @@ Execution-specific settings are revealed only while **Execution Layer · Advance
 enabled.
 
 Google Calendar is configured through one visible connection row: click
-**Connect**, choose your Google account, and approve read-only access. Connected
-state and **Disconnect** remain visible in Settings; users never enter developer
-credentials or Calendar IDs. Each chart click reads only the selected date;
-there is no timer, background poll, or seven-day prefetch. See
+**Connect**, choose your Google account, and approve read-only Calendar and
+Tasks access. Connected state and **Disconnect** remain visible in Settings;
+users never enter developer credentials or Calendar IDs. Each chart click reads
+only the selected date; there is no timer, background poll, or seven-day
+prefetch. Timed Calendar events remain fixed; dated Tasks are imported as
+flexible TODO/DONE rows with the configured Default Todo Duration. See
 [Google Calendar sync](./google-calendar-sync.md).
 
 ## Commands
