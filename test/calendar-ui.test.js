@@ -82,6 +82,13 @@ test('Calendar settings communicate progress and recoverable failure without ano
   assert.match(failed.description, /could not connect/i);
 });
 
+test('Component Prefix sits immediately before Urgent Trigger Word', async () => {
+  const extension = await loadExtension('settings-order');
+  const panel = extension.panelConfig(settingsApi({ language: 'en' }), 'en');
+  const ids = panel.settings.map(({ id }) => id);
+  assert.equal(ids.indexOf('prefix-str') + 1, ids.indexOf('color-1-trigger'));
+});
+
 test('Calendar control keeps its Blueprint calendar glyph and spins only while syncing', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'component.cljs'), 'utf8');
   const css = fs.readFileSync(path.join(__dirname, '..', 'extension.css'), 'utf8');

@@ -588,12 +588,6 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
         },
       },
       {
-        id: "prefix-str",
-        name: labels.prefix,
-        description: labels.prefixDesc,
-        action: { type: "input", default: settingValue(extensionAPI, "prefix-str"), onChange: (event) => update("prefix-str", event.target.value) },
-      },
-      {
         id: "desc-length",
         name: labels.length,
         description: labels.lengthDesc,
@@ -604,6 +598,12 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
         name: labels.duration,
         description: labels.durationDesc,
         action: { type: "select", default: settingValue(extensionAPI, "todo-duration"), items: [5, 10, 15, 20, 25, 30, 45, 60], onChange: (value) => update("todo-duration", value) },
+      },
+      {
+        id: "prefix-str",
+        name: labels.prefix,
+        description: labels.prefixDesc,
+        action: { type: "input", default: settingValue(extensionAPI, "prefix-str"), onChange: (event) => update("prefix-str", event.target.value) },
       },
       {
         id: "color-1-trigger",
