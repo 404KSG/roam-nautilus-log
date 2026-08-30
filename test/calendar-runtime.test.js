@@ -168,6 +168,65 @@ test('calendar runtime syncs only the explicitly clicked Nautilus date and plan'
   assert.equal(result.calendarEvents, 1);
   assert.equal(result.allDaySkipped, 1);
   assert.equal(result.taskAccessPending, false);
+  assert.equal(result.tasksUnavailable, false);
+});
+
+test('calendar runtime keeps event sync available when Google Tasks temporarily fails', async () => {
+  const extension = await loadExtension('calendar-runtime-task-failure');
+  const settings = new Map([
+    ['google-calendar-enabled', true],
+    ['google-calendar-connection', JSON.stringify({ version: 2, id: 'connection-id', secret: 'connection-secret' })],
+    ['google-calendar-ids', 'primary'],
+    ['workday-start', 5],
+    ['workday-end', 21],
+    ['todo-duration', 15],
+  ]);
+  const reconcileCalls = [];
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  try {
+    const runtime = extension.createCalendarRuntime({
+      extensionAPI: {
+        settings: {
+          get: (key) => settings.get(key),
+          set: async (key, value) => settings.set(key, value),
+        },
+      },
+      pageTitleToDate: () => new Date(2026, 7, 30),
+      clientFactory: () => ({
+        readRange: async () => [{
+          calendar: { id: 'primary', summary: 'Work' },
+          events: [{
+            id: 'meeting-1',
+            status: 'confirmed',
+            summary: 'Weekly meeting',
+            start: { dateTime: '2026-08-30T09:00:00+08:00' },
+            end: { dateTime: '2026-08-30T09:30:00+08:00' },
+          }],
+        }],
+        readTasks: async () => { throw new Error('Tasks API unavailable'); },
+        destroy: () => {},
+      }),
+      reconcilerFactory: () => ({
+        sync: async (options) => {
+          reconcileCalls.push(options);
+          return { created: options.events.length, updated: 0, removed: 0, localKept: 0, skipped: 0 };
+        },
+      }),
+    });
+
+    const result = await runtime.syncPlan({
+      planUid: 'today-plan',
+      pageTitle: 'August 30th, 2026',
+    });
+
+    assert.equal(reconcileCalls[0].events.length, 1);
+    assert.equal(result.calendarEvents, 1);
+    assert.equal(result.tasks, 0);
+    assert.equal(result.tasksUnavailable, true);
+  } finally {
+    console.warn = originalWarn;
+  }
 });
 
 test('calendar runtime stays inert when disabled and connects interactively when enabled', async () => {

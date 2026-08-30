@@ -169,11 +169,13 @@ export function createCalendarRuntime({
       const activeClient = getClient();
       const connection = parseCalendarConnection(extensionAPI.settings.get(CONNECTION_KEY));
       const tasksAuthorized = Number(connection?.version) >= 2;
-      const [batches, taskBatches] = await Promise.all([
+      const [batches, taskOutcome] = await Promise.all([
         activeClient.readRange({ calendarIds, ...range }),
         tasksAuthorized && typeof activeClient.readTasks === 'function'
           ? activeClient.readTasks({ date })
-          : Promise.resolve([]),
+            .then((value) => ({ value, error: null }))
+            .catch((error) => ({ value: [], error }))
+          : Promise.resolve({ value: [], error: null }),
       ]);
       if (destroyed || expectedGeneration !== generation) {
         throw new Error('Google Calendar sync was cancelled.');
@@ -181,6 +183,10 @@ export function createCalendarRuntime({
       const calendarEvents = (Array.isArray(batches) ? batches : []).flatMap((batch) => (
         normalizeGoogleCalendarEvents(batch)
       ));
+      const taskBatches = taskOutcome.value;
+      if (taskOutcome.error) {
+        console.warn('[Nautilus Log] Google Tasks sync unavailable', taskOutcome.error);
+      }
       const tasks = (Array.isArray(taskBatches) ? taskBatches : []).flatMap((batch) => (
         normalizeGoogleTasks({
           ...batch,
@@ -204,6 +210,7 @@ export function createCalendarRuntime({
         tasks: tasks.filter((item) => item.status !== 'cancelled').length,
         allDaySkipped,
         taskAccessPending: !tasksAuthorized,
+        tasksUnavailable: Boolean(taskOutcome.error),
       };
     } finally {
       inFlight = false;

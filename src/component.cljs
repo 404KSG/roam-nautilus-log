@@ -1460,7 +1460,9 @@
          (when (pos? (or (:allDaySkipped summary) 0))
            (str " · " (:allDaySkipped summary) " " (:calendarAllDaySkipped copy)))
          (when (:taskAccessPending summary)
-           (str " · " (:calendarTasksPending copy))))))
+           (str " · " (:calendarTasksPending copy)))
+         (when (:tasksUnavailable summary)
+           (str " · " (:calendarTasksUnavailable copy))))))
 
 (defn calendar-button [block-uid page-title-val calendar-state settings copy]
   (when (and (:google-calendar-enabled settings)
