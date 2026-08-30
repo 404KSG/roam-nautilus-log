@@ -5,12 +5,13 @@ workers_dev = true
 
 [vars]
 ALLOWED_ORIGINS = "https://roamresearch.com"
-GOOGLE_OAUTH_REDIRECT_URI = "https://nautilus-auth.kidsseeghosts.art/oauth/callback"
+GOOGLE_OAUTH_REDIRECT_URI = "https://nautilus-log-auth-preview.kidsseeghosts.workers.dev/oauth/callback"
+OAUTH_ISSUER = "production"
 
 [[d1_databases]]
 binding = "NAUTILUS_AUTH_DB"
 database_name = "nautilus-log-auth"
-database_id = "REPLACE_WITH_PRODUCTION_D1_ID"
+database_id = "ec2188ba-016e-4b37-a1a0-25d710e6d6c0"
 migrations_dir = "migrations"
 
 [env.preview]
@@ -20,6 +21,8 @@ workers_dev = true
 [env.preview.vars]
 ALLOWED_ORIGINS = "https://roamresearch.com"
 GOOGLE_OAUTH_REDIRECT_URI = "https://nautilus-log-auth-preview.kidsseeghosts.workers.dev/oauth/callback"
+OAUTH_ISSUER = ""
+OAUTH_CALLBACK_FORWARD_URL = "https://nautilus-log-auth.kidsseeghosts.workers.dev/oauth/callback"
 
 [[env.preview.d1_databases]]
 binding = "NAUTILUS_AUTH_DB"

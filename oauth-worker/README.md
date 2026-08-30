@@ -15,12 +15,21 @@ Required configuration:
 
 - a D1 database bound as `NAUTILUS_AUTH_DB`, with the checked-in migrations
   applied;
-- the Worker's exact `/oauth/callback` URL registered as an authorized redirect
-  URI on the Google Web OAuth client;
+- one exact `/oauth/callback` URL registered as an authorized redirect URI on
+  the Google Web OAuth client;
 - Google Calendar API and Google Tasks API enabled, with the two Calendar
   read-only scopes plus `tasks.readonly` configured on the consent screen;
 - `ALLOWED_ORIGINS=https://roamresearch.com`;
-- `GOOGLE_OAUTH_REDIRECT_URI` set to the same exact Worker callback URL.
+- `GOOGLE_OAUTH_REDIRECT_URI` set to that same exact registered callback URL.
+
+The current production rollout keeps the already registered Preview callback
+as a narrow migration alias. Production signs its state with
+`OAUTH_ISSUER=production`; Preview recognizes only that routing marker and
+forwards `code`, `state`, or `error` to the fixed production callback configured
+by `OAUTH_CALLBACK_FORWARD_URL`. Production then performs the normal HMAC state
+verification and token exchange. The marker never supplies a destination, and
+ordinary Preview callbacks stay in Preview. Users and the extension connect
+only to the production service URL.
 
 Browser Roam opens the Worker's `/authorize` endpoint in a popup and receives
 the result through origin-bound `postMessage`. Roam Desktop creates a
@@ -30,8 +39,14 @@ progress. Desktop handoff results are encrypted, expire after ten minutes, and
 are deleted as soon as Roam retrieves them. Calendar event data never passes
 through the Worker.
 
-Use separate Google Cloud projects, Worker deployments, D1 databases, and
-encryption keys for preview and production. Never commit secret values.
+Use separate Worker deployments, D1 databases, and encryption keys for Preview
+and production. A callback-domain migration may temporarily share one Google
+OAuth client, but the credential stores and connection services remain
+isolated. Never commit secret values.
+
+Production also serves the public app homepage, privacy policy, and terms at
+`/`, `/privacy`, and `/terms`. These documents describe the deployed data flow
+and provide stable Google OAuth branding URLs without adding another runtime.
 
 Typical deployment order:
 
@@ -39,7 +54,9 @@ Typical deployment order:
    `wrangler.toml`.
 2. Apply `wrangler d1 migrations apply nautilus-log-auth --remote`.
 3. Add all four Worker secrets with `wrangler secret put`.
-4. Deploy the Worker and attach the production custom domain.
+4. Deploy the Worker and publish the production OAuth app. If a callback alias
+   is used during a domain migration, deploy and test both ends before switching
+   the extension service URL.
 5. Verify `/health`, `/config` from an allowed origin, a real browser popup,
    Roam Desktop, reload restoration, and disconnect before publishing.
 

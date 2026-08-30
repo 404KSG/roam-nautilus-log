@@ -1,4 +1,4 @@
-export const GOOGLE_AUTH_SERVICE_URL = 'https://nautilus-log-auth-preview.kidsseeghosts.workers.dev';
+export const GOOGLE_AUTH_SERVICE_URL = 'https://nautilus-log-auth.kidsseeghosts.workers.dev';
 
 const OAUTH_MESSAGE_TYPE = 'nautilus-google-oauth-v1';
 

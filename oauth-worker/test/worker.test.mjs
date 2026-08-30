@@ -144,6 +144,19 @@ test('refresh token encryption round-trips and uses a random IV', async () => {
   assert.equal(await decryptRefreshToken(first, bindings), 'refresh-secret');
 });
 
+test('public OAuth pages accurately expose the app, privacy, and terms documents', async () => {
+  for (const [path, text] of [
+    ['/', 'Give every minute a job.'],
+    ['/privacy', 'Privacy Policy'],
+    ['/terms', 'Terms of Service'],
+  ]) {
+    const response = await handleRequest(new Request(`https://auth.example.com${path}`), env());
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('Content-Type'), /^text\/html/);
+    assert.match(await response.text(), new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+});
+
 test('OAuth worker completes its hosted callback, restores, and disconnects one opaque connection', { concurrency: false }, async () => {
   const bindings = env();
   const originalFetch = globalThis.fetch;
@@ -365,4 +378,49 @@ test('OAuth worker rejects non-Roam origins and invalid callback state', async (
     'https://auth.example.com/oauth/callback?code=code&state=invalid',
   ), env());
   assert.equal(badCallback.status, 400);
+});
+
+test('preview callback forwards only production-issued flows to the fixed production callback', async () => {
+  const production = env();
+  production.OAUTH_ISSUER = 'production';
+  production.GOOGLE_OAUTH_REDIRECT_URI = 'https://preview.example.com/oauth/callback';
+  const started = await beginAuthorization(production);
+  assert.equal(
+    started.googleUrl.searchParams.get('redirect_uri'),
+    'https://preview.example.com/oauth/callback',
+  );
+
+  const preview = env();
+  preview.OAUTH_CALLBACK_FORWARD_URL = 'https://production.example.com/oauth/callback';
+  const response = await handleRequest(new Request(
+    `https://preview.example.com/oauth/callback?code=google-code&state=${encodeURIComponent(started.googleUrl.searchParams.get('state'))}&scope=ignored`,
+  ), preview);
+  assert.equal(response.status, 302);
+  const location = new URL(response.headers.get('Location'));
+  assert.equal(location.origin, 'https://production.example.com');
+  assert.equal(location.pathname, '/oauth/callback');
+  assert.equal(location.searchParams.get('code'), 'google-code');
+  assert.equal(location.searchParams.get('state'), started.googleUrl.searchParams.get('state'));
+  assert.equal(location.searchParams.has('scope'), false);
+  assert.equal(response.headers.get('Cache-Control'), 'no-store');
+
+  const rejectingProduction = env();
+  rejectingProduction.OAUTH_STATE_SECRET = base64Url(new Uint8Array(32).fill(12));
+  const rejectedAtProduction = await handleRequest(new Request(location), rejectingProduction);
+  assert.equal(rejectedAtProduction.status, 400);
+});
+
+test('preview callback never forwards ordinary or malformed state', async () => {
+  const preview = env();
+  preview.OAUTH_CALLBACK_FORWARD_URL = 'https://production.example.com/oauth/callback';
+  const ordinary = await beginAuthorization(preview);
+  const ordinaryResponse = await handleRequest(new Request(
+    `https://preview.example.com/oauth/callback?code=google-code&state=${encodeURIComponent(ordinary.googleUrl.searchParams.get('state'))}`,
+  ), preview);
+  assert.notEqual(ordinaryResponse.status, 302);
+
+  const malformedResponse = await handleRequest(new Request(
+    'https://preview.example.com/oauth/callback?code=google-code&state=invalid',
+  ), preview);
+  assert.equal(malformedResponse.status, 400);
 });

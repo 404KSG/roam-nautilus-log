@@ -58,6 +58,14 @@ async function verifyOAuthState(value, env) {
   if (!body || !signature || extra) return null;
   const expected = await crypto.subtle.sign('HMAC', await oauthStateKey(env), encoder.encode(body));
   if (!constantTimeEqual(bytesToBase64Url(new Uint8Array(expected)), signature)) return null;
+  return parseUnsignedOAuthState(value);
+}
+
+function parseUnsignedOAuthState(value) {
+  const text = String(value || '');
+  if (!text || text.length > 4096) return null;
+  const [body, signature, extra] = text.split('.');
+  if (!body || !signature || extra) return null;
   try {
     const payload = JSON.parse(base64UrlToText(body));
     const issuedAt = Number(payload?.issuedAt);
@@ -67,6 +75,11 @@ async function verifyOAuthState(value, env) {
   } catch (_error) {
     return null;
   }
+}
+
+function statePayload(payload, env) {
+  const issuer = String(env.OAUTH_ISSUER || '').trim();
+  return issuer ? { ...payload, issuer } : payload;
 }
 
 function constantTimeEqual(left, right) {
@@ -345,6 +358,104 @@ function desktopDocument(success) {
 </html>`;
 }
 
+function publicPage({ title, heading, description, sections }) {
+  const sectionHtml = sections.map(({ title: sectionTitle, body }) => (
+    `<section><h2>${sectionTitle}</h2>${body}</section>`
+  )).join('');
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>${title}</title>
+  <style>
+    :root{color-scheme:light;background:#fbfcfd;color:#232b35;font:16px/1.6 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    body{margin:0}main{width:min(720px,calc(100% - 40px));margin:64px auto}header{border-bottom:1px solid #dfe4ea;padding-bottom:24px;margin-bottom:32px}
+    h1{font-size:2rem;line-height:1.2;margin:0 0 12px}h2{font-size:1.08rem;margin:32px 0 8px}p,ul{color:#596575}a{color:#1769aa}footer{border-top:1px solid #dfe4ea;margin-top:48px;padding-top:20px;color:#7b8794;font-size:.9rem}
+  </style>
+</head>
+<body><main><header><div>Nautilus Log</div><h1>${heading}</h1><p>${description}</p></header>${sectionHtml}<footer>Effective August 30, 2026 · <a href="mailto:animeshawtylovemealot@gmail.com">Contact</a></footer></main></body>
+</html>`;
+}
+
+function homepageDocument() {
+  return publicPage({
+    title: 'Nautilus Log · Google Calendar connection',
+    heading: 'Give every minute a job.',
+    description: 'Nautilus Log is a read-only Google Calendar and Tasks connection for the Nautilus Log extension in Roam Research.',
+    sections: [
+      {
+        title: 'What the connection does',
+        body: '<p>It lets you explicitly sync fixed Calendar events and dated Google Tasks into the Nautilus plan for the date you are viewing. Your Google data is never edited.</p>',
+      },
+      {
+        title: 'Control stays with you',
+        body: '<p>Sync runs only when you use the Calendar control in Nautilus Log. You can disconnect at any time from the extension settings.</p>',
+      },
+      {
+        title: 'Policies',
+        body: '<p><a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Service</a> · <a href="https://github.com/404KSG/roam-nautilus-log">Source code</a></p>',
+      },
+    ],
+  });
+}
+
+function privacyDocument() {
+  return publicPage({
+    title: 'Nautilus Log · Privacy Policy',
+    heading: 'Privacy Policy',
+    description: 'This policy explains the Google data used by Nautilus Log and how the hosted authorization service handles it.',
+    sections: [
+      {
+        title: 'Data accessed',
+        body: '<p>Nautilus Log requests read-only access to your calendar list, calendar events, and Google Tasks. It cannot create, edit, or delete Google data.</p>',
+      },
+      {
+        title: 'How data is used',
+        body: '<p>The extension reads the items needed for an explicit sync and writes the selected date’s imported blocks into your Roam Research graph. Google event and task content is not stored by the hosted authorization service.</p>',
+      },
+      {
+        title: 'Authorization storage and retention',
+        body: '<p>A Google refresh token is encrypted at rest and stored only to maintain the connection you requested. Short-lived authorization sessions expire after ten minutes. Disconnecting Nautilus Log deletes the stored connection and asks Google to revoke the token. Google may also revoke access under its own policies.</p>',
+      },
+      {
+        title: 'Sharing and advertising',
+        body: '<p>Your Google data is not sold, used for advertising, or shared with third parties. Cloudflare provides the infrastructure used to run the authorization service and encrypted token store.</p>',
+      },
+      {
+        title: 'Your choices',
+        body: '<p>You may disconnect from Nautilus Log settings or remove Nautilus Log from your Google Account permissions at any time. For privacy questions, use the contact address below.</p>',
+      },
+    ],
+  });
+}
+
+function termsDocument() {
+  return publicPage({
+    title: 'Nautilus Log · Terms of Service',
+    heading: 'Terms of Service',
+    description: 'These terms apply to the optional Google Calendar and Tasks connection provided with Nautilus Log.',
+    sections: [
+      {
+        title: 'Service',
+        body: '<p>The connection provides read-only import into a user-controlled Roam Research graph. It does not modify Google data or promise that every external item will fit into a Nautilus plan.</p>',
+      },
+      {
+        title: 'Your responsibility',
+        body: '<p>You are responsible for reviewing imported blocks, maintaining access to your Google and Roam accounts, and following the terms that apply to those services.</p>',
+      },
+      {
+        title: 'Availability',
+        body: '<p>The service is provided as available and may change as Google, Roam Research, or its infrastructure changes. You should not rely on it as the sole record for a meeting, deadline, or task.</p>',
+      },
+      {
+        title: 'Ending the connection',
+        body: '<p>You may stop using the connection and disconnect it at any time. Access may also be suspended to protect users or the service from abuse.</p>',
+      },
+    ],
+  });
+}
+
 async function oauthCompletion(state, payload, env, status = 200) {
   if (state.sessionId) {
     await completeOAuthSession(state.sessionId, payload, env);
@@ -362,7 +473,7 @@ async function authorize(request, env) {
   }
   const clientId = String(env.GOOGLE_CLIENT_ID || '').trim();
   if (!clientId) return json({ code: 'not_configured', message: 'Google authorization is not configured.' }, 503);
-  const state = await signOAuthState({ origin, nonce, issuedAt: Date.now() }, env);
+  const state = await signOAuthState(statePayload({ origin, nonce, issuedAt: Date.now() }, env), env);
   const googleUrl = googleAuthorizationUrl(request, env, state);
   return new Response(null, {
     status: 302,
@@ -384,12 +495,12 @@ async function createDesktopAuthorization(request, env, origin) {
     return json({ code: 'not_configured', message: 'Google authorization is not configured.' }, 503, origin);
   }
   const session = await createOAuthSession({ origin, nonce, env });
-  const state = await signOAuthState({
+  const state = await signOAuthState(statePayload({
     origin,
     nonce,
     sessionId: session.sessionId,
     issuedAt: Date.now(),
-  }, env);
+  }, env), env);
   return json({
     authorizeUrl: googleAuthorizationUrl(request, env, state).href,
     ...session,
@@ -487,6 +598,33 @@ async function oauthCallback(request, env) {
   }
 }
 
+function forwardProductionCallback(request, env) {
+  const forwardUrl = String(env.OAUTH_CALLBACK_FORWARD_URL || '').trim();
+  if (!forwardUrl) return null;
+  const incoming = new URL(request.url);
+  const state = parseUnsignedOAuthState(incoming.searchParams.get('state'));
+  if (state?.issuer !== 'production') return null;
+
+  const target = new URL(forwardUrl);
+  if (target.protocol !== 'https:' || target.pathname !== '/oauth/callback') {
+    throw new Error('OAuth callback forward URL is invalid.');
+  }
+  target.search = '';
+  for (const key of ['code', 'state', 'error']) {
+    const value = incoming.searchParams.get(key);
+    if (value !== null) target.searchParams.set(key, value);
+  }
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: target.href,
+      'Cache-Control': 'no-store',
+      'Referrer-Policy': 'no-referrer',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
+}
+
 async function config(request, env, origin) {
   const clientId = String(env.GOOGLE_CLIENT_ID || '').trim();
   if (!clientId) return json({ code: 'not_configured', message: 'Google authorization is not configured.' }, 503, origin);
@@ -546,12 +684,17 @@ async function disconnect(request, env, origin) {
 
 export async function handleRequest(request, env) {
   const url = new URL(request.url);
+  if (request.method === 'GET' && url.pathname === '/') return html(homepageDocument());
+  if (request.method === 'GET' && url.pathname === '/privacy') return html(privacyDocument());
+  if (request.method === 'GET' && url.pathname === '/terms') return html(termsDocument());
   if (request.method === 'GET' && url.pathname === '/health') {
     return json({ ok: true, service: 'nautilus-google-auth' });
   }
   try {
     if (request.method === 'GET' && url.pathname === '/authorize') return authorize(request, env);
-    if (request.method === 'GET' && url.pathname === '/oauth/callback') return oauthCallback(request, env);
+    if (request.method === 'GET' && url.pathname === '/oauth/callback') {
+      return forwardProductionCallback(request, env) || oauthCallback(request, env);
+    }
   } catch (_error) {
     return json({ code: 'service_error', message: 'Google Calendar connection failed.' }, 500);
   }

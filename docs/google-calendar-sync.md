@@ -67,10 +67,10 @@ connection; only revoked or invalid credentials require consent again.
 5. Option/Alt-click remains the explicit Google-first refresh for managed
    strings. Use **Disconnect** in settings to revoke and delete the connection.
 
-The Draft preview uses an isolated preview OAuth service; the public release
-will use Nautilus Log's verified production OAuth application. No Google Cloud
-setup, Client ID, secret, Calendar ID, or developer knowledge is required from
-a user.
+The Draft preview uses an isolated Preview credential store. The public build
+uses the production Nautilus Log OAuth service and persistent offline consent.
+No Google Cloud setup, Client ID, secret, Calendar ID, or developer knowledge is
+required from a user.
 
 ## Sources
 
