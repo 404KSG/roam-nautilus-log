@@ -60,7 +60,9 @@ Google-managed strings while leaving user-created children alone. All-day,
 free/transparent, and declined events are ignored. Nautilus normally restores
 the connection after a Roam reload; users never create or paste OAuth client
 IDs, secrets, or Calendar IDs. Calendar data is requested directly by the Roam
-client and never passes through the lightweight authorization service.
+client and never passes through the lightweight authorization service. Imported
+`Open` links preserve Google's original event target and prefer the connected
+Primary account when the browser has several Google sessions.
 
 See [Google Calendar sync](./docs/google-calendar-sync.md) for the block shape,
 authorization, scopes, merge rules, and [privacy contract](./PRIVACY.md).

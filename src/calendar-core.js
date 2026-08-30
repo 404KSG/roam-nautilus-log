@@ -53,6 +53,22 @@ function safeHttpUrl(value) {
   }
 }
 
+function googleCalendarOpenUrl(value, accountHint) {
+  const original = safeHttpUrl(value);
+  const hint = compactWhitespace(accountHint);
+  if (!original || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(hint)) return original;
+  try {
+    const url = new URL(original);
+    const googleCalendarHost = url.hostname === 'www.google.com'
+      || url.hostname === 'calendar.google.com';
+    if (!googleCalendarHost || !url.pathname.startsWith('/calendar/')) return original;
+    url.searchParams.set('authuser', hint);
+    return url.href.replace(/\)/g, '%29');
+  } catch (_error) {
+    return original;
+  }
+}
+
 function firstConferenceUrl(event) {
   const direct = safeHttpUrl(event?.hangoutLink);
   if (direct) return direct;
@@ -93,7 +109,7 @@ function sourceString(calendar, event) {
     compactWhitespace(calendar?.summary || calendar?.id || 'Calendar'),
   ];
   const joinUrl = firstConferenceUrl(event);
-  const openUrl = safeHttpUrl(event?.htmlLink);
+  const openUrl = googleCalendarOpenUrl(event?.htmlLink, calendar?.accountHint);
   if (joinUrl) segments.push(`[Join](${joinUrl})`);
   if (openUrl) segments.push(`[Open](${openUrl})`);
   return segments.join(' · ');

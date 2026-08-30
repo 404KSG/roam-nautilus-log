@@ -66,6 +66,31 @@ test('Google events become compact fixed-event blocks and skip non-blocking rows
   ]);
 });
 
+test('Google event links prefer the connected account without losing the original event target', async () => {
+  const extension = await loadExtension('calendar-account-aware-open');
+  const rows = extension.normalizeGoogleCalendarEvents({
+    calendar: {
+      id: 'primary',
+      summary: 'Primary calendar',
+      accountHint: 'connected@example.com',
+    },
+    events: [{
+      id: 'meeting-account-aware',
+      status: 'confirmed',
+      summary: 'Account-aware meeting',
+      start: { dateTime: '2026-08-30T17:00:00+08:00' },
+      end: { dateTime: '2026-08-30T17:45:00+08:00' },
+      htmlLink: 'https://www.google.com/calendar/event?eid=meeting-account-aware',
+    }],
+  });
+
+  assert.equal(rows.length, 1);
+  assert.equal(
+    rows[0].sourceString,
+    'Google Calendar · Primary calendar · [Open](https://www.google.com/calendar/event?eid=meeting-account-aware&authuser=connected%40example.com)',
+  );
+});
+
 test('recurring instances use a stable original-start key and cancelled events remain reconcilable', async () => {
   const extension = await loadExtension('calendar-recurring');
   const rows = extension.normalizeGoogleCalendarEvents({

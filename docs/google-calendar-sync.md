@@ -13,6 +13,10 @@ Nautilus component. It never creates Daily Notes or future plans.
   `HH:MM–HH:MM Title`, so the existing scheduler remains authoritative.
 - One compact managed child records the calendar source and useful links.
   Location and a shortened plain-text description are added only when present.
+- The imported `Open` action is derived from Google's exact `event.htmlLink`.
+  When Google exposes the authorized Primary calendar identifier, Nautilus adds
+  it only as an encoded account hint; unavailable or unsafe hints leave the
+  original link unchanged.
 - Normal sync updates a managed block only while its current string still
   equals the last imported snapshot. Roam edits win silently.
 - Option-click performs an explicit Google-first refresh of managed strings.

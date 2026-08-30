@@ -46,6 +46,10 @@
 
 ### Fixed
 
+- Imported Google Calendar `Open` links now retain Google's original event
+  target while adding the authorized Primary calendar account as a safe,
+  encoded account hint. Missing or invalid hints and non-Calendar links fall
+  back unchanged, with no extra Calendar request or background work.
 - Tidy now treats every visibly completed direct child—including a bare
   reference whose source is already DONE—as settled, while continuing to move
   only today's wrapper. Reordering also preserves each Block's existing

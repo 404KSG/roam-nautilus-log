@@ -41,17 +41,20 @@
 
 ## 可选 Google Calendar 同步
 
-开启 **Google Calendar · 可选** 后，可把定时且标记为忙碌的事件导入到当前点击的
-Nautilus 图表日期。Blueprint Calendar 按钮只执行手动、只读同步；不会后台轮询，也不会
-自动创建 Daily Note。
+打开 Nautilus Log 设置，点击 **连接 Google Calendar**，即可用只读权限授权自己的账号。
+连接后，设置会显示 **已连接 · 只读 · 主日历**，图表中出现 Blueprint Calendar 按钮。
+Roam Desktop 会在系统浏览器打开真实的 Google 授权页，并自动把结果返回正在等待的设置页。
+Calendar 按钮只手动同步当前 Nautilus 图表对应的日期；不会后台轮询，也不会自动创建
+Daily Note。
 
 普通点击会保护你在 Roam 中改写的文字；Option/Alt + 点击只强制刷新 Google 托管字段，
-仍保留用户自己创建的子 block。全天事件、空闲/透明事件和已拒绝事件不会导入。配置需要
-你自己的 Google Web OAuth Client ID，并把 `https://roamresearch.com` 添加为 Authorized
-JavaScript origin；短期访问令牌只留在内存中。
+仍保留用户自己创建的子 block。全天事件、空闲/透明事件和已拒绝事件不会导入。连接可在
+Roam 刷新后自动恢复，用户无需创建或粘贴 OAuth Client ID、密钥或 Calendar ID。Calendar
+数据由 Roam 客户端直接向 Google 请求，不会经过轻量授权服务。导入的 `Open` 链接保留
+Google 原始事件目标，并在浏览器登录多个 Google 账号时优先提示已连接的主账号。
 
-块结构、OAuth 设置、权限范围与合并规则详见
-[Google Calendar 同步说明](./docs/google-calendar-sync.md)。
+块结构、授权、权限范围、合并规则与隐私边界详见
+[Google Calendar 同步说明](./docs/google-calendar-sync.md)与[隐私说明](./PRIVACY.md)。
 
 ## 可选执行层
 

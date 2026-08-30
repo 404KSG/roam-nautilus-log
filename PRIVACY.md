@@ -24,6 +24,10 @@ lists and calendar events.
   settings. Access tokens remain in memory.
 - Imported event blocks and the managed sync mapping remain in the user's Roam
   graph under the user's control.
+- When Google exposes the authorized Primary calendar identifier, an imported
+  event's `Open` URL may include it as an encoded Google account hint. The
+  original Google event link remains authoritative and is used unchanged when
+  the hint is unavailable or unsafe.
 
 ## Use and sharing
 

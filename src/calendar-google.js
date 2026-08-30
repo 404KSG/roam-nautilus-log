@@ -99,6 +99,7 @@ export function createGoogleCalendarClient({
         calendar: {
           id: calendarId,
           summary: entry?.summaryOverride || entry?.summary || entry?.id || calendarId,
+          accountHint: primary?.id || '',
         },
         events,
       });
