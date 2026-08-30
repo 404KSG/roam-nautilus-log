@@ -20,10 +20,13 @@ import {
 import { createCalendarReconciler } from "./calendar-reconcile";
 import {
   createGoogleCalendarClient,
-  isGoogleOAuthClientId,
   parseGoogleCalendarIds,
 } from "./calendar-google";
 import { createCalendarRuntime } from "./calendar-runtime";
+import {
+  createPersistentGoogleAuthClient,
+  parseCalendarConnection,
+} from "./calendar-auth";
 import "../extension.css";
 
 const componentName = "Nautilus Log";
@@ -57,7 +60,7 @@ const executionDefaults = {
 
 const calendarDefaults = {
   "google-calendar-enabled": false,
-  "google-oauth-client-id": "",
+  "google-calendar-connection": "",
   "google-calendar-ids": "primary",
   "google-calendar-sync-state": "",
 };
@@ -159,9 +162,9 @@ function settingValue(extensionAPI, key) {
 
 function runtimeSettings(extensionAPI) {
   const calendarEnabled = extensionAPI.settings.get("google-calendar-enabled") === true;
-  const calendarConfigured = isGoogleOAuthClientId(
-    extensionAPI.settings.get("google-oauth-client-id"),
-  );
+  const calendarConfigured = Boolean(parseCalendarConnection(
+    extensionAPI.settings.get("google-calendar-connection"),
+  ));
   return {
     ...Object.fromEntries(
       Object.keys(defaults).map((key) => [key, settingValue(extensionAPI, key)]),
@@ -346,11 +349,7 @@ function panelConfig(extensionAPI, language) {
       forgottenTimer: "遗忘计时提醒（分钟）",
       forgottenTimerDesc: "单条 CLOCK 连续运行达到该时长后显示警告。填写 0 可关闭提醒；不会自动停止或删除计时。",
       calendar: "Google Calendar · 可选",
-      calendarDesc: "只读同步当前 Nautilus 日期的日历事件；只有点击图表中的 Calendar 按钮时才读取日历数据。默认关闭。",
-      calendarClientId: "Google OAuth Client ID",
-      calendarClientIdDesc: "填写本插件专用的 Web OAuth Client ID，并在 Google Cloud 中把 https://roamresearch.com 设为 Authorized JavaScript origin。访问令牌只保存在内存中。",
-      calendarIds: "Calendar IDs",
-      calendarIdsDesc: "要读取的日历 ID，用英文逗号分隔。默认 primary；可添加其他日历的 ID。",
+      calendarDesc: "启用后点击图表中的 Calendar 按钮即可一次授权并同步当前 Nautilus 日期；Roam 刷新后会自动恢复连接。关闭会断开 Google Calendar。",
     }
     : {
       tabTitle: "Nautilus Log",
@@ -380,11 +379,7 @@ function panelConfig(extensionAPI, language) {
       forgottenTimer: "Forgotten Timer Warning (minutes)",
       forgottenTimerDesc: "Warn when one CLOCK has kept running for this many minutes. Enter 0 to disable; the warning never stops or deletes time automatically.",
       calendar: "Google Calendar · Optional",
-      calendarDesc: "Read-only sync for the date of the clicked Nautilus Plan. Calendar data is requested only when you click the Calendar control; disabled by default.",
-      calendarClientId: "Google OAuth Client ID",
-      calendarClientIdDesc: "Use a Web OAuth Client ID owned by this extension and add https://roamresearch.com as an Authorized JavaScript origin in Google Cloud. Access tokens stay in memory only.",
-      calendarIds: "Calendar IDs",
-      calendarIdsDesc: "Comma-separated calendars to read. Defaults to primary; add other Calendar IDs when needed.",
+      calendarDesc: "Enable, then click the Calendar control to connect once and sync the clicked Nautilus date. Roam restores the connection after reload; disabling disconnects Google Calendar.",
     };
 
   const update = async (key, value) => {
@@ -402,17 +397,6 @@ function panelConfig(extensionAPI, language) {
     await extensionAPI.settings.set(key, next);
     publishRuntimeSettings(extensionAPI);
     await timingRuntime?.requestRefresh?.();
-  };
-
-  const updateCalendarSetting = async (key, event) => {
-    const value = event?.target?.value ?? event;
-    await extensionAPI.settings.set(key, String(value ?? "").trim());
-    publishRuntimeSettings(extensionAPI);
-    if (key === "google-oauth-client-id") {
-      calendarRuntime?.prepare?.().catch((error) => {
-        console.debug("[Nautilus Log] Google Identity Services preload unavailable", error);
-      });
-    }
   };
 
   const hourLabel = (hour) => `${String(Number(hour)).padStart(2, "0")}:00`;
@@ -442,30 +426,6 @@ function panelConfig(extensionAPI, language) {
 
   const executionEnabled = extensionAPI.settings.get("actual-time-tracking") === true;
   const calendarEnabled = extensionAPI.settings.get("google-calendar-enabled") === true;
-  const calendarSettings = [
-    {
-      id: "google-oauth-client-id",
-      name: labels.calendarClientId,
-      description: labels.calendarClientIdDesc,
-      action: {
-        type: "input",
-        default: extensionAPI.settings.get("google-oauth-client-id") || "",
-        placeholder: "000000000000-….apps.googleusercontent.com",
-        onChange: (event) => updateCalendarSetting("google-oauth-client-id", event),
-      },
-    },
-    {
-      id: "google-calendar-ids",
-      name: labels.calendarIds,
-      description: labels.calendarIdsDesc,
-      action: {
-        type: "input",
-        default: extensionAPI.settings.get("google-calendar-ids") || "primary",
-        placeholder: "primary, team@example.com",
-        onChange: (event) => updateCalendarSetting("google-calendar-ids", event),
-      },
-    },
-  ];
   const executionSettings = [
     {
       id: "timing-line-sidebar",
@@ -592,7 +552,22 @@ function panelConfig(extensionAPI, language) {
           defaultValue: calendarEnabled,
           onChange: async (value) => {
             const enabled = typeof value === "boolean" ? value : Boolean(value?.target?.checked);
-            await extensionAPI.settings.set("google-calendar-enabled", enabled);
+            if (enabled) {
+              await extensionAPI.settings.set("google-calendar-enabled", true);
+              try {
+                await calendarRuntime?.prepareIdentity?.();
+              } catch (error) {
+                console.debug("[Nautilus Log] Google authorization preload unavailable", error);
+              }
+            } else {
+              try {
+                await calendarRuntime?.disconnect?.();
+                await extensionAPI.settings.set("google-calendar-enabled", false);
+              } catch (error) {
+                await extensionAPI.settings.set("google-calendar-enabled", true);
+                console.warn("[Nautilus Log] Google Calendar disconnect failed; connection was retained", error);
+              }
+            }
             publishRuntimeSettings(extensionAPI);
             extensionAPI.settings.panel.create(
               panelConfig(extensionAPI, extensionAPI.settings.get("language") || "en"),
@@ -600,7 +575,6 @@ function panelConfig(extensionAPI, language) {
           },
         },
       },
-      ...(calendarEnabled ? calendarSettings : []),
       {
         id: "actual-time-tracking",
         name: labels.tracking,
@@ -656,10 +630,15 @@ async function onload({ extensionAPI }) {
   await migratePreviewDefaults(extensionAPI);
   const language = await initializeLanguage(extensionAPI);
   calendarRuntime?.destroy();
-  calendarRuntime = createCalendarRuntime({ extensionAPI });
-  calendarRuntime.prepare().catch((error) => {
-    console.debug("[Nautilus Log] Google Identity Services preload unavailable", error);
+  calendarRuntime = createCalendarRuntime({
+    extensionAPI,
+    onConnectionChange: () => publishRuntimeSettings(extensionAPI),
   });
+  calendarRuntime.prepare()
+    .then((restored) => (restored ? true : calendarRuntime?.prepareIdentity?.()))
+    .catch((error) => {
+      console.debug("[Nautilus Log] Google Calendar connection restore unavailable", error);
+    });
   tidyCommands.initialize();
   publishRuntimeSettings(extensionAPI);
   extensionAPI.settings.panel.create(panelConfig(extensionAPI, language));
@@ -734,8 +713,9 @@ export {
   decideCalendarManagedChange,
   createCalendarReconciler,
   createGoogleCalendarClient,
+  createPersistentGoogleAuthClient,
   parseGoogleCalendarIds,
-  isGoogleOAuthClientId,
+  parseCalendarConnection,
   createCalendarRuntime,
 };
 

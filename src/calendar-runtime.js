@@ -1,12 +1,16 @@
 import { normalizeGoogleCalendarEvents } from './calendar-core';
 import {
   createGoogleCalendarClient,
-  isGoogleOAuthClientId,
   parseGoogleCalendarIds,
 } from './calendar-google';
+import {
+  GOOGLE_AUTH_SERVICE_URL,
+  parseCalendarConnection,
+} from './calendar-auth';
 import { createCalendarReconciler } from './calendar-reconcile';
 
 const SYNC_STATE_KEY = 'google-calendar-sync-state';
+const CONNECTION_KEY = 'google-calendar-connection';
 
 function parseSyncState(value) {
   if (value && typeof value === 'object') return value;
@@ -50,32 +54,51 @@ export function createCalendarRuntime({
   pageTitleToDate = defaultPageTitleToDate,
   clientFactory = createGoogleCalendarClient,
   reconcilerFactory = createCalendarReconciler,
+  authServiceUrl = GOOGLE_AUTH_SERVICE_URL,
+  onConnectionChange = () => {},
 } = {}) {
   if (!extensionAPI?.settings) throw new Error('Calendar sync requires the Roam extension settings API.');
 
   let client = null;
-  let activeClientId = '';
   let inFlight = false;
   let destroyed = false;
+  let generation = 0;
 
   const reconciler = reconcilerFactory({
     loadState: () => parseSyncState(extensionAPI.settings.get(SYNC_STATE_KEY)),
     saveState: (state) => extensionAPI.settings.set(SYNC_STATE_KEY, JSON.stringify(state)),
   });
 
-  const getClient = (clientId) => {
-    if (client && activeClientId === clientId) return client;
-    client?.destroy?.();
-    client = clientFactory({ clientId });
-    activeClientId = clientId;
+  const getClient = () => {
+    if (client) return client;
+    client = clientFactory({
+      authOptions: {
+        serviceUrl: authServiceUrl,
+        loadConnection: () => parseCalendarConnection(extensionAPI.settings.get(CONNECTION_KEY)),
+        saveConnection: async (connection) => {
+          await extensionAPI.settings.set(CONNECTION_KEY, JSON.stringify(connection));
+          onConnectionChange(true);
+        },
+        clearConnection: async () => {
+          await extensionAPI.settings.set(CONNECTION_KEY, '');
+          onConnectionChange(false);
+        },
+        onConnectionChange,
+      },
+    });
     return client;
   };
 
   const prepare = async () => {
     if (destroyed || extensionAPI.settings.get('google-calendar-enabled') !== true) return false;
-    const clientId = String(extensionAPI.settings.get('google-oauth-client-id') || '').trim();
-    if (!isGoogleOAuthClientId(clientId)) return false;
-    await getClient(clientId).prepare?.();
+    if (!parseCalendarConnection(extensionAPI.settings.get(CONNECTION_KEY))) return false;
+    return Boolean(await getClient().prepare?.());
+  };
+
+  const prepareIdentity = async () => {
+    if (destroyed || extensionAPI.settings.get('google-calendar-enabled') !== true) return false;
+    if (parseCalendarConnection(extensionAPI.settings.get(CONNECTION_KEY))) return true;
+    await getClient().prepareIdentity?.();
     return true;
   };
 
@@ -84,14 +107,11 @@ export function createCalendarRuntime({
     if (extensionAPI.settings.get('google-calendar-enabled') !== true) {
       throw new Error('Google Calendar sync is not enabled in Nautilus Log settings.');
     }
-    const clientId = String(extensionAPI.settings.get('google-oauth-client-id') || '').trim();
-    if (!isGoogleOAuthClientId(clientId)) {
-      throw new Error('Add a valid Google OAuth Client ID in Nautilus Log settings first.');
-    }
     if (!planUid || !pageTitle) throw new Error('Calendar sync requires this Nautilus Plan and its Daily Note date.');
     if (inFlight) throw new Error('A Google Calendar sync is already in progress.');
 
     inFlight = true;
+    const expectedGeneration = generation;
     try {
       const range = planRange(pageTitleToDate(pageTitle), {
         startHour: extensionAPI.settings.get('workday-start'),
@@ -100,24 +120,47 @@ export function createCalendarRuntime({
       const calendarIds = parseGoogleCalendarIds(
         extensionAPI.settings.get('google-calendar-ids'),
       );
-      const batches = await getClient(clientId).readRange({ calendarIds, ...range });
+      const batches = await getClient().readRange({ calendarIds, ...range });
+      if (destroyed || expectedGeneration !== generation) {
+        throw new Error('Google Calendar sync was cancelled.');
+      }
       const events = (Array.isArray(batches) ? batches : []).flatMap((batch) => (
         normalizeGoogleCalendarEvents(batch)
       ));
-      return await reconciler.sync({ planUid, events, force: force === true });
+      const result = await reconciler.sync({ planUid, events, force: force === true });
+      if (destroyed || expectedGeneration !== generation) {
+        throw new Error('Google Calendar sync was cancelled.');
+      }
+      return result;
     } finally {
       inFlight = false;
     }
   };
 
-  const destroy = () => {
-    destroyed = true;
+  const disconnect = async () => {
+    if (!client && !parseCalendarConnection(extensionAPI.settings.get(CONNECTION_KEY))) {
+      onConnectionChange(false);
+      return true;
+    }
+    generation += 1;
+    const result = await getClient().disconnect?.();
     client?.destroy?.();
     client = null;
-    activeClientId = '';
+    return result !== false;
   };
 
-  return { prepare, syncPlan, destroy };
+  const hasConnection = () => Boolean(parseCalendarConnection(
+    extensionAPI.settings.get(CONNECTION_KEY),
+  ));
+
+  const destroy = () => {
+    destroyed = true;
+    generation += 1;
+    client?.destroy?.();
+    client = null;
+  };
+
+  return { prepare, prepareIdentity, syncPlan, disconnect, hasConnection, destroy };
 }
 
-export { SYNC_STATE_KEY };
+export { CONNECTION_KEY, SYNC_STATE_KEY };

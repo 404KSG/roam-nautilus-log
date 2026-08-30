@@ -53,12 +53,14 @@ manual, read-only sync; it never polls in the background or creates Daily Notes.
 
 Normal click preserves Roam text you changed. Option/Alt-click force-refreshes
 Google-managed strings while leaving user-created children alone. All-day,
-free/transparent, and declined events are ignored. Setup requires your own Google
-Web OAuth Client ID with `https://roamresearch.com` as an Authorized JavaScript
-origin; short-lived access tokens remain in memory only.
+free/transparent, and declined events are ignored. The first Calendar click
+opens Google's account authorization and continues the sync. Nautilus normally
+restores that connection after a Roam reload; users never create or paste OAuth
+client IDs. Calendar data is requested directly by the Roam client and never
+passes through the lightweight authorization service.
 
 See [Google Calendar sync](./docs/google-calendar-sync.md) for the block shape,
-OAuth setup, scopes, and merge rules.
+authorization, scopes, merge rules, and [privacy contract](./PRIVACY.md).
 
 ## Optional Execution Layer
 

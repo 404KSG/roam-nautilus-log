@@ -23,39 +23,37 @@ Nautilus component. It never creates Daily Notes or future plans.
 
 ## Authentication boundary
 
-Google Identity Services' browser token model obtains short-lived access
-tokens from a user gesture and calls Calendar REST endpoints through CORS. It
-does not require a refresh-token backend, but a Web OAuth Client ID and an
-authorized JavaScript origin are still required. Nautilus Log therefore never
-reuses another extension's client ID or token broker. The Client ID is supplied
-in extension settings; access tokens stay in memory and are never written to
-Roam or extension settings.
+Nautilus Log owns its Google Web OAuth application. The first Calendar click
+opens Google's authorization-code flow with offline access. A small Nautilus
+authorization service exchanges the callback code and encrypts the refresh
+token at rest. The extension stores only an opaque connection ID and secret in
+extension settings.
 
-After the option is enabled and a valid Client ID is entered, Nautilus Log may
-preload the official Google Identity Services script so the next explicit click
-can open Google's authorization flow reliably. It does not request an access
-token or read Calendar data until that click.
+On a later Roam load, the extension makes one request to restore a short-lived
+access token. Calendar REST requests still run directly from the Roam browser;
+event data never passes through the authorization service. The extension does
+not poll Calendar in the background. Turning Google Calendar off revokes and
+deletes the connection when possible.
 
 ## Setup
 
-1. In Google Cloud, enable the Google Calendar API and configure an OAuth consent
-   screen for the accounts that will use the extension.
-2. Create an OAuth Client ID with application type **Web application**.
-3. Add `https://roamresearch.com` to **Authorized JavaScript origins**. A client
-   secret is not used by this browser token flow.
-4. In **Roam Settings → Nautilus Log**, enable Google Calendar, paste the Client
-   ID, and keep `primary` or add comma-separated Calendar IDs.
-5. Open the Nautilus chart for the intended Daily Note and click its Calendar
-   control. Option/Alt-click is the explicit Google-first refresh.
+1. Enable **Google Calendar · Optional** in Nautilus Log settings.
+2. Open the Nautilus chart for the intended Daily Note and click its Calendar
+   control.
+3. Choose a Google account and approve the two read-only Calendar permissions.
+4. The first sync continues automatically. Later Roam reloads normally restore
+   the same connection without another consent flow.
+5. Option/Alt-click remains the explicit Google-first refresh for managed
+   strings. Turning the setting off disconnects Google Calendar.
 
-OAuth projects that are still in Google's testing mode must include the intended
-Google accounts as test users. Production consent-screen and verification
-requirements remain governed by Google Cloud.
+The public extension uses Nautilus Log's verified production OAuth application.
+No Google Cloud setup, Client ID, secret, Calendar ID, or developer knowledge is
+required from a user.
 
 ## Sources
 
-- [Google Identity Services token model](https://developers.google.com/identity/oauth2/web/guides/use-token-model)
-- [Google Identity Services setup](https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid)
+- [Google Identity Services code model](https://developers.google.com/identity/oauth2/web/guides/use-code-model)
+- [Google OAuth production readiness](https://developers.google.com/identity/protocols/oauth2/production-readiness/policy-compliance)
 - [Google Calendar authorization scopes](https://developers.google.com/workspace/calendar/api/auth)
 - [Google Calendar events.list](https://developers.google.com/workspace/calendar/api/v3/reference/events/list)
 - [Roam Depot extension contract](https://github.com/Roam-Research/roam-depot)

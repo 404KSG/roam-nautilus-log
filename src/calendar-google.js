@@ -1,11 +1,6 @@
-const GOOGLE_IDENTITY_SCRIPT_ID = 'nautilus-log-google-identity-services';
-const GOOGLE_IDENTITY_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
+import { createPersistentGoogleAuthClient } from './calendar-auth';
+
 const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
-const GOOGLE_CALENDAR_SCOPES = [
-  'https://www.googleapis.com/auth/calendar.events.readonly',
-  'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
-].join(' ');
-let googleIdentityPromise = null;
 
 export function parseGoogleCalendarIds(value) {
   const ids = String(value ?? '')
@@ -15,56 +10,6 @@ export function parseGoogleCalendarIds(value) {
   return [...new Set(ids.length ? ids : ['primary'])];
 }
 
-export function isGoogleOAuthClientId(value) {
-  return /^[^\s]+\.apps\.googleusercontent\.com$/i.test(String(value ?? '').trim());
-}
-
-export async function loadGoogleIdentityServices() {
-  if (typeof window === 'undefined') throw new Error('Google Calendar requires a browser window.');
-  if (window.google?.accounts?.oauth2) return window.google.accounts.oauth2;
-  if (typeof document === 'undefined') throw new Error('Google Calendar requires a browser document.');
-  if (googleIdentityPromise) return googleIdentityPromise;
-
-  const existing = document.getElementById(GOOGLE_IDENTITY_SCRIPT_ID)
-    || document.querySelector(`script[src="${GOOGLE_IDENTITY_SCRIPT_URL}"]`);
-  googleIdentityPromise = new Promise((resolve, reject) => {
-    let timeoutId = null;
-    const cleanup = (node) => {
-      if (timeoutId) clearTimeout(timeoutId);
-      node?.removeEventListener?.('load', finish);
-      node?.removeEventListener?.('error', fail);
-    };
-    const finish = () => {
-      const oauth2 = window.google?.accounts?.oauth2;
-      cleanup(existing || document.getElementById(GOOGLE_IDENTITY_SCRIPT_ID));
-      if (oauth2) resolve(oauth2);
-      else reject(new Error('Google Identity Services did not become available.'));
-    };
-    const fail = () => {
-      cleanup(existing || document.getElementById(GOOGLE_IDENTITY_SCRIPT_ID));
-      reject(new Error('Google Identity Services could not be loaded.'));
-    };
-    timeoutId = setTimeout(fail, 15_000);
-    if (existing) {
-      existing.addEventListener('load', finish, { once: true });
-      existing.addEventListener('error', fail, { once: true });
-      return;
-    }
-    const script = document.createElement('script');
-    script.id = GOOGLE_IDENTITY_SCRIPT_ID;
-    script.src = GOOGLE_IDENTITY_SCRIPT_URL;
-    script.async = true;
-    script.defer = true;
-    script.addEventListener('load', finish, { once: true });
-    script.addEventListener('error', fail, { once: true });
-    document.head.appendChild(script);
-  }).catch((error) => {
-    googleIdentityPromise = null;
-    throw error;
-  });
-  return googleIdentityPromise;
-}
-
 function apiErrorMessage(payload, response) {
   return payload?.error?.message
     || payload?.error_description
@@ -72,69 +17,37 @@ function apiErrorMessage(payload, response) {
 }
 
 export function createGoogleCalendarClient({
-  clientId,
-  loadIdentity = loadGoogleIdentityServices,
+  authClient,
+  authClientFactory = createPersistentGoogleAuthClient,
+  authOptions = {},
   fetchImpl = typeof fetch === 'function' ? fetch.bind(globalThis) : null,
-  now = Date.now,
 } = {}) {
-  if (!isGoogleOAuthClientId(clientId)) throw new Error('A valid Google OAuth Client ID is required.');
   if (typeof fetchImpl !== 'function') throw new Error('Google Calendar requires the Fetch API.');
+  const authorization = authClient || authClientFactory(authOptions);
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  let destroyed = false;
 
-  let token = '';
-  let expiresAt = 0;
-  let tokenClient = null;
-  let tokenRequest = null;
-  let tokenSettle = null;
-
-  const hasUsableToken = () => token && Number(now()) < expiresAt - 30_000;
-
-  const authorize = async () => {
-    if (hasUsableToken()) return token;
-    if (tokenRequest) return tokenRequest;
-    tokenRequest = (async () => {
-      const oauth2 = await loadIdentity();
-      if (!tokenClient) {
-        tokenClient = oauth2.initTokenClient({
-          client_id: String(clientId).trim(),
-          scope: GOOGLE_CALENDAR_SCOPES,
-          callback: (response) => tokenSettle?.(response),
-          error_callback: (error) => tokenSettle?.({ error: error?.type || 'popup_failed_to_open' }),
+  const fetchJson = async (url, retry = true) => {
+    if (destroyed) throw new Error('Google Calendar sync was cancelled.');
+    const accessToken = await authorization.authorize({ interactive: true });
+    if (!accessToken) throw new Error('Google Calendar must be connected.');
+    let response = await fetchImpl(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: controller?.signal,
+    });
+    if (response.status === 401 && retry) {
+      authorization.invalidateAccessToken?.();
+      let refreshed = await authorization.authorize({ interactive: false });
+      if (!refreshed) refreshed = await authorization.authorize({ interactive: true });
+      if (refreshed) {
+        response = await fetchImpl(url, {
+          headers: { Authorization: `Bearer ${refreshed}` },
+          signal: controller?.signal,
         });
       }
-      return new Promise((resolve, reject) => {
-        tokenSettle = (response) => {
-          tokenSettle = null;
-          if (!response?.access_token) {
-            reject(new Error(response?.error_description || response?.error || 'Google authorization was cancelled.'));
-            return;
-          }
-          token = response.access_token;
-          expiresAt = Number(now()) + Math.max(0, Number(response.expires_in) || 0) * 1000;
-          resolve(token);
-        };
-        tokenClient.requestAccessToken({ prompt: '' });
-      });
-    })();
-    try {
-      return await tokenRequest;
-    } finally {
-      tokenRequest = null;
     }
-  };
-
-  const fetchJson = async (url) => {
-    const accessToken = await authorize();
-    const response = await fetchImpl(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      if (response.status === 401) {
-        token = '';
-        expiresAt = 0;
-      }
-      throw new Error(apiErrorMessage(payload, response));
-    }
+    if (!response.ok) throw new Error(apiErrorMessage(payload, response));
     return payload;
   };
 
@@ -194,14 +107,18 @@ export function createGoogleCalendarClient({
   };
 
   const destroy = () => {
-    token = '';
-    expiresAt = 0;
-    tokenRequest = null;
-    tokenSettle = null;
-    tokenClient = null;
+    destroyed = true;
+    controller?.abort();
+    authorization.destroy?.();
   };
 
-  return { prepare: loadIdentity, authorize, readRange, destroy };
+  return {
+    prepare: authorization.prepare,
+    prepareIdentity: authorization.prepareIdentity,
+    authorize: authorization.authorize,
+    disconnect: authorization.disconnect,
+    hasConnection: authorization.hasConnection,
+    readRange,
+    destroy,
+  };
 }
-
-export { GOOGLE_CALENDAR_SCOPES };

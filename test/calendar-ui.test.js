@@ -31,11 +31,12 @@ test('Calendar settings remain compact until the optional feature is enabled', a
   const enabled = extension.panelConfig(settingsApi({
     language: 'en',
     'google-calendar-enabled': true,
-    'google-oauth-client-id': 'client-id.apps.googleusercontent.com',
     'google-calendar-ids': 'primary',
   }), 'en');
-  assert.ok(enabled.settings.find((setting) => setting.id === 'google-oauth-client-id'));
-  assert.ok(enabled.settings.find((setting) => setting.id === 'google-calendar-ids'));
+  assert.equal(enabled.settings.some((setting) => setting.id === 'google-oauth-client-id'), false);
+  assert.equal(enabled.settings.some((setting) => setting.id === 'google-calendar-ids'), false);
+  const calendar = enabled.settings.find((setting) => setting.id === 'google-calendar-enabled');
+  assert.match(calendar.description, /connect once/i);
 });
 
 test('Calendar control uses a Blueprint calendar glyph instead of a custom SVG', () => {
@@ -43,4 +44,5 @@ test('Calendar control uses a Blueprint calendar glyph instead of a custom SVG',
   assert.match(source, /bp3-icon bp3-icon-calendar/);
   const calendarFunction = source.match(/\(defn calendar-button[\s\S]*?\n\(defn /)?.[0] || '';
   assert.doesNotMatch(calendarFunction, /\[:svg/);
+  assert.doesNotMatch(calendarFunction, /\(not configured\?\)\)\}/);
 });

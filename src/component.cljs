@@ -1467,7 +1467,7 @@
                   :else default-title)]
       [:button
        {:on-click (fn [event]
-                    (when (and configured? (not busy?))
+                    (when (not busy?)
                       (when-let [sync-calendar (some-> js/window .-nautilusLogExtensionData .-syncCalendarPlan)]
                         (reset! calendar-state {:busy true :title nil})
                         (-> (js/Promise.resolve
@@ -1488,7 +1488,7 @@
         :title title
         :aria-label title
         :aria-busy (if busy? "true" "false")
-        :disabled (or busy? (not configured?))}
+        :disabled busy?}
        [:span {:class "bp3-icon bp3-icon-calendar" :aria-hidden "true"}]])))
 
 (defn collapse-context-key [render-context]
@@ -1628,7 +1628,7 @@
        :legend {:urgent "Urgent" :event "Event" :task "Task"}
        :controls {:hideDone "Hide completed items" :showDone "Show completed items" :playback "Play back the day"
                   :calendar "Sync Google Calendar" :calendarForce "Option-click to force-refresh Google fields"
-                  :calendarSetup "Add a Google OAuth Client ID in Nautilus Log settings"
+                  :calendarSetup "Connect Google Calendar and sync this date"
                   :calendarSyncing "Syncing Google Calendar…" :calendarSynced "Google Calendar synced"
                   :calendarCreated "new" :calendarUpdated "updated" :calendarRemoved "removed"
                   :calendarLocalKept "local kept"

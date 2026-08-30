@@ -15,22 +15,27 @@ test('calendar id input is compact, unique, and defaults to primary', async () =
     'team@example.com',
   ]);
   assert.deepEqual(extension.parseGoogleCalendarIds(''), ['primary']);
-  assert.equal(extension.isGoogleOAuthClientId('123-abc.apps.googleusercontent.com'), true);
-  assert.equal(extension.isGoogleOAuthClientId('not-a-client-id'), false);
+  assert.deepEqual(extension.parseCalendarConnection(JSON.stringify({ id: 'connection-id', secret: 'secret' })), {
+    version: 1,
+    id: 'connection-id',
+    secret: 'secret',
+  });
+  assert.equal(extension.parseCalendarConnection('not-json'), null);
 });
 
-test('Google client requests a memory-only token and follows event pagination', async () => {
+test('Google client uses the persistent authorization boundary and follows event pagination', async () => {
   const extension = await loadExtension('calendar-google-client');
   const requests = [];
-  const tokenRequests = [];
-  const loadIdentity = async () => ({
-    initTokenClient: ({ client_id, scope, callback }) => ({
-      requestAccessToken: (options) => {
-        tokenRequests.push({ client_id, scope, options });
-        callback({ access_token: 'memory-token', expires_in: 3600 });
-      },
-    }),
-  });
+  const authorizationCalls = [];
+  const authClient = {
+    authorize: async (options) => {
+      authorizationCalls.push(options);
+      return 'restored-token';
+    },
+    prepare: async () => true,
+    invalidateAccessToken: () => {},
+    destroy: () => {},
+  };
   const fetchImpl = async (url, options) => {
     requests.push({ url, options });
     const parsed = new URL(url);
@@ -49,10 +54,8 @@ test('Google client requests a memory-only token and follows event pagination', 
     };
   };
   const client = extension.createGoogleCalendarClient({
-    clientId: 'client-id.apps.googleusercontent.com',
-    loadIdentity,
+    authClient,
     fetchImpl,
-    now: () => 1_000,
   });
 
   const rows = await client.readRange({
@@ -61,14 +64,13 @@ test('Google client requests a memory-only token and follows event pagination', 
     timeMax: '2026-08-31T00:00:00.000Z',
   });
 
-  assert.equal(tokenRequests.length, 1);
-  assert.match(tokenRequests[0].scope, /calendar\.events\.readonly/);
-  assert.match(tokenRequests[0].scope, /calendar\.calendarlist\.readonly/);
+  assert.equal(authorizationCalls.length, 3);
+  assert.deepEqual(authorizationCalls[0], { interactive: true });
   assert.equal(rows.length, 1);
   assert.equal(rows[0].calendar.summary, 'Work');
   assert.deepEqual(rows[0].events.map((event) => event.id), ['event-1', 'event-2']);
   assert.equal(requests.length, 3);
-  assert.equal(requests[0].options.headers.Authorization, 'Bearer memory-token');
+  assert.equal(requests[0].options.headers.Authorization, 'Bearer restored-token');
   const eventRequest = new URL(requests[1].url);
   assert.equal(eventRequest.searchParams.get('singleEvents'), 'true');
   assert.equal(eventRequest.searchParams.get('showDeleted'), 'true');
@@ -79,7 +81,7 @@ test('calendar runtime syncs only the explicitly clicked Nautilus date and plan'
   const extension = await loadExtension('calendar-runtime');
   const settings = new Map([
     ['google-calendar-enabled', true],
-    ['google-oauth-client-id', 'client-id.apps.googleusercontent.com'],
+    ['google-calendar-connection', JSON.stringify({ id: 'connection-id', secret: 'connection-secret' })],
     ['google-calendar-ids', 'primary,team@example.com'],
     ['google-calendar-sync-state', JSON.stringify({ version: 1, events: {} })],
     ['workday-start', 21],
@@ -136,16 +138,26 @@ test('calendar runtime syncs only the explicitly clicked Nautilus date and plan'
   assert.equal(result.created, 1);
 });
 
-test('calendar runtime stays inert when disabled and explains missing OAuth setup', async () => {
+test('calendar runtime stays inert when disabled and connects interactively when enabled', async () => {
   const extension = await loadExtension('calendar-disabled');
   const settings = new Map([
     ['google-calendar-enabled', false],
-    ['google-oauth-client-id', ''],
+    ['google-calendar-connection', ''],
+    ['google-calendar-ids', 'primary'],
   ]);
   let clients = 0;
+  let reads = 0;
   const runtime = extension.createCalendarRuntime({
     extensionAPI: { settings: { get: (key) => settings.get(key), set: async () => {} } },
-    clientFactory: () => { clients += 1; return {}; },
+    pageTitleToDate: () => new Date(2026, 7, 30),
+    clientFactory: () => {
+      clients += 1;
+      return {
+        readRange: async () => { reads += 1; return []; },
+        destroy: () => {},
+      };
+    },
+    reconcilerFactory: () => ({ sync: async () => ({ created: 0 }) }),
   });
 
   await assert.rejects(
@@ -155,9 +167,8 @@ test('calendar runtime stays inert when disabled and explains missing OAuth setu
   assert.equal(clients, 0);
 
   settings.set('google-calendar-enabled', true);
-  await assert.rejects(
-    runtime.syncPlan({ planUid: 'plan', pageTitle: 'August 30th, 2026' }),
-    /OAuth Client ID/i,
-  );
-  assert.equal(clients, 0);
+  const result = await runtime.syncPlan({ planUid: 'plan', pageTitle: 'August 30th, 2026' });
+  assert.equal(result.created, 0);
+  assert.equal(clients, 1);
+  assert.equal(reads, 1);
 });
