@@ -11,3 +11,16 @@ binding = "NAUTILUS_AUTH_DB"
 database_name = "nautilus-log-auth"
 database_id = "REPLACE_WITH_PRODUCTION_D1_ID"
 migrations_dir = "migrations"
+
+[env.preview]
+name = "nautilus-log-auth-preview"
+workers_dev = true
+
+[env.preview.vars]
+ALLOWED_ORIGINS = "https://roamresearch.com"
+
+[[env.preview.d1_databases]]
+binding = "NAUTILUS_AUTH_DB"
+database_name = "nautilus-log-auth-preview"
+database_id = "83fc48dc-7fc7-4078-a7c2-e790ba9553fc"
+migrations_dir = "migrations"
