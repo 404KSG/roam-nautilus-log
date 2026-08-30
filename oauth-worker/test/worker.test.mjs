@@ -157,6 +157,14 @@ test('public OAuth pages accurately expose the app, privacy, and terms documents
   }
 });
 
+test('OAuth worker serves the permanent Search Console ownership file', async () => {
+  const filename = 'google59f9f68cabb109f4.html';
+  const response = await handleRequest(new Request(`https://auth.example.com/${filename}`), env());
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('Content-Type'), /^text\/html/);
+  assert.equal(await response.text(), `google-site-verification: ${filename}`);
+});
+
 test('OAuth worker completes its hosted callback, restores, and disconnects one opaque connection', { concurrency: false }, async () => {
   const bindings = env();
   const originalFetch = globalThis.fetch;

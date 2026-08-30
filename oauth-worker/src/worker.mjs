@@ -9,6 +9,7 @@ const GOOGLE_READONLY_SCOPES = [
 const OAUTH_MESSAGE_TYPE = 'nautilus-google-oauth-v1';
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 const OAUTH_SESSION_TTL_MS = 10 * 60 * 1000;
+const GOOGLE_SITE_VERIFICATION_FILE = 'google59f9f68cabb109f4.html';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -687,6 +688,15 @@ export async function handleRequest(request, env) {
   if (request.method === 'GET' && url.pathname === '/') return html(homepageDocument());
   if (request.method === 'GET' && url.pathname === '/privacy') return html(privacyDocument());
   if (request.method === 'GET' && url.pathname === '/terms') return html(termsDocument());
+  if (request.method === 'GET' && url.pathname === `/${GOOGLE_SITE_VERIFICATION_FILE}`) {
+    return new Response(`google-site-verification: ${GOOGLE_SITE_VERIFICATION_FILE}`, {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'public, max-age=3600',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
+  }
   if (request.method === 'GET' && url.pathname === '/health') {
     return json({ ok: true, service: 'nautilus-google-auth' });
   }
