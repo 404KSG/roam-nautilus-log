@@ -174,7 +174,7 @@ export function createPersistentGoogleAuthClient({
     assertActive();
     if (connectRequest) return connectRequest;
     const expectedGeneration = generation;
-    connectRequest = (async () => {
+    const request = (async () => {
       const { clientId, oauth2 } = await prepareIdentity();
       assertActive(expectedGeneration);
       return new Promise((resolve, reject) => {
@@ -234,10 +234,11 @@ export function createPersistentGoogleAuthClient({
         }
       });
     })();
+    connectRequest = request;
     try {
-      return await connectRequest;
+      return await request;
     } finally {
-      connectRequest = null;
+      if (connectRequest === request) connectRequest = null;
     }
   };
 
@@ -256,7 +257,7 @@ export function createPersistentGoogleAuthClient({
   const restore = async () => {
     if (refreshRequest) return refreshRequest;
     const expectedGeneration = generation;
-    refreshRequest = (async () => {
+    const request = (async () => {
       const connection = parseCalendarConnection(await loadConnection());
       if (!connection) return '';
       try {
@@ -268,10 +269,11 @@ export function createPersistentGoogleAuthClient({
         return '';
       }
     })();
+    refreshRequest = request;
     try {
-      return await refreshRequest;
+      return await request;
     } finally {
-      refreshRequest = null;
+      if (refreshRequest === request) refreshRequest = null;
     }
   };
 

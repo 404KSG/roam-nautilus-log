@@ -117,6 +117,22 @@ test('transient token-service errors retain the saved connection', async () => {
   assert.equal(clears, 0);
 });
 
+test('failed remote disconnect retains the local connection', async () => {
+  const extension = await loadExtension('calendar-auth-disconnect-failure');
+  let saved = { id: 'saved-id', secret: 'saved-secret' };
+  let clears = 0;
+  const auth = extension.createPersistentGoogleAuthClient({
+    serviceUrl: 'https://auth.example.com',
+    loadConnection: () => saved,
+    clearConnection: async () => { clears += 1; saved = null; },
+    fetchImpl: async () => jsonResponse({ code: 'service_error', message: 'Try again.' }, 503),
+  });
+
+  await assert.rejects(auth.disconnect(), /Try again/);
+  assert.deepEqual(saved, { id: 'saved-id', secret: 'saved-secret' });
+  assert.equal(clears, 0);
+});
+
 test('destroy rejects a pending popup flow and prevents late credential persistence', async () => {
   const extension = await loadExtension('calendar-auth-destroy');
   let callback = null;

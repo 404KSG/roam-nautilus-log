@@ -16,7 +16,6 @@ lists and calendar events.
   short-lived access tokens. It stores an encrypted Google refresh token, an
   opaque connection identifier, a one-way hash of the connection secret, and
   creation timestamps.
-- Short-lived OAuth sessions expire after ten minutes.
 - The extension stores the opaque connection ID and secret in Roam extension
   settings. Access tokens remain in memory.
 - Imported event blocks and the managed sync mapping remain in the user's Roam

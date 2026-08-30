@@ -24,16 +24,18 @@ Nautilus component. It never creates Daily Notes or future plans.
 ## Authentication boundary
 
 Nautilus Log owns its Google Web OAuth application. The first Calendar click
-opens Google's authorization-code flow with offline access. A small Nautilus
-authorization service exchanges the callback code and encrypts the refresh
-token at rest. The extension stores only an opaque connection ID and secret in
-extension settings.
+uses Google Identity Services' popup authorization-code model. The one-time
+code returns to the callback running in the initiating Roam page, then a small
+Nautilus authorization service exchanges it and encrypts the refresh token at
+rest. The extension stores only an opaque connection ID and secret in extension
+settings.
 
 On a later Roam load, the extension makes one request to restore a short-lived
 access token. Calendar REST requests still run directly from the Roam browser;
 event data never passes through the authorization service. The extension does
 not poll Calendar in the background. Turning Google Calendar off revokes and
-deletes the connection when possible.
+deletes the connection when possible. Temporary Google failures retain the
+connection; only revoked or invalid credentials require consent again.
 
 ## Setup
 

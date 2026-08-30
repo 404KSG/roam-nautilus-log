@@ -5,7 +5,6 @@ workers_dev = true
 
 [vars]
 ALLOWED_ORIGINS = "https://roamresearch.com"
-PUBLIC_BASE_URL = "https://nautilus-auth.kidsseeghosts.art"
 
 [[d1_databases]]
 binding = "NAUTILUS_AUTH_DB"

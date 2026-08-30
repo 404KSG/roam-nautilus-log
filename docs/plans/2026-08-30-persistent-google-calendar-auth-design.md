@@ -31,11 +31,18 @@ manager after the connection flow is verified.
 
 ## Architecture
 
-The extension opens a same-purpose Nautilus authorization service. The service
-uses Google's authorization-code flow with offline access and owns the OAuth
-client secret. It exchanges the callback code, encrypts the refresh token at
-rest, and returns an opaque connection ID and secret to the extension. The
-extension stores only that opaque credential in extension settings.
+The extension uses Google Identity Services `initCodeClient` in popup mode.
+Google returns a one-time authorization code only to the callback running in
+the initiating Roam origin. The extension sends that code to the Nautilus
+authorization service with an AJAX-only cross-origin request. The service owns
+the OAuth client secret, exchanges the code using the validated Roam origin as
+`redirect_uri`, encrypts the refresh token at rest, and returns an opaque
+connection ID and secret. The extension stores only that opaque credential in
+extension settings.
+
+This origin-bound code delivery is the authentication boundary. A public link,
+spoofable polling session, or CORS header alone is never treated as proof that
+the request came from the initiating Roam client.
 
 On load or before a sync, the extension presents the opaque credential to the
 service. The service validates it, refreshes Google access, and returns only a
@@ -44,44 +51,53 @@ client; event data never passes through the authorization service.
 
 The service exposes only:
 
-- `GET /connect`: create an expiring OAuth session and redirect to Google;
-- `GET /oauth/callback`: exchange the code and finish the session;
-- `POST /session`: poll an expiring session from the initiating Roam client;
+- `GET /config`: return the public Google OAuth client ID to an approved Roam
+  origin;
+- `POST /exchange`: exchange one GIS popup code and create a connection;
 - `POST /token`: obtain a short-lived Google access token;
 - `POST /disconnect`: revoke and delete one connection;
 - `GET /health`: deployment diagnostics without secrets.
 
-Session and connection secrets are high entropy and compared by SHA-256 hash.
-Refresh tokens are AES-GCM encrypted with a deployment secret. CORS is limited
-to approved Roam origins. Session records expire after ten minutes.
+Connection secrets are high entropy and compared by SHA-256 hash. Refresh
+tokens are AES-GCM encrypted with a deployment secret and stored in D1 rather
+than eventually consistent KV. CORS is limited to approved Roam origins, and
+code exchange requires the custom header recommended by Google's popup code
+model.
 
 ## Failure and privacy contract
 
 - Popup cancellation leaves the graph and prior connection unchanged.
+- Extension unload or disconnect aborts in-flight network work and prevents a
+  late popup callback from persisting a connection.
 - A failed silent refresh does not read Calendar data and surfaces a reconnect
   title on the existing Calendar control.
-- No OAuth client secret, refresh token, access token, calendar event, email, or
-  Calendar ID is written into Roam blocks.
+- No OAuth client secret, refresh token, access token, account email, or hidden
+  Calendar ID is written into Roam blocks. Imported event content is written
+  only by the explicit sync described in the product contract.
 - The authorization service logs no tokens, authorization codes, descriptions,
   titles, attendees, or locations.
 - Disconnect revokes the Google refresh token when possible and deletes the
   service-side connection even if revocation is unavailable.
+- Temporary Google 429/5xx failures preserve the connection. Only a revoked or
+  invalid grant returns to the disconnected state.
 - The service URL is a build-owned constant, not a user setting.
 
 ## Performance contract
 
 - Disabled: zero network work and no Google script.
-- Enabled but never connected: zero startup network work.
+- Enabled but never connected: one public config request and one cached Google
+  Identity script load so the first user click can open the popup reliably.
 - Connected startup: one token refresh request.
 - Calendar reads: only on an explicit Calendar click.
 - No interval, calendar polling, DOM observer, or render-loop work is added.
 
 ## Verification
 
-- Unit-test session proof validation, token encryption, connection
-  authentication, CORS, callback failure, refresh, and disconnect.
-- Unit-test extension credential migration, popup/poll flow, silent restore,
-  revoked-session fallback, and the absence of public Client ID fields.
+- Unit-test token encryption, connection authentication, CORS, code exchange,
+  transient refresh, invalid-grant cleanup, and disconnect.
+- Unit-test extension credential migration, GIS popup flow, silent restore,
+  startup/click races, unload cancellation, revoked fallback, and the absence
+  of public Client ID fields.
 - Run the full extension build and test suite.
 - Deploy with separate Google OAuth and service environments for test and
   production, then exercise browser and Roam Desktop popup flows.

@@ -112,6 +112,10 @@ export function createGoogleCalendarClient({
     authorization.destroy?.();
   };
 
+  const cancelSync = () => {
+    controller?.abort();
+  };
+
   return {
     prepare: authorization.prepare,
     prepareIdentity: authorization.prepareIdentity,
@@ -119,6 +123,7 @@ export function createGoogleCalendarClient({
     disconnect: authorization.disconnect,
     hasConnection: authorization.hasConnection,
     readRange,
+    cancelSync,
     destroy,
   };
 }

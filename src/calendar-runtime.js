@@ -77,11 +77,9 @@ export function createCalendarRuntime({
         loadConnection: () => parseCalendarConnection(extensionAPI.settings.get(CONNECTION_KEY)),
         saveConnection: async (connection) => {
           await extensionAPI.settings.set(CONNECTION_KEY, JSON.stringify(connection));
-          onConnectionChange(true);
         },
         clearConnection: async () => {
           await extensionAPI.settings.set(CONNECTION_KEY, '');
-          onConnectionChange(false);
         },
         onConnectionChange,
       },
@@ -143,10 +141,18 @@ export function createCalendarRuntime({
       return true;
     }
     generation += 1;
-    const result = await getClient().disconnect?.();
-    client?.destroy?.();
-    client = null;
-    return result !== false;
+    const activeClient = getClient();
+    activeClient.cancelSync?.();
+    try {
+      const result = await activeClient.disconnect?.();
+      activeClient.destroy?.();
+      client = null;
+      return result !== false;
+    } catch (error) {
+      activeClient.destroy?.();
+      client = null;
+      throw error;
+    }
   };
 
   const hasConnection = () => Boolean(parseCalendarConnection(
