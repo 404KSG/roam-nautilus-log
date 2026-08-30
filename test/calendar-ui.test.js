@@ -96,6 +96,9 @@ test('Calendar control keeps its Blueprint calendar glyph and spins only while s
   assert.match(calendarFunction, /default-tooltip \(str \(:calendar copy\) "\\n" \(:calendarForce copy\)\)/);
   assert.match(calendarFunction, /calendar-result-popover result settings copy/);
   assert.match(calendarFunction, /calendar-error-popover error copy/);
+  assert.match(calendarFunction, /:on-mouse-leave #\(swap! calendar-state assoc :hovered false :open false\)/);
+  assert.match(calendarFunction, /:open \(boolean \(:hovered @calendar-state\)\)/);
+  assert.doesNotMatch(calendarFunction, /:focused|:on-focus|:on-blur/);
   assert.doesNotMatch(calendarFunction, /\[:svg/);
   assert.doesNotMatch(calendarFunction, /calendarSetup/);
   assert.doesNotMatch(source, /calendar-result-title/);

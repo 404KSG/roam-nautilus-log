@@ -1496,11 +1496,7 @@
       [:span
        {:class "nautilus-log-calendar-control"
         :on-mouse-enter #(swap! calendar-state assoc :hovered true)
-        :on-mouse-leave #(swap! calendar-state
-                                 (fn [state]
-                                   (assoc state
-                                          :hovered false
-                                          :open (and (:open state) (:focused state)))))}
+        :on-mouse-leave #(swap! calendar-state assoc :hovered false :open false)}
        [:button
         {:on-click (fn [event]
                      (when (not busy?)
@@ -1517,22 +1513,14 @@
                                              :busy false
                                              :result (js->clj sync-result :keywordize-keys true)
                                              :error nil
-                                             :open (boolean (or (:hovered @calendar-state)
-                                                                (:focused @calendar-state))))))
+                                             :open (boolean (:hovered @calendar-state)))))
                              (.catch (fn [sync-error]
                                        (.error js/console "[Nautilus Log] Google Calendar sync failed" sync-error)
                                        (swap! calendar-state assoc
                                               :busy false
                                               :result nil
                                               :error (or (.-message sync-error) (str sync-error))
-                                              :open (boolean (or (:hovered @calendar-state)
-                                                                 (:focused @calendar-state))))))))))
-         :on-focus #(swap! calendar-state assoc :focused true)
-         :on-blur #(swap! calendar-state
-                          (fn [state]
-                            (assoc state
-                                   :focused false
-                                   :open (and (:open state) (:hovered state)))))
+                                              :open (boolean (:hovered @calendar-state)))))))))
          :on-key-down (fn [event]
                         (when (= "Escape" (.-key event))
                           (swap! calendar-state assoc :open false)))
@@ -1950,7 +1938,6 @@
                tidy-state (r/atom false)
                calendar-state (r/atom {:busy false
                                        :hovered false
-                                       :focused false
                                        :open false
                                        :result nil
                                        :error nil})]
