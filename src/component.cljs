@@ -1776,8 +1776,8 @@
 (defn log-controls [show-done-state settings collapsed-state block-uid page-title-val render-context settled-uids tidy-state calendar-state copy show-debug-button?]
   [:div {:class "nautilus-log-controls-top"}
    [switch-done-visibility-button show-done-state (:controls copy)]
-   [calendar-button block-uid page-title-val calendar-state settings (:controls copy)]
    [tidy-button block-uid settled-uids tidy-state settings (:controls copy)]
+   [calendar-button block-uid page-title-val calendar-state settings (:controls copy)]
    [collapse-button collapsed-state block-uid render-context (:controls copy)]
    (when show-debug-button? [switch-debug-button])])
 

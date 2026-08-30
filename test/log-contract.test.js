@@ -614,6 +614,21 @@ test('Log keeps four quiet action controls with reliable hover help and no playb
   assert.match(css, /\.nautilus-log-toggle-btn\[data-nautilus-tooltip\]:focus-visible::after/);
 });
 
+test('Log orders visibility, Tidy, Calendar, then collapse without changing control behavior', () => {
+  const controls = component.slice(
+    component.indexOf('(defn log-controls'),
+    component.indexOf('(defn render-context-probe'),
+  );
+  const visibility = controls.indexOf('[switch-done-visibility-button');
+  const tidy = controls.indexOf('[tidy-button');
+  const calendar = controls.indexOf('[calendar-button');
+  const collapse = controls.indexOf('[collapse-button');
+  assert.ok(visibility >= 0);
+  assert.ok(visibility < tidy);
+  assert.ok(tidy < calendar);
+  assert.ok(calendar < collapse);
+});
+
 test('Log uses an action-first two-row capacity ledger with controls plus legend right', () => {
   assert.match(component, /nautilus-log-header/);
   assert.match(component, /nautilus-log-metrics/);
