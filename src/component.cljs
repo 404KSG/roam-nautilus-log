@@ -1456,12 +1456,11 @@
            (str " · " (:localKept summary) " " (:calendarLocalKept copy))))))
 
 (defn calendar-button [block-uid page-title-val calendar-state settings copy]
-  (when (:google-calendar-enabled settings)
+  (when (and (:google-calendar-enabled settings)
+             (:google-calendar-configured settings))
     (let [busy? (:busy @calendar-state)
-          configured? (:google-calendar-configured settings)
           default-title (str (:calendar copy) " · " (:calendarForce copy))
           title (cond
-                  (not configured?) (:calendarSetup copy)
                   busy? (:calendarSyncing copy)
                   (:title @calendar-state) (:title @calendar-state)
                   :else default-title)]

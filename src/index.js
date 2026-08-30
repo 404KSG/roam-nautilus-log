@@ -72,6 +72,7 @@ let planWatchBridge = null;
 let planTidy = null;
 let tidyCommands = null;
 let calendarRuntime = null;
+let calendarPanelState = { action: "", error: "" };
 const rendererClockCacheMs = 15_000;
 const rendererClockCache = new Map();
 
@@ -161,10 +162,11 @@ function settingValue(extensionAPI, key) {
 }
 
 function runtimeSettings(extensionAPI) {
-  const calendarEnabled = extensionAPI.settings.get("google-calendar-enabled") === true;
   const calendarConfigured = Boolean(parseCalendarConnection(
     extensionAPI.settings.get("google-calendar-connection"),
   ));
+  const calendarEnabled = extensionAPI.settings.get("google-calendar-enabled") === true
+    && calendarConfigured;
   return {
     ...Object.fromEntries(
       Object.keys(defaults).map((key) => [key, settingValue(extensionAPI, key)]),
@@ -318,7 +320,7 @@ async function initializeLanguage(extensionAPI) {
   return "en";
 }
 
-function panelConfig(extensionAPI, language) {
+function panelConfig(extensionAPI, language, calendarUiState = calendarPanelState) {
   const zh = language === "zh";
   const labels = zh
     ? {
@@ -348,8 +350,18 @@ function panelConfig(extensionAPI, language) {
       recentRetentionDesc: "Clock Out 或切换任务后，该任务在 Recent 中保留的分钟数。填写 0 可关闭 Recent。",
       forgottenTimer: "遗忘计时提醒（分钟）",
       forgottenTimerDesc: "单条 CLOCK 连续运行达到该时长后显示警告。填写 0 可关闭提醒；不会自动停止或删除计时。",
-      calendar: "Google Calendar · 可选",
-      calendarDesc: "启用后点击图表中的 Calendar 按钮即可一次授权并同步当前 Nautilus 日期；Roam 刷新后会自动恢复连接。关闭会断开 Google Calendar。",
+      calendar: "Google Calendar",
+      calendarConnect: "连接",
+      calendarDisconnect: "断开连接",
+      calendarConnecting: "正在连接…",
+      calendarDisconnecting: "正在断开…",
+      calendarRetry: "重试",
+      calendarDisconnectedDesc: "未连接 · 选择你的 Google 账号并授予只读权限；默认使用主日历。",
+      calendarConnectingDesc: "正在等待 Google 授权 · 请在弹出的窗口中选择你的账号。",
+      calendarConnectedDesc: "已连接 · 只读 · 主日历。使用图表中的 Calendar 按钮同步当前 Nautilus 日期。",
+      calendarDisconnectingDesc: "正在安全撤销 Google Calendar 连接…",
+      calendarConnectFailedDesc: "未能连接 Google Calendar。没有保存不完整的连接，请重试。",
+      calendarDisconnectFailedDesc: "未能断开连接；现有连接已保留，请重试。",
     }
     : {
       tabTitle: "Nautilus Log",
@@ -378,8 +390,18 @@ function panelConfig(extensionAPI, language) {
       recentRetentionDesc: "Keep a Clocked Out or switched task in Recent for this many minutes. Enter 0 to disable Recent.",
       forgottenTimer: "Forgotten Timer Warning (minutes)",
       forgottenTimerDesc: "Warn when one CLOCK has kept running for this many minutes. Enter 0 to disable; the warning never stops or deletes time automatically.",
-      calendar: "Google Calendar · Optional",
-      calendarDesc: "Enable, then click the Calendar control to connect once and sync the clicked Nautilus date. Roam restores the connection after reload; disabling disconnects Google Calendar.",
+      calendar: "Google Calendar",
+      calendarConnect: "Connect",
+      calendarDisconnect: "Disconnect",
+      calendarConnecting: "Connecting…",
+      calendarDisconnecting: "Disconnecting…",
+      calendarRetry: "Try again",
+      calendarDisconnectedDesc: "Not connected · Choose your Google account and grant read-only access; Primary calendar is used by default.",
+      calendarConnectingDesc: "Waiting for Google · Choose your Google account in the authorization window.",
+      calendarConnectedDesc: "Connected · Read-only · Primary calendar. Use the Calendar control in Nautilus to sync the current date.",
+      calendarDisconnectingDesc: "Securely removing the Google Calendar connection…",
+      calendarConnectFailedDesc: "Google Calendar could not connect. No partial connection was saved; try again.",
+      calendarDisconnectFailedDesc: "Google Calendar could not disconnect. The existing connection was kept; try again.",
     };
 
   const update = async (key, value) => {
@@ -425,7 +447,32 @@ function panelConfig(extensionAPI, language) {
   };
 
   const executionEnabled = extensionAPI.settings.get("actual-time-tracking") === true;
-  const calendarEnabled = extensionAPI.settings.get("google-calendar-enabled") === true;
+  const calendarConnected = Boolean(parseCalendarConnection(
+    extensionAPI.settings.get("google-calendar-connection"),
+  ));
+  const calendarAction = String(calendarUiState?.action || "");
+  const calendarError = String(calendarUiState?.error || "");
+  const calendarBusy = calendarAction === "connecting" || calendarAction === "disconnecting";
+  const calendarDescription = calendarAction === "connecting"
+    ? labels.calendarConnectingDesc
+    : calendarAction === "disconnecting"
+      ? labels.calendarDisconnectingDesc
+      : calendarError === "connect"
+        ? labels.calendarConnectFailedDesc
+        : calendarError === "disconnect"
+          ? labels.calendarDisconnectFailedDesc
+          : calendarConnected
+            ? labels.calendarConnectedDesc
+            : labels.calendarDisconnectedDesc;
+  const calendarButtonContent = calendarAction === "connecting"
+    ? labels.calendarConnecting
+    : calendarAction === "disconnecting"
+      ? labels.calendarDisconnecting
+      : calendarError === "connect"
+        ? labels.calendarRetry
+        : calendarConnected
+          ? labels.calendarDisconnect
+          : labels.calendarConnect;
   const executionSettings = [
     {
       id: "timing-line-sidebar",
@@ -544,34 +591,44 @@ function panelConfig(extensionAPI, language) {
         action: { type: "input", default: settingValue(extensionAPI, "color-1-trigger"), onChange: (event) => update("color-1-trigger", event.target.value) },
       },
       {
-        id: "google-calendar-enabled",
+        id: "google-calendar-connection-action",
         name: labels.calendar,
-        description: labels.calendarDesc,
+        description: calendarDescription,
         action: {
-          type: "switch",
-          defaultValue: calendarEnabled,
-          onChange: async (value) => {
-            const enabled = typeof value === "boolean" ? value : Boolean(value?.target?.checked);
-            if (enabled) {
-              await extensionAPI.settings.set("google-calendar-enabled", true);
-              try {
-                await calendarRuntime?.prepareIdentity?.();
-              } catch (error) {
-                console.debug("[Nautilus Log] Google authorization preload unavailable", error);
-              }
-            } else {
-              try {
-                await calendarRuntime?.disconnect?.();
-                await extensionAPI.settings.set("google-calendar-enabled", false);
-              } catch (error) {
-                await extensionAPI.settings.set("google-calendar-enabled", true);
-                console.warn("[Nautilus Log] Google Calendar disconnect failed; connection was retained", error);
-              }
-            }
-            publishRuntimeSettings(extensionAPI);
-            extensionAPI.settings.panel.create(
+          type: "button",
+          content: calendarButtonContent,
+          class: `bp3-button bp3-minimal${calendarBusy ? " bp3-disabled" : ""}`,
+          onClick: async () => {
+            if (calendarBusy || calendarPanelState.action) return;
+            const disconnecting = Boolean(parseCalendarConnection(
+              extensionAPI.settings.get("google-calendar-connection"),
+            ));
+            calendarPanelState = {
+              action: disconnecting ? "disconnecting" : "connecting",
+              error: "",
+            };
+            const recreatePanel = () => extensionAPI.settings.panel.create(
               panelConfig(extensionAPI, extensionAPI.settings.get("language") || "en"),
             );
+            recreatePanel();
+            try {
+              if (!calendarRuntime) throw new Error("Google Calendar connection is not ready.");
+              if (disconnecting) await calendarRuntime.disconnect();
+              else await calendarRuntime.connect();
+              calendarPanelState = { action: "", error: "" };
+            } catch (error) {
+              calendarPanelState = {
+                action: "",
+                error: disconnecting ? "disconnect" : "connect",
+              };
+              console.warn(
+                `[Nautilus Log] Google Calendar ${disconnecting ? "disconnect" : "connect"} failed`,
+                error,
+              );
+            } finally {
+              publishRuntimeSettings(extensionAPI);
+              recreatePanel();
+            }
           },
         },
       },
@@ -598,6 +655,7 @@ function panelConfig(extensionAPI, language) {
 }
 
 async function onload({ extensionAPI }) {
+  calendarPanelState = { action: "", error: "" };
   planWatchBridge?.destroy();
   planWatchBridge = createPlanWatchBridge({ readString: readBlockString });
   planTidy?.clear();
@@ -632,10 +690,16 @@ async function onload({ extensionAPI }) {
   calendarRuntime?.destroy();
   calendarRuntime = createCalendarRuntime({
     extensionAPI,
-    onConnectionChange: () => publishRuntimeSettings(extensionAPI),
+    onConnectionChange: () => {
+      publishRuntimeSettings(extensionAPI);
+      if (!calendarPanelState.action) {
+        extensionAPI.settings.panel.create(
+          panelConfig(extensionAPI, extensionAPI.settings.get("language") || "en"),
+        );
+      }
+    },
   });
   calendarRuntime.prepare()
-    .then((restored) => (restored ? true : calendarRuntime?.prepareIdentity?.()))
     .catch((error) => {
       console.debug("[Nautilus Log] Google Calendar connection restore unavailable", error);
     });
@@ -674,6 +738,7 @@ function onunload() {
   tidyCommands = null;
   calendarRuntime?.destroy();
   calendarRuntime = null;
+  calendarPanelState = { action: "", error: "" };
   if (typeof window !== "undefined") {
     if (window.nautilusLogExtensionData) {
       window.nautilusLogExtensionData.running = false;

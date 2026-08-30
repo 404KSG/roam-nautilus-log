@@ -172,3 +172,78 @@ test('calendar runtime stays inert when disabled and connects interactively when
   assert.equal(clients, 1);
   assert.equal(reads, 1);
 });
+
+test('calendar runtime makes connection state authoritative for enable and disconnect', async () => {
+  const extension = await loadExtension('calendar-connection-state');
+  const settings = new Map([
+    ['google-calendar-enabled', false],
+    ['google-calendar-connection', ''],
+    ['google-calendar-ids', 'primary'],
+  ]);
+  const connectionChanges = [];
+  let disconnects = 0;
+  const runtime = extension.createCalendarRuntime({
+    extensionAPI: {
+      settings: {
+        get: (key) => settings.get(key),
+        set: async (key, value) => settings.set(key, value),
+      },
+    },
+    clientFactory: () => ({
+      authorize: async ({ interactive }) => {
+        assert.equal(interactive, true);
+        settings.set(
+          'google-calendar-connection',
+          JSON.stringify({ id: 'connected-id', secret: 'connected-secret' }),
+        );
+        return 'access-token';
+      },
+      disconnect: async () => {
+        disconnects += 1;
+        settings.set('google-calendar-connection', '');
+        return true;
+      },
+      cancelSync: () => {},
+      destroy: () => {},
+    }),
+    reconcilerFactory: () => ({ sync: async () => ({ created: 0 }) }),
+    onConnectionChange: (connected) => connectionChanges.push(connected),
+  });
+
+  assert.equal(runtime.hasConnection(), false);
+  assert.equal(await runtime.connect(), true);
+  assert.equal(settings.get('google-calendar-enabled'), true);
+  assert.equal(runtime.hasConnection(), true);
+  assert.deepEqual(connectionChanges, [true]);
+
+  assert.equal(await runtime.disconnect(), true);
+  assert.equal(disconnects, 1);
+  assert.equal(settings.get('google-calendar-enabled'), false);
+  assert.equal(runtime.hasConnection(), false);
+  assert.deepEqual(connectionChanges, [true, false]);
+});
+
+test('calendar runtime rolls the legacy enable gate back when connection is cancelled', async () => {
+  const extension = await loadExtension('calendar-connection-cancel');
+  const settings = new Map([
+    ['google-calendar-enabled', false],
+    ['google-calendar-connection', ''],
+  ]);
+  const runtime = extension.createCalendarRuntime({
+    extensionAPI: {
+      settings: {
+        get: (key) => settings.get(key),
+        set: async (key, value) => settings.set(key, value),
+      },
+    },
+    clientFactory: () => ({
+      authorize: async () => { throw new Error('Google authorization was cancelled.'); },
+      destroy: () => {},
+    }),
+    reconcilerFactory: () => ({ sync: async () => ({ created: 0 }) }),
+  });
+
+  await assert.rejects(runtime.connect(), /cancelled/i);
+  assert.equal(settings.get('google-calendar-enabled'), false);
+  assert.equal(runtime.hasConnection(), false);
+});

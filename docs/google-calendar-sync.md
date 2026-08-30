@@ -23,12 +23,12 @@ Nautilus component. It never creates Daily Notes or future plans.
 
 ## Authentication boundary
 
-Nautilus Log owns its Google Web OAuth application. The first Calendar click
-uses Google Identity Services' popup authorization-code model. The one-time
-code returns to the callback running in the initiating Roam page, then a small
-Nautilus authorization service exchanges it and encrypts the refresh token at
-rest. The extension stores only an opaque connection ID and secret in extension
-settings.
+Nautilus Log owns its Google Web OAuth application. The **Connect Google
+Calendar** settings action opens the hosted Nautilus authorization flow. Google
+returns its one-time code to the authorization service's exact HTTPS callback;
+the service exchanges it, encrypts the refresh token at rest, and posts an
+opaque connection back only to the initiating Roam origin. The extension stores
+only that opaque connection ID and secret in extension settings.
 
 On a later Roam load, the extension makes one request to restore a short-lived
 access token. Calendar REST requests still run directly from the Roam browser;
@@ -39,14 +39,16 @@ connection; only revoked or invalid credentials require consent again.
 
 ## Setup
 
-1. Enable **Google Calendar · Optional** in Nautilus Log settings.
-2. Open the Nautilus chart for the intended Daily Note and click its Calendar
-   control.
-3. Choose a Google account and approve the two read-only Calendar permissions.
-4. The first sync continues automatically. Later Roam reloads normally restore
-   the same connection without another consent flow.
+1. Open Nautilus Log settings. The Google Calendar row clearly reports **Not
+   connected**.
+2. Click **Connect**, choose a Google account, and approve the two read-only
+   Calendar permissions.
+3. The row changes to **Connected · Read-only · Primary calendar** and the
+   Calendar control appears in the Nautilus chart.
+4. Click that control to sync the chart's Daily Note date. Later Roam reloads
+   normally restore the same connection without another consent flow.
 5. Option/Alt-click remains the explicit Google-first refresh for managed
-   strings. Turning the setting off disconnects Google Calendar.
+   strings. Use **Disconnect** in settings to revoke and delete the connection.
 
 The public extension uses Nautilus Log's verified production OAuth application.
 No Google Cloud setup, Client ID, secret, Calendar ID, or developer knowledge is

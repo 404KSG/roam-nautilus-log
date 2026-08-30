@@ -47,17 +47,18 @@ configured default.
 
 ## Optional Google Calendar sync
 
-Enable **Google Calendar · Optional** to import timed, busy events into the date
-of the Nautilus chart you clicked. The Blueprint Calendar control performs a
-manual, read-only sync; it never polls in the background or creates Daily Notes.
+Open Nautilus Log settings and click **Connect Google Calendar** to authorize
+your own account with read-only access. The row then reports **Connected ·
+Read-only · Primary calendar**, and the Blueprint Calendar control appears in
+the chart. It performs a manual sync for the clicked Nautilus date; it never
+polls in the background or creates Daily Notes.
 
 Normal click preserves Roam text you changed. Option/Alt-click force-refreshes
 Google-managed strings while leaving user-created children alone. All-day,
-free/transparent, and declined events are ignored. The first Calendar click
-opens Google's account authorization and continues the sync. Nautilus normally
-restores that connection after a Roam reload; users never create or paste OAuth
-client IDs. Calendar data is requested directly by the Roam client and never
-passes through the lightweight authorization service.
+free/transparent, and declined events are ignored. Nautilus normally restores
+the connection after a Roam reload; users never create or paste OAuth client
+IDs, secrets, or Calendar IDs. Calendar data is requested directly by the Roam
+client and never passes through the lightweight authorization service.
 
 See [Google Calendar sync](./docs/google-calendar-sync.md) for the block shape,
 authorization, scopes, merge rules, and [privacy contract](./PRIVACY.md).

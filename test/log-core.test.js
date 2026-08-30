@@ -534,7 +534,7 @@ test('English UI settings localize all extension-owned status labels', () => {
     playback: 'Play back the day',
     calendar: 'Sync Google Calendar',
     calendarForce: 'Option-click to force-refresh Google fields',
-    calendarSetup: 'Add a Google OAuth Client ID in Nautilus Log settings',
+    calendarSetup: 'Connect Google Calendar in Nautilus Log settings',
     calendarSyncing: 'Syncing Google Calendar…',
     calendarSynced: 'Google Calendar synced',
     calendarCreated: 'new',

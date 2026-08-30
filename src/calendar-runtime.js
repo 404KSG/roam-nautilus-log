@@ -63,6 +63,16 @@ export function createCalendarRuntime({
   let inFlight = false;
   let destroyed = false;
   let generation = 0;
+  let lastConnectionState = Boolean(parseCalendarConnection(
+    extensionAPI.settings.get(CONNECTION_KEY),
+  ));
+
+  const notifyConnection = (connected) => {
+    const next = connected === true;
+    if (next === lastConnectionState) return;
+    lastConnectionState = next;
+    onConnectionChange(next);
+  };
 
   const reconciler = reconcilerFactory({
     loadState: () => parseSyncState(extensionAPI.settings.get(SYNC_STATE_KEY)),
@@ -81,7 +91,7 @@ export function createCalendarRuntime({
         clearConnection: async () => {
           await extensionAPI.settings.set(CONNECTION_KEY, '');
         },
-        onConnectionChange,
+        onConnectionChange: notifyConnection,
       },
     });
     return client;
@@ -98,6 +108,29 @@ export function createCalendarRuntime({
     if (parseCalendarConnection(extensionAPI.settings.get(CONNECTION_KEY))) return true;
     await getClient().prepareIdentity?.();
     return true;
+  };
+
+  const hasConnection = () => Boolean(parseCalendarConnection(
+    extensionAPI.settings.get(CONNECTION_KEY),
+  ));
+
+  const connect = async () => {
+    if (destroyed) throw new Error('Google Calendar connection is no longer available.');
+    await extensionAPI.settings.set('google-calendar-enabled', true);
+    try {
+      const accessToken = await getClient().authorize?.({ interactive: true });
+      if (!accessToken || !hasConnection()) {
+        throw new Error('Google Calendar did not return a persistent connection.');
+      }
+      notifyConnection(true);
+      return true;
+    } catch (error) {
+      if (!hasConnection()) {
+        await extensionAPI.settings.set('google-calendar-enabled', false);
+        notifyConnection(false);
+      }
+      throw error;
+    }
   };
 
   const syncPlan = async ({ planUid, pageTitle, force = false } = {}) => {
@@ -137,7 +170,8 @@ export function createCalendarRuntime({
 
   const disconnect = async () => {
     if (!client && !parseCalendarConnection(extensionAPI.settings.get(CONNECTION_KEY))) {
-      onConnectionChange(false);
+      await extensionAPI.settings.set('google-calendar-enabled', false);
+      notifyConnection(false);
       return true;
     }
     generation += 1;
@@ -147,17 +181,16 @@ export function createCalendarRuntime({
       const result = await activeClient.disconnect?.();
       activeClient.destroy?.();
       client = null;
-      return result !== false;
+      if (result === false) return false;
+      await extensionAPI.settings.set('google-calendar-enabled', false);
+      notifyConnection(false);
+      return true;
     } catch (error) {
       activeClient.destroy?.();
       client = null;
       throw error;
     }
   };
-
-  const hasConnection = () => Boolean(parseCalendarConnection(
-    extensionAPI.settings.get(CONNECTION_KEY),
-  ));
 
   const destroy = () => {
     destroyed = true;
@@ -166,7 +199,7 @@ export function createCalendarRuntime({
     client = null;
   };
 
-  return { prepare, prepareIdentity, syncPlan, disconnect, hasConnection, destroy };
+  return { prepare, prepareIdentity, connect, syncPlan, disconnect, hasConnection, destroy };
 }
 
 export { CONNECTION_KEY, SYNC_STATE_KEY };

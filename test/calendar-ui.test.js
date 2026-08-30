@@ -19,30 +19,63 @@ function settingsApi(values) {
   };
 }
 
-test('Calendar settings remain compact until the optional feature is enabled', async () => {
+test('Calendar settings expose one explicit connection action and visible state', async () => {
   const extension = await loadExtension('calendar-panel');
-  const disabled = extension.panelConfig(settingsApi({
+  const disconnected = extension.panelConfig(settingsApi({
     language: 'en',
     'google-calendar-enabled': false,
+    'google-calendar-connection': '',
   }), 'en');
-  assert.ok(disabled.settings.find((setting) => setting.id === 'google-calendar-enabled'));
-  assert.equal(disabled.settings.some((setting) => setting.id === 'google-oauth-client-id'), false);
+  const connect = disconnected.settings.find(
+    (setting) => setting.id === 'google-calendar-connection-action',
+  );
+  assert.equal(connect.action.type, 'button');
+  assert.equal(connect.action.content, 'Connect');
+  assert.match(connect.description, /not connected/i);
+  assert.match(connect.description, /read-only/i);
+  assert.equal(disconnected.settings.some((setting) => setting.id === 'google-calendar-enabled'), false);
+  assert.equal(disconnected.settings.some((setting) => setting.id === 'google-oauth-client-id'), false);
 
-  const enabled = extension.panelConfig(settingsApi({
+  const connected = extension.panelConfig(settingsApi({
     language: 'en',
     'google-calendar-enabled': true,
+    'google-calendar-connection': JSON.stringify({ id: 'connection-id', secret: 'connection-secret' }),
     'google-calendar-ids': 'primary',
   }), 'en');
-  assert.equal(enabled.settings.some((setting) => setting.id === 'google-oauth-client-id'), false);
-  assert.equal(enabled.settings.some((setting) => setting.id === 'google-calendar-ids'), false);
-  const calendar = enabled.settings.find((setting) => setting.id === 'google-calendar-enabled');
-  assert.match(calendar.description, /connect once/i);
+  const disconnect = connected.settings.find(
+    (setting) => setting.id === 'google-calendar-connection-action',
+  );
+  assert.equal(disconnect.action.type, 'button');
+  assert.equal(disconnect.action.content, 'Disconnect');
+  assert.match(disconnect.description, /connected/i);
+  assert.match(disconnect.description, /primary calendar/i);
+  assert.equal(connected.settings.some((setting) => setting.id === 'google-oauth-client-id'), false);
+  assert.equal(connected.settings.some((setting) => setting.id === 'google-calendar-ids'), false);
+});
+
+test('Calendar settings communicate progress and recoverable failure without another surface', async () => {
+  const extension = await loadExtension('calendar-panel-state');
+  const api = settingsApi({
+    language: 'en',
+    'google-calendar-enabled': false,
+    'google-calendar-connection': '',
+  });
+  const connecting = extension.panelConfig(api, 'en', { action: 'connecting', error: '' })
+    .settings.find((setting) => setting.id === 'google-calendar-connection-action');
+  assert.equal(connecting.action.content, 'Connecting…');
+  assert.match(connecting.description, /choose your Google account/i);
+
+  const failed = extension.panelConfig(api, 'en', { action: '', error: 'connect' })
+    .settings.find((setting) => setting.id === 'google-calendar-connection-action');
+  assert.equal(failed.action.content, 'Try again');
+  assert.match(failed.description, /could not connect/i);
 });
 
 test('Calendar control uses a Blueprint calendar glyph instead of a custom SVG', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'component.cljs'), 'utf8');
   assert.match(source, /bp3-icon bp3-icon-calendar/);
   const calendarFunction = source.match(/\(defn calendar-button[\s\S]*?\n\(defn /)?.[0] || '';
+  assert.match(calendarFunction, /and \(:google-calendar-enabled settings\)[\s\S]*:google-calendar-configured/);
   assert.doesNotMatch(calendarFunction, /\[:svg/);
-  assert.doesNotMatch(calendarFunction, /\(not configured\?\)\)\}/);
+  assert.doesNotMatch(calendarFunction, /calendarSetup/);
 });
