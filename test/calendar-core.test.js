@@ -168,7 +168,7 @@ test('dated Google Tasks become flexible TODO or DONE rows without inventing fix
     resourceType: 'google-task',
     status: 'needsAction',
     dateKey: '2026-08-30',
-    parentString: '{{[[TODO]]}} Submit report 25m · Google Calendar',
+    parentString: '{{[[TODO]]}} Submit report · Google Calendar',
     sourceString: 'Google Tasks · My Tasks · [Open](https://tasks.google.com/task/pending-1)',
     detailStrings: ['Attach the final PDF.'],
     details: { location: '', description: 'Attach the final PDF.' },
@@ -176,7 +176,7 @@ test('dated Google Tasks become flexible TODO or DONE rows without inventing fix
     completed: '',
     updated: '',
   });
-  assert.match(rows[1].parentString, /^\{\{\[\[DONE\]\]\}\} Review document 25m d\d{2}:\d{2} · Google Calendar$/);
+  assert.match(rows[1].parentString, /^\{\{\[\[DONE\]\]\}\} Review document d\d{2}:\d{2} · Google Calendar$/);
   assert.deepEqual(rows[2], {
     key: 'task:my-tasks:deleted-1',
     taskListId: 'my-tasks',

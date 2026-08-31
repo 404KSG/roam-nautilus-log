@@ -56,10 +56,12 @@ Calendar control performs a manual sync for the clicked Nautilus date; it never
 polls Google in the background or creates Daily Notes.
 
 Timed Calendar events become fixed events. Dated Google Tasks become flexible
-TODO/DONE rows using the configured default Todo duration because Google's
-public Tasks API exposes a due date, not a reliable time interval. Imported
-parent rows carry a quiet `· Google Calendar` source suffix; the chart removes
-that suffix from labels. Normal click preserves Roam text you changed.
+TODO/DONE rows. They omit a visible duration and inherit the current configured
+Default Todo Duration because Google's public Tasks API exposes a due date, not
+a reliable time interval. Add an explicit duration such as `30m` only when a
+task needs an override. Imported parent rows carry a quiet `· Google Calendar`
+source suffix; the chart removes that suffix from labels. Normal click preserves
+Roam text you changed.
 Option/Alt-click force-refreshes Google-managed strings while leaving
 user-created children alone. All-day, free/transparent, and declined events are
 ignored. Nautilus normally restores the connection after a Roam reload; users

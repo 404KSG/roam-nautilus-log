@@ -193,25 +193,19 @@ function taskSourceString(taskList, task) {
   return segments.join(' · ');
 }
 
-function normalizedTaskDuration(value) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : 15;
-}
-
 /**
  * Convert dated Google Tasks into Nautilus flexible task rows. Google Tasks
- * exposes a date-only due value, not a reliable scheduled interval, so these
- * rows deliberately use Nautilus's configured default estimate.
+ * exposes a date-only due value, not a reliable scheduled interval. Omitting
+ * an explicit duration keeps the imported outline quiet and lets the normal
+ * Nautilus fallback resolve the current configured default estimate.
  */
 export function normalizeGoogleTasks({
   taskList = {},
   tasks = [],
   date = '',
-  defaultDuration = 15,
 } = {}) {
   const taskListId = String(taskList?.id || 'default');
   const selectedDate = String(date || '').slice(0, 10);
-  const duration = normalizedTaskDuration(defaultDuration);
 
   return (Array.isArray(tasks) ? tasks : []).flatMap((task) => {
     if (!task?.id) return [];
@@ -247,7 +241,7 @@ export function normalizeGoogleTasks({
       resourceType: 'google-task',
       status: completed ? 'completed' : 'needsAction',
       dateKey: dueDate,
-      parentString: `${marker} ${title} ${duration}m${completionToken}${sourceSuffix()}`,
+      parentString: `${marker} ${title}${completionToken}${sourceSuffix()}`,
       sourceString: taskSourceString(taskList, task),
       detailStrings: [notes].filter(Boolean),
       details: { location: '', description: notes },

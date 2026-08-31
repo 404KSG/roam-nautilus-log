@@ -162,7 +162,7 @@ test('calendar runtime syncs only the explicitly clicked Nautilus date and plan'
   assert.equal(reconcileCalls[0].planUid, 'tomorrow-plan');
   assert.equal(reconcileCalls[0].force, true);
   assert.equal(reconcileCalls[0].events[0].parentString, '01:00–01:30 Weekly meeting · Google Calendar');
-  assert.equal(reconcileCalls[0].events[1].parentString, '{{[[TODO]]}} Submit report 25m · Google Calendar');
+  assert.equal(reconcileCalls[0].events[1].parentString, '{{[[TODO]]}} Submit report · Google Calendar');
   assert.equal(result.created, 2);
   assert.equal(result.tasks, 1);
   assert.equal(result.calendarEvents, 1);

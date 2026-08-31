@@ -14,10 +14,11 @@ future plans.
   `HH:MM–HH:MM Title · Google Calendar`, so the existing scheduler remains
   authoritative.
 - A dated pending Google Task becomes
-  `{{[[TODO]]}} Title 15m · Google Calendar`; a completed task becomes DONE.
-  The estimate uses the configured Default Todo Duration. Google Tasks exposes
-  no reliable scheduled interval through its public API, so Nautilus never
-  invents one.
+  `{{[[TODO]]}} Title · Google Calendar`; a completed task becomes DONE. With no
+  visible duration token, the task inherits the current configured Default Todo
+  Duration. A user can add an explicit value such as `30m` to override it.
+  Google Tasks exposes no reliable scheduled interval through its public API,
+  so Nautilus never presents the fallback as a Google-provided estimate.
 - The quiet `· Google Calendar` suffix remains visible in the Roam outline as
   provenance but is removed from chart labels.
 - One compact managed child records the calendar source and useful links.
@@ -28,7 +29,9 @@ future plans.
   it only as an encoded account hint; unavailable or unsafe hints leave the
   original link unchanged.
 - Normal sync updates a managed block only while its current string still
-  equals the last imported snapshot. Roam edits win silently.
+  equals the last imported snapshot. Roam edits win silently, including an
+  explicit duration override. Untouched legacy imports with a written default
+  duration migrate to the quieter implicit form on their next sync.
 - Option-click performs an explicit Google-first refresh of managed strings.
   User-created children are never overwritten or deleted. One Google Task keeps
   the same managed block while it changes between pending and completed.

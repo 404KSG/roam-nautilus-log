@@ -77,7 +77,7 @@ function googleTask(overrides = {}) {
     taskId: 'task-1',
     resourceType: 'google-task',
     status: 'needsAction',
-    parentString: '{{[[TODO]]}} Submit report 25m · Google Calendar',
+    parentString: '{{[[TODO]]}} Submit report · Google Calendar',
     sourceString: 'Google Tasks · My Tasks',
     details: {
       location: '',
@@ -286,12 +286,12 @@ test('one Google Task is updated in place across pending, completed, and deleted
     planUid: 'plan-today',
     events: [googleTask({
       status: 'completed',
-      parentString: '{{[[DONE]]}} Submit report 25m d15:20 · Google Calendar',
+      parentString: '{{[[DONE]]}} Submit report d15:20 · Google Calendar',
     })],
   });
   assert.equal(completed.updated, 1);
   assert.equal(graph.state().events['task:my-tasks:task-1'].parent.uid, parentUid);
-  assert.equal(graph.read(parentUid), '{{[[DONE]]}} Submit report 25m d15:20 · Google Calendar');
+  assert.equal(graph.read(parentUid), '{{[[DONE]]}} Submit report d15:20 · Google Calendar');
   assert.equal(graph.children('plan-today').length, 1);
 
   const removed = await reconciler.sync({
@@ -301,6 +301,35 @@ test('one Google Task is updated in place across pending, completed, and deleted
   assert.equal(removed.removed, 1);
   assert.equal(graph.read(parentUid), null);
   assert.equal(graph.state().events['task:my-tasks:task-1'], undefined);
+});
+
+test('Google Tasks migrate untouched imported defaults while preserving explicit local estimates', async () => {
+  const extension = await loadExtension('google-task-implicit-duration-migration');
+  const graph = graphHarness();
+  const reconciler = extension.createCalendarReconciler(graph);
+
+  await reconciler.sync({
+    planUid: 'plan-today',
+    events: [googleTask({
+      parentString: '{{[[TODO]]}} Submit report 15m · Google Calendar',
+    })],
+  });
+  const mapping = graph.state().events['task:my-tasks:task-1'];
+
+  const migrated = await reconciler.sync({
+    planUid: 'plan-today',
+    events: [googleTask()],
+  });
+  assert.equal(migrated.updated, 1);
+  assert.equal(graph.read(mapping.parent.uid), '{{[[TODO]]}} Submit report · Google Calendar');
+
+  await graph.update(mapping.parent.uid, '{{[[TODO]]}} Submit report 30m · Google Calendar');
+  const preserved = await reconciler.sync({
+    planUid: 'plan-today',
+    events: [googleTask()],
+  });
+  assert.equal(preserved.localKept, 1);
+  assert.equal(graph.read(mapping.parent.uid), '{{[[TODO]]}} Submit report 30m · Google Calendar');
 });
 
 test('mapping state migrates in place and prunes only old missing Roam parents', async () => {

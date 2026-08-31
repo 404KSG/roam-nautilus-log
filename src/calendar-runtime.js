@@ -191,7 +191,6 @@ export function createCalendarRuntime({
         normalizeGoogleTasks({
           ...batch,
           date,
-          defaultDuration: extensionAPI.settings.get('todo-duration'),
         })
       ));
       const items = [...calendarEvents, ...tasks];
