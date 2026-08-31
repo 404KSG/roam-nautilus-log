@@ -5,17 +5,18 @@ import { handleRequest, encryptRefreshToken, decryptRefreshToken } from '../src/
 
 const workerConfig = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
 
-test('production and Preview OAuth callbacks stay explicit and exact', () => {
+test('production uses the registered callback alias and Preview forwards it exactly', () => {
+  const [productionConfig, previewConfig] = workerConfig.split('[env.preview]');
   assert.match(
-    workerConfig,
-    /GOOGLE_OAUTH_REDIRECT_URI = "https:\/\/nautilus-log-auth\.kidsseeghosts\.workers\.dev\/oauth\/callback"/,
-  );
-  assert.match(
-    workerConfig,
+    productionConfig,
     /GOOGLE_OAUTH_REDIRECT_URI = "https:\/\/nautilus-log-auth-preview\.kidsseeghosts\.workers\.dev\/oauth\/callback"/,
   );
   assert.match(
-    workerConfig,
+    previewConfig,
+    /GOOGLE_OAUTH_REDIRECT_URI = "https:\/\/nautilus-log-auth-preview\.kidsseeghosts\.workers\.dev\/oauth\/callback"/,
+  );
+  assert.match(
+    previewConfig,
     /OAUTH_CALLBACK_FORWARD_URL = "https:\/\/nautilus-log-auth\.kidsseeghosts\.workers\.dev\/oauth\/callback"/,
   );
 });

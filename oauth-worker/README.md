@@ -15,18 +15,18 @@ Required configuration:
 
 - a D1 database bound as `NAUTILUS_AUTH_DB`, with the checked-in migrations
   applied;
-- both exact `/oauth/callback` URLs registered as authorized redirect URIs on
-  the Google Web OAuth client currently stored in the production Worker's
-  `GOOGLE_CLIENT_ID` secret:
-  - `https://nautilus-log-auth.kidsseeghosts.workers.dev/oauth/callback`
-  - `https://nautilus-log-auth-preview.kidsseeghosts.workers.dev/oauth/callback`
+- the exact callback currently registered as an authorized redirect URI on the
+  Google Web OAuth client stored in the production Worker's `GOOGLE_CLIENT_ID`
+  secret:
+  `https://nautilus-log-auth-preview.kidsseeghosts.workers.dev/oauth/callback`;
 - Google Calendar API and Google Tasks API enabled, with the two Calendar
   read-only scopes plus `tasks.readonly` configured on the consent screen;
 - `ALLOWED_ORIGINS=https://roamresearch.com`;
 - `GOOGLE_OAUTH_REDIRECT_URI` set to that same exact registered callback URL.
 
-The current production rollout keeps the Preview callback as a narrow migration
-alias. Production signs its state with
+The current production rollout uses the Preview callback as a narrow migration
+alias while Google's verification review prevents callback registration changes.
+Production signs its state with
 `OAUTH_ISSUER=production`; Preview recognizes only that routing marker and
 forwards `code`, `state`, or `error` to the fixed production callback configured
 by `OAUTH_CALLBACK_FORWARD_URL`. Production then performs the normal HMAC state
@@ -58,9 +58,11 @@ Typical deployment order:
 2. Apply `wrangler d1 migrations apply nautilus-log-auth --remote`.
 3. Add all four Worker secrets with `wrangler secret put`.
 4. Before deploying, start one authorization request and confirm its
-   `client_id` is the same Web client being edited in Google Cloud. Register
-   both callback URLs above under **Authorized redirect URIs** (not JavaScript
-   origins), with exact scheme, host, path, case, and no trailing slash.
+   `client_id` is the same Web client being edited in Google Cloud. Confirm the
+   callback above is registered under **Authorized redirect URIs** (not
+   JavaScript origins), with exact scheme, host, path, case, and no trailing
+   slash. After Google finishes verification, the production callback can be
+   registered and migrated in a separate, tested rollout.
 5. Deploy the Worker and publish the production OAuth app. If a callback alias
    is used during a domain migration, deploy and test both ends before switching
    the extension service URL.
