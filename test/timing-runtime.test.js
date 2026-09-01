@@ -935,8 +935,12 @@ test('chart task location scrolls in its current surface and falls back to offic
     scrollIntoView: (options) => trace.push(['scroll', options]),
   };
   let visibleTarget = target;
+  const selectors = [];
   const surface = {
-    querySelectorAll: () => (visibleTarget ? [visibleTarget] : []),
+    querySelectorAll: (selector) => {
+      selectors.push(selector);
+      return selector === '[data-block-uid="task-a"]' && visibleTarget ? [visibleTarget] : [];
+    },
   };
   const origin = {
     closest: () => surface,
@@ -964,6 +968,7 @@ test('chart task location scrolls in its current surface and falls back to offic
 
   const scrolled = await extension.locateTaskInCurrentSurface('task-a', { origin });
   assert.deepEqual(scrolled, { ok: true, mode: 'scroll' });
+  assert.equal(selectors[0], '[data-block-uid="task-a"]');
   assert.deepEqual(trace[0], ['scroll', { block: 'center', behavior: 'smooth' }]);
   assert.equal(trace.some(([action]) => action === 'open'), false);
   assert.equal(classes.has('nautilus-log-timing__located'), false, 'temporary highlight should clean itself up');

@@ -234,6 +234,8 @@ test('chart task activation is read-only navigation with no legacy progress muta
   assert.match(component, /\.-shiftKey/);
   assert.match(entry, /locatePlanTask/);
   assert.match(timingRoam, /locateTaskInCurrentSurface/);
+  assert.match(timingRoam, /data-block-uid/);
+  assert.doesNotMatch(timingRoam, /\[data-uid=/);
 });
 
 test('renderer install polling does not invalidate an unchanged chart', () => {

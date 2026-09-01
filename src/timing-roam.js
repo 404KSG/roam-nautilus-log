@@ -552,7 +552,7 @@ export async function openPrimaryPlan(planUid, { sidebar = false } = {}) {
   if (typeof openBlock !== 'function') throw new Error('Roam main-window navigation is unavailable.');
   await openBlock({ block: { uid: planUid } });
   window.setTimeout?.(() => {
-    const node = document.querySelector?.(`[data-uid="${planUid}"]`);
+    const node = document.querySelector?.(blockUidSelector(planUid));
     node?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
     node?.classList?.add('nautilus-log-timing__located');
     window.setTimeout?.(() => node?.classList?.remove('nautilus-log-timing__located'), 1200);
@@ -571,6 +571,10 @@ function attributeSelectorValue(value) {
   return String(value ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
+function blockUidSelector(uid) {
+  return `[data-block-uid="${attributeSelectorValue(uid)}"]`;
+}
+
 function isRenderedBlock(node) {
   if (!node || typeof node.scrollIntoView !== 'function') return false;
   return typeof node.getClientRects !== 'function' || node.getClientRects().length > 0;
@@ -585,7 +589,7 @@ export async function locateTaskInCurrentSurface(taskUid, { origin } = {}) {
   if (!taskUid) throw new Error('This task has no block UID.');
   const rootDocument = typeof document !== 'undefined' ? document : null;
   const surface = origin?.closest?.('.rm-sidebar-window, .roam-article, .roam-main') || rootDocument;
-  const selector = `[data-uid="${attributeSelectorValue(taskUid)}"]`;
+  const selector = blockUidSelector(taskUid);
   const candidates = Array.from(surface?.querySelectorAll?.(selector) || []);
   const target = candidates.find(isRenderedBlock) || null;
 
