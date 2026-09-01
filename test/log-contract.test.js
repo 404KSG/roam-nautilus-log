@@ -493,7 +493,7 @@ test('responsive observers rebind when Roam replaces the topbar or search surfac
   assert.match(timingTopbar, /hostObserver\.observe\(topbar, \{ childList: true, subtree: true \}\)/);
 });
 
-test('the idle capacity strip shares one centered vertical rhythm', () => {
+test('the idle capacity strip shares one centered optical rhythm', () => {
   assert.match(timingTopbar, /mark\.append\(icon\('unresolve'\)\)/);
   assert.match(timingTopbar, /separator\.setAttribute\('aria-hidden', 'true'\)/);
   assert.match(css, /\.nautilus-log-timing__brand-icon\s*\{[^}]*align-items:\s*center;[^}]*display:\s*inline-flex;[^}]*justify-content:\s*center;/s);
@@ -501,7 +501,8 @@ test('the idle capacity strip shares one centered vertical rhythm', () => {
   assert.match(css, /\.nautilus-log-timing__trigger-separator\s*\{[^}]*background:\s*currentColor;[^}]*border-radius:\s*999px;[^}]*height:\s*3px;[^}]*width:\s*3px;/s);
   assert.match(css, /\.nautilus-log-timing__capacity-token\s*\{[^}]*align-items:\s*center;[^}]*height:\s*18px;[^}]*line-height:\s*18px;/s);
   assert.match(css, /\.nautilus-log-timing__capacity-value\s*\{[^}]*color:\s*inherit;[^}]*font-weight:\s*500;/s);
-  assert.match(css, /\.nautilus-log-timing__capacity-value\s*\{[^}]*min-width:\s*4ch;[^}]*text-align:\s*right;/s);
+  const capacityValueRule = css.match(/\.nautilus-log-timing__capacity-value\s*\{([^}]*)\}/)?.[1] || '';
+  assert.doesNotMatch(capacityValueRule, /min-width|text-align/);
   assert.match(css, /\.nautilus-log-timing__capacity-label\s*\{[^}]*color:\s*inherit;[^}]*font-weight:\s*500;/s);
   assert.doesNotMatch(css, /\.bp3-dark\s+\.nautilus-log-timing__capacity-value[^}]*#d6dbe2/s);
 });

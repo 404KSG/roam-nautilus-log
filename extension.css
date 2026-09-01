@@ -1342,8 +1342,6 @@
 .nautilus-log-timing__capacity-value {
   color: inherit;
   font-weight: 500;
-  min-width: 4ch;
-  text-align: right;
 }
 
 .nautilus-log-timing__capacity-label {
