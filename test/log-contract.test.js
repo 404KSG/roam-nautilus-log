@@ -238,6 +238,16 @@ test('chart task activation is read-only navigation with no legacy progress muta
   assert.doesNotMatch(timingRoam, /\[data-uid=/);
 });
 
+test('task location feedback is a quiet row-level spotlight with accessible reduced motion', () => {
+  assert.match(timingRoam, /:scope > \.rm-block-main/);
+  assert.match(css, /\.nautilus-log-timing__located\s*\{[^}]*900ms/s);
+  assert.match(css, /box-shadow:\s*inset 0 0 0 1px/);
+  assert.match(css, /background-color:\s*var\(--nl-locate-bg\)/);
+  assert.match(css, /\.dark \.nautilus-log-timing__located/);
+  assert.match(css, /prefers-reduced-motion:[^)]+\)[\s\S]*\.nautilus-log-timing__located\s*\{[^}]*animation:\s*none;[^}]*background-color:/);
+  assert.doesNotMatch(css, /0 0 0 3px rgba\(19, 124, 189, 0\.28\)/);
+});
+
 test('renderer install polling does not invalidate an unchanged chart', () => {
   const pollStart = component.indexOf('check-interval');
   const pollEnd = component.indexOf('settings-state', pollStart);

@@ -924,13 +924,26 @@ test('chart task location scrolls in its current surface and falls back to offic
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#chart-locate-${Date.now()}`;
   const extension = await import(moduleUrl);
   const trace = [];
-  const classes = new Set();
+  const containerClasses = new Set();
+  const rowClasses = new Set();
+  const row = {
+    classList: {
+      add: (name) => {
+        trace.push(['row:add', name]);
+        rowClasses.add(name);
+      },
+      remove: (name) => {
+        trace.push(['row:remove', name]);
+        rowClasses.delete(name);
+      },
+    },
+  };
   const target = {
     classList: {
-      add: (name) => classes.add(name),
-      remove: (name) => classes.delete(name),
+      add: (name) => containerClasses.add(name),
+      remove: (name) => containerClasses.delete(name),
     },
-    closest: () => null,
+    querySelector: (selector) => (selector === ':scope > .rm-block-main' ? row : null),
     getClientRects: () => [{ width: 1, height: 1 }],
     scrollIntoView: (options) => trace.push(['scroll', options]),
   };
@@ -971,7 +984,9 @@ test('chart task location scrolls in its current surface and falls back to offic
   assert.equal(selectors[0], '[data-block-uid="task-a"]');
   assert.deepEqual(trace[0], ['scroll', { block: 'center', behavior: 'smooth' }]);
   assert.equal(trace.some(([action]) => action === 'open'), false);
-  assert.equal(classes.has('nautilus-log-timing__located'), false, 'temporary highlight should clean itself up');
+  assert.equal(trace.some(([action]) => action === 'row:add'), true);
+  assert.equal(containerClasses.has('nautilus-log-timing__located'), false, 'the parent subtree should not be highlighted');
+  assert.equal(rowClasses.has('nautilus-log-timing__located'), false, 'temporary highlight should clean itself up');
 
   visibleTarget = null;
   const opened = await extension.locateTaskInCurrentSurface('task-a', { origin });

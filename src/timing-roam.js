@@ -67,6 +67,7 @@ const sidebarOperationQueues = new WeakMap();
 const knownSidebarWindows = new WeakMap();
 const sidebarWindowCacheRevisions = new WeakMap();
 const SIDEBAR_WINDOW_CACHE_TTL_MS = 45 * 60 * 1000;
+const LOCATE_FEEDBACK_MS = 900;
 let latestSidebarIntent = 0;
 
 function sidebarWindowCache(sidebar) {
@@ -554,8 +555,7 @@ export async function openPrimaryPlan(planUid, { sidebar = false } = {}) {
   window.setTimeout?.(() => {
     const node = document.querySelector?.(blockUidSelector(planUid));
     node?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
-    node?.classList?.add('nautilus-log-timing__located');
-    window.setTimeout?.(() => node?.classList?.remove('nautilus-log-timing__located'), 1200);
+    showLocatedFeedback(node);
   }, 80);
 }
 
@@ -573,6 +573,12 @@ function attributeSelectorValue(value) {
 
 function blockUidSelector(uid) {
   return `[data-block-uid="${attributeSelectorValue(uid)}"]`;
+}
+
+function showLocatedFeedback(block) {
+  const row = block?.querySelector?.(':scope > .rm-block-main') || block;
+  row?.classList?.add('nautilus-log-timing__located');
+  window.setTimeout?.(() => row?.classList?.remove('nautilus-log-timing__located'), LOCATE_FEEDBACK_MS);
 }
 
 function isRenderedBlock(node) {
@@ -601,9 +607,7 @@ export async function locateTaskInCurrentSurface(taskUid, { origin } = {}) {
   const reducedMotion = typeof window !== 'undefined'
     && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
   target.scrollIntoView({ block: 'center', behavior: reducedMotion ? 'auto' : 'smooth' });
-  const highlight = target.closest?.('.roam-block-container') || target;
-  highlight.classList?.add('nautilus-log-timing__located');
-  window.setTimeout?.(() => highlight.classList?.remove('nautilus-log-timing__located'), 1200);
+  showLocatedFeedback(target);
   return { ok: true, mode: 'scroll' };
 }
 
