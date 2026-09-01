@@ -616,10 +616,7 @@ function remainingDuration(task) {
   if (!task || task.done) return 0;
   const rawDuration = asNumber(task.duration);
   if (!Number.isFinite(rawDuration) || rawDuration <= 0) return 0;
-  // Renderers normally pass already-reduced duration.  Accepting progress here
-  // makes the public seam safe for callers that pass a raw estimate instead.
-  const progress = clamp(asNumber(task.progress) || 0, 0, 100);
-  return Math.max(0, Math.round(rawDuration * (1 - progress / 100)));
+  return Math.max(0, Math.round(rawDuration));
 }
 
 function futureFixedIntervals({ startMinutes, endMinutes, nowMinutes, fixedEvents = [] }) {
@@ -712,9 +709,8 @@ function scheduleTasks({
  * original estimate, never from a previous task's completion time: a task
  * estimated at 60 minutes and completed at 21:50 occupies 20:50–21:50.
  *
- * `duration` is expected to be the original estimate (before progress is
- * applied).  Callers that parse a task can pass their configured default when
- * the task has no explicit estimate.
+ * `duration` is the task's full estimate. Callers that parse a task can pass
+ * their configured default when the task has no explicit estimate.
  */
 function historicalDoneSlice({
   done,
@@ -925,6 +921,7 @@ const UI_COPY = {
       event: 'Event',
       available: 'Available slot',
       availableNow: 'Available now',
+      locateTask: 'Click to locate · ⇧ Sidebar',
     },
     warnings: {
       overnight: 'Continues into the next day',
@@ -1000,6 +997,7 @@ const UI_COPY = {
       event: '事件',
       available: '可用空档',
       availableNow: '当前可用',
+      locateTask: '单击定位 · ⇧ 侧边栏',
     },
     warnings: {
       overnight: '连续到次日',

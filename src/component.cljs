@@ -1,8 +1,7 @@
 (ns nautilus-log-v1
   (:require [clojure.string :as str]
             [reagent.core :as r]
-            [roam.datascript :as rd]
-            [roam.block :as block]))
+            [roam.datascript :as rd]))
 
 ;; ------- default settings -------
 
@@ -316,7 +315,7 @@
   "Calls the tested JavaScript task-instance core. Keeping this projection in
    one place applies the same reference precedence everywhere: a bare wrapper
    inherits source TODO/DONE, an explicit outer marker owns today's status,
-   and source completion time or progress never leaks into today's instance."
+   and source completion time never leaks into today's instance."
   (try
     (let [core (.-nautilusLogTaskCore js/window)
           function (aget core function-name)]
@@ -397,16 +396,6 @@
     true
     false))
 
-(defn get-block-str-naked [block-uid]
-  (-> (rd/q '[:find ?s
-              :in $ ?uid
-              :where
-              [?b :block/uid ?uid]
-              [?b :block/string ?s]]
-            block-uid)
-      first
-      first))
-
 (defn minutes->time [minutes]
   (let [h (mod (int (/ minutes 60)) 24)
         m (mod minutes 60)]
@@ -416,12 +405,14 @@
   (or (log-core-call "formatDuration" minutes)
       (str (max 0 (int (or minutes 0))) "m")))
 
-(defn timeline-tooltip-info [title kind-label start end]
+(defn timeline-tooltip-info [title kind-label start end hint]
   (let [time-range (str (minutes->time start) "–" (minutes->time end))
         duration (duration-label (- end start))]
     {:title title
      :meta (str kind-label " · " time-range " · " duration)
-     :aria-label (str title ". " kind-label ". " time-range ". " duration)}))
+     :hint hint
+     :aria-label (str title ". " kind-label ". " time-range ". " duration
+                      (when (seq hint) (str ". " hint)))}))
 
 (defn timeline-tooltip-geometry [start end center]
   (let [radius (+ 8 (apply max (map outer-radius-at (range (count snail-blueprint-outer-radiuses)))))]
@@ -466,6 +457,22 @@
 (defn hide-hover-tooltip! [hover-info-state]
   (reset! hover-info-state nil))
 
+(defn locate-plan-task! [uid hover-info-state event]
+  (when (and (seq uid) event)
+    (.preventDefault event)
+    (.stopPropagation event)
+    (when hover-info-state (hide-hover-tooltip! hover-info-state))
+    (if-let [locate-task (some-> js/window .-nautilusLogExtensionData .-locatePlanTask)]
+      (-> (js/Promise.resolve
+           (.call locate-task nil uid (.-currentTarget event) (boolean (.-shiftKey event))))
+          (.catch (fn [error]
+                    (.error js/console "[Nautilus Log] Could not locate task" error))))
+      (.warn js/console "[Nautilus Log] Task location is unavailable"))))
+
+(defn task-keydown! [uid hover-info-state event]
+  (when (= "Enter" (.-key event))
+    (locate-plan-task! uid hover-info-state event)))
+
 (defn position-hover-tooltip! [hover-info-state node]
   (when (and node @hover-info-state (not (:positioned @hover-info-state)))
     (let [{:keys [anchor-x anchor-y preferred]} @hover-info-state
@@ -483,7 +490,7 @@
         (swap! hover-info-state merge positioned {:positioned true})))))
 
 (defn hover-tooltip-content [hover-info-state]
-  (when-let [{:keys [title meta x y anchor-x anchor-y positioned placement]} @hover-info-state]
+  (when-let [{:keys [title meta hint x y anchor-x anchor-y positioned placement]} @hover-info-state]
     [:div {:class (str "nautilus-log-hover-tooltip"
                        (when positioned " nautilus-log-hover-tooltip--positioned")
                        (when placement (str " nautilus-log-hover-tooltip--" placement)))
@@ -492,7 +499,9 @@
            :style {:left (str (or x anchor-x) "px")
                    :top (str (or y anchor-y) "px")}}
      [:strong {:class "nautilus-log-hover-tooltip-title"} title]
-     [:span {:class "nautilus-log-hover-tooltip-meta"} meta]]))
+     [:span {:class "nautilus-log-hover-tooltip-meta"} meta]
+     (when (seq hint)
+       [:span {:class "nautilus-log-hover-tooltip-hint"} hint])]))
 
 (defn hover-tooltip-component [hover-info-state]
   (when @hover-info-state
@@ -503,41 +512,6 @@
                (r/as-element [hover-tooltip-content hover-info-state])
                (.-body js/document))
         [hover-tooltip-content hover-info-state]))))
-
-(defn rm-prog-from-block-if-done [uid]
-  (let [current (get-block-str-naked uid)
-        stripped (str/replace current #"\sd\d{1,3}\%" "")]
-    ;; Avoid an identical write. This function runs inside a reactive child
-    ;; watcher, so a no-op write retriggers the watcher and creates an endless
-    ;; stream of Roam transactions for ordinary DONE blocks.
-    (when (not= current stripped)
-      (block/update {:block
-                     {:uid uid
-                      :string stripped}}))))
-
-(defn update-block-progress [block-uid increment now-time-atom]
-   (let [s (get-block-str-naked block-uid)
-         progress-format #"(\sd)(\d{1,3})(\%)" ; #"(\s\%)(\d{1,3})"
-         updated-str (if-let [progress-match (re-find progress-format s)]
-                       (let [old-progress-str (first progress-match)
-                             prog-incremented (+ (int (last (butlast progress-match))) increment)
-                             prog-new-str (cond
-                                            (= prog-incremented 100) "done"
-                                            (> prog-incremented 100) ""
-                                            :else (str " d" prog-incremented "%"))]
-                         (if (not= prog-new-str "done")
-                           (str/replace s old-progress-str prog-new-str)
-                           (str (->
-                                 (str/replace s old-progress-str "")
-                                 (str/replace #"\{\{\[\[TODO\]\]\}\}" "{{[[DONE]]}}"))
-                                 " d" (minutes->time @now-time-atom))))
-                       (-> (str s " d" increment "%")
-                           (str/replace #"\{\{\[\[DONE\]\]\}\}" "{{[[TODO]]}}")
-                           (str/replace #"\b(d\d{1,2}(:\d{1,2})?)\b(?!%)" "")))]
-     (block/update {:block
-                    {:uid block-uid
-                     :string updated-str}})))
-
 
 ;; ---------------- helpers ----------------------
 
@@ -592,23 +566,13 @@
     {:duration (:minutes parsed) :cleaned-str (:cleanedText parsed)}
     {:duration (:default-duration settings) :cleaned-str s}))
 
-(defn parse-progress [s]
-  (let [progress-format #"(\sd)(\d{1,3})(\%)"]
-    (if-let [progress-match (re-find progress-format s)]
-      (let [progress-str (first progress-match)
-            cleaned-str (str/replace s progress-str "")
-            prog-int (int (last (butlast progress-match)))]
-        {:progress (if (> prog-int 100) 100 prog-int)
-         :cleaned-str cleaned-str})
-      {:progress 0 :cleaned-str s})))
-
 (defn parse-done-time [s]
-  (let [done-time-format #"d(\d{1,2}(?::\d{1,2})?)"
+  (let [done-time-format #"(?:^|\s)d((?:[01]?\d|2[0-3])(?::[0-5]\d)?)(?=\s|$)"
         done-time-match (re-find done-time-format s)]
     (if done-time-match
-      (let [[_ done-time-str] done-time-match
+      (let [[done-token done-time-str] done-time-match
             [h m] (str/split done-time-str #":")
-            cleaned-str (str/replace s (str "d" done-time-str) "")]
+            cleaned-str (str/replace s done-token " ")]
         {:done-at (+ (if m (int m) 0) (* 60 (int h)))
          :cleaned-str cleaned-str})
       {:done-at nil :cleaned-str s})))
@@ -618,9 +582,7 @@
         done-found? (re-find done-format s)]
     (if done-found?
       {:done true
-       :cleaned-str (-> s
-                     (str/replace done-format "")
-                     (str/replace #"\s\%\d{1,3}" ""))}
+       :cleaned-str (str/replace s done-format "")}
       {:done false :cleaned-str s})))
 
 (def get-color-pattern
@@ -671,7 +633,6 @@
         {:keys [custom-color cleaned-str]} (parse-custom-color-1 cleaned-str settings)
         {:keys [range warning cleaned-str]} (parse-time-range cleaned-str settings)
         {:keys [duration cleaned-str]} (parse-duration cleaned-str settings)
-        {:keys [progress cleaned-str]} (parse-progress cleaned-str)
         {:keys [done-at cleaned-str]} (parse-done-time cleaned-str)
         {:keys [done cleaned-str]} (parse-DONE cleaned-str)
         ;; A flexible completed task uses one condensed Actual slice when the
@@ -694,13 +655,10 @@
                                     :lastClockEnd last-clock-end})
         description (parse-rest cleaned-str)
         event-type (if range :meeting :todo)]
-    (when done
-      (rm-prog-from-block-if-done (:uid block-map)))
     (-> {:description description
-         :progress progress
          :duration (if (and done-slice (nil? range))
                      (:duration done-slice)
-                     (int (* (/ (- 100 progress) 100) duration)))
+                     duration)
          :uid (:uid block-map)
          ;; Fixed events keep their explicit range after completion so the
          ;; full-day event denominator remains stable. Flexible DONE tasks use
@@ -732,7 +690,7 @@
                                         {:startMinutes workday-start
                                          :endMinutes workday-end
                                          :nowMinutes plan-from-time
-                                         :tasks (map #(dissoc % :progress) pending-todos)
+                                         :tasks pending-todos
                                          :fixedEvents meeting-events})
         scheduled-by-uid (into {} (map (juxt :uid identity) (:scheduledTasks scheduler-input)))
         scheduled-todos (keep (fn [todo]
@@ -814,7 +772,7 @@
 (defn slice
   "Draws and colors the slice section according to the specified parameters"
   [[start-angle end-angle inner-radius outer-radius center settings]
-   & {:keys [bg-color border-color legend-color legend-rect text timestamp stroke-dasharray font-weight shaky done? uid non-zero-progress? click-to-progress task-start-min task-end-min now-time-atom past?]}]
+   & {:keys [bg-color border-color legend-color legend-rect text timestamp stroke-dasharray font-weight shaky done? task-start-min task-end-min past?]}]
   (let [start-radians (angle->rad (+ start-angle (shake-if shaky)))
         end-radians (angle->rad (+ end-angle (shake-if shaky)))
         mid-radians (if (and task-start-min task-end-min)
@@ -853,33 +811,17 @@
                                         "–>" (round2 end-radians) "/ leg:" (round2 legend-radians)) "") 
         on-left? (or (<= legend-radians (- (/ pi 2))) (>= legend-radians (/ pi 2)))] 
     [:g {:class (when past? "nautilus-log-grid-past")}
-     [:defs
-      [:pattern
-       {:id "dot-pattern" :width "4" :height "4" :patternUnits "userSpaceOnUse"}
-       [:circle {:r "0.5" :cx "1" :cy "1" :fill "gray"}]
-       [:circle {:r "0.5" :cx "5" :cy "5" :fill "gray"}]]]
      (when @debug-state-atom  [:circle {:cx center-x :cy center-y :r 4 :fill "red"}])              
      ;; ⤵ this is the main component - slice
-     
-     (when non-zero-progress? [:path
-      {:d path
-       :style {:--pb-delay (str (* (/ (or task-start-min 0) 1440.0) 6.0) "s")}
-       :fill "url(#dot-pattern)"}])
-     
+
      [:path
       {:d path
        :class "nautilus-log-slice"
-       :style (merge
-                (when click-to-progress {:cursor "pointer"})
-                {:--pb-delay (str (* (/ (or task-start-min 0) 1440.0) 6.0) "s")})
+       :style {:--pb-delay (str (* (/ (or task-start-min 0) 1440.0) 6.0) "s")}
        :stroke-dasharray stroke-dasharray
        :fill bg-color
-       :on-click #(when click-to-progress (update-block-progress uid 10 now-time-atom))
-       ; :on-mouse-enter (fn [_] (reset! hovered true))
-       ; :on-mouse-leave (fn [_] (reset! hovered false))
        :stroke border-color}]
      ;; ⤵ adds an event legend
-     ;; (when @hovered [:g [:text {:x center-x :y center-y} (str progress)]])
      (when text
        [:g {:style {:--pb-delay (str (* (/ (or task-start-min 0) 1440.0) 6.0) "s")}
              :class "nautilus-log-slice-group"}
@@ -893,8 +835,6 @@
                                (if on-left? "end" "start"))
                 :alignment-baseline "baseline"
                 :font-weight font-weight
-                :style (when click-to-progress {:cursor "pointer"})
-                :on-click #(when click-to-progress (update-block-progress uid 10 now-time-atom))
                 :text-decoration (if done? "line-through" "none")
                 :fill (if-not done? legend-color "var(--nautilus-log-completed)")}
          (if debug? (str dbg-radians-txt)
@@ -1020,8 +960,6 @@
         done-at (:done-at event)
         done? (if (:done event) true false)
         meeting? (:meeting event)
-        progress (:progress event)
-        click-to-progress (if (and interactive? todo?) true false)
         expired? (and elapsed-page? meeting? (>= timeline-minute (:end event)))
         current? (= true (log-core-call "isCurrentPlannedTask"
                                          {:event event
@@ -1043,20 +981,18 @@
                  :else nil)
      :done done?
      :outer-radius outer-radius
-     :progress progress
      :meeting? meeting?
      :expired? expired?
      :past-status past-status
-     :current? current?
-     :click-to-progress click-to-progress}))
+     :current? current?}))
 
 (defn get-hour-boundaries [start-min end-min]
   (let [first-bound (* (quot (+ start-min 59) 60) 60)
         first-bound (if (<= first-bound start-min) (+ first-bound 60) first-bound)]
     (range first-bound end-min 60)))
 
-(defn event-slice-component [event index legend-rect inner-radius elapsed-page? interactive? timeline-minute center settings now-time-atom conflict? hover-enabled? hover-info-state copy]
-  (let [{:keys [bg-color done click-to-progress meeting? expired? past-status current?]} (calculate-slice-params event index elapsed-page? interactive? timeline-minute settings)
+(defn event-slice-component [event index legend-rect inner-radius elapsed-page? interactive? timeline-minute center settings conflict? hover-enabled? hover-info-state copy]
+  (let [{:keys [bg-color done meeting? expired? past-status current?]} (calculate-slice-params event index elapsed-page? interactive? timeline-minute settings)
         legend-color (cond
                        (= "completed" past-status) "var(--nautilus-log-completed)"
                        (and meeting? (nil? (:bg-color event))) "var(--nautilus-log-event)"
@@ -1064,12 +1000,13 @@
                        :else nil)
         description (:description event)
         uid (:uid event)
-        progress (:progress event)
+        actionable? (= true (:todo event))
         start-min (:start event)
         end-min (:end event)
         kind-label (when hover-enabled? (get-in copy [:tooltips (if meeting? :event :task)]))
+        action-hint (when actionable? (get-in copy [:tooltips :locateTask]))
         tooltip-info (when hover-enabled?
-                       (merge (timeline-tooltip-info description kind-label start-min end-min)
+                       (merge (timeline-tooltip-info description kind-label start-min end-min action-hint)
                               (timeline-tooltip-geometry start-min end-min center)))
         boundaries (get-hour-boundaries start-min end-min)
         segments (loop [curr start-min
@@ -1082,6 +1019,7 @@
                      (recur (first bounds) (rest bounds) (conj segs [curr (first bounds)]))))]
     (into [:g (merge {:class (str "nautilus-log-event-slice-group"
                             (when hover-enabled? " nautilus-log-event-slice-group--interactive")
+                            (when actionable? " nautilus-log-event-slice-group--actionable")
                             (case past-status
                               "completed" " nautilus-log-past--completed"
                               "event" " nautilus-log-past--event"
@@ -1092,13 +1030,21 @@
                     :aria-current (when current? "true")}
                    (when hover-enabled?
                      {:aria-label (:aria-label tooltip-info)
-                      :role "img"
                       :tab-index 0
                       :focusable "true"
                       :on-mouse-enter #(show-hover-tooltip! hover-info-state tooltip-info %)
                       :on-mouse-leave #(hide-hover-tooltip! hover-info-state)
                       :on-focus #(show-hover-tooltip! hover-info-state tooltip-info %)
-                      :on-blur #(hide-hover-tooltip! hover-info-state)}))]
+                      :on-blur #(hide-hover-tooltip! hover-info-state)})
+                   (if actionable?
+                     {:aria-label (or (:aria-label tooltip-info)
+                                      (str description ". " action-hint))
+                      :role "link"
+                      :tab-index 0
+                      :focusable "true"
+                      :on-click #(locate-plan-task! uid hover-info-state %)
+                      :on-key-down #(task-keydown! uid hover-info-state %)}
+                     (when hover-enabled? {:role "img"})))]
           (map-indexed
            (fn [idx [s e]]
              (let [start-angle (min->angle s)
@@ -1112,15 +1058,10 @@
                 :text (if (= idx 0) description nil)
                 :shaky shaky
                 :done? done
-                :uid uid
-                :progress progress
                 :font-weight "bold"
                 :legend-rect (if (= idx 0) legend-rect nil)
-                :non-zero-progress? (if (> progress 0) true false)
-                :click-to-progress click-to-progress
                 :task-start-min start-min
-                :task-end-min end-min
-                :now-time-atom now-time-atom]))
+                :task-end-min end-min]))
            segments))))
 
 (defn label-track-map [events]
@@ -1130,9 +1071,9 @@
 
 (defn events->slices
   "Returns svg vector of all slice components + list of legend rectangles"
-  ([events elapsed-page? interactive? timeline-minute center settings now-time-atom hover-enabled? hover-info-state copy]
-   (events->slices events elapsed-page? interactive? timeline-minute center settings now-time-atom hover-enabled? hover-info-state copy []))
-  ([events elapsed-page? interactive? timeline-minute center settings now-time-atom hover-enabled? hover-info-state copy init-rects]
+  ([events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy]
+   (events->slices events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy []))
+  ([events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy init-rects]
    (let [events (vec (filter #(not= true (:freetime %)) events))
          track-map (label-track-map events)
          conflict-uids (set (or (log-core-call "overlappingFixedEventUids" {:events events}) []))]
@@ -1154,7 +1095,7 @@
         (println?debug "RADIUS INSIDE EVENTS-SLICES: " radius)              
         (recur (inc i) (rest events) (conj rects new-rect)
                (conj all-slice-components
-                     (event-slice-component event i new-rect snail-inner-radius elapsed-page? interactive? timeline-minute center settings now-time-atom
+                     (event-slice-component event i new-rect snail-inner-radius elapsed-page? interactive? timeline-minute center settings
                                             (contains? conflict-uids (:uid event)) hover-enabled? hover-info-state copy))))
       [all-slice-components rects])))))
 
@@ -1220,7 +1161,7 @@
     (:meeting event) "event"
     :else "task"))
 
-(defn compact-event-list [events copy compact-open-state]
+(defn compact-event-list [events copy compact-open-state hover-info-state]
   (let [items (->> events
                    (filter #(and (not= true (:freetime %))
                                  (number? (:start %))
@@ -1241,9 +1182,16 @@
            :aria-label "Nautilus Log scheduled items"}
       (for [[index event] (map-indexed vector items)]
         ^{:key (str (:uid event) ":" (:start event) ":" index)}
-        [:li {:class (str "nautilus-log-compact-item"
-                          (when (:done event) " nautilus-log-compact-item--done"))
-              :title (:description event)}
+        [:li (merge {:class (str "nautilus-log-compact-item"
+                                  (when (:done event) " nautilus-log-compact-item--done")
+                                  (when (:todo event) " nautilus-log-compact-item--actionable"))
+                     :title (:description event)}
+                    (when (:todo event)
+                      {:role "link"
+                       :tab-index 0
+                       :aria-label (str (:description event) ". " (get-in copy [:tooltips :locateTask]))
+                       :on-click #(locate-plan-task! (:uid event) hover-info-state %)
+                       :on-key-down #(task-keydown! (:uid event) hover-info-state %)}))
          [:i {:class (str "nautilus-log-compact-dot nautilus-log-compact-dot--" (compact-item-tone event))
               :aria-hidden "true"}]
          [:time {:class "nautilus-log-compact-time"}
@@ -1292,7 +1240,7 @@
                       center)
                   :vector-effect "non-scaling-stroke"}])])]))
 
-(defn show-events [events-state show-done-atom? now-time-atom page-title dimensions settings compact? copy compact-open-state hover-info-state block-uid timeline-state]
+(defn show-events [events-state show-done-atom? _now-time-atom page-title dimensions settings compact? copy compact-open-state hover-info-state block-uid timeline-state]
   (let [[events done-todos] events-state
         old-width (js/Math.round (:width dimensions))
         old-height (js/Math.round (:height dimensions))
@@ -1308,9 +1256,9 @@
         elapsed-page? (:showElapsed timeline-state)
         interactive? (:interactive timeline-state)
         timeline-minute (:elapsedThroughMinutes timeline-state)
-        [all-slice-components rects] (events->slices events elapsed-page? interactive? timeline-minute center settings now-time-atom hover-enabled? hover-info-state copy)
+        [all-slice-components rects] (events->slices events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy)
         done-slices-and-rects (when @show-done-atom?
-                                (events->slices done-todos elapsed-page? interactive? timeline-minute center settings now-time-atom hover-enabled? hover-info-state copy rects))
+                                (events->slices done-todos elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy rects))
         done-slice-components (first done-slices-and-rects)
         rects (or (second done-slices-and-rects) rects)
         now-visible? (:showNow timeline-state)
@@ -1365,7 +1313,7 @@
          [:circle {:cx (:center-x center) :cy (:center-y center)        
                    :r 200 :fill "none" :stroke "black" :stroke-width 1}]])]]
      (when hover-enabled? [hover-tooltip-component hover-info-state])
-     [compact-event-list all-events-for-dim copy compact-open-state]]))
+     [compact-event-list all-events-for-dim copy compact-open-state hover-info-state]]))
 
 (defn add-start-after
   "Adds an end time to events so that tasks placed after the meeting cannot start before it"
@@ -1995,7 +1943,7 @@
                                                     :nowMinutes (:capacityFromMinutes timeline-state)
                                                     :fixedEvents fixed-events
                                                     :allFixedEvents all-fixed-events
-                                                    :pendingTasks (map #(dissoc % :progress) pending-tasks)})
+                                                    :pendingTasks pending-tasks})
                                   {:availableMinutes 0 :totalAvailableMinutes 0
                                    :fixedMinutes 0 :totalFixedMinutes 0
                                    :demandMinutes 0 :overloadMinutes 0 :slackMinutes 0

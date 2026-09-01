@@ -225,6 +225,17 @@ test('the spiral exposes slice and available-slot hover targets above an inert g
   assert.doesNotMatch(css, /\.nautilus-log-event-slice-group:hover/);
 });
 
+test('chart task activation is read-only navigation with no legacy progress mutation', () => {
+  assert.doesNotMatch(component, /update-block-progress|click-to-progress|parse-progress|progress-format|non-zero-progress/);
+  assert.doesNotMatch(timingCore, /PROGRESS_RE|taskProgress/);
+  assert.match(component, /locate-plan-task!/);
+  assert.match(component, /:role "link"/);
+  assert.match(component, /:on-key-down/);
+  assert.match(component, /\.-shiftKey/);
+  assert.match(entry, /locatePlanTask/);
+  assert.match(timingRoam, /locateTaskInCurrentSurface/);
+});
+
 test('renderer install polling does not invalidate an unchanged chart', () => {
   const pollStart = component.indexOf('check-interval');
   const pollEnd = component.indexOf('settings-state', pollStart);
@@ -738,7 +749,7 @@ test('Log replaces the center year with an in-range 24-hour now value', () => {
   assert.match(component, /nautilus-log-center-now/);
   assert.match(component, /center-now-label/);
   assert.match(component, /\(defn central-label-component \[\[first-row _\] center center-now-label\]/);
-  assert.match(component, /minutes->time @now-time-atom/);
+  assert.match(component, /center-now-label \(when now-visible\? \(minutes->time timeline-minute\)\)/);
   assert.match(component, /:workday-start settings/);
   assert.match(component, /:workday-end settings/);
   assert.doesNotMatch(component, /nautilus-log-now-label/);

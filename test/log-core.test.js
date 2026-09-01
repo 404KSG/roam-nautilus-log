@@ -630,12 +630,14 @@ test('English UI settings localize all extension-owned status labels', () => {
     event: 'Event',
     available: 'Available slot',
     availableNow: 'Available now',
+    locateTask: 'Click to locate · ⇧ Sidebar',
   });
   assert.deepEqual(uiCopy('zh').tooltips, {
     task: '任务',
     event: '事件',
     available: '可用空档',
     availableNow: '当前可用',
+    locateTask: '单击定位 · ⇧ 侧边栏',
   });
   assert.deepEqual(
     capacityMetrics({
@@ -961,9 +963,9 @@ test('capacity counts only remaining today, subtracts future fixed time, and exc
   });
 
   assert.equal(result.availableMinutes, 720); // 600..1440 minus 600..630 and merged 660..750
-  assert.equal(result.demandMinutes, 150);
+  assert.equal(result.demandMinutes, 180);
   assert.equal(result.overloadMinutes, 0);
-  assert.equal(result.slackMinutes, 570);
+  assert.equal(result.slackMinutes, 540);
   assert.equal(result.fixedMinutes, 120);
 });
 

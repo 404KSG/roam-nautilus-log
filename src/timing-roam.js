@@ -567,6 +567,42 @@ export async function openTaskInMainWindow(taskUid) {
   return { ok: true };
 }
 
+function attributeSelectorValue(value) {
+  return String(value ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function isRenderedBlock(node) {
+  if (!node || typeof node.scrollIntoView !== 'function') return false;
+  return typeof node.getClientRects !== 'function' || node.getClientRects().length > 0;
+}
+
+/**
+ * Locate a chart task inside the surface that owns the activated chart.
+ * Scrolling is read-only and preserves Daily Note context. A collapsed or
+ * otherwise unrendered target falls back to Roam's official main-window API.
+ */
+export async function locateTaskInCurrentSurface(taskUid, { origin } = {}) {
+  if (!taskUid) throw new Error('This task has no block UID.');
+  const rootDocument = typeof document !== 'undefined' ? document : null;
+  const surface = origin?.closest?.('.rm-sidebar-window, .roam-article, .roam-main') || rootDocument;
+  const selector = `[data-uid="${attributeSelectorValue(taskUid)}"]`;
+  const candidates = Array.from(surface?.querySelectorAll?.(selector) || []);
+  const target = candidates.find(isRenderedBlock) || null;
+
+  if (!target) {
+    await openTaskInMainWindow(taskUid);
+    return { ok: true, mode: 'open' };
+  }
+
+  const reducedMotion = typeof window !== 'undefined'
+    && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
+  target.scrollIntoView({ block: 'center', behavior: reducedMotion ? 'auto' : 'smooth' });
+  const highlight = target.closest?.('.roam-block-container') || target;
+  highlight.classList?.add('nautilus-log-timing__located');
+  window.setTimeout?.(() => highlight.classList?.remove('nautilus-log-timing__located'), 1200);
+  return { ok: true, mode: 'scroll' };
+}
+
 /**
  * Warm the sidebar-window hint after startup without opening or mutating it.
  * A revision guard prevents a slow warmup read from overwriting a newer click.

@@ -23,7 +23,9 @@ Their Roam block order is the task priority.
 - A bare block reference inherits its source TODO/DONE. Add an outer TODO to
   explicitly redo completed source content today.
 - A duration written after the reference overrides the source duration. Source
-  completion time, progress, and CLOCK history are never inherited.
+  completion time and CLOCK history are never inherited.
+- Legacy `dNN%` text has no scheduling meaning. Nautilus Log keeps it as ordinary
+  block text and always schedules the full estimate.
 
 ## Scheduling rules
 
@@ -65,7 +67,6 @@ Past gaps are factual schedule data, not a judgment that time was wasted.
 ## Chart controls
 
 - **Eye:** show or hide completed items.
-- **Play:** replay the configured day without changing Roam blocks.
 - **Calendar:** after Google Calendar reports Connected in Settings, import
   timed busy events and dated Google Tasks for this chart's Daily Note.
   Option/Alt-click force-refreshes only the Google-managed strings.
@@ -75,9 +76,13 @@ Past gaps are factual schedule data, not a judgment that time was wasted.
   and offers one Undo unless the Plan is edited again first.
 - **Collapse:** hide this chart instance while keeping its plan blocks visible.
 
-Hover or keyboard-focus a task/event slice to see its exact range and duration.
-Future blank slots show the same preview on wide charts. Compact sidebar charts omit
-hover tooltips and keep the Schedule section folded to avoid clipping and visual noise.
+Hover or keyboard-focus a task/event slice to see its exact range and duration. Click
+a flexible task slice or its compact Schedule row to scroll to that block without
+changing the graph; Shift-click or Shift-Enter opens it in the right sidebar. If a
+collapsed target is not rendered, Nautilus Log falls back to Roam's official block
+navigation. Future blank slots show the same preview on wide charts. Compact sidebar
+charts omit hover tooltips and keep the Schedule section folded to avoid clipping and
+visual noise.
 
 ## Execution Layer
 

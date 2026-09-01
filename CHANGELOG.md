@@ -27,6 +27,11 @@
 
 ### Changed
 
+- Flexible task slices and compact Schedule rows now navigate instead of
+  incrementing hidden progress. Normal activation scrolls to the task in the
+  current surface, Shift opens it in the right sidebar, and collapsed targets
+  fall back to Roam's official block navigation. Legacy `dNN%` text is now
+  ordinary content and no longer changes duration or scheduling.
 - Calendar sync feedback now uses a compact, anchored result popover instead
   of one wrapping debug-style tooltip. Zero change counters stay hidden, event
   and task inventory remain secondary, local deletions receive an explicit
@@ -76,7 +81,7 @@
   burning-bucket context.
 - Depot builds now parse the SCI component source with Clojure's reader before
   packaging, preventing delimiter errors from reaching Preview installs.
-- Source completion time, progress, and CLOCK history are never inherited by a
+- Source completion time and CLOCK history are never inherited by a
   daily wrapper. A bare reference to completed content stays complete and is
   excluded from today's execution; adding an outer TODO explicitly reopens it,
   and later completion updates only that daily wrapper.

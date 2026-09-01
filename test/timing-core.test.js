@@ -127,7 +127,7 @@ test('a bare reference chain inherits the nearest explicit source status', () =>
 });
 
 test('an outer marker owns today status while local duration overrides reusable source duration', () => {
-  const sourceString = '{{[[DONE]]}} Reusable report 15m d60% d09:11';
+  const sourceString = '{{[[DONE]]}} Reusable report 15m d09:11';
   const readString = (uid) => (uid === 'source-task' ? sourceString : '');
   const resolve = (localString) => timing.resolveTaskInstance({
     uid: 'today-task',
@@ -145,16 +145,15 @@ test('an outer marker owns today status while local duration overrides reusable 
       status: task.status,
       statusOrigin: task.statusOrigin,
       plannedMinutes: task.plannedMinutes,
-      progress: task.progress,
       doneAt: task.doneAt,
     })),
     [
-      { status: 'TODO', statusOrigin: 'local', plannedMinutes: 15, progress: 0, doneAt: null },
-      { status: 'TODO', statusOrigin: 'local', plannedMinutes: 25, progress: 0, doneAt: null },
-      { status: 'DONE', statusOrigin: 'local', plannedMinutes: 25, progress: 0, doneAt: 620 },
+      { status: 'TODO', statusOrigin: 'local', plannedMinutes: 15, doneAt: null },
+      { status: 'TODO', statusOrigin: 'local', plannedMinutes: 25, doneAt: null },
+      { status: 'DONE', statusOrigin: 'local', plannedMinutes: 25, doneAt: 620 },
     ],
   );
-  assert.doesNotMatch(reopened.effectiveString, /d60%|d09:11/);
+  assert.doesNotMatch(reopened.effectiveString, /d09:11/);
   assert.match(completed.effectiveString, /DONE.*25m.*d10:20/);
 });
 
@@ -336,7 +335,7 @@ test('execution projections share the renderer duration syntax', () => {
   );
 });
 
-test('Plan projection preserves progress and fixed-event ranges for the shared scheduler', () => {
+test('Plan treats former progress tokens as ordinary text and keeps the full estimate', () => {
   const rows = [
     { uid: 'morning', parentUid: 'plan', order: 0, string: '05:00-06:00 Morning routine' },
     { uid: 'overnight', parentUid: 'plan', order: 1, string: '23:00-00:00 Late event' },
@@ -344,14 +343,13 @@ test('Plan projection preserves progress and fixed-event ranges for the shared s
   ];
 
   assert.deepEqual(
-    timing.projectPlan(rows, 'plan').map(({ uid, title, plannedMinutes, progress, remainingMinutes }) => ({
+    timing.projectPlan(rows, 'plan').map(({ uid, title, plannedMinutes, remainingMinutes }) => ({
       uid,
       title,
       plannedMinutes,
-      progress,
       remainingMinutes,
     })),
-    [{ uid: 'task', title: 'Draft', plannedMinutes: 60, progress: 50, remainingMinutes: 30 }],
+    [{ uid: 'task', title: 'Draft d50%', plannedMinutes: 60, remainingMinutes: 60 }],
   );
   assert.deepEqual(
     timing.projectFixedEvents(rows, 'plan').map(({ uid, start, end }) => ({ uid, start, end })),

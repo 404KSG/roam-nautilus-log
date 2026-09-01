@@ -419,6 +419,16 @@
   background: var(--nautilus-log-hover);
 }
 
+.nautilus-log-compact-item--actionable {
+  cursor: pointer;
+  outline: none;
+}
+
+.nautilus-log-compact-item--actionable:focus-visible {
+  background: var(--nautilus-log-hover);
+  box-shadow: inset 0 0 0 1px var(--nautilus-log-task);
+}
+
 .nautilus-log-compact-dot {
   width: 6px;
   height: 6px;
@@ -458,6 +468,10 @@
 .nautilus-log-event-slice-group,
 .nautilus-log-available-slot {
   outline: none;
+}
+
+.nautilus-log-event-slice-group--actionable {
+  cursor: pointer;
 }
 
 .nautilus-log-event-slice-group--interactive:hover .nautilus-log-slice,
@@ -563,6 +577,11 @@
 .nautilus-log-hover-tooltip-meta {
   color: rgba(255, 255, 255, 0.7);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.nautilus-log-hover-tooltip-hint {
+  color: rgba(255, 255, 255, 0.52);
   white-space: nowrap;
 }
 

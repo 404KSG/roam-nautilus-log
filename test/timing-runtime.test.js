@@ -112,7 +112,7 @@ function graphMock({
   return { roam, blocks, trace };
 }
 
-test('execution capacity applies task progress exactly once', async (t) => {
+test('execution capacity ignores former progress tokens and keeps the full estimate', async (t) => {
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#progress-${Date.now()}`;
   const extension = await import(moduleUrl);
@@ -151,8 +151,9 @@ test('execution capacity applies task progress exactly once', async (t) => {
     delete global.window;
   });
 
-  assert.equal(runtime.getSnapshot().planSnapshot.execution.demandMinutes, 30);
-  assert.equal(runtime.getSnapshot().planSnapshot.execution.scheduledTasks[0].duration, 30);
+  assert.equal(runtime.getSnapshot().planSnapshot.execution.demandMinutes, 60);
+  assert.equal(runtime.getSnapshot().planSnapshot.execution.scheduledTasks[0].duration, 60);
+  assert.equal(runtime.getSnapshot().planSnapshot.tasks[0].title, 'Alpha d50%');
 });
 
 test('execution capacity resolves direct block-reference tasks exactly like the chart', async (t) => {
@@ -916,6 +917,61 @@ test('Primary Plan location opens one deduplicated right-sidebar window without 
   assert.equal(trace.includes('sidebar:expand:plan'), true);
   assert.equal(trace.includes('query:plan'), false);
   runtime.destroy();
+});
+
+test('chart task location scrolls in its current surface and falls back to official block navigation', async (t) => {
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#chart-locate-${Date.now()}`;
+  const extension = await import(moduleUrl);
+  const trace = [];
+  const classes = new Set();
+  const target = {
+    classList: {
+      add: (name) => classes.add(name),
+      remove: (name) => classes.delete(name),
+    },
+    closest: () => null,
+    getClientRects: () => [{ width: 1, height: 1 }],
+    scrollIntoView: (options) => trace.push(['scroll', options]),
+  };
+  let visibleTarget = target;
+  const surface = {
+    querySelectorAll: () => (visibleTarget ? [visibleTarget] : []),
+  };
+  const origin = {
+    closest: () => surface,
+  };
+  global.window = {
+    roamAlphaAPI: {
+      ui: {
+        mainWindow: {
+          openBlock: async ({ block }) => trace.push(['open', block.uid]),
+        },
+      },
+    },
+    matchMedia: () => ({ matches: false }),
+    setTimeout: (callback) => {
+      trace.push(['timer']);
+      callback();
+      return 1;
+    },
+  };
+  global.document = surface;
+  t.after(() => {
+    delete global.window;
+    delete global.document;
+  });
+
+  const scrolled = await extension.locateTaskInCurrentSurface('task-a', { origin });
+  assert.deepEqual(scrolled, { ok: true, mode: 'scroll' });
+  assert.deepEqual(trace[0], ['scroll', { block: 'center', behavior: 'smooth' }]);
+  assert.equal(trace.some(([action]) => action === 'open'), false);
+  assert.equal(classes.has('nautilus-log-timing__located'), false, 'temporary highlight should clean itself up');
+
+  visibleTarget = null;
+  const opened = await extension.locateTaskInCurrentSurface('task-a', { origin });
+  assert.deepEqual(opened, { ok: true, mode: 'open' });
+  assert.deepEqual(trace.find(([action]) => action === 'open'), ['open', 'task-a']);
 });
 
 test('Clock Out uses the confirmed Timing snapshot and cancels a competing idle refresh', async (t) => {

@@ -7,7 +7,13 @@ import {
 import * as logCore from "./log-core";
 import * as timingCore from "./timing-core";
 import { createTimingCommands } from "./timing-commands";
-import { readAllEntries, readBlockString, readEntriesForTaskUids } from "./timing-roam";
+import {
+  locateTaskInCurrentSurface,
+  openTaskInRightSidebar,
+  readAllEntries,
+  readBlockString,
+  readEntriesForTaskUids,
+} from "./timing-roam";
 import { createTimingRuntime } from "./timing-runtime";
 import { createTimingTopbar } from "./timing-topbar";
 import { createPlanWatchBridge } from "./plan-watch";
@@ -703,6 +709,11 @@ async function onload({ extensionAPI }) {
     readPlan: planWatchBridge.read,
     watchPlan: planWatchBridge.subscribe,
     tidyPlan: planTidy.run,
+    locatePlanTask: (taskUid, origin, sidebar = false) => (
+      sidebar
+        ? openTaskInRightSidebar(taskUid)
+        : locateTaskInCurrentSurface(taskUid, { origin })
+    ),
     syncCalendarPlan: (options) => {
       if (!calendarRuntime) return Promise.reject(new Error("Google Calendar sync is not ready."));
       return calendarRuntime.syncPlan(options);
@@ -807,6 +818,7 @@ export {
   parseGoogleCalendarIds,
   parseCalendarConnection,
   createCalendarRuntime,
+  locateTaskInCurrentSurface,
 };
 
 export default { onload, onunload };

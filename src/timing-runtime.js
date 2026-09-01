@@ -36,8 +36,6 @@ function executionProjection(planSnapshot, currentNow, extensionAPI) {
     ...task,
     todo: true,
     done: false,
-    // The shared scheduler owns progress reduction. Passing remainingMinutes
-    // here would apply the same progress a second time.
     duration: Number(task.plannedMinutes) || 0,
   }));
   const fixedEvents = (planSnapshot.fixedEvents || []).map((event) => ({

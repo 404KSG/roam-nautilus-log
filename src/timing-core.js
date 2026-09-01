@@ -14,7 +14,6 @@ const NAUTILUS_RENDER_RE = /\{\{\s*\[\[roam\/render\]\]\s*:\s*\(\(roam-render-Na
 const BLOCK_REF_RE = /\(\(([a-zA-Z0-9_-]{6,})\)\)/g;
 const DURATION_TOKEN_RE = /(?:^|\s)(\d+h(?:\d+(?:min|m))?|\d+(?:min|m))(?=\s|$)/gi;
 const DONE_TIME_RE = /(?:^|\s)d(\d{1,2})(?::(\d{1,2}))?(?=\s|$)/i;
-const PROGRESS_RE = /(?:^|\s)d(\d{1,3})%(?=\s|$)/i;
 const STRUCTURAL_DIVIDER_RE = /^\s*(?:-{3,}|_{3,}|\*{3,})\s*$/;
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const ACTIVE_WORK_WINDOW_MINUTES = 45;
@@ -196,8 +195,7 @@ function taskTitle(string) {
     .replace(/\{\{\[\[?[^}]*\}\}/g, '')
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/#?\[\[([^\]]+)\]\]/g, '$1')
-    .replace(/\(\([a-zA-Z0-9_-]{6,}\)\)/g, '')
-    .replace(/\s+d\d{1,3}%/gi, '');
+    .replace(/\(\([a-zA-Z0-9_-]{6,}\)\)/g, '');
   const cleaned = logCore.parseDurationToken({ text: withoutMarkup, fallback: 0 }).cleanedText
     .replace(/\s+/g, ' ')
     .trim();
@@ -210,12 +208,6 @@ function isStructuralBlock(string) {
 
 function plannedMinutes(string, fallback = 15) {
   return logCore.parseDurationToken({ text: string, fallback }).minutes;
-}
-
-function taskProgress(string) {
-  if (typeof string !== 'string') return 0;
-  const match = PROGRESS_RE.exec(string);
-  return match ? Math.min(100, Number(match[1]) || 0) : 0;
 }
 
 function doneTime(string) {
@@ -241,7 +233,6 @@ function removeTaskState(string) {
   return String(string ?? '')
     .replace(new RegExp(TODO_RE.source, 'gi'), ' ')
     .replace(new RegExp(DONE_TIME_RE.source, 'gi'), ' ')
-    .replace(new RegExp(PROGRESS_RE.source, 'gi'), ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -267,8 +258,8 @@ function referenceUids(string) {
 /**
  * Build one daily task instance with explicit wrapper precedence. A bare
  * reference inherits only its source TODO/DONE state; an explicit wrapper
- * marker reopens or completes the task for today. Completion time, progress,
- * and CLOCK identity always belong to the wrapper. Referenced blocks also
+ * marker reopens or completes the task for today. Completion time and CLOCK
+ * identity always belong to the wrapper. Referenced blocks also
  * contribute reusable content, with a wrapper duration or time range
  * overriding source metadata instead of adding to it.
  */
@@ -318,7 +309,6 @@ function resolveTaskInstance({
   const sourceState = sourceUid ? resolveSourceStatus(sourceUid) : null;
   const sourceStatus = sourceState?.status || null;
   const localDone = doneTime(local);
-  const localProgress = taskProgress(local);
   const localDurations = durationTokens(local);
   const sourceDurations = durationTokens(source);
   const localDuration = localDurations.at(-1) || null;
@@ -344,12 +334,11 @@ function resolveTaskInstance({
   const statusOwnerUid = explicitStatus ? uid : sourceState?.ownerUid || uid;
   const marker = structural ? '' : `{{[[${status}]]}}`;
   const rangeToken = range?.text || '';
-  const progressToken = localProgress > 0 ? `d${localProgress}%` : '';
   const doneToken = explicitStatus === 'DONE' ? localDone.token : '';
   const durationToken = range || structural ? '' : `${planned}m`;
   const effectiveString = structural
     ? local.trim()
-    : [marker, rangeToken, body, durationToken, progressToken, doneToken]
+    : [marker, rangeToken, body, durationToken, doneToken]
       .filter(Boolean)
       .join(' ')
       .replace(/\s+/g, ' ')
@@ -366,8 +355,7 @@ function resolveTaskInstance({
     statusOwnerUid,
     explicitStatus,
     plannedMinutes: structural ? 0 : planned,
-    progress: structural ? 0 : localProgress,
-    remainingMinutes: structural ? 0 : Math.max(0, Math.round(planned * (1 - localProgress / 100))),
+    remainingMinutes: structural ? 0 : planned,
     doneAt: explicitStatus === 'DONE' ? localDone.minutes : null,
     kind: structural ? 'structure' : range ? 'event' : 'task',
     range,
@@ -721,7 +709,6 @@ module.exports = {
   isStandalonePomodoroOverdue,
   parseClockLine,
   plannedMinutes,
-  taskProgress,
   parseTimeRangeMinutes,
   projectPlan,
   projectReviewCandidates,
