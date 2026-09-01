@@ -27,6 +27,12 @@
 
 ### Changed
 
+- Remaining capacity now leads the chart, compact Overview, execution panel,
+  and topbar. Full-density topbars show the neutral `left` label beside the
+  semantic percentage; the existing hover surface adds cached free/total and
+  planned values above its unchanged shortcut guidance. Only numeric values
+  inherit positive or warning tones, and compact/icon density still yields to
+  Roam search without adding another popover or data reader.
 - Flexible task slices and compact Schedule rows now navigate instead of
   incrementing hidden progress. Normal activation scrolls to the task in the
   current surface, Shift opens it in the right sidebar, and collapsed targets

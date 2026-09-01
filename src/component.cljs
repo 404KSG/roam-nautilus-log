@@ -1667,22 +1667,22 @@
 
 (defn metrics-component [metrics]
   (let [{:keys [planned status available events]} metrics
-        ordered-metrics [planned status available events]
-        aria-label (str/join ", " (map #(str (:label %) " " (:value %)
-                                             (when-let [total (:total %)] (str " / " total))
-                                             (when-let [percent (:percent %)]
-                                               (str ", " percent " " (:percentLabel %)))
-                                             (when (:burning %)
-                                               (str ", " (:burningLabel %)))) ordered-metrics))]
+        ordered-metrics [status planned available events]
+        aria-parts (cons (str (:percent planned) " " (:percentLabel planned))
+                         (map #(str (:label %) " " (:value %)
+                                    (when-let [total (:total %)] (str " / " total))
+                                    (when (:burning %)
+                                      (str ", " (:burningLabel %)))) ordered-metrics))
+        aria-label (str/join ", " aria-parts)]
     [:div {:class "nautilus-log-metrics" :aria-label aria-label}
      [:div {:class "nautilus-log-metrics-summary"}
-      [metric-summary-component planned]
+      [:span {:class (str "nautilus-log-metric-summary-item nautilus-log-metric-percent nautilus-log-metric-percent--" (:percentTone planned))}
+       [:strong {:class "nautilus-log-metric-value"} (:percent planned)]
+       [:span {:class "nautilus-log-metric-summary-label"} (:percentLabel planned)]]
       [:span {:class "nautilus-log-metric-separator" :aria-hidden "true"} "·"]
       [metric-summary-component status]
       [:span {:class "nautilus-log-metric-separator" :aria-hidden "true"} "·"]
-      [:span {:class (str "nautilus-log-metric-summary-item nautilus-log-metric-percent nautilus-log-metric-percent--" (:percentTone planned))}
-       [:strong {:class "nautilus-log-metric-value"} (:percent planned)]
-       [:span {:class "nautilus-log-metric-summary-label"} (:percentLabel planned)]]]
+      [metric-summary-component planned]]
      [metrics-capacity-component available events]]))
 
 (defn capacity-metrics-component [capacity settings]
@@ -1718,16 +1718,16 @@
      [:summary {:class "nautilus-log-compact-summary nautilus-log-compact-overview-summary"
                 :aria-label summary-aria}
       [:span {:class "nautilus-log-compact-overview-summary-content"}
-       [:span {:class "nautilus-log-compact-overview-label"}
+      [:span {:class "nautilus-log-compact-overview-label"}
         (get-in copy [:panels :overview])]
-       [:span {:class "nautilus-log-metric-separator" :aria-hidden "true"} "·"]
-       [metric-summary-component planned]
-       [:span {:class "nautilus-log-metric-separator" :aria-hidden "true"} "·"]
-       [metric-summary-component status]
        [:span {:class "nautilus-log-metric-separator" :aria-hidden "true"} "·"]
        [:span {:class (str "nautilus-log-metric-summary-item nautilus-log-metric-percent nautilus-log-metric-percent--" (:percentTone planned))}
         [:strong {:class "nautilus-log-metric-value"} (:percent planned)]
-        [:span {:class "nautilus-log-metric-summary-label"} (:percentLabel planned)]]]]
+        [:span {:class "nautilus-log-metric-summary-label"} (:percentLabel planned)]]
+       [:span {:class "nautilus-log-metric-separator" :aria-hidden "true"} "·"]
+       [metric-summary-component status]
+       [:span {:class "nautilus-log-metric-separator" :aria-hidden "true"} "·"]
+       [metric-summary-component planned]]]
      [:div {:class "nautilus-log-compact-overview-body"}
       [metrics-capacity-component (:available metrics) (:events metrics)]
       [html-legend-component copy]]]))

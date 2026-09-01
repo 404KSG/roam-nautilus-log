@@ -29,7 +29,10 @@ const EXECUTION_COPY = Object.freeze({
       openPanelHint: 'Click: panel · ⌥/Alt: main · ⇧: sidebar',
       startPomodoro: 'Start standalone POMO', stopPomodoro: 'Stop standalone POMO',
     },
-    capacity: { label: 'Today capacity', available: 'Available', remaining: 'Remaining', overload: 'Overload', noSlot: 'No fitting slot' },
+    capacity: {
+      label: 'Today capacity', available: 'Available', remaining: 'Remaining', overload: 'Overload',
+      noSlot: 'No fitting slot', totalConnector: 'of',
+    },
     plan: { scheduled: 'Scheduled today', unscheduled: 'Unscheduled today', today: 'Today' },
     timing: { timing: 'Timing', actual: 'Actual', planned: 'Planned', remaining: 'Remaining', recent: 'Recent', left: 'left', check: 'Check CLOCK' },
     review: {
@@ -53,7 +56,10 @@ const EXECUTION_COPY = Object.freeze({
       openPanelHint: '单击：面板 · ⌥/Alt：主界面 · ⇧：侧边栏',
       startPomodoro: '开始独立番茄钟', stopPomodoro: '结束独立番茄钟',
     },
-    capacity: { label: '今日容量', available: '可安排', remaining: '余量', overload: '超载', noSlot: '没有连续空档' },
+    capacity: {
+      label: '今日容量', available: '可安排', remaining: '余量', overload: '超载',
+      noSlot: '没有连续空档', totalConnector: '共',
+    },
     plan: { scheduled: '今日已安排', unscheduled: '今日未排入', today: '今天' },
     timing: { timing: '计时', actual: '实际', planned: '预计', remaining: '剩余', recent: '最近', left: '后移出', check: '检查 CLOCK' },
     review: {

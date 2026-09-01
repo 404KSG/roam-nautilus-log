@@ -1199,10 +1199,11 @@
   border-radius: 3px;
   box-shadow: 0 2px 4px rgba(16, 22, 26, 0.18), 0 8px 24px rgba(16, 22, 26, 0.12);
   color: var(--nl-shortcut-tooltip-text);
-  display: block;
+  display: grid;
   font-family: var(--nl-exec-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
+  gap: 3px;
   left: 0;
   line-height: 1.3;
   max-width: min(320px, calc(100vw - 24px));
@@ -1217,6 +1218,34 @@
   white-space: nowrap;
   width: max-content;
   z-index: 10060;
+}
+
+.nautilus-log-timing__shortcut-tooltip-data,
+.nautilus-log-timing__shortcut-tooltip-actions {
+  display: block;
+  white-space: nowrap;
+}
+
+.nautilus-log-timing__shortcut-tooltip-data {
+  color: var(--nl-shortcut-tooltip-text);
+}
+
+.nautilus-log-timing__shortcut-tooltip-actions {
+  font-weight: 600;
+}
+
+.nautilus-log-timing__shortcut-tooltip-value {
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.nautilus-log-timing__shortcut-tooltip-value.is-positive {
+  color: var(--nautilus-log-positive);
+}
+
+.nautilus-log-timing__shortcut-tooltip-value.is-warning {
+  color: var(--nautilus-log-warning);
 }
 
 .nautilus-log-timing__shortcut-tooltip::before {
@@ -1313,6 +1342,13 @@
 .nautilus-log-timing__capacity-value {
   color: inherit;
   font-weight: 500;
+  min-width: 4ch;
+  text-align: right;
+}
+
+.nautilus-log-timing__capacity-label {
+  color: inherit;
+  font-weight: 500;
 }
 
 .nautilus-log-timing__capacity-token.is-positive .nautilus-log-timing__capacity-value {
@@ -1326,7 +1362,8 @@
 .nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__mode-separator,
 .nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__pomodoro-label,
 .nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__threads,
-.nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__forgotten-signal {
+.nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__forgotten-signal,
+.nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__capacity-label {
   display: none;
 }
 
@@ -1529,17 +1566,12 @@
   font-weight: 650;
 }
 
-.nautilus-log-timing__capacity-part.is-warning,
 .nautilus-log-timing__capacity-part.is-warning strong {
   color: #ad690f;
 }
 
 .nautilus-log-timing__capacity-part.is-positive strong {
   color: var(--nautilus-log-positive);
-}
-
-.nautilus-log-timing__capacity-part.is-warning.is-left {
-  color: inherit;
 }
 
 .nautilus-log-timing__capacity-part.is-warning.is-left strong {
@@ -1871,20 +1903,13 @@ button.nautilus-log-timing__plan-heading:focus-visible {
   color: #d6dbe2;
 }
 
-.bp3-dark .nautilus-log-timing__capacity-part.is-warning,
 .bp3-dark .nautilus-log-timing__capacity-part.is-warning strong,
-.dark .nautilus-log-timing__capacity-part.is-warning,
 .dark .nautilus-log-timing__capacity-part.is-warning strong,
 .bp3-dark .nautilus-log-timing__plan-section.is-unscheduled .nautilus-log-timing__plan-heading,
 .dark .nautilus-log-timing__plan-section.is-unscheduled .nautilus-log-timing__plan-heading,
 .bp3-dark .nautilus-log-timing__row.is-unscheduled .nautilus-log-timing__row-meta,
 .dark .nautilus-log-timing__row.is-unscheduled .nautilus-log-timing__row-meta {
   color: #d89a46;
-}
-
-.bp3-dark .nautilus-log-timing__capacity-part.is-warning.is-left,
-.dark .nautilus-log-timing__capacity-part.is-warning.is-left {
-  color: inherit;
 }
 
 /* Preserve the complete three-view switcher in unusually narrow Roam

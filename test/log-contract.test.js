@@ -344,11 +344,18 @@ test('the topbar trigger preserves normal click and routes modifier clicks to th
 test('the topbar exposes a stable hover tooltip for its modifier-click shortcuts', () => {
   assert.match(timingTopbar, /SHORTCUT_TOOLTIP_ID = 'nautilus-log-timing-shortcut-tooltip'/);
   assert.match(timingTopbar, /trigger\.setAttribute\('aria-describedby', SHORTCUT_TOOLTIP_ID\)/);
-  assert.match(timingTopbar, /shortcutTooltip\.textContent = text\.actions\.openPanelHint/);
+  assert.match(timingTopbar, /const updateShortcutTooltip/);
+  assert.match(timingTopbar, /nautilus-log-timing__shortcut-tooltip-data/);
+  assert.match(timingTopbar, /nautilus-log-timing__shortcut-tooltip-actions/);
+  assert.match(timingTopbar, /shortcutTooltip\.replaceChildren\(data, actions\)/);
+  assert.match(timingTopbar, /text\.capacity\.totalConnector/);
+  assert.match(timingTopbar, /capacity\.removeAttribute\('title'\)/);
   assert.match(timingTopbar, /shortcutTooltip\.setAttribute\('role', 'tooltip'\)/);
   assert.match(css, /\.nautilus-log-timing__shortcut-tooltip\s*\{[^}]*position:\s*absolute;/s);
   assert.match(css, /\.nautilus-log-timing__shortcut-tooltip\s*\{[^}]*pointer-events:\s*none;/s);
-  assert.match(css, /\.nautilus-log-timing__shortcut-tooltip\s*\{[^}]*background:\s*var\(--nl-shortcut-tooltip-bg\);[^}]*font-size:\s*12px;[^}]*padding:\s*7px 9px;/s);
+  assert.match(css, /\.nautilus-log-timing__shortcut-tooltip\s*\{[^}]*background:\s*var\(--nl-shortcut-tooltip-bg\);[^}]*display:\s*grid;[^}]*font-size:\s*12px;[^}]*padding:\s*7px 9px;/s);
+  assert.match(css, /\.nautilus-log-timing__shortcut-tooltip-value\.is-positive\s*\{[^}]*color:\s*var\(--nautilus-log-positive\);/s);
+  assert.match(css, /\.nautilus-log-timing__shortcut-tooltip-value\.is-warning\s*\{[^}]*color:\s*var\(--nautilus-log-warning\);/s);
   assert.match(css, /\.nautilus-log-timing__shortcut-tooltip::before\s*\{[^}]*transform:\s*rotate\(45deg\);/s);
   assert.match(css, /\.bp3-dark \.nautilus-log-timing__shortcut-tooltip/);
   assert.match(css, /\.nautilus-log-timing__trigger:hover ~ \.nautilus-log-timing__shortcut-tooltip/);
@@ -427,7 +434,7 @@ test('the global capacity token yields topbar space to Roam search', () => {
   assert.doesNotMatch(timingTopbar, /readAllEntries|readPrimaryPlan/);
 });
 
-test('the global capacity token shows only the percentage and mirrors its semantic tone', () => {
+test('the global capacity token pairs a semantic percentage with a neutral label', () => {
   const triggerNodesStart = timingTopbar.indexOf('const triggerNodes');
   const triggerNodesEnd = timingTopbar.indexOf('const updateTriggerCapacity', triggerNodesStart);
   const updateStart = triggerNodesEnd;
@@ -436,11 +443,16 @@ test('the global capacity token shows only the percentage and mirrors its semant
   const updateSource = timingTopbar.slice(updateStart, updateEnd);
 
   assert.match(triggerNodesSource, /element\('span', 'nautilus-log-timing__capacity-value'\)/);
-  assert.doesNotMatch(triggerNodesSource, /nautilus-log-timing__capacity-label/);
+  assert.match(triggerNodesSource, /element\('span', 'nautilus-log-timing__capacity-label'\)/);
+  assert.match(updateSource, /capacity\.querySelector\('\.nautilus-log-timing__capacity-label'\)\.textContent = summary\.left\.label/);
   assert.match(updateSource, /capacity\.classList\.toggle\('is-positive'/);
   assert.match(updateSource, /capacity\.classList\.toggle\('is-warning'/);
   assert.match(css, /nautilus-log-timing__capacity-token\.is-positive/);
   assert.match(css, /nautilus-log-timing__capacity-token\.is-warning/);
+  assert.match(css, /\.nautilus-log-timing__capacity-label\s*\{[^}]*color:\s*inherit;/s);
+  assert.match(css, /data-density="compact"[^}]*nautilus-log-timing__capacity-label/s);
+  assert.doesNotMatch(css, /nautilus-log-timing__capacity-token\.is-positive \.nautilus-log-timing__capacity-label/);
+  assert.doesNotMatch(css, /nautilus-log-timing__capacity-token\.is-warning \.nautilus-log-timing__capacity-label/);
   assert.match(css, /--nautilus-log-positive/);
   assert.match(css, /nautilus-log-metric-percent--positive \.nautilus-log-metric-value/);
   assert.match(css, /nautilus-log-metric-percent--warning \.nautilus-log-metric-value/);
@@ -448,6 +460,27 @@ test('the global capacity token shows only the percentage and mirrors its semant
   assert.match(css, /nautilus-log-timing__capacity-part\.is-positive strong/);
   assert.doesNotMatch(css, /nautilus-log-metric-percent--positive\s*\{/);
   assert.doesNotMatch(css, /nautilus-log-metric--positive \.nautilus-log-metric-summary-label/);
+});
+
+test('capacity summaries lead with the remaining quota and color values only', () => {
+  const metricsStart = component.indexOf('(defn metrics-component');
+  const metricsEnd = component.indexOf('(defn capacity-metrics-component', metricsStart);
+  const metrics = component.slice(metricsStart, metricsEnd);
+  const compactStart = component.indexOf('(defn compact-overview-component');
+  const compactEnd = component.indexOf('(defn localized-warning', compactStart);
+  const compact = component.slice(compactStart, compactEnd);
+  const stripStart = timingTopbar.indexOf('const capacityStrip');
+  const stripEnd = timingTopbar.indexOf('const planSectionHeader', stripStart);
+  const strip = timingTopbar.slice(stripStart, stripEnd);
+
+  assert.ok(metrics.indexOf('nautilus-log-metric-percent') < metrics.indexOf('metric-summary-component status'));
+  assert.ok(metrics.indexOf('metric-summary-component status') < metrics.indexOf('metric-summary-component planned'));
+  assert.ok(compact.indexOf('nautilus-log-metric-percent') < compact.indexOf('metric-summary-component status'));
+  assert.ok(compact.indexOf('metric-summary-component status') < compact.indexOf('metric-summary-component planned'));
+  assert.ok(strip.indexOf('part(summary.left') < strip.indexOf('part(summary.status'));
+  assert.ok(strip.indexOf('part(summary.status') < strip.indexOf('part(summary.planned'));
+  assert.doesNotMatch(css, /\.nautilus-log-timing__capacity-part\.is-warning\s*,/);
+  assert.match(css, /\.nautilus-log-timing__capacity-part\.is-warning strong\s*\{[^}]*color:\s*#ad690f;/s);
 });
 
 test('responsive observers rebind when Roam replaces the topbar or search surface', () => {
@@ -468,6 +501,8 @@ test('the idle capacity strip shares one centered vertical rhythm', () => {
   assert.match(css, /\.nautilus-log-timing__trigger-separator\s*\{[^}]*background:\s*currentColor;[^}]*border-radius:\s*999px;[^}]*height:\s*3px;[^}]*width:\s*3px;/s);
   assert.match(css, /\.nautilus-log-timing__capacity-token\s*\{[^}]*align-items:\s*center;[^}]*height:\s*18px;[^}]*line-height:\s*18px;/s);
   assert.match(css, /\.nautilus-log-timing__capacity-value\s*\{[^}]*color:\s*inherit;[^}]*font-weight:\s*500;/s);
+  assert.match(css, /\.nautilus-log-timing__capacity-value\s*\{[^}]*min-width:\s*4ch;[^}]*text-align:\s*right;/s);
+  assert.match(css, /\.nautilus-log-timing__capacity-label\s*\{[^}]*color:\s*inherit;[^}]*font-weight:\s*500;/s);
   assert.doesNotMatch(css, /\.bp3-dark\s+\.nautilus-log-timing__capacity-value[^}]*#d6dbe2/s);
 });
 

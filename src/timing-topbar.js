@@ -76,6 +76,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
   let cachedCapacityExecution = null;
   let cachedCapacityLanguage = null;
   let cachedCapacitySummary = null;
+  let shortcutTooltipKey = null;
   let observedTopbar = null;
   let observedSearch = null;
 
@@ -113,7 +114,10 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
   const triggerNodes = (...nodes) => {
     const capacity = element('span', 'nautilus-log-timing__capacity-token');
     capacity.hidden = true;
-    capacity.append(element('span', 'nautilus-log-timing__capacity-value'));
+    capacity.append(
+      element('span', 'nautilus-log-timing__capacity-value'),
+      element('span', 'nautilus-log-timing__capacity-label'),
+    );
     const capacitySeparator = triggerSeparator('capacity');
     capacitySeparator.hidden = true;
     return [
@@ -134,14 +138,69 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       trigger.setAttribute('aria-label', ariaLabel);
       return;
     }
-    const summaryText = `${summary.planned.value} ${summary.planned.label} · ${summary.status.value} ${summary.status.label} · ${summary.left.value} ${summary.left.label}`;
+    const summaryText = `${summary.left.value} ${summary.left.label} · ${summary.status.value} ${summary.status.label} · ${summary.planned.value} ${summary.planned.label}`;
     separator.hidden = false;
     capacity.hidden = false;
     capacity.classList.toggle('is-positive', summary.left.tone === 'positive');
     capacity.classList.toggle('is-warning', summary.left.tone === 'warning');
     capacity.querySelector('.nautilus-log-timing__capacity-value').textContent = summary.left.value;
-    capacity.title = summaryText;
+    capacity.querySelector('.nautilus-log-timing__capacity-label').textContent = summary.left.label;
+    capacity.removeAttribute('title');
     trigger.setAttribute('aria-label', `${ariaLabel}, ${summaryText}`);
+  };
+
+  const updateShortcutTooltip = () => {
+    if (!shortcutTooltip) return;
+    const text = ui();
+    const summary = currentCapacitySummary();
+    const execution = state.planSnapshot?.execution;
+    const totalMinutes = Number(execution?.totalAvailableMinutes);
+    const total = Number.isFinite(totalMinutes) && totalMinutes > 0
+      ? timingCore.compactMinutes(totalMinutes)
+      : '';
+    const nextKey = JSON.stringify([
+      text.actions.openPanelHint,
+      summary?.status?.value,
+      summary?.status?.label,
+      summary?.status?.tone,
+      summary?.status?.warning,
+      summary?.planned?.value,
+      summary?.planned?.label,
+      total,
+    ]);
+    if (nextKey === shortcutTooltipKey) return;
+    shortcutTooltipKey = nextKey;
+
+    const actions = element(
+      'span',
+      'nautilus-log-timing__shortcut-tooltip-actions',
+      text.actions.openPanelHint,
+    );
+    if (!summary) {
+      shortcutTooltip.replaceChildren(actions);
+      return;
+    }
+
+    const data = element('span', 'nautilus-log-timing__shortcut-tooltip-data');
+    const statusTone = summary.status.tone === 'positive' || summary.status.tone === 'warning'
+      ? ` is-${summary.status.tone}`
+      : '';
+    data.append(
+      element('strong', `nautilus-log-timing__shortcut-tooltip-value${statusTone}`, summary.status.value),
+      ` ${summary.status.label}`,
+    );
+    if (total && !summary.status.warning) {
+      data.append(
+        ` ${text.capacity.totalConnector} `,
+        element('strong', 'nautilus-log-timing__shortcut-tooltip-value', total),
+      );
+    }
+    data.append(
+      ' · ',
+      element('strong', 'nautilus-log-timing__shortcut-tooltip-value', summary.planned.value),
+      ` ${summary.planned.label}`,
+    );
+    shortcutTooltip.replaceChildren(data, actions);
   };
 
   const clearDeleteConfirmation = () => {
@@ -302,11 +361,11 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       return node;
     };
     metric.append(
-      part(summary.planned),
+      part(summary.left, { tone: summary.left.tone, left: true }),
       ' · ',
       part(summary.status, { tone: summary.status.tone }),
       ' · ',
-      part(summary.left, { tone: summary.left.tone, left: true }),
+      part(summary.planned),
     );
     strip.append(metric);
     return strip;
@@ -648,9 +707,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     if (!trigger) return;
     const text = ui();
     trigger.setAttribute('aria-description', text.actions.openPanelHint);
-    if (shortcutTooltip && shortcutTooltip.textContent !== text.actions.openPanelHint) {
-      shortcutTooltip.textContent = text.actions.openPanelHint;
-    }
+    updateShortcutTooltip();
     const focused = state.activeWork?.focused;
     const standalone = !focused && state.standalonePomodoro;
     if (standalone) {
@@ -874,6 +931,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     trigger = null;
     pomoCloseButton = null;
     shortcutTooltip = null;
+    shortcutTooltipKey = null;
   };
 
   return { initialize, destroy, ensureMounted };
