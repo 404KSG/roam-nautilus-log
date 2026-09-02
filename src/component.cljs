@@ -451,7 +451,7 @@
          :preferred preferred}))))
 
 (defn show-hover-tooltip! [hover-info-state info event]
-  (when-let [anchor (hover-anchor event info)]
+  (let [anchor (hover-anchor event info)]
     (reset! hover-info-state (merge info anchor {:positioned false}))))
 
 (defn hide-hover-tooltip! [hover-info-state]
@@ -512,6 +512,18 @@
                (r/as-element [hover-tooltip-content hover-info-state])
                (.-body js/document))
         [hover-tooltip-content hover-info-state]))))
+
+(defn compact-hover-context-component [hover-info-state]
+  (let [{:keys [title meta tone]} @hover-info-state
+        visible? (and (seq title) (seq meta))]
+    [:div {:class (str "nautilus-log-compact-hover-context"
+                       (when visible? " is-visible"))
+           :aria-hidden "true"}
+     [:i {:class (str "nautilus-log-compact-hover-context-dot"
+                      (when (seq tone)
+                        (str " nautilus-log-compact-hover-context-dot--" tone)))}]
+     [:span {:class "nautilus-log-compact-hover-context-title"} (or title "")]
+     [:span {:class "nautilus-log-compact-hover-context-meta"} (or meta "")]]))
 
 ;; ---------------- helpers ----------------------
 
@@ -1006,8 +1018,12 @@
         kind-label (when hover-enabled? (get-in copy [:tooltips (if meeting? :event :task)]))
         action-hint (when actionable? (get-in copy [:tooltips :locateTask]))
         tooltip-info (when hover-enabled?
-                       (merge (timeline-tooltip-info description kind-label start-min end-min action-hint)
-                              (timeline-tooltip-geometry start-min end-min center)))
+                       (assoc (merge (timeline-tooltip-info description kind-label start-min end-min action-hint)
+                                     (timeline-tooltip-geometry start-min end-min center))
+                              :tone (cond
+                                      (= "completed" past-status) "completed"
+                                      meeting? "event"
+                                      :else "task")))
         boundaries (get-hour-boundaries start-min end-min)
         segments (loop [curr start-min
                         bounds boundaries
@@ -1204,6 +1220,7 @@
         duration (duration-label (:duration slot))]
     (merge {:title slot-label
             :meta (str time-range " · " duration)
+            :tone "available"
             :aria-label (str slot-label ". " time-range ". " duration)}
            (timeline-tooltip-geometry (:start slot) (:end slot) center))))
 
@@ -1252,7 +1269,7 @@
           [(/ old-width 2) old-width (/ old-height 2) old-height]
           (events->new-dimensions all-events-for-dim {:center-x (/ old-width 2) :center-y (/ old-height 2)} settings))
         center {:center-x center-x :center-y center-y}
-        hover-enabled? (not compact?)
+        hover-enabled? true
         elapsed-page? (:showElapsed timeline-state)
         interactive? (:interactive timeline-state)
         timeline-minute (:elapsedThroughMinutes timeline-state)
@@ -1312,7 +1329,9 @@
           " Center-y: " (js/Math.round center-y)]                       
          [:circle {:cx (:center-x center) :cy (:center-y center)        
                    :r 200 :fill "none" :stroke "black" :stroke-width 1}]])]]
-     (when hover-enabled? [hover-tooltip-component hover-info-state])
+     (if compact?
+       [compact-hover-context-component hover-info-state]
+       [hover-tooltip-component hover-info-state])
      [compact-event-list all-events-for-dim copy compact-open-state hover-info-state]]))
 
 (defn add-start-after
@@ -1811,9 +1830,9 @@
   (when node
     (let [update-width! (fn [width]
                           (let [next-state (compact-chart-width? width)]
-                            (when (and next-state @hover-info-state)
-                              (reset! hover-info-state nil))
                             (when (not= @compact-state next-state)
+                              (when @hover-info-state
+                                (reset! hover-info-state nil))
                               (reset! compact-state next-state))))]
       (update-width! (.-width (.getBoundingClientRect node)))
       (when (.-ResizeObserver js/window)

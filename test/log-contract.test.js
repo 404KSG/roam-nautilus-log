@@ -196,7 +196,7 @@ test('mounted charts share the extension Plan Pull Watch and release it on clean
   assert.doesNotMatch(component, /roam\.datascript\.reactive/);
 });
 
-test('the spiral exposes slice and available-slot hover targets above an inert grid', () => {
+test('the spiral exposes responsive slice and available-slot hover details above an inert grid', () => {
   const gridStart = component.indexOf('(defn snail-blueprint-component');
   const gridEnd = component.indexOf('(defn central-label-component', gridStart);
   const gridComponent = component.slice(gridStart, gridEnd);
@@ -213,9 +213,9 @@ test('the spiral exposes slice and available-slot hover targets above an inert g
   assert.match(component, /\.getScreenCTM/);
   assert.match(component, /createPortal/);
   assert.match(component, /nautilus-log-event-slice-group--interactive/);
-  assert.match(component, /hover-enabled\? \(not compact\?\)/);
+  assert.match(component, /hover-enabled\? true/);
   assert.match(component, /\(when \(and hover-enabled\? \(:showAvailableSlots timeline-state\)\)\s+\[available-slot-component/);
-  assert.match(component, /\(when hover-enabled\? \[hover-tooltip-component/);
+  assert.match(component, /\(if compact\?\s+\[compact-hover-context-component hover-info-state\]\s+\[hover-tooltip-component hover-info-state\]\)/);
   assert.match(component, /:on-mouse-enter/);
   assert.match(component, /:on-focus/);
   assert.match(css, /\.nautilus-log-grid\s*\{[^}]*pointer-events:\s*none;/s);
@@ -223,6 +223,31 @@ test('the spiral exposes slice and available-slot hover targets above an inert g
   assert.match(css, /\.nautilus-log-hover-tooltip\s*\{[^}]*position:\s*fixed;[^}]*pointer-events:\s*none;/s);
   assert.match(css, /\.nautilus-log-event-slice-group--interactive:hover/);
   assert.doesNotMatch(css, /\.nautilus-log-event-slice-group:hover/);
+});
+
+test('compact timeline hover uses one stable context rail instead of a floating panel', () => {
+  const compactStart = component.indexOf('(defn compact-hover-context-component');
+  const compactEnd = component.indexOf(';; ---------------- helpers', compactStart);
+  const compactComponent = component.slice(compactStart, compactEnd);
+  const observerStart = component.indexOf('(defn observe-compact-width!');
+  const observerEnd = component.indexOf('(defn main', observerStart);
+  const observer = component.slice(observerStart, observerEnd);
+
+  assert.ok(compactStart >= 0 && compactEnd > compactStart);
+  assert.match(compactComponent, /nautilus-log-compact-hover-context/);
+  assert.match(compactComponent, /:aria-hidden "true"/);
+  assert.match(compactComponent, /nautilus-log-compact-hover-context-dot--/);
+  assert.match(compactComponent, /nautilus-log-compact-hover-context-title/);
+  assert.match(compactComponent, /nautilus-log-compact-hover-context-meta/);
+  assert.match(component, /\(let \[anchor \(hover-anchor event info\)\]\s+\(reset! hover-info-state \(merge info anchor \{:positioned false\}\)\)\)/);
+  assert.match(component, /:tone \(cond[\s\S]*"completed"[\s\S]*"event"[\s\S]*"task"/);
+  assert.match(component, /:tone "available"/);
+  assert.match(css, /@container \(max-width: 520px\)[\s\S]*\.nautilus-log-visual--compact\s*\{[^}]*display:\s*grid;/s);
+  assert.match(css, /\.nautilus-log-compact-hover-context\s*\{[^}]*grid-row:\s*1;[^}]*width:\s*max-content;[^}]*pointer-events:\s*none;[^}]*visibility:\s*hidden;/s);
+  assert.match(css, /\.nautilus-log-compact-hover-context\.is-visible\s*\{[^}]*opacity:\s*1;[^}]*visibility:\s*visible;/s);
+  assert.match(css, /\.nautilus-log-compact-hover-context-meta\s*\{[^}]*font-variant-numeric:\s*tabular-nums;/s);
+  assert.match(observer, /when \(not= @compact-state next-state\)[\s\S]*reset! hover-info-state nil[\s\S]*reset! compact-state next-state/);
+  assert.doesNotMatch(observer, /when \(and next-state @hover-info-state\)/);
 });
 
 test('chart task activation is read-only navigation with no legacy progress mutation', () => {

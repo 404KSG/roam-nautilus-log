@@ -27,6 +27,10 @@
 
 ### Changed
 
+- Compact and right-sidebar timelines now keep hover and keyboard-focus detail
+  without opening a floating panel. A stable one-line context rail reuses the
+  chart's lower whitespace, preserves task/event/available semantics, and leaves
+  the wide viewport-aware tooltip unchanged.
 - Remaining capacity now leads the chart, compact Overview, execution panel,
   and topbar. Full-density topbars show the neutral `left` label beside the
   semantic percentage; the existing hover surface adds cached free/total and
