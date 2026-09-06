@@ -27,6 +27,9 @@
 
 ### Changed
 
+- Roam Depot now loads the root stylesheet only once instead of embedding the
+  same CSS payload inside `extension.js`; the build also uses Webpack's native
+  source-asset support and no longer depends on `css-loader` or `text-loader`.
 - Compact and right-sidebar timelines now keep hover and keyboard-focus detail
   without opening a floating panel. A stable one-line context rail reuses the
   chart's lower whitespace, preserves task/event/available semantics, and leaves
@@ -71,6 +74,12 @@
 
 ### Fixed
 
+- Shorthand upgrades now recover an existing customized Nautilus template and
+  renderer identity instead of creating another active template generation.
+  Legacy render blocks receive the current renderer code in place, duplicate
+  template entries are retired non-destructively, and historical Daily Notes
+  remain unchanged—so prefixes such as `[[log]]` survive an update without a
+  graph-wide replacement.
 - Imported Google Calendar `Open` links now retain Google's original event
   target while adding the authorized Primary calendar account as a safe,
   encoded account hint. Missing or invalid hints and non-Calendar links fall

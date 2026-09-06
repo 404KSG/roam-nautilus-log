@@ -14,6 +14,7 @@ const guide = fs.readFileSync(path.join(__dirname, '..', 'docs', 'guide.md'), 'u
 const guideZh = fs.readFileSync(path.join(__dirname, '..', 'docs', 'guide.zh-CN.md'), 'utf8');
 const changelog = fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'utf8');
 const buildScript = fs.readFileSync(path.join(__dirname, '..', 'build.sh'), 'utf8');
+const webpackConfig = fs.readFileSync(path.join(__dirname, '..', 'webpack.config.js'), 'utf8');
 const timingTopbar = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-topbar.js'), 'utf8');
 const timingCore = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-core.js'), 'utf8');
 const timingRuntime = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-runtime.js'), 'utf8');
@@ -117,6 +118,16 @@ test('README media uses absolute HTTPS URLs for Roam Depot rendering', () => {
     assert.ok(media.length > 0, 'README should keep its product image');
     for (const url of media) assert.match(url, /^https:\/\//);
   }
+});
+
+test('Depot CSS stays external to the single JavaScript bundle', () => {
+  const dependencies = JSON.parse(packageJson).devDependencies || {};
+  assert.doesNotMatch(entry, /extension\.css/);
+  assert.doesNotMatch(webpackConfig, /css-loader|text-loader/);
+  assert.match(webpackConfig, /type:\s*['"]asset\/source['"]/);
+  assert.equal(Object.hasOwn(dependencies, 'css-loader'), false);
+  assert.equal(Object.hasOwn(dependencies, 'text-loader'), false);
+  assert.ok(css.length > 0, 'Roam Depot should still receive the root extension.css');
 });
 
 test('Nautilus Log is the only active product identity', () => {

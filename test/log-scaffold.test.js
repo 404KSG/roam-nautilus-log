@@ -18,6 +18,15 @@ function createRoamMock() {
     .filter((block) => block.parentUid === parentUid)
     .sort((a, b) => Number(a.order) - Number(b.order));
 
+  const pageUidOf = (block) => {
+    let current = block;
+    while (current?.parentUid) {
+      if ([...pages.values()].includes(current.parentUid)) return current.parentUid;
+      current = blocks.get(current.parentUid);
+    }
+    return null;
+  };
+
   const roam = {
     util: { generateUID: () => `logtest${++generated}` },
     data: {
@@ -52,6 +61,15 @@ function createRoamMock() {
       if (pageTitle && query.includes('pull ?e [:block/uid]')) {
         const uid = pages.get(pageTitle);
         return uid ? [[{ uid }]] : [];
+      }
+
+      if (pageTitle && query.includes('clojure.string/includes?')) {
+        const pageUid = pages.get(pageTitle);
+        const search = query.match(/clojure\.string\/includes\? \?node-string "([^"]*)"/)?.[1] || '';
+        return [...blocks.values()]
+          .filter((block) => pageUidOf(block) === pageUid)
+          .filter((block) => block.string.includes(search))
+          .map((block) => [[block][0]]);
       }
 
       const parentUid = query.match(/\[\?parent :block\/uid "([^"]+)"\]/)?.[1];
@@ -271,3 +289,250 @@ test('preview defaults migrate once from an empty prefix and midnight end', asyn
   assert.equal(settings.get('product-defaults-version'), 'timing-v1');
   await extension.onunload();
 });
+
+test('a new shorthand reuses one customized legacy template without rewriting historical Logs', async (t) => {
+  const { roam, pages, blocks } = createRoamMock();
+  pages.set('roam/render', 'render-page');
+  pages.set('September 1st, 2026', 'daily-page');
+
+  blocks.set('legacy-title', {
+    uid: 'legacy-title',
+    string: 'Nautilus Flow',
+    order: 0,
+    parentUid: 'render-page',
+  });
+  blocks.set('legacy-template', {
+    uid: 'legacy-template',
+    string: 'Nautilus Flow [[roam/templates]]',
+    order: 0,
+    parentUid: 'legacy-title',
+  });
+  blocks.set('legacy-template-render', {
+    uid: 'legacy-template-render',
+    string: '[[log]] {{[[roam/render]]:((roam-render-Nautilus-Flow-cljs)) 28 30 9 "" 2}}',
+    order: 0,
+    parentUid: 'legacy-template',
+  });
+  blocks.set('legacy-code-header', {
+    uid: 'legacy-code-header',
+    string: 'code',
+    order: 1,
+    parentUid: 'legacy-title',
+  });
+  blocks.set('roam-render-Nautilus-Flow-cljs', {
+    uid: 'roam-render-Nautilus-Flow-cljs',
+    string: 'old legacy code',
+    order: 0,
+    parentUid: 'legacy-code-header',
+  });
+  blocks.set('enhanced-title', {
+    uid: 'enhanced-title',
+    string: 'Nautilus',
+    order: 1,
+    parentUid: 'render-page',
+  });
+  blocks.set('enhanced-template', {
+    uid: 'enhanced-template',
+    string: 'Nautilus Enhanced [[roam/templates]]',
+    order: 0,
+    parentUid: 'enhanced-title',
+  });
+  blocks.set('enhanced-template-render', {
+    uid: 'enhanced-template-render',
+    string: '[[older-log]] {{[[roam/render]]:((roam-render-Nautilus-cljs)) 20 20 8 "" 24}}',
+    order: 0,
+    parentUid: 'enhanced-template',
+  });
+
+  blocks.set('roam-render-Nautilus-Log', {
+    uid: 'roam-render-Nautilus-Log',
+    string: 'Nautilus Log',
+    order: 1,
+    parentUid: 'render-page',
+  });
+  blocks.set('duplicate-template', {
+    uid: 'duplicate-template',
+    string: 'Nautilus Log [[roam/templates]]',
+    order: 0,
+    parentUid: 'roam-render-Nautilus-Log',
+  });
+  blocks.set('duplicate-template-render', {
+    uid: 'duplicate-template-render',
+    string: '[[Nautilus Log]] {{[[roam/render]]:((roam-render-Nautilus-Log-cljs)) 22 15 5 "" 21}}',
+    order: 0,
+    parentUid: 'duplicate-template',
+  });
+  blocks.set('current-code-header', {
+    uid: 'current-code-header',
+    string: 'code',
+    order: 1,
+    parentUid: 'roam-render-Nautilus-Log',
+  });
+  blocks.set('roam-render-Nautilus-Log-cljs', {
+    uid: 'roam-render-Nautilus-Log-cljs',
+    string: 'old code',
+    order: 0,
+    parentUid: 'current-code-header',
+  });
+  blocks.set('weekly-title', {
+    uid: 'weekly-title',
+    string: 'User templates',
+    order: 2,
+    parentUid: 'render-page',
+  });
+  blocks.set('weekly-template', {
+    uid: 'weekly-template',
+    string: 'Weekly Planning [[roam/templates]]',
+    order: 0,
+    parentUid: 'weekly-title',
+  });
+  blocks.set('weekly-template-render', {
+    uid: 'weekly-template-render',
+    string: 'Agenda + {{[[roam/render]]:((roam-render-Nautilus-Log-cljs))}}',
+    order: 0,
+    parentUid: 'weekly-template',
+  });
+
+  const historicalString = '[[log]] {{[[roam/render]]:((roam-render-Nautilus-Flow-cljs)) 28 30 9 "" 2}}';
+  blocks.set('historical-log', {
+    uid: 'historical-log',
+    string: historicalString,
+    order: 0,
+    parentUid: 'daily-page',
+  });
+
+  global.window = { roamAlphaAPI: roam, dispatchEvent: () => {} };
+  t.after(() => { delete global.window; });
+
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#template-reuse-${Date.now()}`;
+  const extension = (await import(moduleUrl)).default;
+  let latestPanel;
+  const settings = new Map([
+    ['language', 'en'],
+    ['language-default-version', 'en-v1'],
+    ['product-defaults-version', 'timing-v1'],
+    ['prefix-str', '[[Nautilus Log]]'],
+    ['desc-length', 22],
+    ['todo-duration', 15],
+    ['workday-start', 5],
+    ['color-1-trigger', ''],
+    ['workday-end', 21],
+  ]);
+  const extensionAPI = {
+    settings: {
+      get: (key) => settings.get(key),
+      set: async (key, value) => settings.set(key, value),
+      panel: { create: (config) => { latestPanel = config; } },
+    },
+  };
+
+  await extension.onload({ extensionAPI });
+
+  assert.equal(settings.get('prefix-str'), '[[log]]');
+  assert.equal(settings.get('desc-length'), 28);
+  assert.equal(settings.get('todo-duration'), 30);
+  assert.equal(settings.get('workday-start'), 9);
+  assert.equal(settings.get('workday-end'), 2);
+
+  const activeTemplates = [...blocks.values()]
+    .filter((block) => pageUidOfForTest(blocks, pages, block) === 'render-page')
+    .filter((block) => block.string === 'Nautilus Log [[roam/templates]]');
+  assert.equal(activeTemplates.length, 1);
+  assert.equal(activeTemplates[0].string, 'Nautilus Log [[roam/templates]]');
+  assert.match(
+    blocks.get('legacy-template-render').string,
+    /^\[\[log\]\] \{\{\[\[roam\/render\]\]:\(\(roam-render-Nautilus-Flow-cljs\)\) 28 30 9 "" 2\}\}$/,
+  );
+  assert.match(blocks.get('roam-render-Nautilus-Flow-cljs').string, /nautilus-log-v1/);
+  assert.match(blocks.get('roam-render-Nautilus-Log-cljs').string, /nautilus-log-v1/);
+  assert.equal(blocks.get('historical-log').string, historicalString);
+  assert.equal(blocks.get('duplicate-template').string, 'Nautilus Log · Previous template');
+  assert.equal(blocks.get('enhanced-template').string, 'Nautilus Log · Previous template');
+  assert.equal(blocks.get('weekly-template').string, 'Weekly Planning [[roam/templates]]');
+  assert.equal(
+    blocks.get('weekly-template-render').string,
+    'Agenda + {{[[roam/render]]:((roam-render-Nautilus-Log-cljs))}}',
+  );
+
+  const weeklyTemplateBeforeSettingsChange = blocks.get('weekly-template-render').string;
+  const prefixSetting = latestPanel.settings.find(({ id }) => id === 'prefix-str');
+  await prefixSetting.action.onChange({ target: { value: '[[changed-log]]' } });
+  assert.match(blocks.get('legacy-template-render').string, /^\[\[changed-log\]\]/);
+  assert.equal(blocks.get('weekly-template-render').string, weeklyTemplateBeforeSettingsChange);
+  assert.equal(blocks.get('historical-log').string, historicalString);
+
+  const blockCountAfterUpgrade = blocks.size;
+  await extension.onunload();
+  await extension.onload({ extensionAPI });
+
+  const templatesAfterReload = [...blocks.values()]
+    .filter((block) => pageUidOfForTest(blocks, pages, block) === 'render-page')
+    .filter((block) => block.string === 'Nautilus Log [[roam/templates]]');
+  assert.equal(templatesAfterReload.length, 1);
+  assert.equal(blocks.size, blockCountAfterUpgrade);
+  assert.equal(blocks.get('historical-log').string, historicalString);
+
+  await extension.onunload();
+});
+
+test('shorthand migration preserves an existing intentionally empty prefix', async (t) => {
+  const { roam, pages, blocks } = createRoamMock();
+  pages.set('roam/render', 'render-page');
+  blocks.set('legacy-title', {
+    uid: 'legacy-title', string: 'Nautilus Flow', order: 0, parentUid: 'render-page',
+  });
+  blocks.set('legacy-template', {
+    uid: 'legacy-template',
+    string: 'Nautilus Flow [[roam/templates]]',
+    order: 0,
+    parentUid: 'legacy-title',
+  });
+  blocks.set('legacy-template-render', {
+    uid: 'legacy-template-render',
+    string: '{{[[roam/render]]:((roam-render-Nautilus-Flow-cljs)) 22 15 5 "" 24}}',
+    order: 0,
+    parentUid: 'legacy-template',
+  });
+  blocks.set('roam-render-Nautilus-Flow-cljs', {
+    uid: 'roam-render-Nautilus-Flow-cljs',
+    string: 'old legacy code',
+    order: 1,
+    parentUid: 'legacy-title',
+  });
+
+  global.window = { roamAlphaAPI: roam, dispatchEvent: () => {} };
+  t.after(() => { delete global.window; });
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#empty-prefix-${Date.now()}`;
+  const extension = (await import(moduleUrl)).default;
+  const settings = new Map([
+    ['language', 'en'],
+    ['language-default-version', 'en-v1'],
+  ]);
+  const extensionAPI = {
+    settings: {
+      get: (key) => settings.get(key),
+      set: async (key, value) => settings.set(key, value),
+      panel: { create: () => {} },
+    },
+  };
+
+  await extension.onload({ extensionAPI });
+
+  assert.equal(settings.get('prefix-str'), '');
+  assert.equal(settings.get('workday-end'), 24);
+  assert.equal(settings.get('product-defaults-version'), 'timing-v1');
+  assert.equal(blocks.get('legacy-template-render').string.startsWith('{{[[roam/render]]'), true);
+
+  await extension.onunload();
+});
+
+function pageUidOfForTest(blocks, pages, block) {
+  let current = block;
+  while (current?.parentUid) {
+    if ([...pages.values()].includes(current.parentUid)) return current.parentUid;
+    current = blocks.get(current.parentUid);
+  }
+  return null;
+}

@@ -10,7 +10,7 @@ const logCore = require('./log-core');
 
 const TODO_RE = /\{\{\[\[(TODO|DONE)\]\]\}\}|\{\{(TODO|DONE)\}\}/i;
 const CLOCK_RE = /^\s*:?CLOCK:{1,2}\s*\[([^\]]+)\](?:\s*--\s*\[([^\]]+)\])?(?:\s*=>\s*(\d+:[0-5]\d))?\s*$/i;
-const NAUTILUS_RENDER_RE = /\{\{\s*\[\[roam\/render\]\]\s*:\s*\(\(roam-render-Nautilus-Log-cljs\)\)/i;
+const NAUTILUS_RENDER_RE = /\{\{\s*\[\[roam\/render\]\]\s*:\s*\(\(roam-render-Nautilus(?:-Log|-Flow)?-cljs\)\)/i;
 const BLOCK_REF_RE = /\(\(([a-zA-Z0-9_-]{6,})\)\)/g;
 const DURATION_TOKEN_RE = /(?:^|\s)(\d+h(?:\d+(?:min|m))?|\d+(?:min|m))(?=\s|$)/gi;
 const DONE_TIME_RE = /(?:^|\s)d(\d{1,2})(?::(\d{1,2}))?(?=\s|$)/i;

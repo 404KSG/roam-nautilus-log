@@ -20,12 +20,8 @@ module.exports = {
         rules: [
             {
             test: /\.cljs$/,
-            use: 'text-loader',
+            type: 'asset/source',
             },
-          {
-            test: /\.css$/,
-            use: 'css-loader',
-          },
         ],
       },
 };

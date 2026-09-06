@@ -27,6 +27,14 @@ test('Nautilus component identity follows the stable renderer rather than its di
     false,
   );
   assert.equal(timing.isNautilusComponent('Mention ((roam-render-Nautilus-Log-cljs))'), false);
+  assert.equal(
+    timing.isNautilusComponent('{{[[roam/render]]:((roam-render-Nautilus-Flow-cljs))}}'),
+    true,
+  );
+  assert.equal(
+    timing.isNautilusComponent('{{[[roam/render]]:((roam-render-Nautilus-cljs))}}'),
+    true,
+  );
 });
 
 test('the first component in Daily Note tree order owns the Primary Plan', () => {

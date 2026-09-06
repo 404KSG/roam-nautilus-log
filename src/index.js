@@ -1,5 +1,6 @@
 import {
   isRightSidebarRenderContext,
+  readExistingTemplateState,
   shouldSuppressRenderContext,
   toggleRenderComponent,
   updateTemplateString,
@@ -34,11 +35,12 @@ import {
   createPersistentGoogleAuthClient,
   parseCalendarConnection,
 } from "./calendar-auth";
-import "../extension.css";
 
 const componentName = "Nautilus Log";
 const codeBlockUID = "roam-render-Nautilus-Log-cljs";
 const renderStringCore = `{{[[roam/render]]:((${codeBlockUID}))`;
+let activeCodeBlockUID = codeBlockUID;
+let activeRenderStringCore = renderStringCore;
 const disabledReplacementString = `{{${componentName}-disabled`;
 const version = "v1";
 const titleblockUID = "roam-render-Nautilus-Log";
@@ -220,29 +222,47 @@ async function generateUpdatedRenderString(renderCore, extensionAPI, replacement
   return `${normalizedPrefix ? `${normalizedPrefix} ` : ""}${renderCore} ${args.join(" ")}}}`;
 }
 
-async function generateTemplateString(extensionAPI) {
+async function generateTemplateString(extensionAPI, renderCore = activeRenderStringCore) {
   const values = Object.keys(defaults).map((key) => settingValue(extensionAPI, key));
   const [prefix, ...args] = values;
   args[3] = args[3] === "" || args[3] === undefined
     ? '""'
     : `"${String(args[3]).replace(/\s/g, "")}"`;
   const normalizedPrefix = String(prefix ?? "").trim();
-  return `${normalizedPrefix ? `${normalizedPrefix} ` : ""}${renderStringCore} ${args.join(" ")}}}`;
+  return `${normalizedPrefix ? `${normalizedPrefix} ` : ""}${renderCore} ${args.join(" ")}}}`;
 }
 
-async function setDefaultSettings(extensionAPI) {
+async function setDefaultSettings(extensionAPI, recoveredTemplateSettings = null) {
   await Promise.all(Object.entries({ ...defaults, ...executionDefaults, ...calendarDefaults }).map(async ([key, fallback]) => {
     const current = extensionAPI.settings.get(key);
-    if (current === undefined || current === null) await extensionAPI.settings.set(key, fallback);
+    const hasRecovered = recoveredTemplateSettings
+      && Object.prototype.hasOwnProperty.call(recoveredTemplateSettings, key);
+    const recovered = hasRecovered ? recoveredTemplateSettings[key] : fallback;
+    const missing = current === undefined || current === null;
+    const untouchedShorthandDefault = hasRecovered
+      && Object.prototype.hasOwnProperty.call(defaults, key)
+      && current === fallback
+      && recovered !== fallback;
+    if (missing || untouchedShorthandDefault) {
+      await extensionAPI.settings.set(key, recovered);
+    }
   }));
 }
 
-async function migratePreviewDefaults(extensionAPI) {
+async function migratePreviewDefaults(extensionAPI, recoveredTemplateSettings = null) {
   if (extensionAPI.settings.get("product-defaults-version") === productDefaultsVersion) return;
   const prefix = extensionAPI.settings.get("prefix-str");
   const end = Number(extensionAPI.settings.get("workday-end"));
-  if (prefix === "") await extensionAPI.settings.set("prefix-str", defaults["prefix-str"]);
-  if (end === 24) await extensionAPI.settings.set("workday-end", defaults["workday-end"]);
+  const recoveredPrefix = recoveredTemplateSettings
+    && Object.prototype.hasOwnProperty.call(recoveredTemplateSettings, "prefix-str");
+  const recoveredEnd = recoveredTemplateSettings
+    && Object.prototype.hasOwnProperty.call(recoveredTemplateSettings, "workday-end");
+  if (prefix === "" && !recoveredPrefix) {
+    await extensionAPI.settings.set("prefix-str", defaults["prefix-str"]);
+  }
+  if (end === 24 && !recoveredEnd) {
+    await extensionAPI.settings.set("workday-end", defaults["workday-end"]);
+  }
   await extensionAPI.settings.set("product-defaults-version", productDefaultsVersion);
 }
 
@@ -423,7 +443,10 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
     const next = key === "color-1-trigger" ? String(value).replace(/\s/g, "") : value;
     await extensionAPI.settings.set(key, next);
     publishRuntimeSettings(extensionAPI);
-    await updateTemplateString(renderStringCore, await generateUpdatedRenderString(renderStringCore, extensionAPI, key, next));
+    await updateTemplateString(
+      activeRenderStringCore,
+      await generateUpdatedRenderString(activeRenderStringCore, extensionAPI, key, next),
+    );
   };
 
   const updateExecutionMinutes = async (key, event, fallback) => {
@@ -685,6 +708,8 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
 }
 
 async function onload({ extensionAPI }) {
+  activeCodeBlockUID = codeBlockUID;
+  activeRenderStringCore = renderStringCore;
   calendarPanelState = { action: "", error: "" };
   planWatchBridge?.destroy();
   planWatchBridge = createPlanWatchBridge({ readString: readBlockString });
@@ -719,8 +744,14 @@ async function onload({ extensionAPI }) {
       return calendarRuntime.syncPlan(options);
     },
   };
-  await setDefaultSettings(extensionAPI);
-  await migratePreviewDefaults(extensionAPI);
+  const recoveredTemplateState = readExistingTemplateState(renderStringCore);
+  if (recoveredTemplateState?.renderStringCore) {
+    activeRenderStringCore = recoveredTemplateState.renderStringCore;
+    const recoveredUid = /\(\(([a-zA-Z0-9_-]+)\)\)$/.exec(activeRenderStringCore)?.[1];
+    if (recoveredUid) activeCodeBlockUID = recoveredUid;
+  }
+  await setDefaultSettings(extensionAPI, recoveredTemplateState?.settings);
+  await migratePreviewDefaults(extensionAPI, recoveredTemplateState?.settings);
   const language = await initializeLanguage(extensionAPI);
   calendarRuntime?.destroy();
   calendarRuntime = createCalendarRuntime({
@@ -745,9 +776,9 @@ async function onload({ extensionAPI }) {
     true,
     titleblockUID,
     version,
-    renderStringCore,
+    activeRenderStringCore,
     disabledReplacementString,
-    codeBlockUID,
+    activeCodeBlockUID,
     componentName,
     await generateTemplateString(extensionAPI),
   );
@@ -787,9 +818,9 @@ function onunload() {
     false,
     titleblockUID,
     version,
-    renderStringCore,
+    activeRenderStringCore,
     disabledReplacementString,
-    codeBlockUID,
+    activeCodeBlockUID,
     componentName,
     "",
   );
