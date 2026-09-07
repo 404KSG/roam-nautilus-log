@@ -337,6 +337,7 @@ test('Log scaffolding is isolated and unload is graph-safe', () => {
 
 test('Actual Time Tracking is opt-in and owns no disabled topbar interaction', () => {
   assert.match(entry, /"actual-time-tracking": false/);
+  assert.match(entry, /"energy-bar-enabled": false/);
   assert.match(entry, /if \(extensionAPI\.settings\.get\("actual-time-tracking"\) === true\)/);
   assert.match(entry, /stopTiming\(\{ closeActive: false \}\)/);
   assert.match(timingTopbar, /bp3-icon-\$\{name\}/);
@@ -496,6 +497,25 @@ test('the global capacity token pairs a semantic percentage with a neutral label
   assert.match(css, /nautilus-log-timing__capacity-part\.is-positive strong/);
   assert.doesNotMatch(css, /nautilus-log-metric-percent--positive\s*\{/);
   assert.doesNotMatch(css, /nautilus-log-metric--positive \.nautilus-log-metric-summary-label/);
+});
+
+test('the optional energy bar layers live reserve over committed capacity without changing text mode', () => {
+  assert.match(timingCore, /function energyBarModel/);
+  assert.match(timingCore, /function executionProjection/);
+  assert.match(timingTopbar, /extensionAPI\.settings\.get\('energy-bar-enabled'\) === true/);
+  assert.match(timingTopbar, /nautilus-log-timing__energy-track/);
+  assert.match(timingTopbar, /nautilus-log-timing__energy-committed/);
+  assert.match(timingTopbar, /nautilus-log-timing__energy-reserve/);
+  assert.match(timingTopbar, /timingCore\.executionProjection/);
+  assert.match(timingTopbar, /timingCore\.energyBarModel/);
+  assert.match(timingTopbar, /Math\.floor\(state\.now\.getTime\(\) \/ 60000\)/);
+  assert.match(timingTopbar, /nautilus-log-timing__energy-damage/);
+  assert.match(css, /\.nautilus-log-timing__energy-track\s*\{/);
+  assert.match(css, /\.nautilus-log-timing__energy-committed\s*\{/);
+  assert.match(css, /\.nautilus-log-timing__energy-reserve\s*\{/);
+  assert.match(css, /data-density="compact"[^}]*nautilus-log-timing__energy-track/s);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*nautilus-log-timing__energy-/);
+  assert.doesNotMatch(timingTopbar, /readAllEntries|readPrimaryPlan/);
 });
 
 test('capacity summaries lead with the remaining quota and color values only', () => {

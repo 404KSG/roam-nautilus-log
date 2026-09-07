@@ -182,6 +182,7 @@ test('a fresh install defaults the settings panel and rendered UI to English', a
   assert.equal(settings.get('workday-end'), 21);
   assert.equal(settings.get('prefix-str'), '[[Nautilus Log]]');
   assert.equal(settings.get('actual-time-tracking'), false);
+  assert.equal(settings.get('energy-bar-enabled'), false);
   assert.equal(settings.get('timing-line-sidebar'), true);
   assert.equal(settings.get('recent-retention-minutes'), 45);
   assert.equal(settings.get('forgotten-timer-minutes'), 120);
@@ -205,12 +206,19 @@ test('a fresh install defaults the settings panel and rendered UI to English', a
   assert.equal(executionEntry.name, 'Execution Layer · Advanced');
   assert.match(executionEntry.description, /Enable to reveal execution settings/);
   assert.equal(executionEntry.action.defaultValue, false);
-  for (const id of ['timing-line-sidebar', 'pomodoro-minutes', 'recent-retention-minutes', 'forgotten-timer-minutes']) {
+  for (const id of ['energy-bar-enabled', 'timing-line-sidebar', 'pomodoro-minutes', 'recent-retention-minutes', 'forgotten-timer-minutes']) {
     assert.equal(latestPanel.settings.some((setting) => setting.id === id), false);
   }
 
   settings.set('actual-time-tracking', true);
   const expandedPanel = extensionModule.panelConfig(extensionAPI, 'en');
+  const energySetting = expandedPanel.settings.find(({ id }) => id === 'energy-bar-enabled');
+  assert.equal(energySetting.name, 'Show capacity as an energy bar');
+  assert.match(energySetting.description, /solid reserve/);
+  assert.equal(energySetting.action.defaultValue, false);
+  await energySetting.action.onChange(true);
+  assert.equal(settings.get('energy-bar-enabled'), true);
+  assert.equal(window.nautilusLogExtensionData.settings['energy-bar-enabled'], true);
   assert.equal(expandedPanel.settings.find(({ id }) => id === 'timing-line-sidebar').action.defaultValue, true);
   assert.equal(expandedPanel.settings.find(({ id }) => id === 'recent-retention-minutes').action.default, 45);
   assert.equal(expandedPanel.settings.find(({ id }) => id === 'forgotten-timer-minutes').action.default, 120);
@@ -220,6 +228,7 @@ test('a fresh install defaults the settings panel and rendered UI to English', a
   assert.equal(settings.get('forgotten-timer-minutes'), 0);
   const zhPanel = extensionModule.panelConfig(extensionAPI, 'zh');
   assert.equal(zhPanel.settings.find(({ id }) => id === 'actual-time-tracking').name, '执行层 · 进阶');
+  assert.equal(zhPanel.settings.find(({ id }) => id === 'energy-bar-enabled').name, '用精力槽显示剩余容量');
   assert.equal(global.document, undefined);
 
   await extension.onunload();

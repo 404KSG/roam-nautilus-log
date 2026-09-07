@@ -563,9 +563,11 @@ test('execution surface copy follows the extension language', () => {
   assert.equal(timing.executionCopy('en').trigger.threads, 'threads');
   assert.equal(timing.executionCopy('en').actions.openPanelHint, 'Click: panel · ⌥/Alt: main · ⇧: sidebar');
   assert.equal(timing.executionCopy('en').capacity.totalConnector, 'of');
+  assert.equal(timing.executionCopy('en').capacity.energy, 'Capacity energy bar');
   assert.equal(timing.executionCopy('zh').tabs.plan, '计划');
   assert.equal(timing.executionCopy('zh').capacity.available, '可安排');
   assert.equal(timing.executionCopy('zh').capacity.totalConnector, '共');
+  assert.equal(timing.executionCopy('zh').capacity.energy, '容量精力槽');
   assert.equal(timing.executionCopy('zh').actions.openPanelHint, '单击：面板 · ⌥/Alt：主界面 · ⇧：侧边栏');
   assert.equal(timing.executionCopy('en').empty.noActive, 'No active work. Open Plan to start a task.');
 });
@@ -614,6 +616,92 @@ test('Plan capacity summary shares the chart allocation language', () => {
     totalAvailableMinutes: 540,
     demandMinutes: 180,
   }, 'en').status.tone, 'neutral');
+});
+
+test('energy bar separates reserve, committed demand, and elapsed capacity on one track', () => {
+  assert.deepEqual(timing.energyBarModel({
+    totalAvailableMinutes: 480,
+    availableMinutes: 420,
+    demandMinutes: 300,
+    slackMinutes: 120,
+  }), {
+    totalMinutes: 480,
+    availableMinutes: 420,
+    reserveMinutes: 120,
+    committedMinutes: 300,
+    elapsedMinutes: 60,
+    availablePercent: 87.5,
+    reservePercent: 25,
+    committedPercent: 62.5,
+    elapsedPercent: 12.5,
+    overloadMinutes: 0,
+    unplacedMinutes: 0,
+    warning: false,
+  });
+
+  const overloaded = timing.energyBarModel({
+    totalAvailableMinutes: 480,
+    availableMinutes: 120,
+    demandMinutes: 180,
+    slackMinutes: 0,
+    overloadMinutes: 60,
+  });
+  assert.deepEqual({
+    availablePercent: overloaded.availablePercent,
+    reservePercent: overloaded.reservePercent,
+    committedPercent: overloaded.committedPercent,
+    elapsedPercent: overloaded.elapsedPercent,
+    overloadMinutes: overloaded.overloadMinutes,
+    warning: overloaded.warning,
+  }, {
+    availablePercent: 25,
+    reservePercent: 0,
+    committedPercent: 25,
+    elapsedPercent: 75,
+    overloadMinutes: 60,
+    warning: true,
+  });
+
+  assert.deepEqual(timing.energyBarModel(), {
+    totalMinutes: 0,
+    availableMinutes: 0,
+    reserveMinutes: 0,
+    committedMinutes: 0,
+    elapsedMinutes: 0,
+    availablePercent: 0,
+    reservePercent: 0,
+    committedPercent: 0,
+    elapsedPercent: 0,
+    overloadMinutes: 0,
+    unplacedMinutes: 0,
+    warning: false,
+  });
+});
+
+test('shared execution projection keeps live energy aligned with scheduling capacity', () => {
+  const projection = timing.executionProjection({
+    plan: { uid: 'plan' },
+    tasks: [
+      { uid: 'a', title: 'A', plannedMinutes: 60 },
+      { uid: 'b', title: 'B', plannedMinutes: 60 },
+    ],
+    fixedEvents: [{ uid: 'event', start: 720, end: 780 }],
+  }, new Date(2026, 7, 22, 10, 0), {
+    workdayStart: 5,
+    workdayEnd: 21,
+  });
+
+  assert.equal(projection.totalAvailableMinutes, 900);
+  assert.equal(projection.availableMinutes, 600);
+  assert.equal(projection.demandMinutes, 120);
+  assert.equal(projection.slackMinutes, 480);
+  assert.deepEqual(
+    projection.scheduledTasks.map(({ uid, start, end }) => ({ uid, start, end })),
+    [
+      { uid: 'a', start: 600, end: 660 },
+      { uid: 'b', start: 660, end: 720 },
+    ],
+  );
 });
 
 test('topbar density uses stable leading space and can recover from icon mode', () => {

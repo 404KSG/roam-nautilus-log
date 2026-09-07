@@ -31,7 +31,8 @@ const EXECUTION_COPY = Object.freeze({
     },
     capacity: {
       label: 'Today capacity', available: 'Available', remaining: 'Remaining', overload: 'Overload',
-      noSlot: 'No fitting slot', totalConnector: 'of',
+      noSlot: 'No fitting slot', totalConnector: 'of', energy: 'Capacity energy bar',
+      reserve: 'reserve', committed: 'planned', elapsed: 'elapsed',
     },
     plan: { scheduled: 'Scheduled today', unscheduled: 'Unscheduled today', today: 'Today' },
     timing: { timing: 'Timing', actual: 'Actual', planned: 'Planned', remaining: 'Remaining', recent: 'Recent', left: 'left', check: 'Check CLOCK' },
@@ -58,7 +59,8 @@ const EXECUTION_COPY = Object.freeze({
     },
     capacity: {
       label: '今日容量', available: '可安排', remaining: '余量', overload: '超载',
-      noSlot: '没有连续空档', totalConnector: '共',
+      noSlot: '没有连续空档', totalConnector: '共', energy: '容量精力槽',
+      reserve: '余量', committed: '计划占用', elapsed: '已流逝',
     },
     plan: { scheduled: '今日已安排', unscheduled: '今日未排入', today: '今天' },
     timing: { timing: '计时', actual: '实际', planned: '预计', remaining: '剩余', recent: '最近', left: '后移出', check: '检查 CLOCK' },
@@ -95,6 +97,84 @@ function capacitySummary(execution = {}, language = 'en') {
       label: planned.percentLabel,
       tone: planned.percentTone,
     },
+  };
+}
+
+function executionProjection(planSnapshot, currentNow, settings = {}) {
+  if (!planSnapshot?.plan) return null;
+  const now = currentNow instanceof Date && Number.isFinite(currentNow.getTime())
+    ? currentNow
+    : new Date();
+  const schedule = logCore.normalizeScheduleSettings({
+    workdayStart: settings.workdayStart,
+    workdayEnd: settings.workdayEnd,
+  });
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const pendingTasks = (planSnapshot.tasks || []).map((task) => ({
+    ...task,
+    todo: true,
+    done: false,
+    duration: Number(task.plannedMinutes) || 0,
+  }));
+  const fixedEvents = (planSnapshot.fixedEvents || []).map((event) => ({
+    ...event,
+    ...logCore.alignIntervalToWindow({
+      start: event.start,
+      end: event.end,
+      windowStart: schedule.startMinutes,
+      windowEnd: schedule.endMinutes,
+    }),
+  }));
+  return {
+    ...logCore.calculateCapacity({
+      startMinutes: schedule.startMinutes,
+      endMinutes: schedule.endMinutes,
+      nowMinutes,
+      fixedEvents,
+      allFixedEvents: fixedEvents,
+      pendingTasks,
+    }),
+    nowMinutes,
+    startMinutes: schedule.startMinutes,
+    endMinutes: schedule.endMinutes,
+  };
+}
+
+function energyBarModel(execution = {}) {
+  const positive = (value) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.max(0, number) : 0;
+  };
+  const totalMinutes = positive(execution.totalAvailableMinutes);
+  const availableMinutes = Math.min(totalMinutes, positive(execution.availableMinutes));
+  const demandMinutes = positive(execution.demandMinutes);
+  const derivedReserve = Math.max(0, availableMinutes - demandMinutes);
+  const reserveMinutes = Math.min(
+    availableMinutes,
+    execution.slackMinutes === undefined
+      ? derivedReserve
+      : positive(execution.slackMinutes),
+  );
+  const committedMinutes = Math.max(0, availableMinutes - reserveMinutes);
+  const elapsedMinutes = Math.max(0, totalMinutes - availableMinutes);
+  const percent = (minutes) => totalMinutes > 0
+    ? Math.min(100, Math.max(0, (minutes / totalMinutes) * 100))
+    : 0;
+  const overloadMinutes = positive(execution.overloadMinutes);
+  const unplacedMinutes = positive(execution.unplacedMinutes);
+  return {
+    totalMinutes,
+    availableMinutes,
+    reserveMinutes,
+    committedMinutes,
+    elapsedMinutes,
+    availablePercent: percent(availableMinutes),
+    reservePercent: percent(reserveMinutes),
+    committedPercent: percent(committedMinutes),
+    elapsedPercent: percent(elapsedMinutes),
+    overloadMinutes,
+    unplacedMinutes,
+    warning: overloadMinutes > 0 || unplacedMinutes > 0,
   };
 }
 
@@ -702,7 +782,9 @@ module.exports = {
   chooseFocusedEntry,
   compactMinutes,
   durationMetadata,
+  energyBarModel,
   executionCopy,
+  executionProjection,
   executionStructureKey,
   formatClockLine,
   formatElapsed,

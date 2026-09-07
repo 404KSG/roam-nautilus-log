@@ -1,5 +1,4 @@
 import * as timingCore from './timing-core';
-import * as logCore from './log-core';
 import {
   closeClock,
   completeTask,
@@ -24,43 +23,6 @@ import {
 const POMODORO_STATE_KEY = 'actual-time-pomodoro-state';
 const STANDALONE_POMODORO_STATE_KEY = 'standalone-pomodoro-state';
 const RECOVERY_REFRESH_INTERVAL_MS = 5 * 60_000;
-
-function executionProjection(planSnapshot, currentNow, extensionAPI) {
-  if (!planSnapshot?.plan) return null;
-  const schedule = logCore.normalizeScheduleSettings({
-    workdayStart: extensionAPI.settings.get('workday-start') ?? 5,
-    workdayEnd: extensionAPI.settings.get('workday-end') ?? 21,
-  });
-  const nowMinutes = currentNow.getHours() * 60 + currentNow.getMinutes();
-  const pendingTasks = (planSnapshot.tasks || []).map((task) => ({
-    ...task,
-    todo: true,
-    done: false,
-    duration: Number(task.plannedMinutes) || 0,
-  }));
-  const fixedEvents = (planSnapshot.fixedEvents || []).map((event) => ({
-    ...event,
-    ...logCore.alignIntervalToWindow({
-      start: event.start,
-      end: event.end,
-      windowStart: schedule.startMinutes,
-      windowEnd: schedule.endMinutes,
-    }),
-  }));
-  return {
-    ...logCore.calculateCapacity({
-      startMinutes: schedule.startMinutes,
-      endMinutes: schedule.endMinutes,
-      nowMinutes,
-      fixedEvents,
-      allFixedEvents: fixedEvents,
-      pendingTasks,
-    }),
-    nowMinutes,
-    startMinutes: schedule.startMinutes,
-    endMinutes: schedule.endMinutes,
-  };
-}
 
 function scheduleNextTask(callback) {
   const host = typeof window !== 'undefined' ? window : globalThis;
@@ -246,7 +208,10 @@ export function createTimingRuntime({
       const planSnapshot = sourcePlanSnapshot
         ? {
           ...sourcePlanSnapshot,
-          execution: executionProjection(sourcePlanSnapshot, currentNow, extensionAPI),
+          execution: timingCore.executionProjection(sourcePlanSnapshot, currentNow, {
+            workdayStart: extensionAPI.settings.get('workday-start') ?? 5,
+            workdayEnd: extensionAPI.settings.get('workday-end') ?? 21,
+          }),
         }
         : sourcePlanSnapshot;
       const reviewTasks = planSnapshot?.reviewCandidates || planSnapshot?.reviewTasks || (planSnapshot?.plan
