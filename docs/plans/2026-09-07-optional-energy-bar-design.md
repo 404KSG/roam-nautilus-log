@@ -58,13 +58,15 @@ projection.
 
 ## Interface
 
-Full density shows one continuous 104×18px track, aligned to the preceding
-18px Nautilus icon; compact density uses 72×16px. The track has no internal
-quarter ticks because those marks do not represent distinct data and make one
-bar look like several. The exact existing percentage follows the track. The
-word `left` is omitted in energy mode because the layered bar carries that
-role; the tooltip and accessible name retain the full semantic summary. Icon
-density continues yielding the whole capacity token to Roam search.
+Full density shows one continuous 104×10px track. Its vertical weight follows
+the visible glyph inside the preceding Nautilus icon—not the icon's 18px layout
+box. The track has no internal quarter ticks because those marks do not
+represent distinct data and make one bar look like several. The exact existing
+percentage follows the track. The word `left` is omitted in energy mode because
+the layered bar carries that role; the tooltip and accessible name retain the
+full semantic summary. When the full control no longer fits, the topbar switches
+directly to the leading Nautilus icon: it never leaves an orphaned bar,
+percentage, timer, or overload label beside Roam search.
 
 The palette is restrained and theme-safe:
 
@@ -113,7 +115,7 @@ Internal key: `energy-bar-enabled`.
 - `src/timing-topbar.js`: optional live projection, layered track, semantics,
   and setting-driven rendering.
 - `src/index.js`: default-off switch and localized setting copy.
-- `extension.css`: full/compact/dark/reduced-motion presentation.
+- `extension.css`: full/icon-only/dark/reduced-motion presentation.
 - Tests: pure model, settings/default contract, topbar DOM/CSS contract, and
   no-extra-query runtime guarantees.
 - README, guides, and changelog: optional behavior and exact semantics.
@@ -130,7 +132,7 @@ Internal key: `energy-bar-enabled`.
    Roam read or a new timer.
 6. Confirmed task completion, external graph changes, overflow, fragmentation,
    and fixed events reuse authoritative capacity semantics.
-7. Full and compact densities render the bar; icon density yields to search.
+7. Full density renders the bar; constrained space shows only the leading icon.
 8. Light, dark, keyboard, and reduced-motion states remain legible.
 9. No persistence beyond the boolean preference and no task schema are added.
 10. Production build, full tests, bundle checks, source push, and a new Roam

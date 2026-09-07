@@ -180,16 +180,13 @@ function energyBarModel(execution = {}) {
 
 function topbarDensity({
   availableWidth,
-  fullControlWidth = 220,
-  compactControlWidth = 112,
+  fullControlWidth = 280,
   safetyGap = 12,
 } = {}) {
   const available = Number(availableWidth);
   if (!Number.isFinite(available)) return 'full';
   const usableWidth = Math.max(0, available - Math.max(0, Number(safetyGap) || 0));
-  if (usableWidth >= fullControlWidth) return 'full';
-  if (usableWidth >= compactControlWidth) return 'compact';
-  return 'icon';
+  return usableWidth >= fullControlWidth ? 'full' : 'icon';
 }
 
 const pad = (value) => String(value).padStart(2, '0');

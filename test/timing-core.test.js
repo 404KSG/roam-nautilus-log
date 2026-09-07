@@ -706,9 +706,10 @@ test('shared execution projection keeps live energy aligned with scheduling capa
   );
 });
 
-test('topbar density uses stable leading space and can recover from icon mode', () => {
+test('topbar density switches directly from the full control to the leading icon', () => {
   assert.equal(timing.topbarDensity({ availableWidth: 620, controlWidth: 30 }), 'full');
-  assert.equal(timing.topbarDensity({ availableWidth: 180, controlWidth: 30 }), 'compact');
+  assert.equal(timing.topbarDensity({ availableWidth: 300, controlWidth: 30 }), 'full');
+  assert.equal(timing.topbarDensity({ availableWidth: 180, controlWidth: 30 }), 'icon');
   assert.equal(timing.topbarDensity({ availableWidth: 70, controlWidth: 220 }), 'icon');
   assert.equal(timing.topbarDensity(), 'full');
 });

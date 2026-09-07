@@ -1455,12 +1455,12 @@
   --nautilus-energy-reserve: 0%;
   background: rgba(59, 68, 79, 0.11);
   border: 1px solid rgba(59, 68, 79, 0.28);
-  border-radius: 3px;
+  border-radius: 2px;
   box-shadow: inset 0 1px 2px rgba(26, 32, 39, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.35);
   box-sizing: border-box;
   display: block;
   flex: 0 0 auto;
-  height: 18px;
+  height: 10px;
   overflow: hidden;
   position: relative;
   width: 104px;
@@ -1549,19 +1549,6 @@
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.01em;
-}
-
-.nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__mode-separator,
-.nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__pomodoro-label,
-.nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__threads,
-.nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__forgotten-signal,
-.nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__capacity-label {
-  display: none;
-}
-
-.nautilus-log-timing__topbar[data-density="compact"] .nautilus-log-timing__energy-track {
-  height: 16px;
-  width: 72px;
 }
 
 .nautilus-log-timing__topbar[data-density="icon"] {

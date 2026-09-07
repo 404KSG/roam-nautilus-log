@@ -465,7 +465,7 @@ test('the global capacity token yields topbar space to Roam search', () => {
   assert.match(timingTopbar, /nautilus-log-timing__capacity-token/);
   assert.match(timingTopbar, /nautilus-log-timing__brand-icon/);
   assert.match(timingTopbar, /new ResizeObserver/);
-  assert.match(css, /data-density="compact"/);
+  assert.doesNotMatch(css, /data-density="compact"/);
   assert.match(css, /data-density="icon"/);
   assert.match(css, /data-density="icon"[^}]*nautilus-log-timing__brand-icon/s);
   assert.doesNotMatch(timingTopbar, /readAllEntries|readPrimaryPlan/);
@@ -487,7 +487,6 @@ test('the global capacity token pairs a semantic percentage with a neutral label
   assert.match(css, /nautilus-log-timing__capacity-token\.is-positive/);
   assert.match(css, /nautilus-log-timing__capacity-token\.is-warning/);
   assert.match(css, /\.nautilus-log-timing__capacity-label\s*\{[^}]*color:\s*inherit;/s);
-  assert.match(css, /data-density="compact"[^}]*nautilus-log-timing__capacity-label/s);
   assert.doesNotMatch(css, /nautilus-log-timing__capacity-token\.is-positive \.nautilus-log-timing__capacity-label/);
   assert.doesNotMatch(css, /nautilus-log-timing__capacity-token\.is-warning \.nautilus-log-timing__capacity-label/);
   assert.match(css, /--nautilus-log-positive/);
@@ -512,11 +511,10 @@ test('the optional energy bar layers live reserve over committed capacity withou
   assert.match(timingTopbar, /text\.capacity\.noSlotCue.*timingCore\.compactMinutes\(model\.unplacedMinutes\)/);
   assert.match(timingTopbar, /Math\.floor\(state\.now\.getTime\(\) \/ 60000\)/);
   assert.match(timingTopbar, /nautilus-log-timing__energy-damage/);
-  assert.match(css, /\.nautilus-log-timing__energy-track\s*\{[^}]*box-sizing:\s*border-box;[^}]*height:\s*18px;[^}]*width:\s*104px;/s);
+  assert.match(css, /\.nautilus-log-timing__energy-track\s*\{[^}]*box-sizing:\s*border-box;[^}]*height:\s*10px;[^}]*width:\s*104px;/s);
   assert.match(css, /\.nautilus-log-timing__energy-committed\s*\{/);
   assert.match(css, /\.nautilus-log-timing__energy-reserve\s*\{/);
   assert.doesNotMatch(css, /\.nautilus-log-timing__energy-track::after/);
-  assert.match(css, /data-density="compact"[^}]*nautilus-log-timing__energy-track\s*\{[^}]*height:\s*16px;[^}]*width:\s*72px;/s);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*nautilus-log-timing__energy-/);
   assert.doesNotMatch(timingTopbar, /readAllEntries|readPrimaryPlan/);
 });

@@ -123,8 +123,9 @@ remain excluded, untimed work uses Default Todo Duration, and the clock contract
 the bar once per minute without another Roam read or timer. Confirmed completion
 settles the pale layer with a short delayed transition and duration cue. A failed
 write changes nothing; external TODO/DONE or duration edits redraw silently. This
-is a time-capacity display, not a measure of physical or mental health. Full and
-compact topbars show it, while icon density yields the token to Roam search.
+is a time-capacity display, not a measure of physical or mental health. The full
+topbar shows it; constrained space switches directly to the leading Nautilus
+icon so no detached bar or status text remains beside Roam search.
 
 ### Referenced task ownership
 
