@@ -512,10 +512,11 @@ test('the optional energy bar layers live reserve over committed capacity withou
   assert.match(timingTopbar, /text\.capacity\.noSlotCue.*timingCore\.compactMinutes\(model\.unplacedMinutes\)/);
   assert.match(timingTopbar, /Math\.floor\(state\.now\.getTime\(\) \/ 60000\)/);
   assert.match(timingTopbar, /nautilus-log-timing__energy-damage/);
-  assert.match(css, /\.nautilus-log-timing__energy-track\s*\{/);
+  assert.match(css, /\.nautilus-log-timing__energy-track\s*\{[^}]*box-sizing:\s*border-box;[^}]*height:\s*18px;[^}]*width:\s*104px;/s);
   assert.match(css, /\.nautilus-log-timing__energy-committed\s*\{/);
   assert.match(css, /\.nautilus-log-timing__energy-reserve\s*\{/);
-  assert.match(css, /data-density="compact"[^}]*nautilus-log-timing__energy-track/s);
+  assert.doesNotMatch(css, /\.nautilus-log-timing__energy-track::after/);
+  assert.match(css, /data-density="compact"[^}]*nautilus-log-timing__energy-track\s*\{[^}]*height:\s*16px;[^}]*width:\s*72px;/s);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*nautilus-log-timing__energy-/);
   assert.doesNotMatch(timingTopbar, /readAllEntries|readPrimaryPlan/);
 });

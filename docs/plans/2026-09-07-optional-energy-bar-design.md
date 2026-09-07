@@ -58,11 +58,13 @@ projection.
 
 ## Interface
 
-Full and compact density show a single 72px/48px track followed by the exact
-existing percentage. The word `left` is omitted in energy mode because the
-layered bar carries that role; the tooltip and accessible name retain the full
-semantic summary. Icon density continues yielding the whole capacity token to
-Roam search.
+Full density shows one continuous 104×18px track, aligned to the preceding
+18px Nautilus icon; compact density uses 72×16px. The track has no internal
+quarter ticks because those marks do not represent distinct data and make one
+bar look like several. The exact existing percentage follows the track. The
+word `left` is omitted in energy mode because the layered bar carries that
+role; the tooltip and accessible name retain the full semantic summary. Icon
+density continues yielding the whole capacity token to Roam search.
 
 The palette is restrained and theme-safe:
 
