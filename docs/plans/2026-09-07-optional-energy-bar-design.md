@@ -58,21 +58,24 @@ projection.
 
 ## Interface
 
-Full density shows one continuous 104×10px track. Its vertical weight follows
-the visible glyph inside the preceding Nautilus icon—not the icon's 18px layout
-box. The track has no internal quarter ticks because those marks do not
-represent distinct data and make one bar look like several. The exact existing
-percentage follows the track. The word `left` is omitted in energy mode because
-the layered bar carries that role; the tooltip and accessible name retain the
-full semantic summary. When the full control no longer fits, the topbar switches
-directly to the leading Nautilus icon: it never leaves an orphaned bar,
-percentage, timer, or overload label beside Roam search.
+Full density shows one continuous 96×8px depth-gauge capsule. Its vertical
+weight follows the visible glyph inside the preceding Nautilus icon—not the
+icon's 18px layout box. The capsule has no metallic border, bevel, internal
+quarter ticks, or divider dot between it and the Nautilus mark. Those details
+do not encode data and made the control look like a legacy system progress bar.
+The exact existing percentage follows the track in neutral text; only a real
+warning turns the value into a status color. The word `left` is omitted in
+energy mode because the layered bar carries that role; the tooltip and
+accessible name retain the full semantic summary. When the full control no
+longer fits, the topbar switches directly to the leading Nautilus icon: it never
+leaves an orphaned bar, percentage, timer, or overload label beside Roam search.
 
 The palette is restrained and theme-safe:
 
-- reserve: the existing positive color;
-- committed/delayed damage: muted warm gold;
-- elapsed track: low-contrast neutral;
+- reserve: soft sea green (`#58a984`);
+- committed: muted sand gold (`#c9ad67`);
+- elapsed track: cool low-contrast gray (`#dce1e5` in light themes);
+- ordinary percentage: neutral gray-blue rather than a duplicate green signal;
 - overload or no-slot: the existing warning color, a static cap, and an exact
   `OVER +Xm` or `NO SLOT Xm` cue outside the track.
 

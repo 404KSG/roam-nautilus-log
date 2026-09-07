@@ -110,11 +110,12 @@ Clock In also opens or moves the active task to the top of Roam's sidebar.
 ### Optional capacity energy bar
 
 Enable **Show capacity as an energy bar** to replace only the topbar's visible
-`left` word with a single layered track. The exact percentage remains beside it:
+`left` word with a single borderless depth-gauge capsule. The exact percentage
+remains beside it in a neutral color unless there is a warning:
 
-- solid green is flexible reserve after all unfinished demand;
-- pale gold is unfinished planned demand that still fits today;
-- the empty track is flexible capacity that has elapsed;
+- soft sea green is flexible reserve after all unfinished demand;
+- muted sand gold is unfinished planned demand that still fits today;
+- the cool-gray empty track is flexible capacity that has elapsed;
 - a warning cap plus `OVER +Xm` or `NO SLOT Xm` preserves the exact existing
   overload or fragmentation state.
 

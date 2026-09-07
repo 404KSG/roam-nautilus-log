@@ -195,7 +195,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     const energyTrack = capacity.querySelector('.nautilus-log-timing__energy-track');
     const label = capacity.querySelector('.nautilus-log-timing__capacity-label');
     const summaryText = `${summary.left.value} ${summary.left.label} · ${summary.status.value} ${summary.status.label} · ${summary.planned.value} ${summary.planned.label}`;
-    separator.hidden = false;
+    separator.hidden = energy;
     capacity.hidden = false;
     capacity.classList.toggle('is-energy', energy);
     capacity.classList.toggle('is-settling', energy && energySettlementPending);

@@ -1446,24 +1446,26 @@
 }
 
 .nautilus-log-timing__capacity-token.is-energy {
-  gap: 5px;
+  color: #66788a;
+  gap: 6px;
+  margin-left: 2px;
   position: relative;
 }
 
 .nautilus-log-timing__energy-track {
   --nautilus-energy-available: 0%;
   --nautilus-energy-reserve: 0%;
-  background: rgba(59, 68, 79, 0.11);
-  border: 1px solid rgba(59, 68, 79, 0.28);
-  border-radius: 2px;
-  box-shadow: inset 0 1px 2px rgba(26, 32, 39, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.35);
+  background: #dce1e5;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(59, 68, 79, 0.08);
   box-sizing: border-box;
   display: block;
   flex: 0 0 auto;
-  height: 10px;
+  height: 8px;
   overflow: hidden;
   position: relative;
-  width: 104px;
+  width: 96px;
 }
 
 .nautilus-log-timing__energy-track[hidden],
@@ -1481,25 +1483,26 @@
 }
 
 .nautilus-log-timing__energy-committed {
-  background: linear-gradient(180deg, #dec77f 0%, #b79543 100%);
-  box-shadow: inset 0 1px rgba(255, 248, 214, 0.48);
+  background: #c9ad67;
+  box-shadow: 1px 0 2px rgba(160, 126, 53, 0.16);
   width: var(--nautilus-energy-available);
 }
 
 .nautilus-log-timing__energy-reserve {
-  background: linear-gradient(180deg, #6bb08d 0%, var(--nautilus-log-positive) 100%);
-  box-shadow: inset 0 1px rgba(225, 255, 240, 0.42);
+  background: #58a984;
+  box-shadow: 1px 0 2px rgba(47, 126, 91, 0.16);
   width: var(--nautilus-energy-reserve);
 }
 
 .nautilus-log-timing__energy-warning {
   background: var(--nautilus-log-warning);
+  border-radius: 999px;
   bottom: 0;
   opacity: 0;
   position: absolute;
   right: 0;
   top: 0;
-  width: 3px;
+  width: 2px;
 }
 
 .nautilus-log-timing__energy-track.is-warning .nautilus-log-timing__energy-warning {
@@ -1537,7 +1540,7 @@
   100% { opacity: 0; transform: translateY(-3px); }
 }
 
-.nautilus-log-timing__capacity-token.is-positive .nautilus-log-timing__capacity-value {
+.nautilus-log-timing__capacity-token.is-positive:not(.is-energy) .nautilus-log-timing__capacity-value {
   color: var(--nautilus-log-positive);
 }
 
@@ -2076,14 +2079,21 @@ button.nautilus-log-timing__plan-heading:focus-visible {
   color: #66c7e8;
 }
 
+.bp3-dark .nautilus-log-timing__capacity-token.is-energy,
+.roam-app.rm-dark-theme .nautilus-log-timing__capacity-token.is-energy,
+.dark .nautilus-log-timing__capacity-token.is-energy {
+  color: #a5afb9;
+}
+
 .bp3-dark .nautilus-log-timing__energy-track,
+.roam-app.rm-dark-theme .nautilus-log-timing__energy-track,
 .dark .nautilus-log-timing__energy-track {
-  background: rgba(5, 9, 13, 0.42);
-  border-color: rgba(220, 228, 236, 0.3);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.28);
+  background: rgba(220, 226, 232, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .bp3-dark .nautilus-log-timing__energy-damage,
+.roam-app.rm-dark-theme .nautilus-log-timing__energy-damage,
 .dark .nautilus-log-timing__energy-damage {
   color: #e0c36f;
 }
