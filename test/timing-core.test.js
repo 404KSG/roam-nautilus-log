@@ -564,10 +564,12 @@ test('execution surface copy follows the extension language', () => {
   assert.equal(timing.executionCopy('en').actions.openPanelHint, 'Click: panel · ⌥/Alt: main · ⇧: sidebar');
   assert.equal(timing.executionCopy('en').capacity.totalConnector, 'of');
   assert.equal(timing.executionCopy('en').capacity.energy, 'Capacity energy bar');
+  assert.equal(timing.executionCopy('en').capacity.overCue, 'OVER');
   assert.equal(timing.executionCopy('zh').tabs.plan, '计划');
   assert.equal(timing.executionCopy('zh').capacity.available, '可安排');
   assert.equal(timing.executionCopy('zh').capacity.totalConnector, '共');
   assert.equal(timing.executionCopy('zh').capacity.energy, '容量精力槽');
+  assert.equal(timing.executionCopy('zh').capacity.noSlotCue, '无空档');
   assert.equal(timing.executionCopy('zh').actions.openPanelHint, '单击：面板 · ⌥/Alt：主界面 · ⇧：侧边栏');
   assert.equal(timing.executionCopy('en').empty.noActive, 'No active work. Open Plan to start a task.');
 });
@@ -685,7 +687,7 @@ test('shared execution projection keeps live energy aligned with scheduling capa
       { uid: 'a', title: 'A', plannedMinutes: 60 },
       { uid: 'b', title: 'B', plannedMinutes: 60 },
     ],
-    fixedEvents: [{ uid: 'event', start: 720, end: 780 }],
+    fixedEvents: [{ uid: 'event', start: 720, end: 780, meeting: true }],
   }, new Date(2026, 7, 22, 10, 0), {
     workdayStart: 5,
     workdayEnd: 21,

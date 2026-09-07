@@ -32,7 +32,7 @@ const EXECUTION_COPY = Object.freeze({
     capacity: {
       label: 'Today capacity', available: 'Available', remaining: 'Remaining', overload: 'Overload',
       noSlot: 'No fitting slot', totalConnector: 'of', energy: 'Capacity energy bar',
-      reserve: 'reserve', committed: 'planned', elapsed: 'elapsed',
+      reserve: 'reserve', committed: 'planned', elapsed: 'elapsed', overCue: 'OVER', noSlotCue: 'NO SLOT',
     },
     plan: { scheduled: 'Scheduled today', unscheduled: 'Unscheduled today', today: 'Today' },
     timing: { timing: 'Timing', actual: 'Actual', planned: 'Planned', remaining: 'Remaining', recent: 'Recent', left: 'left', check: 'Check CLOCK' },
@@ -60,7 +60,7 @@ const EXECUTION_COPY = Object.freeze({
     capacity: {
       label: '今日容量', available: '可安排', remaining: '余量', overload: '超载',
       noSlot: '没有连续空档', totalConnector: '共', energy: '容量精力槽',
-      reserve: '余量', committed: '计划占用', elapsed: '已流逝',
+      reserve: '余量', committed: '计划占用', elapsed: '已流逝', overCue: '超载', noSlotCue: '无空档',
     },
     plan: { scheduled: '今日已安排', unscheduled: '今日未排入', today: '今天' },
     timing: { timing: '计时', actual: '实际', planned: '预计', remaining: '剩余', recent: '最近', left: '后移出', check: '检查 CLOCK' },

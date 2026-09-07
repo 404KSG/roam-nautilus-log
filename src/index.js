@@ -61,6 +61,7 @@ const defaults = {
 
 const executionDefaults = {
   "actual-time-tracking": false,
+  "energy-bar-enabled": false,
   "timing-line-sidebar": true,
   "pomodoro-minutes": 45,
   "recent-retention-minutes": 45,
@@ -371,6 +372,8 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
       colorDesc: "使任务显示为紧急红色的关键词（不可包含空格，例如：重要）。",
       tracking: "执行层 · 进阶",
       trackingDesc: "可选功能。将计划转化为行动：支持任务聚焦、CLOCK 计时、多任务切换、一键完成和每日复盘。启用后会在下方显示执行设置；默认关闭。",
+      energyBar: "用精力槽显示剩余容量",
+      energyBarDesc: "用一根时间容量槽替换顶栏的剩余文本：实色为可自由安排的余量，浅色为未完成计划占用，空槽为已经流逝的弹性时间。",
       sidebar: "计时任务置顶到右侧边栏",
       sidebarDesc: "Clock In 或切换任务时，将当前 Timing Line 打开或移动到 Roam 右侧边栏顶部。",
       pomodoro: "番茄钟阈值",
@@ -414,6 +417,8 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
       colorDesc: "Keyword that colors a task urgent red (no spaces, for example urgent).",
       tracking: "Execution Layer · Advanced",
       trackingDesc: "Optional. Turn your plan into action with focus, CLOCK timing, task switching, one-click completion, and daily Review. Enable to reveal execution settings; disabled by default.",
+      energyBar: "Show capacity as an energy bar",
+      energyBarDesc: "Replace the topbar's left text with one time-capacity bar: solid reserve is free flexible time, the pale layer is unfinished planned demand, and the empty track is elapsed flexible time.",
       sidebar: "Keep Timing Line first in right sidebar",
       sidebarDesc: "After Clock In or a task switch, open or move the Timing Line to the top of Roam's right sidebar.",
       pomodoro: "Pomodoro Threshold",
@@ -524,6 +529,20 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
               ? labels.calendarDisconnect
               : labels.calendarConnect;
   const executionSettings = [
+    {
+      id: "energy-bar-enabled",
+      name: labels.energyBar,
+      description: labels.energyBarDesc,
+      action: {
+        type: "switch",
+        defaultValue: extensionAPI.settings.get("energy-bar-enabled") ?? false,
+        onChange: async (value) => {
+          const enabled = typeof value === "boolean" ? value : Boolean(value?.target?.checked);
+          await extensionAPI.settings.set("energy-bar-enabled", enabled);
+          publishRuntimeSettings(extensionAPI);
+        },
+      },
+    },
     {
       id: "timing-line-sidebar",
       name: labels.sidebar,

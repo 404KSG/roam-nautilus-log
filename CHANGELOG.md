@@ -4,6 +4,13 @@
 
 ### Added
 
+- The Execution Layer now offers a default-off capacity energy bar for the
+  topbar. One layered time track shows flexible reserve, unfinished planned
+  demand, and elapsed capacity on the existing full-day denominator; confirmed
+  completion settles the planned layer with a short delayed cue. It reuses the
+  current Primary Plan and timer state, adds no graph query or polling source,
+  yields to Roam search at icon density, and honors dark and reduced-motion
+  themes. Existing `left` text remains unchanged while the option is off.
 - Optional, read-only Google Calendar sync now imports timed busy events into
   the exact date and Nautilus Plan represented by the clicked chart. The new
   control uses Blueprint's native Calendar glyph, contacts Google only from a

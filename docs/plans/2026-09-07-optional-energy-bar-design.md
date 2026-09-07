@@ -21,8 +21,8 @@ The bar treats the configured day's flexible capacity as one track:
   available flexible time. It is rendered as a lighter delayed-damage layer.
 - **Elapsed** is full-day flexible capacity that is no longer available. It is
   the unfilled remainder of the track.
-- **Overload** remains the authoritative `overloadMinutes`; fragmented demand
-  continues to use the existing no-fitting-slot warning.
+- **Overload** remains the authoritative `overloadMinutes`; the value beside
+  the track becomes `OVER +Xm`. Fragmented demand uses `NO SLOT Xm`.
 
 For a positive `totalAvailableMinutes`:
 
@@ -69,7 +69,8 @@ The palette is restrained and theme-safe:
 - reserve: the existing positive color;
 - committed/delayed damage: muted warm gold;
 - elapsed track: low-contrast neutral;
-- overload or no-slot: the existing warning color plus a static striped cap.
+- overload or no-slot: the existing warning color, a static cap, and an exact
+  `OVER +Xm` or `NO SLOT Xm` cue outside the track.
 
 No idle pulse, continuous glow, sound, particles, XP, streak, or loss state is
 introduced. Width changes use one short transition. `prefers-reduced-motion`

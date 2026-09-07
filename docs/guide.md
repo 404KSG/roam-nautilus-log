@@ -107,6 +107,25 @@ Only one CLOCK runs at a time. Switching tasks closes the previous CLOCK and ope
 next at the same instant. With **Keep Timing Line first in right sidebar** enabled,
 Clock In also opens or moves the active task to the top of Roam's sidebar.
 
+### Optional capacity energy bar
+
+Enable **Show capacity as an energy bar** to replace only the topbar's visible
+`left` word with a single layered track. The exact percentage remains beside it:
+
+- solid green is flexible reserve after all unfinished demand;
+- pale gold is unfinished planned demand that still fits today;
+- the empty track is flexible capacity that has elapsed;
+- a warning cap plus `OVER +Xm` or `NO SLOT Xm` preserves the exact existing
+  overload or fragmentation state.
+
+Every width uses the full day's flexible capacity as its denominator. Fixed events
+remain excluded, untimed work uses Default Todo Duration, and the clock contracts
+the bar once per minute without another Roam read or timer. Confirmed completion
+settles the pale layer with a short delayed transition and duration cue. A failed
+write changes nothing; external TODO/DONE or duration edits redraw silently. This
+is a time-capacity display, not a measure of physical or mental health. Full and
+compact topbars show it, while icon density yields the token to Roam search.
+
 ### Referenced task ownership
 
 - A bare `((source TODO))` keeps its TODO/DONE state in the real source block.
@@ -158,6 +177,7 @@ but ordinary planning and completion do not require it.
 | Urgent Trigger Word | Empty |
 | Google Calendar | Not connected; Primary calendar after connection |
 | Execution Layer · Advanced | Off |
+| Show capacity as an energy bar | Off |
 | Keep Timing Line first in right sidebar | On |
 | Pomodoro Threshold | 45 minutes |
 | Recent Retention | 45 minutes; `0` disables |

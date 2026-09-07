@@ -508,6 +508,8 @@ test('the optional energy bar layers live reserve over committed capacity withou
   assert.match(timingTopbar, /nautilus-log-timing__energy-reserve/);
   assert.match(timingTopbar, /timingCore\.executionProjection/);
   assert.match(timingTopbar, /timingCore\.energyBarModel/);
+  assert.match(timingTopbar, /text\.capacity\.overCue.*\+\$\{timingCore\.compactMinutes\(model\.overloadMinutes\)\}/);
+  assert.match(timingTopbar, /text\.capacity\.noSlotCue.*timingCore\.compactMinutes\(model\.unplacedMinutes\)/);
   assert.match(timingTopbar, /Math\.floor\(state\.now\.getTime\(\) \/ 60000\)/);
   assert.match(timingTopbar, /nautilus-log-timing__energy-damage/);
   assert.match(css, /\.nautilus-log-timing__energy-track\s*\{/);
