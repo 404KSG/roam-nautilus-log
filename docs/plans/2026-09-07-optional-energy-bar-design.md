@@ -78,15 +78,23 @@ only a real warning turns either metric into a status color.
 The palette is restrained and theme-safe:
 
 - reserve: soft sea green (`#58a984`);
-- committed: muted sand gold (`#c9ad67`);
+- committed: lighter sea green (`#a8cfba`, dark-theme `#8fbfa6`) so both still
+  belong to today's capacity while luminance distinguishes free from reserved;
 - elapsed track: cool low-contrast gray (`#dce1e5` in light themes);
 - ordinary percentage, planned duration, and timer: neutral gray-blue;
 - overload or no-slot: the existing warning color, a static cap, and an exact
   `OVER +Xm` or `NO SLOT Xm` cue in place of the lower planned duration.
 
-No idle pulse, continuous glow, sound, particles, XP, streak, or loss state is
-introduced. Width changes use one short transition. `prefers-reduced-motion`
-removes it.
+Track and fill layers are flat: no border, inset ring, outer shadow, boundary
+shadow, gradient, idle pulse, or continuous glow. The upper grid row is 14px so
+the 6px track and 13px tabular timer share the same optical centerline; POMO's
+smaller mode label remains secondary. The adjacent stop glyph follows that
+centerline without shrinking its button target. Width changes retain one short
+transition, and `prefers-reduced-motion` removes it.
+
+The shortcut tooltip uses nested border/fill triangles rather than a rotated
+square. The inner triangle overlaps the surface by one pixel, covering the top
+border beneath it and avoiding a visible seam at both 1× and Retina scale.
 
 ## Settings
 

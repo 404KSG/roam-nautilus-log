@@ -114,17 +114,17 @@ topbar token with a borderless two-level depth gauge. The upper row contains the
 fixed-scale track and, while CLOCK or POMO runs, its timer. The lower row keeps
 exact `% left` on the left and unfinished planned duration on the right:
 
-- soft sea green is flexible reserve after all unfinished demand;
-- muted sand gold is unfinished planned demand that still fits today;
-- the cool-gray empty track is flexible capacity that has elapsed;
+- deeper sea green is flexible reserve after all unfinished demand;
+- lighter sea green is unfinished planned demand reserved within today;
+- the flat cool-gray track is flexible capacity that has elapsed;
 - a warning cap plus `OVER +Xm` or `NO SLOT Xm` preserves the exact existing
   overload or fragmentation state.
 
 Every width uses the full day's flexible capacity as its denominator. Fixed events
 remain excluded, untimed work uses Default Todo Duration, and the clock contracts
 the bar once per minute without another Roam read or timer. Confirmed completion
-settles the pale layer with a short delayed transition and duration cue. A failed
-write changes nothing; external TODO/DONE or duration edits redraw silently. This
+settles the pale-green layer with a short delayed transition and duration cue. A
+failed write changes nothing; external TODO/DONE or duration edits redraw silently. This
 is a time-capacity display, not a measure of physical or mental health. In full
 density the gauge itself is the clickable trigger, so the leading Nautilus icon
 and divider disappear. Missing capacity data or constrained space restores only

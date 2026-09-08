@@ -12,9 +12,12 @@
   yields to Roam search at icon density, and honors dark and reduced-motion
   themes. Its borderless two-level depth gauge uses a fixed 136×6px track above
   exact `% left` and unfinished planned duration; CLOCK/POMO timing appears to
-  the track's right without changing its scale. The full gauge replaces the
-  leading icon, while missing data or constrained space restores the 30px icon
-  fallback. Existing `left` text remains unchanged while the option is off.
+  the track's right without changing its scale. The larger timer shares the
+  track's centerline, planned demand is a lighter green rather than warning-like
+  gold, and the flat track has no outline or shadow. The shortcut tooltip uses
+  a seam-free two-layer pointer. The full gauge replaces the leading icon,
+  while missing data or constrained space restores the 30px icon fallback.
+  Existing `left` text remains unchanged while the option is off.
 - Optional, read-only Google Calendar sync now imports timed busy events into
   the exact date and Nautilus Plan represented by the clicked chart. The new
   control uses Blueprint's native Calendar glyph, contacts Google only from a

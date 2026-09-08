@@ -393,7 +393,10 @@ test('the topbar exposes a stable hover tooltip for its modifier-click shortcuts
   assert.match(css, /\.nautilus-log-timing__shortcut-tooltip\s*\{[^}]*background:\s*var\(--nl-shortcut-tooltip-bg\);[^}]*display:\s*grid;[^}]*font-size:\s*12px;[^}]*padding:\s*7px 9px;/s);
   assert.match(css, /\.nautilus-log-timing__shortcut-tooltip-value\.is-positive\s*\{[^}]*color:\s*var\(--nautilus-log-positive\);/s);
   assert.match(css, /\.nautilus-log-timing__shortcut-tooltip-value\.is-warning\s*\{[^}]*color:\s*var\(--nautilus-log-warning\);/s);
-  assert.match(css, /\.nautilus-log-timing__shortcut-tooltip::before\s*\{[^}]*transform:\s*rotate\(45deg\);/s);
+  assert.match(css, /\.nautilus-log-timing__shortcut-tooltip::before,[\s\S]*\.nautilus-log-timing__shortcut-tooltip::after\s*\{[^}]*clip-path:\s*polygon\(50% 0, 100% 100%, 0 100%\);/s);
+  assert.match(css, /\.nautilus-log-timing__shortcut-tooltip::before\s*\{[^}]*background:\s*var\(--nl-shortcut-tooltip-border\);/s);
+  assert.match(css, /\.nautilus-log-timing__shortcut-tooltip::after\s*\{[^}]*background:\s*var\(--nl-shortcut-tooltip-bg\);/s);
+  assert.doesNotMatch(css, /\.nautilus-log-timing__shortcut-tooltip::before\s*\{[^}]*rotate\(45deg\)/s);
   assert.match(css, /\.bp3-dark \.nautilus-log-timing__shortcut-tooltip/);
   assert.match(css, /\.nautilus-log-timing__trigger:hover ~ \.nautilus-log-timing__shortcut-tooltip/);
   assert.match(css, /\.nautilus-log-timing__trigger:focus-visible ~ \.nautilus-log-timing__shortcut-tooltip/);
@@ -522,10 +525,12 @@ test('the optional energy bar layers live reserve over committed capacity withou
   assert.match(timingTopbar, /plannedValue\.textContent = summary\.planned\.value/);
   assert.match(css, /\.nautilus-log-timing__trigger\.has-energy \.nautilus-log-timing__brand-icon\s*\{[^}]*display:\s*none;/s);
   assert.match(css, /\.nautilus-log-timing__trigger\.is-energy-unavailable \.nautilus-log-timing__brand-icon\s*\{[^}]*display:\s*inline-flex;/s);
-  assert.match(css, /\.nautilus-log-timing__capacity-token\.is-energy\s*\{[^}]*grid-template-columns:\s*136px max-content;[^}]*grid-template-rows:\s*9px 12px;/s);
-  assert.match(css, /\.nautilus-log-timing__energy-track\s*\{[^}]*border:\s*0;[^}]*border-radius:\s*999px;[^}]*box-sizing:\s*border-box;[^}]*height:\s*6px;[^}]*width:\s*136px;/s);
-  assert.match(css, /\.nautilus-log-timing__energy-committed\s*\{[^}]*background:\s*#c9ad67;/s);
-  assert.match(css, /\.nautilus-log-timing__energy-reserve\s*\{[^}]*background:\s*#58a984;/s);
+  assert.match(css, /\.nautilus-log-timing__capacity-token\.is-energy\s*\{[^}]*grid-template-columns:\s*136px max-content;[^}]*grid-template-rows:\s*14px 12px;[^}]*height:\s*27px;/s);
+  assert.match(css, /\.nautilus-log-timing__energy-track\s*\{[^}]*border:\s*0;[^}]*border-radius:\s*999px;[^}]*box-shadow:\s*none;[^}]*box-sizing:\s*border-box;[^}]*height:\s*6px;[^}]*width:\s*136px;/s);
+  assert.match(css, /\.nautilus-log-timing__energy-timer\s*\{[^}]*align-self:\s*center;[^}]*font-size:\s*13px;[^}]*line-height:\s*14px;/s);
+  assert.match(css, /\.nautilus-log-timing__energy-committed\s*\{[^}]*background:\s*#a8cfba;[^}]*box-shadow:\s*none;/s);
+  assert.match(css, /\.nautilus-log-timing__energy-reserve\s*\{[^}]*background:\s*#58a984;[^}]*box-shadow:\s*none;/s);
+  assert.match(css, /\.nautilus-log-timing__trigger\.has-energy \+ \.nautilus-log-timing__pomodoro-close\s*\{[^}]*align-self:\s*flex-start;/s);
   assert.match(css, /\.nautilus-log-timing__capacity-token\.is-energy \.nautilus-log-timing__threads,[\s\S]*\{[^}]*display:\s*none;/);
   assert.match(css, /\.nautilus-log-timing__capacity-token\.is-positive:not\(\.is-energy\)/);
   assert.doesNotMatch(css, /\.nautilus-log-timing__energy-track::after/);

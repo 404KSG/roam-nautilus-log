@@ -1286,6 +1286,14 @@
   outline: none;
 }
 
+.nautilus-log-timing__trigger.has-energy + .nautilus-log-timing__pomodoro-close {
+  align-self: flex-start;
+}
+
+.nautilus-log-timing__trigger.has-energy + .nautilus-log-timing__pomodoro-close > .bp3-icon {
+  transform: translateY(-2px);
+}
+
 .nautilus-log-timing__shortcut-tooltip {
   --nl-shortcut-tooltip-bg: #fff;
   --nl-shortcut-tooltip-border: rgba(16, 22, 26, 0.2);
@@ -1344,17 +1352,29 @@
   color: var(--nautilus-log-warning);
 }
 
-.nautilus-log-timing__shortcut-tooltip::before {
-  background: var(--nl-shortcut-tooltip-bg);
-  border-left: 1px solid var(--nl-shortcut-tooltip-border);
-  border-top: 1px solid var(--nl-shortcut-tooltip-border);
+.nautilus-log-timing__shortcut-tooltip::before,
+.nautilus-log-timing__shortcut-tooltip::after {
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
   content: "";
-  height: 9px;
-  left: 10px;
+  pointer-events: none;
   position: absolute;
+  z-index: 1;
+}
+
+.nautilus-log-timing__shortcut-tooltip::before {
+  background: var(--nl-shortcut-tooltip-border);
+  height: 8px;
+  left: 19px;
+  top: -8px;
+  width: 14px;
+}
+
+.nautilus-log-timing__shortcut-tooltip::after {
+  background: var(--nl-shortcut-tooltip-bg);
+  height: 7px;
+  left: 20px;
   top: -6px;
-  transform: rotate(45deg);
-  width: 9px;
+  width: 12px;
 }
 
 .nautilus-log-timing__trigger:hover ~ .nautilus-log-timing__shortcut-tooltip,
@@ -1458,12 +1478,12 @@
   column-gap: 8px;
   display: grid;
   grid-template-columns: 136px max-content;
-  grid-template-rows: 9px 12px;
-  height: 23px;
+  grid-template-rows: 14px 12px;
+  height: 27px;
   line-height: 1;
   margin-left: 0;
   position: relative;
-  row-gap: 2px;
+  row-gap: 1px;
 }
 
 .nautilus-log-timing__energy-track {
@@ -1473,7 +1493,7 @@
   background: #dce1e5;
   border: 0;
   border-radius: 999px;
-  box-shadow: inset 0 0 0 1px rgba(59, 68, 79, 0.08);
+  box-shadow: none;
   box-sizing: border-box;
   display: block;
   grid-column: 1;
@@ -1495,27 +1515,27 @@
   align-self: center;
   color: #5f6f7f;
   display: inline-flex;
-  font-size: 11px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
+  font-weight: 650;
   gap: 4px;
   grid-column: 2;
   grid-row: 1;
-  line-height: 12px;
+  line-height: 14px;
   white-space: nowrap;
 }
 
 .nautilus-log-timing__capacity-token.is-energy .nautilus-log-timing__energy-timer .nautilus-log-timing__elapsed {
-  font-size: 11px;
-  line-height: 12px;
+  font-size: 13px;
+  line-height: 14px;
 }
 
 .nautilus-log-timing__capacity-token.is-energy .nautilus-log-timing__energy-timer .nautilus-log-timing__pomodoro-label {
   color: inherit;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.04em;
-  line-height: 12px;
+  line-height: 14px;
   order: -1;
 }
 
@@ -1576,14 +1596,14 @@
 }
 
 .nautilus-log-timing__energy-committed {
-  background: #c9ad67;
-  box-shadow: 1px 0 2px rgba(160, 126, 53, 0.16);
+  background: #a8cfba;
+  box-shadow: none;
   width: var(--nautilus-energy-available);
 }
 
 .nautilus-log-timing__energy-reserve {
   background: #58a984;
-  box-shadow: 1px 0 2px rgba(47, 126, 91, 0.16);
+  box-shadow: none;
   width: var(--nautilus-energy-reserve);
 }
 
@@ -1607,7 +1627,7 @@
 }
 
 .nautilus-log-timing__energy-damage {
-  color: #9b762d;
+  color: #4f8f70;
   font-size: 10px;
   font-weight: 700;
   line-height: 10px;
@@ -2204,13 +2224,19 @@ button.nautilus-log-timing__plan-heading:focus-visible {
 .roam-app.rm-dark-theme .nautilus-log-timing__energy-track,
 .dark .nautilus-log-timing__energy-track {
   background: rgba(220, 226, 232, 0.13);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+
+.bp3-dark .nautilus-log-timing__energy-committed,
+.roam-app.rm-dark-theme .nautilus-log-timing__energy-committed,
+.dark .nautilus-log-timing__energy-committed {
+  background: #8fbfa6;
 }
 
 .bp3-dark .nautilus-log-timing__energy-damage,
 .roam-app.rm-dark-theme .nautilus-log-timing__energy-damage,
 .dark .nautilus-log-timing__energy-damage {
-  color: #e0c36f;
+  color: #9ac9b0;
 }
 
 .bp3-dark .nautilus-log-timing__capacity,
