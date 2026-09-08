@@ -87,9 +87,10 @@ planning. The compact topbar panel provides:
 Only one task CLOCK runs at a time. CLOCK takes priority over POMO, and can keep
 the active task at the top of Roam's right sidebar. An additional default-off
 **Show capacity as an energy bar** setting can replace the ordinary topbar token
-with a two-level time-capacity gauge: one layered track above exact `% left` and
-unfinished planned duration, with CLOCK/POMO timing to its right. The Execution
-Layer defaults to off, so estimate-only planning stays light.
+with a two-level time-capacity gauge: one layered track above a right-aligned
+`% left · planned duration` summary. The two rows fold around the Roam topbar
+centerline, where CLOCK/POMO timing remains centered to the track's right. The
+Execution Layer defaults to off, so estimate-only planning stays light.
 
 See the [user guide](./docs/guide.md) for settings, commands, syntax, history
 rules, and safety boundaries.

@@ -59,13 +59,14 @@ projection.
 ## Interface
 
 Full density becomes one compact two-level instrument. The upper-left row is a
-continuous 136×6px depth-gauge capsule. The lower row aligns `70% left` at its
-left edge and the unfinished duration, such as `3h20m planned`, at its right
-edge. CLOCK or POMO elapsed time occupies a separate upper-right cell, so the
-track never shrinks or changes scale when timing starts. The previous percentage
-to the right of the track is removed. CLOCK uses the timer alone; POMO keeps a
-small `POMO` mode label beside it. Thread count stays in the accessible summary
-and popover rather than competing with time workload in the topbar.
+continuous 136×6px depth-gauge capsule. The lower row becomes one quiet,
+right-aligned sentence, such as `70% left · 3h20m planned`, whose right edge
+matches the track. CLOCK or POMO elapsed time occupies a separate right cell
+that spans both rows and centers on the Roam topbar axis, so the track never
+shrinks or changes scale when timing starts. The previous percentage to the
+right of the track is removed. CLOCK uses the timer alone; POMO keeps a small
+`POMO` mode label beside it. Thread count stays in the accessible summary and
+popover rather than competing with time workload in the topbar.
 
 The Nautilus icon and divider dot disappear while the complete energy
 instrument has authoritative capacity data. The entire instrument remains the
@@ -86,11 +87,13 @@ The palette is restrained and theme-safe:
   `OVER +Xm` or `NO SLOT Xm` cue in place of the lower planned duration.
 
 Track and fill layers are flat: no border, inset ring, outer shadow, boundary
-shadow, gradient, idle pulse, or continuous glow. The upper grid row is 14px so
-the 6px track and 13px tabular timer share the same optical centerline; POMO's
-smaller mode label remains secondary. The adjacent stop glyph follows that
-centerline without shrinking its button target. Width changes retain one short
-transition, and `prefers-reduced-motion` removes it.
+shadow, gradient, idle pulse, or continuous glow. Two equal 14px rows place the
+track center 7px above the Roam topbar axis and the lower summary center 7px
+below it. The 13px tabular timer spans both rows and centers directly on that
+axis; POMO's smaller mode label remains secondary, and its adjacent stop glyph
+uses the same axis without shrinking its button target. The lower values and
+labels read as one right-aligned phrase separated by a quiet middle dot. Width
+changes retain one short transition, and `prefers-reduced-motion` removes it.
 
 The shortcut tooltip uses nested border/fill triangles rather than a rotated
 square. The inner triangle overlaps the surface by one pixel, covering the top

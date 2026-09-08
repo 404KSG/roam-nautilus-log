@@ -512,6 +512,7 @@ test('the optional energy bar layers live reserve over committed capacity withou
   assert.match(timingTopbar, /energyTimer\.append\(\.\.\.nodes\)/);
   assert.match(timingTopbar, /\.\.\.\(!energy \? nodes : \[\]\)/);
   assert.match(timingTopbar, /nautilus-log-timing__energy-bottom/);
+  assert.match(timingTopbar, /element\(\s*'span',\s*'nautilus-log-timing__energy-summary-separator',\s*'·',\s*\)/);
   assert.match(timingTopbar, /nautilus-log-timing__energy-planned-value/);
   assert.match(timingTopbar, /timingCore\.executionProjection/);
   assert.match(timingTopbar, /timingCore\.energyBarModel/);
@@ -525,12 +526,14 @@ test('the optional energy bar layers live reserve over committed capacity withou
   assert.match(timingTopbar, /plannedValue\.textContent = summary\.planned\.value/);
   assert.match(css, /\.nautilus-log-timing__trigger\.has-energy \.nautilus-log-timing__brand-icon\s*\{[^}]*display:\s*none;/s);
   assert.match(css, /\.nautilus-log-timing__trigger\.is-energy-unavailable \.nautilus-log-timing__brand-icon\s*\{[^}]*display:\s*inline-flex;/s);
-  assert.match(css, /\.nautilus-log-timing__capacity-token\.is-energy\s*\{[^}]*grid-template-columns:\s*136px max-content;[^}]*grid-template-rows:\s*14px 12px;[^}]*height:\s*27px;/s);
+  assert.match(css, /\.nautilus-log-timing__capacity-token\.is-energy\s*\{[^}]*grid-template-columns:\s*136px max-content;[^}]*grid-template-rows:\s*14px 14px;[^}]*height:\s*28px;[^}]*row-gap:\s*0;/s);
   assert.match(css, /\.nautilus-log-timing__energy-track\s*\{[^}]*border:\s*0;[^}]*border-radius:\s*999px;[^}]*box-shadow:\s*none;[^}]*box-sizing:\s*border-box;[^}]*height:\s*6px;[^}]*width:\s*136px;/s);
-  assert.match(css, /\.nautilus-log-timing__energy-timer\s*\{[^}]*align-self:\s*center;[^}]*font-size:\s*13px;[^}]*line-height:\s*14px;/s);
+  assert.match(css, /\.nautilus-log-timing__energy-timer\s*\{[^}]*align-self:\s*center;[^}]*font-size:\s*13px;[^}]*grid-row:\s*1 \/ 3;[^}]*line-height:\s*14px;/s);
   assert.match(css, /\.nautilus-log-timing__energy-committed\s*\{[^}]*background:\s*#a8cfba;[^}]*box-shadow:\s*none;/s);
   assert.match(css, /\.nautilus-log-timing__energy-reserve\s*\{[^}]*background:\s*#58a984;[^}]*box-shadow:\s*none;/s);
-  assert.match(css, /\.nautilus-log-timing__trigger\.has-energy \+ \.nautilus-log-timing__pomodoro-close\s*\{[^}]*align-self:\s*flex-start;/s);
+  assert.match(css, /\.nautilus-log-timing__energy-bottom\s*\{[^}]*align-self:\s*center;[^}]*gap:\s*4px;[^}]*justify-content:\s*flex-end;[^}]*text-align:\s*right;/s);
+  assert.match(css, /\.nautilus-log-timing__energy-summary-separator\s*\{[^}]*color:\s*#9aa4ae;/s);
+  assert.doesNotMatch(css, /\.nautilus-log-timing__trigger\.has-energy \+ \.nautilus-log-timing__pomodoro-close/);
   assert.match(css, /\.nautilus-log-timing__capacity-token\.is-energy \.nautilus-log-timing__threads,[\s\S]*\{[^}]*display:\s*none;/);
   assert.match(css, /\.nautilus-log-timing__capacity-token\.is-positive:not\(\.is-energy\)/);
   assert.doesNotMatch(css, /\.nautilus-log-timing__energy-track::after/);

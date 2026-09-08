@@ -110,9 +110,11 @@ Clock In also opens or moves the active task to the top of Roam's sidebar.
 ### Optional capacity energy bar
 
 Enable **Show capacity as an energy bar** to replace the ordinary one-line
-topbar token with a borderless two-level depth gauge. The upper row contains the
-fixed-scale track and, while CLOCK or POMO runs, its timer. The lower row keeps
-exact `% left` on the left and unfinished planned duration on the right:
+topbar token with a borderless two-level depth gauge. The fixed-scale track sits
+above the topbar centerline, while the lower row is one right-aligned phrase such
+as `42% left · 3h20m planned`. The two rows fold symmetrically around the
+centerline. While CLOCK or POMO runs, its timer and stop control remain centered
+on that line instead of aligning to the track:
 
 - deeper sea green is flexible reserve after all unfinished demand;
 - lighter sea green is unfinished planned demand reserved within today;

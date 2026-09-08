@@ -171,8 +171,14 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       energyDamage.hidden = true;
       energyDamage.setAttribute('aria-hidden', 'true');
       energyPlanned.append(energyDamage);
+      const energySummarySeparator = element(
+        'span',
+        'nautilus-log-timing__energy-summary-separator',
+        '·',
+      );
+      energySummarySeparator.setAttribute('aria-hidden', 'true');
       const energyBottom = element('span', 'nautilus-log-timing__energy-bottom');
-      energyBottom.append(energyLeft, energyPlanned);
+      energyBottom.append(energyLeft, energySummarySeparator, energyPlanned);
       capacity.append(energyTrack, energyTimer, energyBottom);
     } else {
       capacity.append(capacityValue, capacityLabel);
