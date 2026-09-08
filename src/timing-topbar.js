@@ -144,8 +144,11 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
 
   const triggerNodes = (...nodes) => {
     const capacity = element('span', 'nautilus-log-timing__capacity-token');
+    const capacityValue = element('span', 'nautilus-log-timing__capacity-value');
+    const capacityLabel = element('span', 'nautilus-log-timing__capacity-label');
+    const energy = energyBarEnabled();
     capacity.hidden = true;
-    if (energyBarEnabled()) {
+    if (energy) {
       const energyTrack = element('span', 'nautilus-log-timing__energy-track');
       energyTrack.hidden = true;
       energyTrack.setAttribute('aria-hidden', 'true');
@@ -154,26 +157,31 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
         element('span', 'nautilus-log-timing__energy-reserve'),
         element('span', 'nautilus-log-timing__energy-warning'),
       );
+      const energyTimer = element('span', 'nautilus-log-timing__energy-timer');
+      energyTimer.hidden = nodes.length === 0;
+      energyTimer.append(...nodes);
+      const energyLeft = element('span', 'nautilus-log-timing__energy-left');
+      energyLeft.append(capacityValue, capacityLabel);
+      const energyPlanned = element('span', 'nautilus-log-timing__energy-planned');
+      energyPlanned.append(
+        element('span', 'nautilus-log-timing__energy-planned-value'),
+        element('span', 'nautilus-log-timing__energy-planned-label'),
+      );
       const energyDamage = element('span', 'nautilus-log-timing__energy-damage');
       energyDamage.hidden = true;
       energyDamage.setAttribute('aria-hidden', 'true');
-      capacity.append(energyTrack);
-      capacity.append(
-        element('span', 'nautilus-log-timing__capacity-value'),
-        element('span', 'nautilus-log-timing__capacity-label'),
-        energyDamage,
-      );
+      energyPlanned.append(energyDamage);
+      const energyBottom = element('span', 'nautilus-log-timing__energy-bottom');
+      energyBottom.append(energyLeft, energyPlanned);
+      capacity.append(energyTrack, energyTimer, energyBottom);
     } else {
-      capacity.append(
-        element('span', 'nautilus-log-timing__capacity-value'),
-        element('span', 'nautilus-log-timing__capacity-label'),
-      );
+      capacity.append(capacityValue, capacityLabel);
     }
     const capacitySeparator = triggerSeparator('capacity');
     capacitySeparator.hidden = true;
     return [
       brandIcon(),
-      ...nodes,
+      ...(!energy ? nodes : []),
       capacitySeparator,
       capacity,
     ];
@@ -185,6 +193,8 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     const separator = trigger.querySelector('.nautilus-log-timing__capacity-separator');
     const capacity = trigger.querySelector('.nautilus-log-timing__capacity-token');
     if (!summary || !execution || !separator || !capacity) {
+      trigger.classList.remove('has-energy');
+      trigger.classList.toggle('is-energy-unavailable', energyBarEnabled());
       if (separator) separator.hidden = true;
       if (capacity) capacity.hidden = true;
       trigger.setAttribute('aria-label', ariaLabel);
@@ -193,8 +203,12 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     const text = ui();
     const energy = energyBarEnabled();
     const energyTrack = capacity.querySelector('.nautilus-log-timing__energy-track');
-    const label = capacity.querySelector('.nautilus-log-timing__capacity-label');
+    const planned = capacity.querySelector('.nautilus-log-timing__energy-planned');
+    const plannedValue = capacity.querySelector('.nautilus-log-timing__energy-planned-value');
+    const plannedLabel = capacity.querySelector('.nautilus-log-timing__energy-planned-label');
     const summaryText = `${summary.left.value} ${summary.left.label} · ${summary.status.value} ${summary.status.label} · ${summary.planned.value} ${summary.planned.label}`;
+    trigger.classList.remove('is-energy-unavailable');
+    trigger.classList.toggle('has-energy', energy);
     separator.hidden = energy;
     capacity.hidden = false;
     capacity.classList.toggle('is-energy', energy);
@@ -203,19 +217,23 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     capacity.classList.toggle('is-warning', summary.left.tone === 'warning');
     capacity.querySelector('.nautilus-log-timing__capacity-value').textContent = summary.left.value;
     capacity.querySelector('.nautilus-log-timing__capacity-label').textContent = summary.left.label;
-    label.hidden = energy;
     if (energyTrack) energyTrack.hidden = !energy;
     let accessibleSummary = summaryText;
-    if (energy && energyTrack) {
+    if (energy && energyTrack && planned && plannedValue && plannedLabel) {
       const model = timingCore.energyBarModel(execution);
       energyTrack.style.setProperty('--nautilus-energy-available', `${model.availablePercent}%`);
       energyTrack.style.setProperty('--nautilus-energy-reserve', `${model.reservePercent}%`);
       energyTrack.classList.toggle('is-warning', model.warning);
       capacity.classList.toggle('is-status-cue', model.warning);
+      planned.classList.toggle('is-warning', model.warning);
+      plannedValue.textContent = summary.planned.value;
+      plannedLabel.textContent = summary.planned.label;
       if (model.overloadMinutes > 0) {
-        capacity.querySelector('.nautilus-log-timing__capacity-value').textContent = `${text.capacity.overCue} +${timingCore.compactMinutes(model.overloadMinutes)}`;
+        plannedValue.textContent = `${text.capacity.overCue} +${timingCore.compactMinutes(model.overloadMinutes)}`;
+        plannedLabel.textContent = '';
       } else if (model.unplacedMinutes > 0) {
-        capacity.querySelector('.nautilus-log-timing__capacity-value').textContent = `${text.capacity.noSlotCue} ${timingCore.compactMinutes(model.unplacedMinutes)}`;
+        plannedValue.textContent = `${text.capacity.noSlotCue} ${timingCore.compactMinutes(model.unplacedMinutes)}`;
+        plannedLabel.textContent = '';
       }
       accessibleSummary = `${text.capacity.energy}: ${timingCore.compactMinutes(model.reserveMinutes)} ${text.capacity.reserve}, ${timingCore.compactMinutes(model.committedMinutes)} ${text.capacity.committed}, ${timingCore.compactMinutes(model.elapsedMinutes)} ${text.capacity.elapsed}; ${summaryText}`;
     }

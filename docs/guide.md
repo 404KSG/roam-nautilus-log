@@ -109,9 +109,10 @@ Clock In also opens or moves the active task to the top of Roam's sidebar.
 
 ### Optional capacity energy bar
 
-Enable **Show capacity as an energy bar** to replace only the topbar's visible
-`left` word with a single borderless depth-gauge capsule. The exact percentage
-remains beside it in a neutral color unless there is a warning:
+Enable **Show capacity as an energy bar** to replace the ordinary one-line
+topbar token with a borderless two-level depth gauge. The upper row contains the
+fixed-scale track and, while CLOCK or POMO runs, its timer. The lower row keeps
+exact `% left` on the left and unfinished planned duration on the right:
 
 - soft sea green is flexible reserve after all unfinished demand;
 - muted sand gold is unfinished planned demand that still fits today;
@@ -124,9 +125,10 @@ remain excluded, untimed work uses Default Todo Duration, and the clock contract
 the bar once per minute without another Roam read or timer. Confirmed completion
 settles the pale layer with a short delayed transition and duration cue. A failed
 write changes nothing; external TODO/DONE or duration edits redraw silently. This
-is a time-capacity display, not a measure of physical or mental health. The full
-topbar shows it; constrained space switches directly to the leading Nautilus
-icon so no detached bar or status text remains beside Roam search.
+is a time-capacity display, not a measure of physical or mental health. In full
+density the gauge itself is the clickable trigger, so the leading Nautilus icon
+and divider disappear. Missing capacity data or constrained space restores only
+the icon, leaving no detached bar or status text beside Roam search.
 
 ### Referenced task ownership
 

@@ -58,26 +58,31 @@ projection.
 
 ## Interface
 
-Full density shows one continuous 96×8px depth-gauge capsule. Its vertical
-weight follows the visible glyph inside the preceding Nautilus icon—not the
-icon's 18px layout box. The capsule has no metallic border, bevel, internal
-quarter ticks, or divider dot between it and the Nautilus mark. Those details
-do not encode data and made the control look like a legacy system progress bar.
-The exact existing percentage follows the track in neutral text; only a real
-warning turns the value into a status color. The word `left` is omitted in
-energy mode because the layered bar carries that role; the tooltip and
-accessible name retain the full semantic summary. When the full control no
-longer fits, the topbar switches directly to the leading Nautilus icon: it never
-leaves an orphaned bar, percentage, timer, or overload label beside Roam search.
+Full density becomes one compact two-level instrument. The upper-left row is a
+continuous 136×6px depth-gauge capsule. The lower row aligns `70% left` at its
+left edge and the unfinished duration, such as `3h20m planned`, at its right
+edge. CLOCK or POMO elapsed time occupies a separate upper-right cell, so the
+track never shrinks or changes scale when timing starts. The previous percentage
+to the right of the track is removed. CLOCK uses the timer alone; POMO keeps a
+small `POMO` mode label beside it. Thread count stays in the accessible summary
+and popover rather than competing with time workload in the topbar.
+
+The Nautilus icon and divider dot disappear while the complete energy
+instrument has authoritative capacity data. The entire instrument remains the
+same clickable trigger. If data is unavailable, or responsive density yields to
+Roam search, the Nautilus icon returns as the safe 30px navigation affordance.
+The capsule has no metallic border, bevel, internal quarter ticks, or idle
+animation. Its lower labels separate stronger tabular values from quieter words;
+only a real warning turns either metric into a status color.
 
 The palette is restrained and theme-safe:
 
 - reserve: soft sea green (`#58a984`);
 - committed: muted sand gold (`#c9ad67`);
 - elapsed track: cool low-contrast gray (`#dce1e5` in light themes);
-- ordinary percentage: neutral gray-blue rather than a duplicate green signal;
+- ordinary percentage, planned duration, and timer: neutral gray-blue;
 - overload or no-slot: the existing warning color, a static cap, and an exact
-  `OVER +Xm` or `NO SLOT Xm` cue outside the track.
+  `OVER +Xm` or `NO SLOT Xm` cue in place of the lower planned duration.
 
 No idle pulse, continuous glow, sound, particles, XP, streak, or loss state is
 introduced. Width changes use one short transition. `prefers-reduced-motion`
@@ -99,8 +104,9 @@ Internal key: `energy-bar-enabled`.
 
 ## Data and failure boundaries
 
-- Missing Primary Plan or execution data hides the capacity token exactly as
-  today; it never fabricates a full or empty bar.
+- Missing Primary Plan or execution data hides the capacity token and restores
+  the Nautilus icon; it never fabricates a full or empty bar or an invisible
+  click target.
 - A zero-capacity day renders an empty neutral track with `0%`.
 - Scheduled and overflow tasks both contribute to demand.
 - Fixed events are excluded from the flexible-capacity denominator by the
@@ -127,8 +133,9 @@ Internal key: `energy-bar-enabled`.
 
 1. A new or upgraded install stores `energy-bar-enabled=false` when missing.
 2. With the switch off, the current textual topbar contract remains unchanged.
-3. With the switch on, the bar replaces visible `left` text and keeps the exact
-   percentage, tooltip, and accessible summary.
+3. With the switch on, full density shows the fixed-scale bar above exact
+   `percent left` and unfinished planned duration; CLOCK/POMO timing appears to
+   the track's right without resizing it.
 4. Reserve, committed, and elapsed widths use one full-day flexible-capacity
    denominator and remain clamped from 0–100%.
 5. Time passage contracts current capacity at minute resolution without any

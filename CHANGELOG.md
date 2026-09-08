@@ -10,9 +10,11 @@
   completion settles the planned layer with a short delayed cue. It reuses the
   current Primary Plan and timer state, adds no graph query or polling source,
   yields to Roam search at icon density, and honors dark and reduced-motion
-  themes. Its borderless 96×8px depth-gauge capsule uses a soft sea-green,
-  sand-gold, and cool-gray palette with a neutral ordinary percentage. Existing
-  `left` text remains unchanged while the option is off.
+  themes. Its borderless two-level depth gauge uses a fixed 136×6px track above
+  exact `% left` and unfinished planned duration; CLOCK/POMO timing appears to
+  the track's right without changing its scale. The full gauge replaces the
+  leading icon, while missing data or constrained space restores the 30px icon
+  fallback. Existing `left` text remains unchanged while the option is off.
 - Optional, read-only Google Calendar sync now imports timed busy events into
   the exact date and Nautilus Plan represented by the clicked chart. The new
   control uses Blueprint's native Calendar glyph, contacts Google only from a
