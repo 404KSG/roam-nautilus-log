@@ -443,10 +443,12 @@ test('standalone POMO has an independent topbar start/stop contract', () => {
   assert.match(timingRuntime, /standalone-pomodoro-state/);
   assert.match(timingRuntime, /startStandalonePomodoro/);
   assert.match(timingRuntime, /stopStandalonePomodoro/);
-  assert.match(timingTopbar, /!state\.activeWork\?\.focused && !state\.standalonePomodoro/);
-  assert.match(timingTopbar, /iconButton\('stopwatch', text\.actions\.startPomodoro/);
-  assert.match(timingTopbar, /runtime\.startStandalonePomodoro\(\)/);
-  assert.match(timingTopbar, /runtime\.stopStandalonePomodoro\(\)/);
+  assert.match(timingTopbar, /if \(!state\.activeWork\?\.focused\)/);
+  assert.match(timingTopbar, /const standalonePomodoroRunning = Boolean\(state\.standalonePomodoro\)/);
+  assert.match(timingTopbar, /standalonePomodoroRunning \? 'small-cross' : 'stopwatch'/);
+  assert.match(timingTopbar, /standalonePomodoroRunning \? text\.actions\.stopPomodoro : text\.actions\.startPomodoro/);
+  assert.match(timingTopbar, /standalonePomodoroRunning[\s\S]*runtime\.stopStandalonePomodoro\(\)[\s\S]*runtime\.startStandalonePomodoro\(\)/);
+  assert.match(timingTopbar, /nautilus-log-timing__pomodoro-action/);
   assert.match(timingTopbar, /pomoCloseButton\.addEventListener\('click',[\s\S]*event\.stopPropagation\(\)/);
   assert.match(timingTopbar, /pomoCloseButton\.append\(icon\('small-cross'\)\)/);
   assert.match(timingTopbar, /element\('span', 'nautilus-log-timing__pomodoro-label', 'POMO'\)/);
@@ -455,6 +457,7 @@ test('standalone POMO has an independent topbar start/stop contract', () => {
   assert.match(css, /\.nautilus-log-timing__trigger\.is-overdue \.nautilus-log-timing__pomodoro-label/);
   assert.match(css, /\.nautilus-log-timing__pomodoro-close\s*\{[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*box-shadow:\s*none;/s);
   assert.match(css, /\.nautilus-log-timing__pomodoro-close\[hidden\]\s*\{[^}]*display:\s*none;/s);
+  assert.match(css, /\.nautilus-log-timing__pomodoro-action\s*\{[^}]*margin-left:\s*auto;/s);
   const triggerStart = timingTopbar.indexOf('const renderTrigger');
   const triggerEnd = timingTopbar.indexOf('const ensureMounted', triggerStart);
   assert.doesNotMatch(timingTopbar.slice(triggerStart, triggerEnd), /renderPopover/);

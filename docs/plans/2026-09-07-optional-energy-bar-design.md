@@ -127,6 +127,11 @@ Internal key: `energy-bar-enabled`.
   redraw from authoritative plan state.
 - A failed completion leaves the committed layer and percentage unchanged after
   the existing error recovery.
+- Completing a task closes only that task's running CLOCK. A different focused
+  task and its continuous Pomodoro state remain untouched.
+- Icon-only density may hide the adjacent POMO close glyph, but an active
+  standalone POMO always retains an accessible Stop POMO action in the panel
+  header.
 
 ## Files
 
@@ -153,8 +158,11 @@ Internal key: `energy-bar-enabled`.
    Roam read or a new timer.
 6. Confirmed task completion, external graph changes, overflow, fragmentation,
    and fixed events reuse authoritative capacity semantics.
-7. Full density renders the bar; constrained space shows only the leading icon.
-8. Light, dark, keyboard, and reduced-motion states remain legible.
-9. No persistence beyond the boolean preference and no task schema are added.
-10. Production build, full tests, bundle checks, source push, and a new Roam
+7. Full density renders the bar; constrained space shows only the leading icon,
+   while an active standalone POMO remains stoppable from the panel header.
+8. Completing a non-focused task never stops the focused CLOCK or resets its
+   Pomodoro cycle.
+9. Light, dark, keyboard, and reduced-motion states remain legible.
+10. No persistence beyond the boolean preference and no task schema are added.
+11. Production build, full tests, bundle checks, source push, and a new Roam
     Depot Draft PR all succeed.

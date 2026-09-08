@@ -857,6 +857,58 @@ test('runtime serializes close-before-switch and close-before-complete', async (
   runtime.destroy();
 });
 
+test('completing another task leaves the focused CLOCK and Pomodoro running', async (t) => {
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#non-focused-completion-${Date.now()}`;
+  const extension = await import(moduleUrl);
+  const { roam, blocks } = graphMock();
+  const settings = new Map([
+    ['todo-duration', 15],
+    ['workday-start', 5],
+    ['workday-end', 21],
+    ['pomodoro-minutes', 45],
+    ['timing-line-sidebar', false],
+    ['recent-retention-minutes', 45],
+  ]);
+  let current = new Date(2026, 7, 22, 10, 0);
+  global.window = {
+    roamAlphaAPI: roam,
+    setInterval: () => 99,
+    clearInterval: () => {},
+    setTimeout,
+    clearTimeout,
+  };
+  const extensionAPI = {
+    settings: {
+      get: (key) => settings.get(key),
+      set: async (key, value) => settings.set(key, value),
+    },
+  };
+  const runtime = extension.createTimingRuntime({ extensionAPI, now: () => current });
+  await runtime.initialize();
+  t.after(() => {
+    runtime.destroy();
+    delete global.window;
+  });
+
+  await runtime.startTask('task-a');
+  const focusedClock = [...blocks.values()].find((block) => (
+    /^CLOCK:/.test(block.string) && blocks.get(block.parentUid)?.parentUid === 'task-a'
+  ));
+  assert.ok(focusedClock);
+  const pomodoro = settings.get('actual-time-pomodoro-state');
+  assert.deepEqual(pomodoro, { startedAt: current.getTime() });
+
+  current = new Date(2026, 7, 22, 10, 5);
+  await runtime.completeTask('task-b');
+
+  assert.match(blocks.get('task-b').string, /DONE/);
+  assert.match(blocks.get(focusedClock.uid).string, /^CLOCK: \[2026-08-22 Sat 10:00\]$/);
+  assert.equal(runtime.getSnapshot().activeWork.focused?.taskUid, 'task-a');
+  assert.deepEqual(runtime.getSnapshot().pomodoro, pomodoro);
+  assert.deepEqual(settings.get('actual-time-pomodoro-state'), pomodoro);
+});
+
 test('Primary Plan location opens one deduplicated right-sidebar window without rereading the graph', async (t) => {
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#locate-sidebar-${Date.now()}`;

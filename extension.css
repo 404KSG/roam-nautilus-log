@@ -1386,7 +1386,7 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.28), 0 8px 24px rgba(0, 0, 0, 0.24);
 }
 
-.nautilus-log-timing__pomodoro-start {
+.nautilus-log-timing__pomodoro-action {
   color: #8a929f;
   flex: 0 0 auto;
   margin-left: auto;

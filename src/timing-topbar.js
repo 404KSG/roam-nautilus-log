@@ -714,16 +714,22 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     });
     headerMain.append(identity, identityDivider, tabs);
     header.append(headerMain);
-    if (!state.activeWork?.focused && !state.standalonePomodoro) {
-      const startPomodoro = iconButton('stopwatch', text.actions.startPomodoro, (event) => {
-        event.stopPropagation();
-        runAction(async () => {
-          await runtime.startStandalonePomodoro();
-          closePopover();
-        });
-      });
-      startPomodoro.classList.add('nautilus-log-timing__pomodoro-start');
-      header.append(startPomodoro);
+    if (!state.activeWork?.focused) {
+      const standalonePomodoroRunning = Boolean(state.standalonePomodoro);
+      const pomodoroAction = iconButton(
+        standalonePomodoroRunning ? 'small-cross' : 'stopwatch',
+        standalonePomodoroRunning ? text.actions.stopPomodoro : text.actions.startPomodoro,
+        (event) => {
+          event.stopPropagation();
+          runAction(async () => {
+            if (standalonePomodoroRunning) await runtime.stopStandalonePomodoro();
+            else await runtime.startStandalonePomodoro();
+            closePopover();
+          });
+        },
+      );
+      pomodoroAction.classList.add('nautilus-log-timing__pomodoro-action');
+      header.append(pomodoroAction);
     }
     popover.append(header);
 

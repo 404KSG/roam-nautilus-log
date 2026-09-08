@@ -381,9 +381,9 @@ export function createTimingRuntime({
     return run;
   };
 
-  const closeEntriesAt = async (entries, instant) => {
+  const closeEntriesAt = async (entries, instant, shouldClose = () => true) => {
     const updated = new Map();
-    for (const entry of entries.filter((candidate) => candidate.running)) {
+    for (const entry of entries.filter((candidate) => candidate.running && shouldClose(candidate))) {
       const closed = await closeClock(entry, instant);
       if (closed) updated.set(entry.clockUid, closed);
     }
@@ -394,7 +394,11 @@ export function createTimingRuntime({
   const closeDoneClocks = async (entries) => {
     const doneRunning = entries.filter((entry) => entry.running && entry.status === 'DONE');
     if (doneRunning.length === 0) return entries;
-    const updatedEntries = await closeEntriesAt(entries, now());
+    const updatedEntries = await closeEntriesAt(
+      entries,
+      now(),
+      (entry) => entry.status === 'DONE',
+    );
     if (!timingCore.chooseFocusedEntry(updatedEntries)) await setPomodoro(null);
     return updatedEntries;
   };
@@ -492,7 +496,11 @@ export function createTimingRuntime({
     const instant = now();
     const entries = snapshot.entries;
     const ownedRunning = entries.filter((entry) => entry.running && entry.taskUid === taskUid);
-    const updatedEntries = await closeEntriesAt(entries, instant);
+    const updatedEntries = await closeEntriesAt(
+      entries,
+      instant,
+      (entry) => entry.taskUid === taskUid,
+    );
     await completeTask(taskUid, task.statusOwnerUid || taskUid);
     if (ownedRunning.length > 0) await setPomodoro(null);
     return refresh({

@@ -89,6 +89,11 @@
 
 ### Fixed
 
+- Standalone POMO now exposes an accessible Stop POMO action inside the panel,
+  so it can always be ended when responsive icon-only density hides the adjacent
+  topbar close control.
+- Completing a non-focused Plan task now closes only that task's own CLOCK;
+  another focused task and its continuous Pomodoro cycle remain untouched.
 - Shorthand upgrades now recover an existing customized Nautilus template and
   renderer identity instead of creating another active template generation.
   Legacy render blocks receive the current renderer code in place, duplicate
