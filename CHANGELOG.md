@@ -11,7 +11,7 @@
   current Primary Plan and timer state, adds no graph query or polling source,
   yields to Roam search at icon density, and honors dark and reduced-motion
   themes. Its borderless two-level depth gauge uses a fixed 136×6px track above
-  a right-aligned `% left · planned duration` summary. Those rows fold evenly
+  a left-aligned `% left · planned duration` summary. Those rows fold evenly
   around the Roam topbar centerline, where the larger CLOCK/POMO timer and stop
   control remain centered without changing the track scale. Planned demand is a
   lighter green rather than warning-like gold, and the flat track has no outline

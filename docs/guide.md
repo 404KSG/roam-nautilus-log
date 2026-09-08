@@ -111,7 +111,7 @@ Clock In also opens or moves the active task to the top of Roam's sidebar.
 
 Enable **Show capacity as an energy bar** to replace the ordinary one-line
 topbar token with a borderless two-level depth gauge. The fixed-scale track sits
-above the topbar centerline, while the lower row is one right-aligned phrase such
+above the topbar centerline, while the lower row is one left-aligned phrase such
 as `42% left · 3h20m planned`. The two rows fold symmetrically around the
 centerline. While CLOCK or POMO runs, its timer and stop control remain centered
 on that line instead of aligning to the track:

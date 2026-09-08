@@ -60,7 +60,7 @@ projection.
 
 Full density becomes one compact two-level instrument. The upper-left row is a
 continuous 136×6px depth-gauge capsule. The lower row becomes one quiet,
-right-aligned sentence, such as `70% left · 3h20m planned`, whose right edge
+left-aligned sentence, such as `70% left · 3h20m planned`, whose left edge
 matches the track. CLOCK or POMO elapsed time occupies a separate right cell
 that spans both rows and centers on the Roam topbar axis, so the track never
 shrinks or changes scale when timing starts. The previous percentage to the
@@ -92,7 +92,7 @@ track center 7px above the Roam topbar axis and the lower summary center 7px
 below it. The 13px tabular timer spans both rows and centers directly on that
 axis; POMO's smaller mode label remains secondary, and its adjacent stop glyph
 uses the same axis without shrinking its button target. The lower values and
-labels read as one right-aligned phrase separated by a quiet middle dot. Width
+labels read as one left-aligned phrase separated by a quiet middle dot. Width
 changes retain one short transition, and `prefers-reduced-motion` removes it.
 
 The shortcut tooltip uses nested border/fill triangles rather than a rotated
