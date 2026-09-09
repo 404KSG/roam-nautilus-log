@@ -14,9 +14,9 @@
   a left-aligned `% left · planned duration` summary. Those rows fold evenly
   around the Roam topbar centerline, where the larger CLOCK/POMO timer and stop
   control remain centered without changing the track scale. The fully rounded
-  capsule uses the primary control-icon gray for free reserve, keeps planned
-  demand lighter green, and carries no border, shadow, decorative end structure,
-  or overload marker. Overload and no-slot warnings appear once in the exact
+  capsule uses Roam's right-side toolbar icon gray (`#5c7080`) for free reserve,
+  keeps planned demand lighter green, and carries no border, shadow, decorative
+  end structure, or overload marker. Overload and no-slot warnings appear once in the exact
   lower text. The shortcut tooltip uses a seam-free two-layer pointer. The full
   gauge replaces the leading icon, while missing data or constrained space
   restores the 30px icon fallback.

@@ -14,6 +14,7 @@
   --nautilus-log-task: #0899c8;
   --nautilus-log-task-fill: rgba(8, 153, 200, 0.28);
   --nautilus-log-control-icon: #888;
+  --nautilus-log-roam-toolbar-icon: #5c7080;
   --nautilus-log-now: #d44b4b;
   --nautilus-log-past-overlay: rgba(86, 101, 116, 0.08);
   --nautilus-log-unplanned-stripe: rgba(86, 101, 116, 0.34);
@@ -38,6 +39,7 @@
   --nautilus-log-task: #47b8df;
   --nautilus-log-task-fill: rgba(71, 184, 223, 0.32);
   --nautilus-log-control-icon: #aaa;
+  --nautilus-log-roam-toolbar-icon: #bfccd6;
   --nautilus-log-now: #ff8b78;
   --nautilus-log-past-overlay: rgba(255, 255, 255, 0.06);
   --nautilus-log-unplanned-stripe: rgba(255, 255, 255, 0.24);
@@ -1605,7 +1607,7 @@
 }
 
 .nautilus-log-timing__energy-reserve {
-  background: var(--nautilus-log-control-icon);
+  background: var(--nautilus-log-roam-toolbar-icon);
   box-shadow: none;
   width: var(--nautilus-energy-reserve);
 }

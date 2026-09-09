@@ -79,8 +79,8 @@ into a status color.
 
 The palette is restrained and theme-safe:
 
-- reserve: exactly the primary control-icon color
-  (`var(--nautilus-log-control-icon)`), including its dark-theme value;
+- reserve: exactly Roam's right-side toolbar icon gray
+  (`#5c7080` in the default light theme; `#bfccd6` in Blueprint dark);
 - committed: lighter sea green (`#a8cfba`, dark-theme `#8fbfa6`) so unfinished
   planned demand remains distinct from both neutral time states;
 - elapsed track: cool low-contrast gray (`#dce1e5` in light themes);

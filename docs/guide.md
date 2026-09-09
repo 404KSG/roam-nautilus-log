@@ -117,8 +117,8 @@ phrase such as `42% left · 3h20m planned`. The two rows fold symmetrically arou
 centerline. While CLOCK or POMO runs, its timer and stop control remain centered
 on that line instead of aligning to the track:
 
-- the same gray-blue as the primary control icons is flexible reserve after all
-  unfinished demand;
+- the same gray-blue as Roam's right-side toolbar icons is flexible reserve
+  after all unfinished demand;
 - lighter sea green is unfinished planned demand reserved within today;
 - the quieter cool-gray track is flexible capacity that has elapsed;
 - `OVER +Xm` or `NO SLOT Xm` appears once in the lower summary, using the

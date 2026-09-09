@@ -534,8 +534,10 @@ test('the optional energy bar layers live reserve over committed capacity withou
   assert.doesNotMatch(css, /\.nautilus-log-timing__capacity-token\.is-energy::(?:before|after)/);
   assert.match(css, /\.nautilus-log-timing__energy-timer\s*\{[^}]*align-self:\s*center;[^}]*font-size:\s*13px;[^}]*grid-row:\s*1 \/ 3;[^}]*line-height:\s*14px;/s);
   assert.doesNotMatch(css, /--nautilus-log-energy-reserve/);
+  assert.match(css, /:root\s*\{[^}]*--nautilus-log-roam-toolbar-icon:\s*#5c7080;/s);
+  assert.match(css, /\.bp3-dark,[^{]*\{[^}]*--nautilus-log-roam-toolbar-icon:\s*#bfccd6;/s);
   assert.match(css, /\.nautilus-log-timing__energy-committed\s*\{[^}]*background:\s*#a8cfba;[^}]*box-shadow:\s*none;/s);
-  assert.match(css, /\.nautilus-log-timing__energy-reserve\s*\{[^}]*background:\s*var\(--nautilus-log-control-icon\);[^}]*box-shadow:\s*none;/s);
+  assert.match(css, /\.nautilus-log-timing__energy-reserve\s*\{[^}]*background:\s*var\(--nautilus-log-roam-toolbar-icon\);[^}]*box-shadow:\s*none;/s);
   assert.doesNotMatch(timingTopbar, /nautilus-log-timing__energy-warning/);
   assert.doesNotMatch(css, /nautilus-log-timing__energy-warning/);
   assert.match(timingTopbar, /planned\.classList\.toggle\('is-warning', model\.warning\)/);
