@@ -524,11 +524,22 @@ export async function createGraphBlock({
   string,
   open = false,
   uid: requestedUid,
+  properties = {},
 } = {}) {
   const create = resolveMutation('create');
   if (!create) throw apiUnavailable('Roam block creation is unavailable.');
   const uid = requestedUid || generateUid();
-  await create({ location: { 'parent-uid': parentUid, order }, block: { uid, string, open } });
+  // These are Roam's documented writable block presentation fields. Keep the
+  // allowlist narrow: template cloning must not invent or silently discard API
+  // fields it cannot read back and verify.
+  const presentation = {};
+  for (const key of ['heading', 'text-align', 'children-view-type']) {
+    if (properties?.[key] !== undefined) presentation[key] = properties[key];
+  }
+  await create({
+    location: { 'parent-uid': parentUid, order },
+    block: { uid, string, open: properties?.open ?? open, ...presentation },
+  });
   return uid;
 }
 

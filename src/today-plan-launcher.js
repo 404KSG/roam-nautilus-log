@@ -18,6 +18,7 @@ export function createTodayPlanLauncher({ todayPlan, extensionAPI } = {}) {
   let destroyed = false;
   let container = null;
   let trigger = null;
+  let tooltip = null;
   let observers = [];
   let unsubscribe = null;
   let settingsListener = null;
@@ -49,6 +50,7 @@ export function createTodayPlanLauncher({ todayPlan, extensionAPI } = {}) {
       'is-checking',
       'is-blocked',
       'is-read-failed',
+      'is-partial',
       'is-creating',
     );
     trigger.disabled = status === 'creating' || status === 'checking';
@@ -69,6 +71,10 @@ export function createTodayPlanLauncher({ todayPlan, extensionAPI } = {}) {
       mode = 'blocked';
       label = labels.manual;
       trigger.classList.add('is-blocked');
+    } else if (status === 'partial') {
+      mode = 'partial';
+      label = labels.partial || labels.retryLocate;
+      trigger.classList.add('is-partial');
     } else if (status === 'read-failed') {
       mode = 'failed';
       label = labels.retry;
@@ -93,7 +99,10 @@ export function createTodayPlanLauncher({ todayPlan, extensionAPI } = {}) {
       if (textNode) textNode.textContent = label;
     }
     trigger.setAttribute('aria-label', `${label} · ${state?.pageTitle || ''}`);
-    trigger.title = `${state?.message || label} · ${state?.pageTitle || ''}`;
+    trigger.setAttribute('aria-describedby', 'nautilus-log-today-plan-tooltip');
+    // Keep native title short; full diagnostics are exposed in the linked tooltip.
+    trigger.title = label;
+    if (tooltip) tooltip.textContent = state?.message || label;
   };
 
   const runClick = (event) => {
@@ -104,9 +113,9 @@ export function createTodayPlanLauncher({ todayPlan, extensionAPI } = {}) {
       return todayPlan.locateToday({ locateMode });
     }
     if (status === 'ready-absent') return todayPlan.ensureToday({ locateMode });
-    if (status === 'read-failed' || status === 'ready-blocked') {
-      return todayPlan.discover({ authoritative: true });
-    }
+    if (status === 'ready-blocked') return todayPlan.openTemplate?.({ locateMode });
+    if (status === 'partial') return todayPlan.locateToday({ locateMode });
+    if (status === 'read-failed') return todayPlan.discover({ authoritative: true });
     return undefined;
   };
 
@@ -137,7 +146,10 @@ export function createTodayPlanLauncher({ todayPlan, extensionAPI } = {}) {
         event.stopPropagation();
         void runClick(event);
       });
-      container.append(trigger);
+      tooltip = element('span', 'nautilus-log-timing__today-plan-tooltip');
+      tooltip.id = 'nautilus-log-today-plan-tooltip';
+      tooltip.setAttribute('role', 'tooltip');
+      container.append(trigger, tooltip);
     }
     if (!container.isConnected || !topbar.contains(container)) placeAfterNavigation(topbar, container);
     renderTrigger();
@@ -230,6 +242,7 @@ export function createTodayPlanLauncher({ todayPlan, extensionAPI } = {}) {
     container?.remove();
     container = null;
     trigger = null;
+    tooltip = null;
   };
 
   return { initialize, destroy, ensureMounted };

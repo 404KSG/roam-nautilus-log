@@ -6,21 +6,25 @@
 
 - A 30px topbar control and **Nautilus Log: Create or open today’s plan** can
   create or locate today's Primary Plan without turning on the Execution Layer.
-  The click path inserts one canonical component at the end of the local-calendar
-  Daily Note from the live renderer identity and settings (custom prefix included).
-  Any legal renderer already on that page is locate-only. Custom templates with
-  extra sibling blocks or render-block descendants stay on the native `;;` path;
-  this entry does not copy or drop them, auto-create at midnight, or rewrite
-  historical notes. Execution Layer off still has this launcher, but not CLOCK
+  The click path freezes and copies the complete single managed renderer root and
+  ordinary descendant tree at the end of the local-calendar Daily Note. Every
+  copied block gets a fresh UID; internal references are remapped and external
+  references are retained. Any legal renderer already on that page is locate-only.
+  Multiple roots, unsafe template top-level siblings, dynamic/unreadable content,
+  or missing safety capabilities fail closed and offer template review; no source
+  template is changed, nothing auto-creates at midnight, and no historical note
+  is rewritten. Execution Layer off still has this launcher, but not CLOCK
   writes, a 1s ticker, or the execution popover. After a confirmed create, the
   existing capacity text / 136×6 energy bar returns and the plan opens in the
   main window. Running CLOCK/POMO remains visible when no plan exists, with a
   create action in the Plan empty-state.
-- Creation is guarded by graph-scoped Web Locks, a reserved date-specific block
-  UID, fresh reads, and frozen-date readback. Unsupported locking, unreadable
-  query results, and occupied UIDs fail closed. There is no automatic retry
-  insert; read failures offer a read-only check. Midnight or graph changes stop
-  subsequent writes, and unchanged timing ticks do not republish launcher state.
+- Creation is guarded by graph-scoped Web Locks, a reserved date-specific root
+  UID, preallocated descendant UIDs, source revalidation, an opaque
+  settings-backed operation fingerprint, and complete-tree readback. Unsupported
+  locking, unreadable results, occupied UIDs, and partial trees fail closed.
+  Partial writes remain available for inspection and are never automatically
+  supplemented. Midnight or graph changes stop subsequent writes, and unchanged
+  timing ticks do not republish launcher state.
 
 ### Fixed
 

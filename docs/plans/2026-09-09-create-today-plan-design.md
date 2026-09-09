@@ -1,5 +1,10 @@
 # One-click creation of today's Nautilus plan
 
+> **Superseded for template creation** by
+> [Full-template one-click creation](./2026-09-10-full-template-creation-design.md).
+> This document remains as historical context for the original single-root path.
+
+
 ## Decision
 
 Use the existing 30px topbar control to create or open the Primary Plan on the

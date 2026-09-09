@@ -1,6 +1,8 @@
 import {
+  freezeCanonicalTemplate,
   inspectCanonicalTemplate,
   isRightSidebarRenderContext,
+  readBlockTree,
   readExistingTemplateState,
   shouldSuppressRenderContext,
   toggleRenderComponent,
@@ -885,6 +887,8 @@ async function onload({ extensionAPI }) {
     extensionAPI,
     buildComponentString: () => generateTemplateString(extensionAPI, activeRenderStringCore),
     inspectTemplate: () => inspectCanonicalTemplate(activeRenderStringCore),
+    freezeTemplate: () => freezeCanonicalTemplate(activeRenderStringCore),
+    readTemplateTree: (uid) => readBlockTree(uid),
     trackingEnabled: () => extensionAPI.settings.get("actual-time-tracking") === true,
     readTrackingSnapshot: () => (
       typeof timingRuntime?.getSnapshot === "function" ? timingRuntime.getSnapshot() : null
@@ -967,6 +971,8 @@ export {
   createTodayPlanLauncher,
   createTodayPlanCommands,
   inspectCanonicalTemplate,
+  freezeCanonicalTemplate,
+  readBlockTree,
   createPlanWatchBridge,
   createPlanTidy,
   createTidyCommands,

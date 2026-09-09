@@ -33,8 +33,8 @@ fill suitable gaps from the current moment. Tasks that cannot fit appear in
    use the ShortHand shown in that Depot pull request.
 2. Click **+ Create today's plan** in the topbar, or run
    **Nautilus Log: Create or open today’s plan**. It targets today's Daily Note
-   even when you are viewing another page. To insert a full custom template,
-   open the target Daily Note, type `;;`, and choose **Nautilus Log**.
+   even when you are viewing another page and copies the complete managed
+   Nautilus template tree, including ordinary nested children.
 3. Add fixed events and TODOs as direct children.
 4. Order the tasks and give each one a rough duration.
 
@@ -81,13 +81,15 @@ authorization, scopes, merge rules, and [privacy contract](./PRIVACY.md).
 
 A 30px topbar control and one command can create or locate today's Primary Plan
 even while the Execution Layer is off. That launcher does not start CLOCK
-writes, a 1s ticker, or the execution popover. One-click insert writes a single
-canonical component from live settings (custom prefix included). It does not
-copy yesterday, extra template siblings, or render-block descendants; use `;;`
-for those custom templates. Existing legal Nautilus renderers on today's Daily
-Note, including empty or all-DONE plans, are locate-only. Creation requires a
-confirmed graph identity and Web Locks; unsupported environments keep the native
-`;;` fallback. Failed reads offer a read-only check, never an automatic insert.
+writes, a 1s ticker, or the execution popover. One-click insert freezes and
+copies the complete managed renderer root and ordinary descendant tree with
+fresh UIDs; internal block references are remapped and external references stay
+intact. It does not copy yesterday or alter the source template. Ambiguous
+multiple roots, unsafe top-level template siblings, or unreadable dynamic
+content fail closed and let you open the template to review it. Existing legal
+Nautilus renderers on today's Daily Note, including empty or all-DONE plans,
+are locate-only. Creation requires a confirmed graph identity and Web Locks;
+failed reads offer a read-only check, never an automatic insert.
 
 Enable **Execution Layer · Advanced** in Settings when you want more than visual
 planning. The compact topbar panel provides:

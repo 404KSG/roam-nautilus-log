@@ -50,6 +50,7 @@ function createGraph({ title = 'September 9th, 2026' } = {}) {
   const defaultCreateBlock = async ({ location, block }) => {
     const parentUid = location['parent-uid'];
     blocks.set(block.uid, {
+      ...block,
       uid: block.uid,
       string: block.string,
       open: block.open,
@@ -337,6 +338,83 @@ test('standard template writes one last-child generateTemplateString value', asy
   session.destroy();
 });
 
+test('frozen anonymous template clones its complete tree, formatting, and internal references', async (t) => {
+  const extension = await loadExtension();
+  const graph = createGraph();
+  graph.addPage('September 9th, 2026', 'day');
+  graph.addBlock({ uid: 'weekly-tag', string: '[[Weekly]]', parentUid: 'day', order: 0 });
+  graph.queueUids('child-a', 'child-a-1', 'child-b');
+  installHost(graph.roam);
+  t.after(() => { delete global.window; delete global.navigator; delete global.localStorage; });
+  const source = {
+    uid: 'source-root', string: `{{[[roam/render]]:((roam-render-Nautilus-Log-cljs)) 22 15 5 "" 21}}`,
+    properties: { open: false, heading: 2, 'text-align': 'center', 'children-view-type': 'bullet' },
+    children: [
+      { uid: 'source-a', string: '08:00-09:00 fixed ((outside))', properties: { open: true }, children: [
+        { uid: 'source-a-1', string: '{{[[TODO]]}} nested ((source-a))', properties: { heading: 1 }, children: [] },
+      ] },
+      { uid: 'source-b', string: '--- ((source-a-1))', properties: { 'text-align': 'right' }, children: [] },
+    ],
+  };
+  const treeFromGraph = (uid) => {
+    const block = graph.blocks.get(uid);
+    if (!block) return null;
+    const properties = {};
+    for (const key of ['open', 'heading', 'text-align', 'children-view-type']) {
+      if (block[key] !== undefined) properties[key] = block[key];
+    }
+    return { uid, string: block.string, properties, children: [...graph.blocks.values()]
+      .filter((child) => child.parentUid === uid).sort((a, b) => a.order - b.order)
+      .map((child) => treeFromGraph(child.uid)) };
+  };
+  const records = new Map();
+  const options = sessionOptions({
+    extensionAPI: { settings: {
+      get: (key) => key === 'language' ? 'en' : records.get(key),
+      set: async (key, value) => { records.set(key, value); },
+    } },
+    inspectTemplate: () => ({ kind: 'standard' }),
+    freezeTemplate: () => ({ kind: 'standard', root: source, fingerprint: 'stable' }),
+    readTemplateTree: treeFromGraph,
+  }).options;
+  const session = extension.createTodayPlanSession(options);
+  const result = await session.ensureToday();
+  assert.equal(result.status, 'ready-present');
+  assert.equal(graph.blocks.get('nautilus-log-plan-2026-09-09').string, source.string);
+  assert.equal(graph.blocks.get('child-a-1').string, '{{[[TODO]]}} nested ((child-a))');
+  assert.equal(graph.blocks.get('child-b').string, '--- ((child-a-1))');
+  assert.equal(graph.blocks.get('child-a').string, '08:00-09:00 fixed ((outside))');
+  assert.equal(graph.blocks.get('weekly-tag').string, '[[Weekly]]');
+  assert.deepEqual(source.children[0].children[0].properties, { heading: 1 });
+  assert.equal(graph.counts().createBlock, 4);
+  session.destroy();
+});
+
+test('a reload recognizes an incomplete recorded template tree and never treats its root as complete', async (t) => {
+  const extension = await loadExtension();
+  const graph = createGraph();
+  graph.addPage('September 9th, 2026', 'day');
+  graph.addBlock({ uid: 'nautilus-log-plan-2026-09-09', string: COMPONENT, parentUid: 'day', order: 0 });
+  installHost(graph.roam);
+  t.after(() => { delete global.window; delete global.navigator; delete global.localStorage; });
+  const key = 'nautilus-log:today-plan-operation:test-graph:September 9th, 2026';
+  const values = new Map([[key, JSON.stringify({
+    pageTitle: 'September 9th, 2026', rootUid: 'nautilus-log-plan-2026-09-09',
+    nodes: [{ uid: 'nautilus-log-plan-2026-09-09', parentUid: null, order: 0, fingerprint: 'fbad' }, { uid: 'missing-child', parentUid: 'nautilus-log-plan-2026-09-09', order: 0, fingerprint: 'fbad' }],
+  })]]);
+  const session = extension.createTodayPlanSession(sessionOptions({
+    extensionAPI: { settings: { get: (name) => name === 'language' ? 'en' : values.get(name), set: async () => {} } },
+    readTemplateTree: (uid) => uid === 'nautilus-log-plan-2026-09-09'
+      ? { uid, string: COMPONENT, properties: { open: true }, children: [] } : null,
+  }).options);
+  session.initialize();
+  assert.equal(session.getState().status, 'partial');
+  const result = await session.ensureToday();
+  assert.equal(result.status, 'partial');
+  assert.equal(graph.counts().createBlock, 0);
+  session.destroy();
+});
+
 test('custom template is blocked with zero writes', async (t) => {
   const extension = await loadExtension();
   const graph = createGraph();
@@ -352,7 +430,7 @@ test('custom template is blocked with zero writes', async (t) => {
   assert.equal(result.outcome, 'blocked');
   assert.equal(graph.counts().createBlock, 0);
   assert.equal(graph.counts().createPage, 0);
-  assert.match(toasts[0][0], /;;/);
+  assert.match(toasts[0][0], /template/i);
   session.destroy();
 });
 
@@ -634,7 +712,7 @@ test('inspectCanonicalTemplate distinguishes missing, standard, and custom', asy
     parentUid: 'render',
   });
   const inspect = () => extension.inspectCanonicalTemplate('{{[[roam/render]]:((roam-render-Nautilus-Log-cljs))');
-  assert.equal(inspect().kind, 'custom');
+  assert.equal(inspect().kind, 'standard');
   blocks.delete('desc');
   const originalString = blocks.get('render').string;
   for (const string of [

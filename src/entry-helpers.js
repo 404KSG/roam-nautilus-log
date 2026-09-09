@@ -74,7 +74,46 @@ function blockByUid(uid) {
 function queryBlock(uid) {
   const roam = api();
   if (!roam || !uid) return null;
-  return roam.q?.(`[:find (pull ?e [:block/uid :block/string :block/order :block/children]) :where [?e :block/uid "${uid}"]]`)?.[0]?.[0] || null;
+  return roam.q?.(`[:find (pull ?e [:block/uid :block/string :block/order :block/open :block/heading :block/text-align :block/children-view-type]) :where [?e :block/uid "${uid}"]]`)?.[0]?.[0] || null;
+}
+
+const CLONE_PROPERTIES = ['open', 'heading', 'text-align', 'children-view-type'];
+
+function cloneProperties(block) {
+  const result = {};
+  for (const key of CLONE_PROPERTIES) {
+    const value = block?.[key] ?? block?.[`:${key}`] ?? block?.[`block/${key}`]
+      ?? block?.[`:block/${key}`];
+    if (value !== undefined && value !== null) result[key] = value;
+  }
+  // Roam may omit the false-valued attribute from a Pull; creation has the
+  // same false default, so normalize it for a stable verified clone shape.
+  if (result.open === undefined) result.open = false;
+  return result;
+}
+
+function snapshotNode(block, children) {
+  if (!block || typeof block.uid !== 'string' || !block.uid || typeof block.string !== 'string') {
+    throw new Error('Roam returned unreadable template content.');
+  }
+  return { uid: block.uid, string: block.string, properties: cloneProperties(block), children };
+}
+
+function snapshotTree(root, strict = true) {
+  const visit = (block, seen = new Set()) => {
+    if (seen.has(block?.uid)) throw new Error('Roam returned a cyclic template tree.');
+    const nextSeen = new Set(seen).add(block.uid);
+    const children = childBlocks(block.uid, strict).map((child) => visit(child, nextSeen));
+    return snapshotNode(block, children);
+  };
+  return visit(root);
+}
+
+function fingerprintTree(node) {
+  return JSON.stringify({
+    uid: node.uid, string: node.string, properties: node.properties,
+    children: node.children.map(fingerprintTree),
+  });
 }
 
 function getPageUidByPageTitle(title) {
@@ -119,7 +158,7 @@ function templateQueryRows(rows, strict) {
 function childBlocks(parentUid, strict = false) {
   const roam = api();
   if (!roam?.q || !parentUid) return [];
-  return templateQueryRows(roam.q(`[:find (pull ?child [:block/uid :block/string :block/order])
+  return templateQueryRows(roam.q(`[:find (pull ?child [:block/uid :block/string :block/order :block/open :block/heading :block/text-align :block/children-view-type])
                  :where [?parent :block/uid "${parentUid}"]
                         [?parent :block/children ?child]]`), strict)
     .map((row) => row?.[0])
@@ -218,27 +257,54 @@ export function readExistingTemplateState(renderStringCore) {
 }
 
 /**
- * Classify the managed canonical template for one-click Daily Note insert.
- * `missing` still allows v1 create from live settings. `custom` extra siblings
- * or render-block descendants are blocked so this path never copies or drops them.
+ * Freeze the one managed renderer root and its complete ordinary block tree.
+ * A renderer root may have arbitrary normal descendants; only ambiguous roots,
+ * top-level siblings, or unreadable/dynamic render strings are refused.
  */
-export function inspectCanonicalTemplate(renderStringCore) {
+export function freezeCanonicalTemplate(renderStringCore) {
   if (typeof api()?.q !== 'function') {
     throw Object.assign(new Error('Roam template inspection is unavailable.'), { code: 'apiUnavailable' });
   }
   const candidates = managedTemplateCandidates(renderStringCore, true);
-  const candidate = preferredTemplateCandidate(candidates, renderStringCore);
-  if (!candidate) return { kind: 'missing' };
-  if (!candidate.renderBlock || !candidate.parsed || candidate.parsed.unsupported) return { kind: 'custom' };
+  if (candidates.length === 0) return { kind: 'missing' };
+  if (candidates.length !== 1) return { kind: 'unsupported', reason: 'multipleTemplates' };
+  const candidate = candidates[0];
+  const unsupported = (reason) => ({ kind: 'unsupported', reason, templateUid: candidate.template.uid });
+  if (!candidate.renderBlock || !candidate.parsed || candidate.parsed.unsupported) {
+    return unsupported('unsupportedRenderer');
+  }
   const source = candidate.renderBlock.string || '';
-  if (source.slice(source.lastIndexOf('}}') + 2).trim()) return { kind: 'custom' };
   const renderStringCores = managedRenderCores(renderStringCore);
   const coreCount = renderStringCores.reduce((count, core) => count + source.split(core).length - 1, 0);
-  if (coreCount !== 1) return { kind: 'custom' };
+  if (source.slice(source.lastIndexOf('}}') + 2).trim() || coreCount !== 1) {
+    return unsupported('unsupportedRenderer');
+  }
   const siblings = childBlocks(candidate.template.uid, true);
-  if (siblings.length !== 1) return { kind: 'custom' };
-  if (childBlocks(candidate.renderBlock.uid, true).length > 0) return { kind: 'custom' };
-  return { kind: 'standard' };
+  if (siblings.length !== 1 || siblings[0].uid !== candidate.renderBlock.uid) {
+    return unsupported('extraTemplateSiblings');
+  }
+  const root = snapshotTree(candidate.renderBlock, true);
+  return {
+    kind: 'standard', root, templateUid: candidate.template.uid,
+    fingerprint: fingerprintTree(root),
+  };
+}
+
+export function inspectCanonicalTemplate(renderStringCore) {
+  const snapshot = freezeCanonicalTemplate(renderStringCore);
+  return snapshot.kind === 'unsupported'
+    ? { kind: 'custom', reason: snapshot.reason }
+    : { kind: snapshot.kind, reason: snapshot.reason };
+}
+
+/** Read a block and all descendants using the same conservative clone shape. */
+export function readBlockTree(uid) {
+  const root = queryBlock(uid);
+  return root ? snapshotTree(root, true) : null;
+}
+
+export function templateTreeFingerprint(tree) {
+  return tree ? fingerprintTree(tree) : null;
 }
 
 async function updateBlockIfChanged(uid, string) {
@@ -378,4 +444,4 @@ export function toggleRenderComponent(
   );
 }
 
-export { getBlockContentStringByUID, queryBlock };
+export { getBlockContentStringByUID, queryBlock, CLONE_PROPERTIES };

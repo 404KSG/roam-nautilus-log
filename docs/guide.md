@@ -91,20 +91,23 @@ until enabled. While it is off, Nautilus Log still mounts a 30px today-plan laun
 and one create-or-open command, but it loads no execution panel, 1s ticker, CLOCK
 writer, or LOGBOOK reader.
 
-Click **+ Create today's plan** (or the command) to append one canonical component
-to the local-calendar Daily Note, regardless of the page you are viewing. The
-component uses the configured renderer identity and current settings, including
-custom prefixes. Any recognized Nautilus renderer already on that page, including
-an empty or all-DONE plan, is locate-only. Extra template siblings, render
-children, or unsupported custom content require native `;;` insertion. No custom
-content is silently dropped, and nothing is created on load or at midnight.
+Click **+ Create today's plan** (or the command) to append a frozen copy of the
+single managed Nautilus renderer root and its complete ordinary descendant tree
+to the local-calendar Daily Note, regardless of the page you are viewing. Every
+new block receives a new UID; references inside that tree are remapped and
+external references remain unchanged. Any recognized Nautilus renderer already
+on that page, including an empty or all-DONE plan, is locate-only. Multiple roots,
+top-level template siblings, dynamic/unreadable content, or unavailable required
+fields fail closed and offer an open-template review action. Nothing is created
+on load or at midnight.
 
-Loading, confirmed absence, unsupported templates, and failures have separate
-states. **Check again** only rereads; a navigation failure only retries opening.
-Creation requires a known graph and Web Locks. If those or the required Roam APIs
-are unavailable, use `;;` on the target Daily Note. Occupied identifiers are never
-overwritten, and an unconfirmed write never triggers an automatic second insert.
-A date or graph change stops subsequent writes rather than retargeting the action.
+Loading, confirmed absence, unsupported templates, partial writes, and failures
+have separate states. **Check again** only rereads; a navigation failure only
+retries opening. Creation requires a known graph, Web Locks, and an opaque
+settings-backed structural operation record. Occupied identifiers are never
+overwritten, a complete-tree readback is required for success, and an unconfirmed
+or partial write never triggers an automatic second insert. A date or graph change
+stops subsequent writes rather than retargeting the action.
 
 No new per-second graph queries are added. With execution on, discovery reuses
 runtime data; with it off, checks occur at initialization, throttled foreground,

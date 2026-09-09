@@ -11,6 +11,9 @@ import {
   showToast,
 } from './timing-roam';
 
+const OPERATION_KEY_PREFIX = 'nautilus-log:today-plan-operation:';
+const REFERENCE_RE = /\(\(([A-Za-z0-9_-]{6,})\)\)/g;
+
 const VISIBILITY_THROTTLE_MS = 1500;
 const hostGlobal = () => (typeof window !== 'undefined' ? window : globalThis);
 const copyFor = (language) => timingCore.executionCopy(language).createToday;
@@ -38,6 +41,8 @@ export function createTodayPlanSession({
   now = () => new Date(),
   buildComponentString,
   inspectTemplate = () => ({ kind: 'missing' }),
+  freezeTemplate = () => ({ kind: 'missing' }),
+  readTemplateTree = () => null,
   trackingEnabled = () => false,
   readTrackingSnapshot = () => null,
   requestTrackingRefresh,
@@ -68,6 +73,79 @@ export function createTodayPlanSession({
 
   const language = () => extensionAPI?.settings?.get?.('language') || 'en';
   const labels = () => copyFor(language());
+  const operationKey = (target) => `${OPERATION_KEY_PREFIX}${encodeURIComponent(target.name)}:${target.pageTitle}`;
+  const writeOperationRecord = async (target, intent) => {
+    const set = extensionAPI?.settings?.set;
+    if (typeof set !== 'function') throw fault('recordUnavailable');
+    const record = {
+      id: intent.id, pageTitle: target.pageTitle, rootUid: intent.uid,
+      nodes: intent.nodes.map((node) => ({ uid: node.uid, parentUid: node.parentUid, order: node.order, fingerprint: node.fingerprint })),
+    };
+    await set(operationKey(target), JSON.stringify(record));
+    if (extensionAPI?.settings?.get?.(operationKey(target)) !== JSON.stringify(record)) throw fault('recordUnavailable');
+  };
+  const clearOperationRecord = async (target) => {
+    const set = extensionAPI?.settings?.set;
+    if (typeof set === 'function') await set(operationKey(target), '');
+  };
+  const rewriteReferences = (string, mapping) => String(string).replace(REFERENCE_RE, (whole, uid) => (
+    mapping.get(uid) ? `((${mapping.get(uid)}))` : whole
+  ));
+  const flattenTemplate = (root, rootUid, roam) => {
+    const mapping = new Map([[root.uid, rootUid]]);
+    const nodes = [];
+    const allocate = () => {
+      const uid = roam?.util?.generateUID?.();
+      if (typeof uid !== 'string' || !uid) throw fault('apiUnavailable');
+      return uid;
+    };
+    const reserve = (node) => {
+      if (node !== root) mapping.set(node.uid, allocate());
+      node.children.forEach(reserve);
+    };
+    reserve(root);
+    const visit = (node, parentUid, order) => {
+      const uid = mapping.get(node.uid);
+      nodes.push({
+        uid, parentUid, order, string: rewriteReferences(node.string, mapping),
+        properties: { open: node.properties?.open ?? false, ...(node.properties || {}) }, sourceUid: node.uid,
+      });
+      node.children.forEach((child, index) => visit(child, uid, index));
+    };
+    visit(root, null, 0);
+    return nodes;
+  };
+  // A compact non-reversible diagnostic checksum keeps private template strings
+  // out of extension settings. Full text remains only in this operation's RAM.
+  const nodeFingerprint = (node) => {
+    const value = JSON.stringify({ string: node.string, properties: node.properties || {} });
+    let hash = 2166136261;
+    for (let index = 0; index < value.length; index += 1) {
+      hash ^= value.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return `f${(hash >>> 0).toString(36)}`;
+  };
+  const matchingCreatedNodes = (intent) => {
+    const root = readTemplateTree(intent.uid);
+    if (!root) return 0;
+    const actual = [];
+    const walk = (node, parentUid = null, order = 0) => {
+      actual.push({ uid: node.uid, parentUid, order, fingerprint: nodeFingerprint(node) });
+      (node.children || []).forEach((child, index) => walk(child, node.uid, index));
+    };
+    walk(root);
+    let count = 0;
+    while (count < actual.length && count < intent.nodes.length) {
+      const node = actual[count];
+      const expected = intent.nodes[count];
+      if (node.uid !== expected.uid || node.parentUid !== expected.parentUid
+        || node.order !== expected.order || node.fingerprint !== expected.fingerprint) return -1;
+      count += 1;
+    }
+    return actual.length > intent.nodes.length ? -1 : count;
+  };
+  const matchesCreatedTree = (intent) => matchingCreatedNodes(intent) === intent.nodes.length;
   function getState() {
     const text = labels();
     return {
@@ -106,6 +184,7 @@ export function createTodayPlanSession({
   };
   const fail = (error, { target, announce = false } = {}) => {
     if (destroyed || error?.code === 'destroyed' || error?.name === 'AbortError') return getState();
+    if (state.status === 'partial') return getState();
     const code = error?.code && labels()[error.code] ? error.code : 'failed';
     const result = setState({
       status: 'read-failed', pageTitle: target?.pageTitle || state.pageTitle,
@@ -120,14 +199,16 @@ export function createTodayPlanSession({
     templateKind: null, outcome: null, error: null, ...extra,
   });
   const inspectKind = () => {
-    const kind = inspectTemplate()?.kind;
-    if (!['standard', 'custom', 'missing'].includes(kind)) throw fault('failed');
+    const result = inspectTemplate() || {};
+    const kind = result.kind;
+    if (!['standard', 'custom', 'missing', 'unsupported'].includes(kind)) throw fault('failed');
     return kind;
   };
-  const absent = (target, kind) => setState({
-    status: kind === 'custom' ? 'ready-blocked' : 'ready-absent',
+  const absent = (target, kind, reason = null) => setState({
+    status: kind === 'custom' || kind === 'unsupported' ? 'ready-blocked' : 'ready-absent',
     pageTitle: target.pageTitle, pageUid: null, planUid: null, templateKind: kind,
-    outcome: kind === 'custom' ? 'blocked' : null, error: kind === 'custom' ? 'blocked' : null,
+    outcome: kind === 'custom' || kind === 'unsupported' ? 'blocked' : null,
+    error: kind === 'custom' || kind === 'unsupported' ? 'blocked' : null, reason,
   });
   const blockTemplate = (target) => {
     const result = absent(target, 'custom');
@@ -153,11 +234,38 @@ export function createTodayPlanSession({
     }
     return absent(target, inspectedKind);
   };
+  const storedOperation = (target) => {
+    const raw = extensionAPI?.settings?.get?.(operationKey(target));
+    if (typeof raw !== 'string' || !raw) return null;
+    try {
+      const record = JSON.parse(raw);
+      if (record?.pageTitle !== target.pageTitle || typeof record.rootUid !== 'string'
+        || !Array.isArray(record.nodes) || record.nodes.some((node) => (
+          typeof node?.uid !== 'string' || typeof node?.fingerprint !== 'string'
+        ))) throw new Error('malformed');
+      return { uid: record.rootUid, nodes: record.nodes };
+    } catch (_error) { throw fault('recordUnavailable'); }
+  };
+  const recoverPartial = (target) => {
+    const record = storedOperation(target);
+    if (!record) return false;
+    if (!matchesCreatedTree(record)) {
+      setState({ status: 'partial', pageTitle: target.pageTitle, pageUid: readDailyPageUid(target.pageTitle), planUid: record.uid, error: 'partial' });
+      return true;
+    }
+    void clearOperationRecord(target);
+    return false;
+  };
   const discover = ({ authoritative = false } = {}) => {
     if (destroyed || operation) return getState();
     let target;
     try {
       target = targetNow();
+      // Settings recovery is bounded to initialization/foreground/explicit
+      // discovery; tracking ticks take their existing snapshot fast path.
+      if (authoritative || !trackingEnabled()) {
+        if (recoverPartial(target)) return getState();
+      }
       if (!authoritative && trackingEnabled()) return fromTracking(target, readTrackingSnapshot());
       const snapshot = readTarget(target);
       return snapshot.plan ? present(snapshot) : absent(target, inspectKind());
@@ -177,6 +285,15 @@ export function createTodayPlanSession({
       }
     }
     return getState();
+  };
+  const openTemplate = async ({ locateMode = 'main' } = {}) => {
+    const target = targetNow();
+    try {
+      const frozen = freezeTemplate();
+      if (!frozen.templateUid) throw fault('failed');
+      await openPrimaryPlan(frozen.templateUid, { sidebar: locateMode === 'sidebar' });
+      return getState();
+    } catch (error) { return fail(error, { target, announce: true }); }
   };
   const locateToday = async ({ locateMode = 'main' } = {}) => {
     if (destroyed || operation) return getState();
@@ -205,27 +322,61 @@ export function createTodayPlanSession({
   };
   const ensureLocked = async (target, locateMode) => {
     let snapshot = readTarget(target);
-    if (snapshot.plan) return finish(target, snapshot, locateMode, 'located');
-    if (inspectKind() === 'custom') return blockTemplate(target);
-    if (typeof buildComponentString !== 'function') throw fault('failed');
-    const string = await buildComponentString();
+    const existingIntent = intents.get(target.key);
+    if (snapshot.plan) {
+      if (existingIntent?.attempted && !matchesCreatedTree(existingIntent)) {
+        return setState({ status: 'partial', pageTitle: target.pageTitle, pageUid: snapshot.pageUid, planUid: existingIntent.uid, error: 'partial' });
+      }
+      return finish(target, snapshot, locateMode, 'located');
+    }
+    const frozen = freezeTemplate();
+    if (frozen.kind === 'unsupported' || frozen.kind === 'custom'
+      || (frozen.kind === 'missing' && inspectKind() === 'custom')) return blockTemplate(target);
+    let root;
+    let sourceFingerprint = null;
+    if (frozen.kind === 'standard') {
+      root = frozen.root;
+      sourceFingerprint = frozen.fingerprint;
+      if (!root || !sourceFingerprint) throw fault('failed');
+    } else {
+      // A graph without a managed template retains the historical empty-root
+      // fallback. Installed templates always take the full frozen-tree path.
+      if (typeof buildComponentString !== 'function') throw fault('failed');
+      const string = await buildComponentString();
+      if (!timingCore.isNautilusComponent(string)) throw fault('failed');
+      root = { uid: '__fallback_root__', string, properties: { open: true }, children: [] };
+    }
     assertTarget(target);
-    if (!timingCore.isNautilusComponent(string)) throw fault('failed');
-    // Preparation may yield to user edits. Check the target and template again
-    // before the first page/block write, including after every awaited mutation.
     snapshot = readTarget(target);
     if (snapshot.plan) return finish(target, snapshot, locateMode, 'located');
-    if (inspectKind() === 'custom') return blockTemplate(target);
-    if (typeof target.roam?.data?.block?.create !== 'function'
-      && typeof target.roam?.createBlock !== 'function') throw fault('apiUnavailable');
+    const beforeWrite = freezeTemplate();
+    if (frozen.kind === 'standard' && (beforeWrite.kind !== 'standard' || beforeWrite.fingerprint !== sourceFingerprint)) {
+      throw fault('templateChanged');
+    }
+    if (beforeWrite.kind === 'unsupported' || beforeWrite.kind === 'custom') return blockTemplate(target);
+    if (typeof target.roam?.data?.block?.create !== 'function' && typeof target.roam?.createBlock !== 'function') {
+      throw fault('apiUnavailable');
+    }
     let intent = intents.get(target.key);
     if (!intent) {
-      // The reserved date UID also protects retries after a tab reload while
-      // the broader day query is lagging. A collision never means overwrite.
-      intent = { uid: componentUid(target.date), attempted: false };
+      const uid = componentUid(target.date);
+      const nodes = flattenTemplate(root, uid, target.roam);
+      intent = { uid, nodes, attempted: false, id: `${Date.now()}-${Math.random()}` };
+      intent.nodes.forEach((node) => { node.fingerprint = nodeFingerprint(node); });
       intents.set(target.key, intent);
     }
-    if (blockUidExists(intent.uid)) throw fault(intent.attempted ? 'unconfirmed' : 'uidCollision');
+    for (const node of intent.nodes) {
+      if (blockUidExists(node.uid)) {
+        if (matchesCreatedTree(intent)) {
+          snapshot = readTarget(target, { allowDateChange: true });
+          if (snapshot.plan) return finish(target, snapshot, locateMode, 'created');
+        }
+        throw fault(intent.attempted ? 'unconfirmed' : 'uidCollision');
+      }
+    }
+    // Persist only opaque structural fingerprints, never template text. This is
+    // a reload diagnostic, not a lock or an automatic recovery queue.
+    if (frozen.kind === 'standard') await writeOperationRecord(target, intent);
     let pageUid = readDailyPageUid(target.pageTitle);
     if (!pageUid) {
       assertTarget(target);
@@ -234,17 +385,28 @@ export function createTodayPlanSession({
     }
     snapshot = readTarget(target);
     if (snapshot.plan) return finish(target, snapshot, locateMode, 'located');
-    if (blockUidExists(intent.uid)) throw fault(intent.attempted ? 'unconfirmed' : 'uidCollision');
     assertTarget(target);
     intent.attempted = true;
     let mutationError = null;
-    try {
-      await createGraphBlock({ parentUid: pageUid, order: 'last', string, open: true, uid: intent.uid });
-    } catch (error) { mutationError = error; }
+    for (const node of intent.nodes) {
+      if (destroyed || hostGlobal() !== host || host.roamAlphaAPI !== target.roam || graphName(host) !== target.name) break;
+      try {
+        await createGraphBlock({
+          parentUid: node.parentUid || pageUid, order: node.parentUid ? node.order : 'last',
+          string: node.string, uid: node.uid, properties: node.properties,
+        });
+      } catch (error) { mutationError = error; break; }
+    }
     if (destroyed) return getState();
-    // Use the frozen date, not a fresh now(), even if midnight passed in-flight.
+    // A full tree match, not merely a visible renderer root, is the completion
+    // criterion. Partial writes are intentionally retained for inspection.
+    if (frozen.kind === 'standard' && !matchesCreatedTree(intent)) {
+      setState({ status: 'partial', pageTitle: target.pageTitle, pageUid, planUid: intent.uid, error: 'partial' });
+      throw mutationError || fault('partial');
+    }
     snapshot = readTarget(target, { allowDateChange: true });
     if (!snapshot.plan) throw mutationError || fault('unconfirmed');
+    if (frozen.kind === 'standard') await clearOperationRecord(target);
     return finish(target, snapshot, locateMode, snapshot.plan.uid === intent.uid ? 'created' : 'located');
   };
   const ensureToday = ({ locateMode = 'main' } = {}) => {
@@ -257,6 +419,7 @@ export function createTodayPlanSession({
     // Start after assigning the shared promise, so subscriber re-entry cannot
     // create a second writer or receive a not-yet-assigned promise.
     current.promise = Promise.resolve().then(async () => {
+      if (recoverPartial(target)) return getState();
       setState({ status: 'creating', pageTitle: target.pageTitle, outcome: null, error: null });
       const snapshot = readTarget(target);
       if (snapshot.plan) return finish(target, snapshot, locateMode, 'located');
@@ -343,5 +506,5 @@ export function createTodayPlanSession({
     listeners.add(listener);
     return () => listeners.delete(listener);
   };
-  return { discover, ensureToday, locateToday, getState, subscribe, initialize, destroy };
+  return { discover, ensureToday, locateToday, openTemplate, getState, subscribe, initialize, destroy };
 }

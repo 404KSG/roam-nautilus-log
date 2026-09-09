@@ -98,7 +98,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   const activateTodayPlanEntry = (locateMode = 'main') => {
     const status = todayPlanState()?.status;
     if (status === 'ready-absent') return runAction(() => todayPlan.ensureToday({ locateMode }));
-    if (status === 'nav-failed') return runAction(() => todayPlan.locateToday({ locateMode }));
+    if (status === 'nav-failed' || status === 'partial') return runAction(() => todayPlan.locateToday({ locateMode }));
     if (status === 'read-failed' || status === 'ready-blocked') {
       return runAction(() => todayPlan.discover({ authoritative: true }));
     }
