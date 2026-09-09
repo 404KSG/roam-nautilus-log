@@ -1499,8 +1499,7 @@
 }
 
 .nautilus-log-timing__energy-track[hidden],
-.nautilus-log-timing__energy-timer[hidden],
-.nautilus-log-timing__energy-damage[hidden] {
+.nautilus-log-timing__energy-timer[hidden] {
   display: none;
 }
 
@@ -1612,36 +1611,13 @@
   width: var(--nautilus-energy-reserve);
 }
 
-.nautilus-log-timing__capacity-token.is-settling .nautilus-log-timing__energy-reserve {
-  transition-delay: 140ms;
+.nautilus-log-timing__energy-planned-value.is-confirming {
+  animation: nautilus-log-energy-confirm 320ms ease-out;
 }
 
-.nautilus-log-timing__energy-damage {
-  color: #4f8f70;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 10px;
-  opacity: 0;
-  pointer-events: none;
-  position: absolute;
-  right: 0;
-  top: 1px;
-  white-space: nowrap;
-}
-
-.nautilus-log-timing__capacity-token.is-damage-active .nautilus-log-timing__energy-planned-value,
-.nautilus-log-timing__capacity-token.is-damage-active .nautilus-log-timing__energy-planned-label {
-  opacity: 0;
-}
-
-.nautilus-log-timing__energy-damage.is-active {
-  animation: nautilus-log-energy-damage 700ms ease-out forwards;
-}
-
-@keyframes nautilus-log-energy-damage {
-  0%, 16% { opacity: 0; transform: translateY(2px); }
-  30%, 72% { opacity: 1; transform: translateY(0); }
-  100% { opacity: 0; transform: translateY(-3px); }
+@keyframes nautilus-log-energy-confirm {
+  0%, 45% { font-weight: 700; }
+  100% { font-weight: 600; }
 }
 
 .nautilus-log-timing__capacity-token.is-positive:not(.is-energy) .nautilus-log-timing__capacity-value {
@@ -1650,10 +1626,12 @@
 
 .nautilus-log-timing__capacity-token.is-warning .nautilus-log-timing__capacity-value,
 .nautilus-log-timing__energy-planned.is-warning .nautilus-log-timing__energy-planned-value {
+  animation: none;
   color: var(--nautilus-log-warning);
 }
 
 .nautilus-log-timing__capacity-token.is-status-cue .nautilus-log-timing__energy-planned-value {
+  animation: none;
   font-weight: 700;
   letter-spacing: 0.01em;
 }
@@ -2229,12 +2207,6 @@ button.nautilus-log-timing__plan-heading:focus-visible {
   background: #8fbfa6;
 }
 
-.bp3-dark .nautilus-log-timing__energy-damage,
-.roam-app.rm-dark-theme .nautilus-log-timing__energy-damage,
-.dark .nautilus-log-timing__energy-damage {
-  color: #9ac9b0;
-}
-
 .bp3-dark .nautilus-log-timing__capacity,
 .dark .nautilus-log-timing__capacity {
   background: rgba(255, 255, 255, 0.018);
@@ -2287,5 +2259,5 @@ button.nautilus-log-timing__plan-heading:focus-visible {
   .nautilus-log-timing__shortcut-tooltip { transition: none; }
   .nautilus-log-timing__energy-committed,
   .nautilus-log-timing__energy-reserve { transition: none; }
-  .nautilus-log-timing__energy-damage.is-active { animation: none; opacity: 1; }
+  .nautilus-log-timing__energy-planned-value.is-confirming { animation: none; }
 }

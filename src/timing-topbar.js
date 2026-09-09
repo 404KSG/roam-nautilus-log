@@ -3,6 +3,7 @@ import * as timingCore from './timing-core';
 const TOPBAR_ID = 'nautilus-log-timing-topbar';
 const POPOVER_ID = 'nautilus-log-timing-popover';
 const SHORTCUT_TOOLTIP_ID = 'nautilus-log-timing-shortcut-tooltip';
+const ENERGY_CONFIRM_MS = 320;
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -80,8 +81,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
   let observedTopbar = null;
   let observedSearch = null;
   let liveExecutionCache = null;
-  let energyDamageTimer = null;
-  let energySettlementPending = false;
+  let energyConfirmTimer = null;
 
   const ui = () => timingCore.executionCopy(extensionAPI.settings.get('language') || 'en');
   const energyBarEnabled = () => extensionAPI.settings.get('energy-bar-enabled') === true;
@@ -166,10 +166,6 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
         element('span', 'nautilus-log-timing__energy-planned-value'),
         element('span', 'nautilus-log-timing__energy-planned-label'),
       );
-      const energyDamage = element('span', 'nautilus-log-timing__energy-damage');
-      energyDamage.hidden = true;
-      energyDamage.setAttribute('aria-hidden', 'true');
-      energyPlanned.append(energyDamage);
       const energySummarySeparator = element(
         'span',
         'nautilus-log-timing__energy-summary-separator',
@@ -217,7 +213,6 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     separator.hidden = energy;
     capacity.hidden = false;
     capacity.classList.toggle('is-energy', energy);
-    capacity.classList.toggle('is-settling', energy && energySettlementPending);
     capacity.classList.toggle('is-positive', summary.left.tone === 'positive');
     capacity.classList.toggle('is-warning', summary.left.tone === 'warning');
     capacity.querySelector('.nautilus-log-timing__capacity-value').textContent = summary.left.value;
@@ -230,6 +225,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       energyTrack.style.setProperty('--nautilus-energy-reserve', `${model.reservePercent}%`);
       capacity.classList.toggle('is-status-cue', model.warning);
       planned.classList.toggle('is-warning', model.warning);
+      if (model.warning) plannedValue.classList.remove('is-confirming');
       plannedValue.textContent = summary.planned.value;
       plannedLabel.textContent = summary.planned.label;
       if (model.overloadMinutes > 0) {
@@ -245,45 +241,34 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     trigger.setAttribute('aria-label', `${ariaLabel}, ${accessibleSummary}`);
   };
 
-  const beginEnergySettlement = () => {
-    if (!energyBarEnabled()) return;
-    energySettlementPending = true;
-    trigger?.querySelector('.nautilus-log-timing__capacity-token')
-      ?.classList.add('is-settling');
+  const clearEnergyConfirm = () => {
+    const host = typeof window !== 'undefined' ? window : globalThis;
+    if (energyConfirmTimer) {
+      host.clearTimeout(energyConfirmTimer);
+      energyConfirmTimer = null;
+    }
+    trigger?.querySelector('.nautilus-log-timing__energy-planned-value')
+      ?.classList.remove('is-confirming');
   };
 
-  const cancelEnergySettlement = () => {
-    energySettlementPending = false;
-    trigger?.querySelector('.nautilus-log-timing__capacity-token')
-      ?.classList.remove('is-settling');
-  };
-
-  const playEnergyDamage = (minutes) => {
+  const playEnergyConfirm = () => {
     const capacity = trigger?.querySelector('.nautilus-log-timing__capacity-token');
-    const damage = capacity?.querySelector('.nautilus-log-timing__energy-damage');
-    if (!energyBarEnabled() || !capacity || !damage || !(Number(minutes) > 0)) {
-      cancelEnergySettlement();
+    const planned = capacity?.querySelector('.nautilus-log-timing__energy-planned');
+    const plannedValue = capacity?.querySelector('.nautilus-log-timing__energy-planned-value');
+    clearEnergyConfirm();
+    if (!energyBarEnabled() || !capacity || !plannedValue) return;
+    if (capacity.classList.contains('is-status-cue') || planned?.classList.contains('is-warning')) {
       return;
     }
     const host = typeof window !== 'undefined' ? window : globalThis;
-    if (energyDamageTimer) host.clearTimeout(energyDamageTimer);
-    damage.textContent = `−${timingCore.compactMinutes(minutes)}`;
-    damage.hidden = false;
-    capacity.classList.add('is-damage-active');
-    damage.classList.remove('is-active');
-    void damage.offsetWidth;
-    damage.classList.add('is-active');
-    energyDamageTimer = host.setTimeout(() => {
-      const currentCapacity = trigger?.querySelector('.nautilus-log-timing__capacity-token');
-      const currentDamage = currentCapacity?.querySelector('.nautilus-log-timing__energy-damage');
-      if (currentDamage) {
-        currentDamage.hidden = true;
-        currentDamage.classList.remove('is-active');
-      }
-      currentCapacity?.classList.remove('is-damage-active', 'is-settling');
-      energySettlementPending = false;
-      energyDamageTimer = null;
-    }, 800);
+    if (host.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return;
+    void plannedValue.offsetWidth;
+    plannedValue.classList.add('is-confirming');
+    energyConfirmTimer = host.setTimeout(() => {
+      trigger?.querySelector('.nautilus-log-timing__energy-planned-value')
+        ?.classList.remove('is-confirming');
+      energyConfirmTimer = null;
+    }, ENERGY_CONFIRM_MS);
   };
 
   const updateShortcutTooltip = () => {
@@ -440,15 +425,9 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       runAction(() => focused ? runtime.stopTask() : runtime.startTask(task.uid));
     });
     const completeAction = iconButton('confirm', text.actions.complete, () => {
-      beginEnergySettlement();
       runAction(async () => {
-        try {
-          await runtime.completeTask(task.uid);
-          playEnergyDamage(task.plannedMinutes);
-        } catch (error) {
-          cancelEnergySettlement();
-          throw error;
-        }
+        await runtime.completeTask(task.uid);
+        playEnergyConfirm();
       });
     });
     completeAction.classList.add('is-complete');
@@ -1082,11 +1061,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     observedSearch = null;
     cancelDeferredRefresh();
     clearDeleteConfirmation();
-    if (energyDamageTimer) {
-      window.clearTimeout(energyDamageTimer);
-      energyDamageTimer = null;
-    }
-    energySettlementPending = false;
+    clearEnergyConfirm();
     liveExecutionCache = null;
     container?.remove();
     container = null;

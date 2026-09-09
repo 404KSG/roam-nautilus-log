@@ -18,7 +18,7 @@ The bar treats the configured day's flexible capacity as one track:
 - **Reserve** is `slackMinutes`: currently available flexible time left after
   all unfinished task demand. This is the existing `left` metric.
 - **Committed** is the unfinished demand that still fits inside current
-  available flexible time. It is rendered as a lighter delayed-damage layer.
+  available flexible time. It is rendered as a lighter planned-demand layer.
 - **Elapsed** is full-day flexible capacity that is no longer available. It is
   the unfilled remainder of the track.
 - **Overload** remains the authoritative `overloadMinutes`; the value beside
@@ -96,7 +96,11 @@ The 13px tabular timer spans both rows and centers directly on that axis; POMO's
 smaller mode label remains secondary, and its adjacent stop glyph
 uses the same axis without shrinking its button target. The lower values and
 labels read as one left-aligned phrase separated by a quiet middle dot. Width
-changes retain one short transition, and `prefers-reduced-motion` removes it.
+changes share one 360ms transition with no layered delay. Confirmed panel
+completion keeps the planned reading visible and briefly emphasizes its weight
+for 320ms; it never covers, fades, or recolors `OVER` / `NO SLOT`. External graph
+updates redraw without that confirmation. `prefers-reduced-motion` removes the
+width transition and the confirmation emphasis.
 
 The shortcut tooltip uses nested border/fill triangles rather than a rotated
 square. The inner triangle overlaps the surface by one pixel, covering the top
@@ -147,6 +151,16 @@ Internal key: `energy-bar-enabled`.
 - Tests: pure model, settings/default contract, topbar DOM/CSS contract, and
   no-extra-query runtime guarantees.
 - README, guides, and changelog: optional behavior and exact semantics.
+
+## Verification
+
+- `npm test`: core, runtime, and UI contracts.
+- `python3 test/energy-bar-settlement.py`: local browser regression checks using
+  the real topbar module and stylesheet with an in-memory runtime. Requires an
+  existing Python Playwright and Chromium installation; it does not access Roam.
+  Covers readable completion, failure, external changes, both warning types,
+  light/dark themes, repeated completion, unload, and reduced motion. Temporary
+  screenshots and results are written to `/tmp/nautilus-energy-bar-verify`.
 
 ## Acceptance
 

@@ -127,9 +127,11 @@ on that line instead of aligning to the track:
 Every width uses the full day's flexible capacity as its denominator. Fixed events
 remain excluded, untimed work uses Default Todo Duration, and the clock contracts
 the bar once per minute without another Roam read or timer. Confirmed completion
-settles the pale-green layer with a short delayed transition and duration cue. A
-failed write changes nothing; external TODO/DONE or duration edits redraw silently. This
-is a time-capacity display, not a measure of physical or mental health. In full
+from the panel keeps the exact planned reading visible, confirms that number in
+place, and settles both track layers on one short width transition. A failed write
+changes nothing; external TODO/DONE or duration edits redraw silently without a
+completion cue. This is a time-capacity display, not a measure of physical or
+mental health. In full
 density the gauge itself is the clickable trigger, so the leading Nautilus icon
 and divider disappear. Missing capacity data or constrained space restores only
 the icon, leaving no detached bar or status text beside Roam search.

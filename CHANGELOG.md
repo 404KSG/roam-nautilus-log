@@ -7,7 +7,8 @@
 - The Execution Layer now offers a default-off capacity energy bar for the
   topbar. One layered time track shows flexible reserve, unfinished planned
   demand, and elapsed capacity on the existing full-day denominator; confirmed
-  completion settles the planned layer with a short delayed cue. It reuses the
+  panel completion keeps the planned reading visible, confirms it in place, and
+  settles both layers on one short width transition. It reuses the
   current Primary Plan and timer state, adds no graph query or polling source,
   yields to Roam search at icon density, and honors dark and reduced-motion
   themes. Its borderless two-level depth gauge uses a fixed 136×6px track above

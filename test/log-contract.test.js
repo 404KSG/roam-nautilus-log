@@ -522,7 +522,8 @@ test('the optional energy bar layers live reserve over committed capacity withou
   assert.match(timingTopbar, /text\.capacity\.overCue.*\+\$\{timingCore\.compactMinutes\(model\.overloadMinutes\)\}/);
   assert.match(timingTopbar, /text\.capacity\.noSlotCue.*timingCore\.compactMinutes\(model\.unplacedMinutes\)/);
   assert.match(timingTopbar, /Math\.floor\(state\.now\.getTime\(\) \/ 60000\)/);
-  assert.match(timingTopbar, /nautilus-log-timing__energy-damage/);
+  assert.doesNotMatch(timingTopbar, /nautilus-log-timing__energy-damage/);
+  assert.doesNotMatch(timingTopbar, /playEnergyDamage|is-damage-active|beginEnergySettlement|energySettlementPending/);
   assert.match(timingTopbar, /separator\.hidden = energy/);
   assert.match(timingTopbar, /trigger\.classList\.toggle\('has-energy', energy\)/);
   assert.match(timingTopbar, /trigger\.classList\.toggle\('is-energy-unavailable', energyBarEnabled\(\)\)/);
@@ -549,6 +550,63 @@ test('the optional energy bar layers live reserve over committed capacity withou
   assert.doesNotMatch(css, /\.nautilus-log-timing__energy-track::after/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*nautilus-log-timing__energy-/);
   assert.doesNotMatch(timingTopbar, /readAllEntries|readPrimaryPlan/);
+});
+
+test('energy bar completion keeps planned reading visible and settles widths together', () => {
+  const completeStart = timingTopbar.indexOf('const completeAction');
+  const completeBody = timingTopbar.slice(
+    completeStart,
+    timingTopbar.indexOf('completeAction.classList.add', completeStart),
+  );
+  assert.match(completeBody, /await runtime\.completeTask\(task\.uid\)/);
+  assert.match(completeBody, /playEnergyConfirm\(\)/);
+  assert.ok(
+    completeBody.indexOf('completeTask') < completeBody.indexOf('playEnergyConfirm'),
+    'confirmation must wait for authoritative completeTask',
+  );
+  assert.doesNotMatch(completeBody, /beginEnergySettlement|playEnergyDamage/);
+
+  const subscribeStart = timingTopbar.indexOf('unsubscribe = runtime.subscribe');
+  const subscribeBody = timingTopbar.slice(subscribeStart, timingTopbar.indexOf('return true;', subscribeStart));
+  assert.doesNotMatch(subscribeBody, /playEnergyConfirm/);
+
+  assert.match(timingTopbar, /const ENERGY_CONFIRM_MS = 320/);
+  assert.match(timingTopbar, /clearEnergyConfirm\(\)/);
+  assert.match(timingTopbar, /energyConfirmTimer/);
+  assert.match(timingTopbar, /prefers-reduced-motion: reduce/);
+  assert.match(timingTopbar, /is-status-cue.*is-warning|is-warning.*is-status-cue/s);
+  assert.match(timingTopbar, /if \(model\.warning\) plannedValue\.classList\.remove\('is-confirming'\)/);
+  assert.match(timingTopbar, /destroy[\s\S]*clearEnergyConfirm\(\)/);
+
+  assert.doesNotMatch(css, /nautilus-log-timing__energy-damage/);
+  assert.doesNotMatch(css, /is-damage-active/);
+  assert.doesNotMatch(css, /is-settling/);
+  assert.doesNotMatch(css, /energy-reserve[^{]*\{[^}]*transition-delay/s);
+  assert.doesNotMatch(css, /nautilus-log-energy-damage/);
+  assert.match(
+    css,
+    /\.nautilus-log-timing__energy-committed,[\s\S]*\.nautilus-log-timing__energy-reserve \{[\s\S]*transition:\s*width 360ms/,
+  );
+  assert.match(css, /\.nautilus-log-timing__energy-planned-value\.is-confirming \{[\s\S]*animation:\s*nautilus-log-energy-confirm 320ms/);
+  assert.match(css, /@keyframes nautilus-log-energy-confirm \{[\s\S]*font-weight:\s*700/);
+  assert.doesNotMatch(
+    css,
+    /@keyframes nautilus-log-energy-confirm \{[^{}]*opacity:\s*0/,
+  );
+  assert.match(
+    css,
+    /\.nautilus-log-timing__energy-planned\.is-warning \.nautilus-log-timing__energy-planned-value \{[\s\S]*animation:\s*none;[\s\S]*color:\s*var\(--nautilus-log-warning\)/,
+  );
+  assert.match(
+    css,
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.nautilus-log-timing__energy-planned-value\.is-confirming \{ animation: none; \}/,
+  );
+  assert.doesNotMatch(guide, /delayed transition and duration cue/);
+  assert.doesNotMatch(guideZh, /短暂延迟过渡和时长提示/);
+  assert.doesNotMatch(changelog, /short delayed cue/);
+  assert.match(guide, /keeps the exact planned reading visible/);
+  assert.match(guide, /redraw silently without a\s+completion cue/);
+  assert.match(changelog, /keeps the planned reading visible, confirms it in place/);
 });
 
 test('capacity summaries lead with the remaining quota and color values only', () => {
