@@ -60,7 +60,7 @@ projection.
 
 Full density becomes one compact two-level instrument. The upper-left row is a
 continuous 136×6px depth-gauge body with a restrained 1px corner and symmetric
-6px decorative end lights. The lower row becomes one quiet, left-aligned
+vertical end caps. The lower row becomes one quiet, left-aligned
 sentence, such as `70% left · 3h20m planned`, whose left edge
 matches the track. CLOCK or POMO elapsed time occupies a separate right cell
 that spans both rows and centers on the Roam topbar axis, so the track never
@@ -74,11 +74,12 @@ instrument has authoritative capacity data. The entire instrument remains the
 same clickable trigger. If data is unavailable, or responsive density yields to
 Roam search, the Nautilus icon returns as the safe 30px navigation affordance.
 The semantic track has no metallic border, bevel, internal quarter ticks, or
-idle animation. Each decorative end combines a 1px whisker with a short 4×3px
-flare at 48% opacity. They occupy the trigger's existing padding, remain outside
-the 136px data scale, and never encode capacity or warning state. Its lower
-labels separate stronger tabular values from quieter words; only a real warning
-turns either metric into a status color.
+idle animation. Each decorative end is a 1px-wide, 10px-tall vertical theme-gray
+cap: it rises 2px above and below the 6px body, fades at its vertical tips, and
+uses a restrained 2px halo at 62% opacity. The caps remain outside the 136px
+data scale and never encode capacity or warning state. Its lower labels separate
+stronger tabular values from quieter words; only a real warning turns either
+metric into a status color.
 
 The palette is restrained and theme-safe:
 
@@ -93,11 +94,10 @@ The palette is restrained and theme-safe:
 
 Track and fill layers stay flat: no border, inset ring, outer shadow, boundary
 shadow, body gradient, idle pulse, or continuous glow. Two static pseudo-elements
-use stacked hard-edged gradients to form the end lights, without blur, filter, or
-animation. Two equal 14px rows place the track center 7px above the Roam topbar
-axis and the lower summary center 7px below it. The 13px tabular timer spans both
-rows and centers directly on that
-axis; POMO's smaller mode label remains secondary, and its adjacent stop glyph
+form the vertical end caps; their small halo softens the cross-section without
+adding horizontal points or animation. Two equal 14px rows place the track
+center 7px above the Roam topbar axis and the lower summary center 7px below it.
+The 13px tabular timer spans both rows and centers directly on that axis; POMO's smaller mode label remains secondary, and its adjacent stop glyph
 uses the same axis without shrinking its button target. The lower values and
 labels read as one left-aligned phrase separated by a quiet middle dot. Width
 changes retain one short transition, and `prefers-reduced-motion` removes it.

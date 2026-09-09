@@ -1483,26 +1483,30 @@
 
 .nautilus-log-timing__capacity-token.is-energy::before,
 .nautilus-log-timing__capacity-token.is-energy::after {
-  background:
-    linear-gradient(to right, transparent, currentColor) center / 100% 1px no-repeat,
-    linear-gradient(to right, transparent, currentColor) right center / 4px 3px no-repeat;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    currentColor 20%,
+    currentColor 80%,
+    transparent
+  );
+  box-shadow: 0 0 2px currentColor;
   color: var(--nautilus-log-energy-reserve);
   content: "";
-  height: 6px;
-  opacity: 0.48;
+  height: 10px;
+  opacity: 0.62;
   pointer-events: none;
   position: absolute;
-  top: 4px;
-  width: 6px;
+  top: 2px;
+  width: 1px;
 }
 
 .nautilus-log-timing__capacity-token.is-energy::before {
-  left: -6px;
+  left: -1px;
 }
 
 .nautilus-log-timing__capacity-token.is-energy::after {
   left: 136px;
-  transform: scaleX(-1);
 }
 
 .nautilus-log-timing__energy-track {
