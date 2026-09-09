@@ -19,15 +19,31 @@
   main window. Running CLOCK/POMO remains visible when no plan exists, with a
   create action in the Plan empty-state.
 - Creation is guarded by graph-scoped Web Locks, a reserved date-specific root
-  UID, preallocated descendant UIDs, source revalidation, an opaque
-  settings-backed operation fingerprint, and complete-tree readback. Unsupported
-  locking, unreadable results, occupied UIDs, and partial trees fail closed.
-  Partial writes remain available for inspection and are never automatically
-  supplemented. Midnight or graph changes stop subsequent writes, and unchanged
-  timing ticks do not republish launcher state.
+  UID, unique preallocated descendant UIDs, click-time source freezing, source
+  revalidation after awaited page/receipt writes, and full exact tree readback.
+  A minimal graph/date settings receipt stores destination topology and SHA-256
+  hashes, not template text. Partial status survives locate, tracking, reload,
+  and discovery. Only the original in-memory intent can explicitly continue
+  missing nodes after validating every written block; reloads never reconstruct
+  missing content from a new template. Pre-template failures remain retryable.
+  Midnight before the first template request stops creation; afterward the frozen
+  original day is completed and reported. Graph changes/unload stop following work,
+  not an already-issued host request. Unchanged ticks use cached integrity.
+- Real-session Node/browser acceptance exercises actual source queries, freezing,
+  mutation adapters, both launchers, and the shared command over an isolated
+  duplicate-rejecting graph. It covers failure/continuation/reload routes, midnight,
+  timer priority, and English/Chinese dark, keyboard, and narrow-screen UI.
 
 ### Fixed
 
+- The actual execution shortcut tooltip and lightweight tooltip now share a
+  border-box, viewport-clamped, wrapping theme; long explanations no longer escape
+  a 320px bubble. Absent/unconfirmed plans show no fake 100% capacity. Unsupported,
+  partial, and read-failure states have short labels and visible diagnostic actions,
+  not a nonfunctional `Use ;;` prompt. Plan empty state also offers View template.
+- Template reads normalize native `:children/view-type` and presentation defaults,
+  reject unknown properties/history/extra renderers, and bound depth/size/cycles.
+  Canonical trees are serialized once instead of recursively escaping JSON.
 - CLOCK starts now check running records under a graph-scoped browser Web Lock;
   cross-tab invalidation refreshes other execution views without per-second queries.
   This is browser-local coordination, not a distributed lock across devices.

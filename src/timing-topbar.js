@@ -1,4 +1,5 @@
 import * as timingCore from './timing-core';
+import { createPlanDiagnostics, planEntryLabel, planActions, positionTopbarTooltip } from './today-plan-view';
 
 const TOPBAR_ID = 'nautilus-log-timing-topbar';
 const POPOVER_ID = 'nautilus-log-timing-popover';
@@ -90,6 +91,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   const ui = () => timingCore.executionCopy(extensionAPI.settings.get('language') || 'en');
   const energyBarEnabled = () => extensionAPI.settings.get('energy-bar-enabled') === true;
   const todayPlanState = () => todayPlan?.getState?.() || null;
+  const diagnostics = createPlanDiagnostics(todayPlan, () => trigger);
   const shouldUseTodayPlanEntry = () => {
     const status = todayPlanState()?.status;
     if (!status) return false;
@@ -98,15 +100,19 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   const activateTodayPlanEntry = (locateMode = 'main') => {
     const status = todayPlanState()?.status;
     if (status === 'ready-absent') return runAction(() => todayPlan.ensureToday({ locateMode }));
-    if (status === 'nav-failed' || status === 'partial') return runAction(() => todayPlan.locateToday({ locateMode }));
-    if (status === 'read-failed' || status === 'ready-blocked') {
-      return runAction(() => todayPlan.discover({ authoritative: true }));
+    if (status === 'nav-failed') return runAction(() => todayPlan.locateToday({ locateMode }));
+    if (['read-failed','ready-blocked','partial'].includes(status)) {
+      closePopover();
+      return diagnostics.show();
     }
     return undefined;
   };
 
   const currentTriggerExecution = () => {
     const snapshot = state.planSnapshot;
+    const planUi = todayPlanState();
+    if (!snapshot?.plan || (planUi && (!['ready-present','nav-failed'].includes(planUi.status)
+      || (planUi.planUid && planUi.planUid !== snapshot.plan.uid)))) return null;
     const execution = snapshot?.execution;
     if (!energyBarEnabled() || !snapshot?.plan) return execution || null;
     const workdayStart = extensionAPI.settings.get('workday-start') ?? 5;
@@ -315,7 +321,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       const key = JSON.stringify([planUi.status, action, planUi.pageTitle]);
       if (key !== shortcutTooltipKey) {
         shortcutTooltipKey = key;
-        shortcutTooltip.textContent = `${action} · ${planUi.pageTitle}`;
+        shortcutTooltip.textContent = action;
       }
       return;
     }
@@ -699,47 +705,10 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   };
 
   const planEmptyNode = (planUi, text) => {
-    const status = planUi?.status;
-    if (status === 'ready-absent' || status === 'creating') {
-      const button = element(
-        'button',
-        'nautilus-log-timing__plan-create',
-        status === 'creating' ? planUi.labels.creating : planUi.labels.create,
-      );
-      button.type = 'button';
-      button.disabled = status === 'creating';
-      button.addEventListener('click', () => {
-        runAction(() => todayPlan.ensureToday({ locateMode: 'main' }));
-      });
-      const wrap = element('div', 'nautilus-log-timing__empty is-create');
-      wrap.append(button);
-      return wrap;
-    }
-    if (status === 'ready-blocked') {
-      return element('div', 'nautilus-log-timing__empty', planUi.labels.blocked);
-    }
-    if (status === 'checking') return element('div', 'nautilus-log-timing__empty', planUi.labels.checking);
-    if (status === 'read-failed') {
-      const wrap = element('div', 'nautilus-log-timing__empty');
-      wrap.append(element('div', '', planUi.message || planUi.labels.failed));
-      const retry = element('button', 'nautilus-log-timing__plan-create', planUi.labels.retry);
-      retry.type = 'button';
-      retry.addEventListener('click', () => runAction(() => todayPlan.discover({ authoritative: true })));
-      wrap.append(retry);
-      return wrap;
-    }
-    if (status === 'nav-failed') {
-      const wrap = element('div', 'nautilus-log-timing__empty');
-      wrap.append(element('div', '', planUi.labels.navFailed));
-      const retry = element('button', 'nautilus-log-timing__plan-create', planUi.labels.retryLocate);
-      retry.type = 'button';
-      retry.addEventListener('click', () => {
-        runAction(() => todayPlan.locateToday({ locateMode: 'main' }));
-      });
-      wrap.append(retry);
-      return wrap;
-    }
-    return element('div', 'nautilus-log-timing__empty', text.empty.noLog);
+    const wrap = element('div', 'nautilus-log-timing__empty');
+    if (planUi) wrap.append(planActions(todayPlan, planUi));
+    else wrap.textContent = text.empty.noLog;
+    return wrap;
   };
 
   const capturePopoverFocus = () => {
@@ -940,8 +909,8 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       } else {
         tasks.forEach((task) => list.append(taskRow(task)));
       }
-      if (!state.planSnapshot?.plan) {
-        list.append(planEmptyNode(todayPlanState(), text));
+      if (!state.planSnapshot?.plan || shouldUseTodayPlanEntry()) {
+        list.replaceChildren(planEmptyNode(todayPlanState(), text));
       } else if (!tasks.length) {
         list.append(element('div', 'nautilus-log-timing__empty', text.empty.noPlanTasks));
       }
@@ -1062,11 +1031,8 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     if (!focused) {
       const planUi = todayPlanState();
       const planStatus = planUi?.status;
-      if (['ready-absent', 'creating', 'checking', 'ready-blocked', 'read-failed'].includes(planStatus)) {
-        const label = planStatus === 'ready-absent' ? planUi.labels.create
-          : planStatus === 'creating' ? planUi.labels.creating
-            : planStatus === 'checking' ? planUi.labels.checking
-              : planStatus === 'ready-blocked' ? planUi.labels.manual : planUi.labels.retry;
+      if (['ready-absent', 'creating', 'checking', 'ready-blocked', 'read-failed', 'partial', 'nav-failed'].includes(planStatus)) {
+        const label = planEntryLabel(planUi);
         const mode = `plan-${planStatus}`;
         if (triggerMode !== mode) {
           trigger.replaceChildren(brandIcon(), element('span', 'nautilus-log-timing__create-label', label));
@@ -1082,7 +1048,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
         trigger.classList.toggle('is-blocked', planStatus === 'ready-blocked');
         trigger.classList.toggle('is-read-failed', planStatus === 'read-failed');
         trigger.disabled = planStatus === 'creating' || planStatus === 'checking';
-        trigger.setAttribute('aria-label', `${label} · ${planUi.pageTitle}`);
+        trigger.setAttribute('aria-label', label);
         trigger.setAttribute('aria-description', planUi.message || label);
         if (pomoCloseButton) pomoCloseButton.hidden = true;
         return;
@@ -1141,6 +1107,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       ? timingCore.topbarDensity({ availableWidth: searchRect.left - controlRect.left })
       : 'full';
     if (container.dataset.density !== density) container.dataset.density = density;
+    positionTopbarTooltip(trigger, shortcutTooltip);
   };
 
   const ensureMounted = () => {
@@ -1157,6 +1124,8 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       trigger.setAttribute('aria-controls', POPOVER_ID);
       trigger.setAttribute('aria-describedby', SHORTCUT_TOOLTIP_ID);
       trigger.setAttribute('aria-expanded', 'false');
+      trigger.addEventListener('mouseenter', () => positionTopbarTooltip(trigger, shortcutTooltip));
+      trigger.addEventListener('focus', () => positionTopbarTooltip(trigger, shortcutTooltip));
       trigger.addEventListener('click', (event) => {
         const liveTimer = Boolean(state.activeWork?.focused || state.standalonePomodoro);
         if (event.shiftKey) {
@@ -1280,6 +1249,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     if (destroyed) return;
     destroyed = true;
     closePopover();
+    diagnostics.destroy();
     unsubscribe?.();
     unsubscribe = null;
     unsubscribePlan?.();

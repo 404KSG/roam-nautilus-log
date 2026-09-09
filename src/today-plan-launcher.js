@@ -1,4 +1,5 @@
 import * as timingCore from './timing-core';
+import { createPlanDiagnostics, positionTopbarTooltip } from './today-plan-view';
 import { findSearchSurface, placeAfterNavigation, TOPBAR_ID } from './timing-topbar';
 
 function element(tag, className, text) {
@@ -27,6 +28,7 @@ export function createTodayPlanLauncher({ todayPlan, extensionAPI } = {}) {
   let triggerMode = null;
 
   const ui = () => todayPlan?.getState?.() || null;
+  const diagnostics = createPlanDiagnostics(todayPlan, () => trigger);
 
   const brandIcon = () => {
     const mark = element('span', 'nautilus-log-timing__brand-icon');
@@ -69,15 +71,15 @@ export function createTodayPlanLauncher({ todayPlan, extensionAPI } = {}) {
       label = labels.locate;
     } else if (status === 'ready-blocked') {
       mode = 'blocked';
-      label = labels.manual;
+      label = labels.templateBlocked;
       trigger.classList.add('is-blocked');
     } else if (status === 'partial') {
       mode = 'partial';
-      label = labels.partial || labels.retryLocate;
+      label = labels.incomplete;
       trigger.classList.add('is-partial');
     } else if (status === 'read-failed') {
       mode = 'failed';
-      label = labels.retry;
+      label = labels.readError;
       trigger.classList.add('is-read-failed');
     } else {
       mode = 'checking';
@@ -98,11 +100,11 @@ export function createTodayPlanLauncher({ todayPlan, extensionAPI } = {}) {
       const textNode = trigger.querySelector('.nautilus-log-timing__create-label');
       if (textNode) textNode.textContent = label;
     }
-    trigger.setAttribute('aria-label', `${label} · ${state?.pageTitle || ''}`);
+    trigger.setAttribute('aria-label', label);
     trigger.setAttribute('aria-describedby', 'nautilus-log-today-plan-tooltip');
-    // Keep native title short; full diagnostics are exposed in the linked tooltip.
-    trigger.title = label;
+    trigger.removeAttribute('title');
     if (tooltip) tooltip.textContent = state?.message || label;
+    positionTopbarTooltip(trigger, tooltip);
   };
 
   const runClick = (event) => {
@@ -113,9 +115,7 @@ export function createTodayPlanLauncher({ todayPlan, extensionAPI } = {}) {
       return todayPlan.locateToday({ locateMode });
     }
     if (status === 'ready-absent') return todayPlan.ensureToday({ locateMode });
-    if (status === 'ready-blocked') return todayPlan.openTemplate?.({ locateMode });
-    if (status === 'partial') return todayPlan.locateToday({ locateMode });
-    if (status === 'read-failed') return todayPlan.discover({ authoritative: true });
+    if (['ready-blocked','partial','read-failed'].includes(status)) return diagnostics.show();
     return undefined;
   };
 
@@ -129,6 +129,7 @@ export function createTodayPlanLauncher({ todayPlan, extensionAPI } = {}) {
       ? timingCore.topbarDensity({ availableWidth: searchRect.left - controlRect.left })
       : 'full';
     if (container.dataset.density !== density) container.dataset.density = density;
+    positionTopbarTooltip(trigger, tooltip);
   };
 
   const ensureMounted = () => {
@@ -144,9 +145,11 @@ export function createTodayPlanLauncher({ todayPlan, extensionAPI } = {}) {
       trigger.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
-        void runClick(event);
+        Promise.resolve(runClick(event)).catch(error => console.error('[Nautilus Log] plan action', error));
       });
-      tooltip = element('span', 'nautilus-log-timing__today-plan-tooltip');
+      trigger.addEventListener('mouseenter', () => positionTopbarTooltip(trigger, tooltip));
+      trigger.addEventListener('focus', () => positionTopbarTooltip(trigger, tooltip));
+      tooltip = element('span', 'nautilus-log-timing__shortcut-tooltip nautilus-log-timing__today-plan-tooltip');
       tooltip.id = 'nautilus-log-today-plan-tooltip';
       tooltip.setAttribute('role', 'tooltip');
       container.append(trigger, tooltip);
@@ -237,6 +240,7 @@ export function createTodayPlanLauncher({ todayPlan, extensionAPI } = {}) {
     }
     settingsListener = null;
     resetObservers();
+    diagnostics.destroy();
     observedTopbar = null;
     observedSearch = null;
     container?.remove();

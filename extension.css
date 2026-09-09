@@ -1201,35 +1201,6 @@
   gap: 6px;
 }
 
-.nautilus-log-timing__today-plan-tooltip {
-  background: var(--nl-shortcut-tooltip-bg, #fff);
-  border: 1px solid var(--nl-shortcut-tooltip-border, rgba(16, 22, 26, .2));
-  border-radius: 4px;
-  box-sizing: border-box;
-  color: var(--nl-shortcut-tooltip-text, #182026);
-  font-size: 12px;
-  left: max(12px, 50%);
-  line-height: 1.35;
-  max-width: min(320px, calc(100vw - 24px));
-  opacity: 0;
-  overflow-wrap: anywhere;
-  padding: 6px 8px;
-  pointer-events: none;
-  position: absolute;
-  top: calc(100% + 5px);
-  transform: translateX(-50%);
-  visibility: hidden;
-  white-space: normal;
-  word-break: break-word;
-  z-index: 30;
-}
-
-.nautilus-log-timing__trigger:hover + .nautilus-log-timing__today-plan-tooltip,
-.nautilus-log-timing__trigger:focus-visible + .nautilus-log-timing__today-plan-tooltip {
-  opacity: 1;
-  visibility: visible;
-}
-
 .nautilus-log-timing__create-label {
   font-size: 12px;
   font-weight: 500;
@@ -1352,12 +1323,15 @@
   opacity: 0;
   padding: 7px 9px;
   pointer-events: none;
-  position: absolute;
+  position: fixed;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   top: calc(100% + 9px);
   transform: translateY(-2px);
   transition: opacity 90ms ease, transform 90ms ease, visibility 0s linear 90ms;
   visibility: hidden;
-  white-space: nowrap;
+  white-space: normal;
   width: max-content;
   z-index: 10060;
 }
@@ -1365,7 +1339,7 @@
 .nautilus-log-timing__shortcut-tooltip-data,
 .nautilus-log-timing__shortcut-tooltip-actions {
   display: block;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .nautilus-log-timing__shortcut-tooltip-data {
@@ -1377,6 +1351,8 @@
 }
 
 .nautilus-log-timing__shortcut-tooltip-value {
+  display: inline-block;
+  white-space: nowrap;
   color: inherit;
   font-variant-numeric: tabular-nums;
   font-weight: 650;
@@ -1431,6 +1407,41 @@
   --nl-shortcut-tooltip-text: #f5f8fa;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.28), 0 8px 24px rgba(0, 0, 0, 0.24);
 }
+
+.nautilus-log-timing__plan-diagnostics {
+  position: fixed;
+  box-sizing: border-box;
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 70px);
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--nl-exec-border, #d8dee4);
+  border-radius: 6px;
+  background: var(--nl-exec-bg, #fff);
+  color: var(--nl-exec-text, #374151);
+  box-shadow: 0 4px 20px #0002;
+  z-index: 10061;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.nautilus-log-timing__plan-actions { display: grid; gap: 8px; text-align: left; }
+.nautilus-log-timing__plan-secondary {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 6px;
+  white-space: normal;
+}
+.nautilus-log-timing__plan-diagnostics button:focus-visible,
+.nautilus-log-timing__plan-actions button:focus-visible { outline: 2px solid #5b8db8; outline-offset: 2px; }
+.bp3-dark .nautilus-log-timing__plan-diagnostics,
+.dark .nautilus-log-timing__plan-diagnostics,
+.rm-dark-theme .nautilus-log-timing__plan-diagnostics { background: #293742; color: #f5f8fa; }
 
 .nautilus-log-timing__pomodoro-action {
   color: #8a929f;

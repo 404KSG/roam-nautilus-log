@@ -34,7 +34,8 @@ fill suitable gaps from the current moment. Tasks that cannot fit appear in
 2. Click **+ Create today's plan** in the topbar, or run
    **Nautilus Log: Create or open today’s plan**. It targets today's Daily Note
    even when you are viewing another page and copies the complete managed
-   Nautilus template tree, including ordinary nested children.
+   Nautilus template tree, including ordinary nested children, then opens it.
+   One normal click is enough—no panel, confirmation, or manual `;;`.
 3. Add fixed events and TODOs as direct children.
 4. Order the tasks and give each one a rough duration.
 
@@ -91,6 +92,15 @@ Nautilus renderers on today's Daily Note, including empty or all-DONE plans,
 are locate-only. Creation requires a confirmed graph identity and Web Locks;
 failed reads offer a read-only check, never an automatic insert.
 
+**Creation incomplete** opens diagnostics and verified-block counts. **Inspect
+created blocks** never clears that status. **Continue creation** is available
+only to the original in-memory operation after checking every written block;
+reloads can verify/open, never resume from a changed template. A graph/date-scoped
+SHA-256 receipt contains destination identifiers and hashes, not template text.
+LOGBOOK/CLOCK history and unsupported properties are refused before template writes.
+Before writing, midnight stops the action; after writing starts, the frozen original
+day is completed and reported without being shown as today's ready plan.
+
 Enable **Execution Layer · Advanced** in Settings when you want more than visual
 planning. The compact topbar panel provides:
 
@@ -116,11 +126,15 @@ rules, and safety boundaries.
 
 ```sh
 npm test
-npm run test:ui
+PYTHONDONTWRITEBYTECODE=1 npm run test:ui
 ```
 
 The browser suites require an existing Python Playwright installation and Chromium.
-They use synthetic local fixtures, not a live Roam graph. The refinement suite covers
+They use synthetic local fixtures, not a live Roam graph. The real-session suite
+executes the actual source reader, session, mutation adapter, and both launchers
+over a low-level graph that rejects duplicate UIDs. It checks full-tree single-click
+creation, partial/reload recovery, navigation, tooltip bounds, and timer priority;
+screenshots/results go to `/tmp/nautilus-real-today-plan`. The refinement suite covers
 cross-midnight labels, minute-level capacity consistency, keyboard focus, and scroll
 continuity. Runtime tests cover cross-tab CLOCK coordination and unload cancellation.
 See the [refinement design](./docs/plans/2026-09-09-execution-refinement-design.md)

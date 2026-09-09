@@ -49,6 +49,7 @@ function createGraph({ title = 'September 9th, 2026' } = {}) {
 
   const defaultCreateBlock = async ({ location, block }) => {
     const parentUid = location['parent-uid'];
+    if (blocks.has(block.uid) || [...pages.values()].includes(block.uid)) throw new Error(`Duplicate UID ${block.uid}`);
     blocks.set(block.uid, {
       ...block,
       uid: block.uid,
@@ -72,6 +73,10 @@ function createGraph({ title = 'September 9th, 2026' } = {}) {
       dateToPageUid: (date) => `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}-${date.getFullYear()}`,
     },
     q: (query, ...args) => {
+      const uid = query.match(/\[\?e :block\/uid "([^"]+)"\]/)?.[1];
+      if (uid) return blocks.has(uid) ? [[{ ...blocks.get(uid) }]] : [];
+      const parent = query.match(/\[\?parent :block\/uid "([^"]+)"\]/)?.[1];
+      if (parent) return children(parent).map(block => [{ ...block }]);
       if (query.includes('?clock-uid ?clock-string')) {
         trace.push(['query:entries']);
         return [];
@@ -138,6 +143,7 @@ function createGraph({ title = 'September 9th, 2026' } = {}) {
       pages.set(pageTitle, uid);
     },
     addBlock(block) {
+      if (blocks.has(block.uid) || [...pages.values()].includes(block.uid)) throw new Error(`Duplicate UID ${block.uid}`);
       blocks.set(block.uid, block);
     },
     queueUids(...values) {
@@ -167,8 +173,11 @@ function createGraph({ title = 'September 9th, 2026' } = {}) {
 function installHost(roam, { locks = exclusiveLocks() } = {}) {
   const timers = [];
   const storage = new Map();
+  const receiptValues = new Map();
   global.window = {
+    fixtureSettings: { get: key => key === 'language' ? 'en' : receiptValues.get(key), set: async (key, value) => receiptValues.set(key,value) },
     roamAlphaAPI: roam,
+    crypto: require('node:crypto').webcrypto,
     setTimeout: (fn, ms) => {
       const id = timers.push({ fn, ms }) ;
       return id;
@@ -201,7 +210,7 @@ function sessionOptions(overrides = {}) {
     inspectCalls,
     options: {
       extensionAPI: {
-        settings: { get: (key) => (key === 'language' ? 'en' : undefined) },
+        settings: global.window.fixtureSettings,
       },
       now: () => new Date(2026, 8, 9, 10, 0, 0),
       buildComponentString: async () => `[[Nautilus Log]] ${COMPONENT}`,
@@ -316,7 +325,7 @@ test('existing current and legacy renderers locate without creating', async (t) 
   }
 });
 
-test('standard template writes one last-child generateTemplateString value', async (t) => {
+test('missing-template fallback writes one last-child generateTemplateString value', async (t) => {
   const extension = await loadExtension();
   const graph = createGraph();
   graph.addPage('September 9th, 2026', 'day');
@@ -399,8 +408,9 @@ test('a reload recognizes an incomplete recorded template tree and never treats 
   t.after(() => { delete global.window; delete global.navigator; delete global.localStorage; });
   const key = 'nautilus-log:today-plan-operation:test-graph:September 9th, 2026';
   const values = new Map([[key, JSON.stringify({
+    version: 2, id: 'old-operation', graph: 'test-graph', pageUid: 'day',
     pageTitle: 'September 9th, 2026', rootUid: 'nautilus-log-plan-2026-09-09',
-    nodes: [{ uid: 'nautilus-log-plan-2026-09-09', parentUid: null, order: 0, fingerprint: 'fbad' }, { uid: 'missing-child', parentUid: 'nautilus-log-plan-2026-09-09', order: 0, fingerprint: 'fbad' }],
+    nodes: [{ uid: 'nautilus-log-plan-2026-09-09', parentUid: 'day', order: 0, hash: '0'.repeat(64) }, { uid: 'missing-child', parentUid: 'nautilus-log-plan-2026-09-09', order: 0, hash: '0'.repeat(64) }],
   })]]);
   const session = extension.createTodayPlanSession(sessionOptions({
     extensionAPI: { settings: { get: (name) => name === 'language' ? 'en' : values.get(name), set: async () => {} } },
@@ -430,7 +440,7 @@ test('custom template is blocked with zero writes', async (t) => {
   assert.equal(result.outcome, 'blocked');
   assert.equal(graph.counts().createBlock, 0);
   assert.equal(graph.counts().createPage, 0);
-  assert.match(toasts[0][0], /template/i);
+  assert.match(result.message, /template/i);
   session.destroy();
 });
 
@@ -476,7 +486,7 @@ test('createBlock throw after disk write locates without retry or delete', async
   session.destroy();
 });
 
-test('a failed write is retried only on an explicit second action', async (t) => {
+test('an ambiguous failed write requires explicit same-intent continuation', async (t) => {
   const extension = await loadExtension();
   const graph = createGraph();
   graph.addPage('September 9th, 2026', 'day');
@@ -490,9 +500,9 @@ test('a failed write is retried only on an explicit second action', async (t) =>
   });
   const session = extension.createTodayPlanSession(sessionOptions().options);
   const first = await session.ensureToday();
-  assert.equal(first.status, 'read-failed');
+  assert.equal(first.status, 'partial');
   assert.equal(attempts, 1);
-  const result = await session.ensureToday();
+  const result = await session.ensureToday({ resume: true });
   assert.equal(result.status, 'ready-present');
   assert.equal(attempts, 2);
   assert.equal(graph.counts().createBlock, 1);

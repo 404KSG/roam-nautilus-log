@@ -71,57 +71,75 @@ function blockByUid(uid) {
   return roam.data?.pull?.("[*]", [":block/uid", uid]) || null;
 }
 
-function queryBlock(uid) {
+function queryBlock(uid, strict = false) {
   const roam = api();
   if (!roam || !uid) return null;
-  return roam.q?.(`[:find (pull ?e [:block/uid :block/string :block/order :block/open :block/heading :block/text-align :block/children-view-type]) :where [?e :block/uid "${uid}"]]`)?.[0]?.[0] || null;
+  const rows = templateQueryRows(roam.q?.(`[:find (pull ?e [*]) :where [?e :block/uid ${JSON.stringify(uid)}]]`), strict);
+  if (strict && rows.length > 1) throw new Error('Roam returned duplicate block results.');
+  return rows[0]?.[0] || null;
 }
 
 const CLONE_PROPERTIES = ['open', 'heading', 'text-align', 'children-view-type'];
 
-function cloneProperties(block) {
+// Wildcard Pull detects fields that an allowlist-only Pull would silently lose.
+// Native :children/view-type maps to the mutation field children-view-type.
+function normalizeBlock(block) {
+  if (!block || typeof block !== 'object' || Array.isArray(block)) return block;
   const result = {};
-  for (const key of CLONE_PROPERTIES) {
-    const value = block?.[key] ?? block?.[`:${key}`] ?? block?.[`block/${key}`]
-      ?? block?.[`:block/${key}`];
-    if (value !== undefined && value !== null) result[key] = value;
+  for (const [raw, value] of Object.entries(block)) {
+    const native = raw.replace(/^:/, '');
+    const key = ['children/view-type', 'view-type'].includes(native)
+      ? 'children-view-type' : native.replace(/^block\//, '');
+    if (key in result && JSON.stringify(result[key]) !== JSON.stringify(value)) throw new Error(`Conflicting property: ${raw}`);
+    result[key] = value;
   }
-  // Roam may omit the false-valued attribute from a Pull; creation has the
-  // same false default, so normalize it for a stable verified clone shape.
-  if (result.open === undefined) result.open = false;
   return result;
 }
-
-function snapshotNode(block, children) {
-  if (!block || typeof block.uid !== 'string' || !block.uid || typeof block.string !== 'string') {
-    throw new Error('Roam returned unreadable template content.');
+// Roam's query serialization can drop non-block keyword namespaces too:
+// create/edit attribution becomes time/user, and viewing activity is seen-by.
+// These are host-managed metadata, not template formatting to clone.
+const READ_METADATA = new Set(['db/id', 'id', 'page', 'parents', 'children', 'refs', '_children', 'parentUid',
+  'create/time', 'create/user', 'edit/time', 'edit/user', 'edit/seen-by',
+  'time', 'user', 'seen-by', 'uid', 'string', 'order']);
+function cloneProperties(block) {
+  for (const key of Object.keys(block)) {
+    if (!CLONE_PROPERTIES.includes(key) && !READ_METADATA.has(key)) throw new Error(`Cannot preserve property "${key}" on block ${block.uid}.`);
   }
-  return { uid: block.uid, string: block.string, properties: cloneProperties(block), children };
+  const result = { open: true, heading: 0, 'text-align': 'left', 'children-view-type': 'bullet' };
+  for (const key of CLONE_PROPERTIES) {
+    if (block[key] !== undefined && block[key] !== null) result[key] = block[key];
+  }
+  if (typeof result.open !== 'boolean' || ![0,1,2,3].includes(result.heading)
+    || !['left','center','right','justify'].includes(result['text-align'])
+    || !['bullet','numbered','document'].includes(result['children-view-type'])) throw new Error(`Invalid presentation properties on block ${block.uid}.`);
+  return result;
 }
-
 function snapshotTree(root, strict = true) {
-  const visit = (block, seen = new Set()) => {
-    if (seen.has(block?.uid)) throw new Error('Roam returned a cyclic template tree.');
-    const nextSeen = new Set(seen).add(block.uid);
-    const children = childBlocks(block.uid, strict).map((child) => visit(child, nextSeen));
-    return snapshotNode(block, children);
+  const seen = new Set();
+  let textUnits = 0;
+  const visit = (block, depth = 0) => {
+    if (seen.has(block.uid)) throw new Error(`Duplicate UID or cycle in template: ${block.uid}.`);
+    seen.add(block.uid);
+    textUnits += block.string.length;
+    if (seen.size > 2000 || depth > 64 || textUnits > 1000000) throw new Error('Template exceeds safety bounds (2000 blocks, 64 levels, 1000000 text code units).');
+    const children = childBlocks(block.uid, strict);
+    if (children.some((child, index) => child.order !== index)) throw new Error(`Invalid child order under ${block.uid}.`);
+    return Object.freeze({ uid: block.uid, string: block.string, order: block.order,
+      properties: Object.freeze(cloneProperties(block)), children: Object.freeze(children.map(child => visit(child, depth + 1))) });
   };
   return visit(root);
 }
-
 function fingerprintTree(node) {
-  return JSON.stringify({
-    uid: node.uid, string: node.string, properties: node.properties,
-    children: node.children.map(fingerprintTree),
-  });
+  // Serialize the object once, not recursively escaped JSON strings.
+  return JSON.stringify(node);
 }
 
 function getPageUidByPageTitle(title) {
   const roam = api();
   if (!roam?.q) return null;
-  return roam.q(
+  return normalizeBlock(roam.q(
     `[:find (pull ?e [:block/uid]) :where [?e :node/title "${title}"]]`,
-  )?.[0]?.[0]?.uid || null;
+  )?.[0]?.[0])?.uid || null;
 }
 
 function getBlockContentStringByUID(uid) {
@@ -147,6 +165,8 @@ async function createBlock(parentUid, order, string, uid, extra = {}) {
 }
 
 function templateQueryRows(rows, strict) {
+  if (strict && Array.isArray(rows) && rows.length > 2000) throw new Error('Template query exceeds the 2000-block safety bound.');
+  if (Array.isArray(rows)) rows = rows.map(row => Array.isArray(row) ? row.map(normalizeBlock) : row);
   if (strict && (!Array.isArray(rows) || rows.some((row) => (
     !Array.isArray(row) || row.length !== 1
     || typeof row[0]?.uid !== 'string' || !row[0].uid
@@ -158,8 +178,8 @@ function templateQueryRows(rows, strict) {
 function childBlocks(parentUid, strict = false) {
   const roam = api();
   if (!roam?.q || !parentUid) return [];
-  return templateQueryRows(roam.q(`[:find (pull ?child [:block/uid :block/string :block/order :block/open :block/heading :block/text-align :block/children-view-type])
-                 :where [?parent :block/uid "${parentUid}"]
+  return templateQueryRows(roam.q(`[:find (pull ?child ${strict ? '[*]' : '[:block/uid :block/string :block/order]'})
+                 :where [?parent :block/uid ${JSON.stringify(parentUid)}]
                         [?parent :block/children ?child]]`), strict)
     .map((row) => row?.[0])
     .filter(Boolean)
@@ -267,23 +287,35 @@ export function freezeCanonicalTemplate(renderStringCore) {
   }
   const candidates = managedTemplateCandidates(renderStringCore, true);
   if (candidates.length === 0) return { kind: 'missing' };
-  if (candidates.length !== 1) return { kind: 'unsupported', reason: 'multipleTemplates' };
+  if (candidates.length !== 1) return { kind: 'unsupported', reason: 'Multiple managed templates were found; keep exactly one.', templateUid: getPageUidByPageTitle(RENDER_PAGE) || candidates[0].template.uid };
   const candidate = candidates[0];
   const unsupported = (reason) => ({ kind: 'unsupported', reason, templateUid: candidate.template.uid });
   if (!candidate.renderBlock || !candidate.parsed || candidate.parsed.unsupported) {
-    return unsupported('unsupportedRenderer');
+    return unsupported('The template needs one supported managed renderer without extra arguments.');
   }
   const source = candidate.renderBlock.string || '';
   const renderStringCores = managedRenderCores(renderStringCore);
   const coreCount = renderStringCores.reduce((count, core) => count + source.split(core).length - 1, 0);
-  if (source.slice(source.lastIndexOf('}}') + 2).trim() || coreCount !== 1) {
-    return unsupported('unsupportedRenderer');
+  if (source.slice(source.lastIndexOf('}}') + 2).trim() || coreCount !== 1
+    || (source.match(/\{\{\s*(?:\[\[)?roam\/render/g) || []).length !== 1) {
+    return unsupported('The template must contain exactly one renderer and no trailing content.');
   }
   const siblings = childBlocks(candidate.template.uid, true);
   if (siblings.length !== 1 || siblings[0].uid !== candidate.renderBlock.uid) {
-    return unsupported('extraTemplateSiblings');
+    return unsupported('Extra top-level template siblings are not supported; put ordinary content under the renderer.');
   }
-  const root = snapshotTree(candidate.renderBlock, true);
+  if (siblings[0].order !== 0) return unsupported('The renderer has invalid order under its template.');
+  let root;
+  try { root = snapshotTree(candidate.renderBlock, true); }
+  catch (error) { return unsupported(error.message); }
+  const scan = (node) => {
+    if (node !== root && /\{\{\s*(?:\[\[)?roam\/render/i.test(node.string)) return 'A second renderer in the template is not supported.';
+    if (/^\s*:?LOGBOOK:{1,2}\s*$/i.test(node.string) || /^\s*:?CLOCK:{1,2}\s*\[/im.test(node.string)) return 'LOGBOOK/CLOCK history cannot be copied as a fresh plan.';
+    for (const child of node.children) { const reason = scan(child); if (reason) return reason; }
+    return null;
+  };
+  const reason = scan(root);
+  if (reason) return unsupported(reason);
   return {
     kind: 'standard', root, templateUid: candidate.template.uid,
     fingerprint: fingerprintTree(root),
@@ -293,13 +325,13 @@ export function freezeCanonicalTemplate(renderStringCore) {
 export function inspectCanonicalTemplate(renderStringCore) {
   const snapshot = freezeCanonicalTemplate(renderStringCore);
   return snapshot.kind === 'unsupported'
-    ? { kind: 'custom', reason: snapshot.reason }
-    : { kind: snapshot.kind, reason: snapshot.reason };
+    ? { kind: 'custom', reason: snapshot.reason, templateUid: snapshot.templateUid }
+    : { kind: snapshot.kind, reason: snapshot.reason, templateUid: snapshot.templateUid };
 }
 
 /** Read a block and all descendants using the same conservative clone shape. */
 export function readBlockTree(uid) {
-  const root = queryBlock(uid);
+  const root = queryBlock(uid, true);
   return root ? snapshotTree(root, true) : null;
 }
 

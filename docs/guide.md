@@ -98,16 +98,34 @@ new block receives a new UID; references inside that tree are remapped and
 external references remain unchanged. Any recognized Nautilus renderer already
 on that page, including an empty or all-DONE plan, is locate-only. Multiple roots,
 top-level template siblings, dynamic/unreadable content, or unavailable required
-fields fail closed and offer an open-template review action. Nothing is created
+fields fail closed with a specific reason and **View template**. LOGBOOK/CLOCK
+history is not copied. The root string is preserved, not regenerated from settings;
+`open`, heading, alignment, and children view type are preserved too. No panel,
+confirmation, or manual `;;` intervenes on a normal create click. Nothing is created
 on load or at midnight.
 
 Loading, confirmed absence, unsupported templates, partial writes, and failures
 have separate states. **Check again** only rereads; a navigation failure only
-retries opening. Creation requires a known graph, Web Locks, and an opaque
-settings-backed structural operation record. Occupied identifiers are never
-overwritten, a complete-tree readback is required for success, and an unconfirmed
-or partial write never triggers an automatic second insert. A date or graph change
-stops subsequent writes rather than retargeting the action.
+retries opening. Creation requires a known graph, Web Locks, and a read-back
+settings receipt with destination identifiers, parents/orders, and SHA-256 hashes,
+not private template text. Settings are not a global lock. WebLocks coordinate
+participating browser contexts, not devices or manual writers.
+
+**Creation incomplete** opens diagnosis and verified-block counts. **Inspect created
+blocks** is read-only and never clears partial status. **Continue creation** is
+available only to the original in-memory operation: it verifies unchanged text,
+attributes, parents, and order before appending just the missing blocks. After
+reload there is no continuation from a newly read template. Corrupt receipts fail
+closed; keep the created contents for inspection rather than deleting/retrying a
+second copy. Occupied UIDs are never overwritten, and success requires full exact
+tree readback, including the root's Daily Note membership.
+
+Before the first template request, a date change stops the action. After writing
+starts, it finishes the frozen original day and explains midnight without showing
+that plan as today's ready state. Graph changes and unload stop following work;
+already-issued host requests cannot be rolled back. A page created before a later
+pre-template failure may remain empty. Such failures are retryable when no template
+request was made.
 
 No new per-second graph queries are added. With execution on, discovery reuses
 runtime data; with it off, checks occur at initialization, throttled foreground,
@@ -120,7 +138,7 @@ capacity text or 136×6 energy bar returns and the plan is opened in the main wi
 If CLOCK/POMO is already running without a plan, its timer and applicable stop
 controls stay visible; use the create button in the panel's **Plan** empty-state.
 
-Click the Nautilus topbar trigger to open the panel, Option/Alt-click it to locate
+When a plan is present, click the Nautilus topbar trigger to open the panel, Option/Alt-click it to locate
 the Primary Plan in the main window, or Shift-click it to open or bring the same
 block to the top of Roam's right sidebar.
 
@@ -269,6 +287,17 @@ The Command Palette exposes:
 
 Bind them in **Roam Settings → Hotkeys**. TODO context menus also expose Clock In and
 Clock Out while tracking is on.
+
+## Local acceptance and API limits
+
+`npm test` includes the actual source-query/freeze/session/adapter path over a
+low-level graph fixture. `PYTHONDONTWRITEBYTECODE=1 npm run test:ui` includes real
+session clicks through both launchers, not fabricated ready-state responses.
+Screenshots and results are in `/tmp/nautilus-real-today-plan`. Official Roam schema
+and type evidence, exact integrity rules, and platform limits are documented in the
+[full-template design](./plans/2026-09-10-full-template-creation-design.md).
+No live Roam Desktop graph was used; native mutation/Pull/settings behavior remains
+a live-validation boundary.
 
 ## Data and safety
 

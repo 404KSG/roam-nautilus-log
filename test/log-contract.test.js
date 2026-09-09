@@ -406,7 +406,8 @@ test('the topbar exposes a stable hover tooltip for its modifier-click shortcuts
   assert.match(timingTopbar, /text\.capacity\.totalConnector/);
   assert.match(timingTopbar, /capacity\.removeAttribute\('title'\)/);
   assert.match(timingTopbar, /shortcutTooltip\.setAttribute\('role', 'tooltip'\)/);
-  assert.match(css, /\.nautilus-log-timing__shortcut-tooltip\s*\{[^}]*position:\s*absolute;/s);
+  assert.match(css, /\.nautilus-log-timing__shortcut-tooltip\s*\{[^}]*position:\s*fixed;/s);
+  assert.match(css, /\.nautilus-log-timing__shortcut-tooltip\s*\{[^}]*box-sizing:\s*border-box;[^}]*white-space:\s*normal;/s);
   assert.match(css, /\.nautilus-log-timing__shortcut-tooltip\s*\{[^}]*pointer-events:\s*none;/s);
   assert.match(css, /\.nautilus-log-timing__shortcut-tooltip\s*\{[^}]*background:\s*var\(--nl-shortcut-tooltip-bg\);[^}]*display:\s*grid;[^}]*font-size:\s*12px;[^}]*padding:\s*7px 9px;/s);
   assert.match(css, /\.nautilus-log-timing__shortcut-tooltip-value\.is-positive\s*\{[^}]*color:\s*var\(--nautilus-log-positive\);/s);

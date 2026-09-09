@@ -190,6 +190,8 @@ def run() -> int:
             assert_true(page.locator(".nautilus-log-timing__trigger").is_disabled(), f"{mount}: checking is actionable", failures)
             page.evaluate("mount => todayPlanHarness[mount]({ status: 'read-failed' })", mount)
             page.locator(".nautilus-log-timing__trigger").click()
+            page.get_by_role("button", name="Check again", exact=True).click()
+            page.wait_for_function("() => todayPlanHarness.api.discoverCalls().length === 1")
             assert_true(page.evaluate("() => todayPlanHarness.api.ensureCalls().length") == 0, f"{mount}: read retry tried to create", failures)
             assert_true(page.evaluate("() => todayPlanHarness.api.discoverCalls().length") == 1, f"{mount}: retry did not re-read", failures)
 

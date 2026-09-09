@@ -485,7 +485,8 @@ export function readDailyPageUid(title) {
   return uid;
 }
 
-export async function createDailyPage(title, date) {
+export async function createDailyPage(title, date, assertActive = () => {}) {
+  assertActive();
   if (!title || !(date instanceof Date) || !Number.isFinite(date.getTime())) {
     throw new Error('A Daily Note title and date are required.');
   }
@@ -509,10 +510,12 @@ export async function createDailyPage(title, date) {
       await legacy.call(roam, { page: { title, uid } });
     }
   } catch (error) {
+    assertActive();
     const confirmed = readDailyPageUid(title);
     if (confirmed) return confirmed;
     throw error;
   }
+  assertActive();
   const confirmed = readDailyPageUid(title);
   if (!confirmed) throw new Error('Daily page creation could not be confirmed.');
   return confirmed;
@@ -656,14 +659,17 @@ export async function completeTask(taskUid, statusOwnerUid = taskUid) {
   return true;
 }
 
-export async function openPrimaryPlan(planUid, { sidebar = false } = {}) {
+export async function openPrimaryPlan(planUid, { sidebar = false, assertActive = () => {} } = {}) {
+  assertActive();
   if (!planUid) throw new Error('No Primary Nautilus Log was found today.');
-  if (sidebar) return openTaskInRightSidebar(planUid);
+  if (sidebar) return openTaskInRightSidebar(planUid, assertActive);
   const openBlock = api()?.ui?.mainWindow?.openBlock;
   if (typeof openBlock !== 'function') throw new Error('Roam main-window navigation is unavailable.');
   await openBlock({ block: { uid: planUid } });
+  assertActive();
   window.setTimeout?.(() => {
-    const node = document.querySelector?.(blockUidSelector(planUid));
+    try { assertActive(); } catch (_) { return; }
+    const node = typeof document !== 'undefined' && document.querySelector?.(blockUidSelector(planUid));
     node?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
     showLocatedFeedback(node);
   }, 80);
@@ -757,7 +763,8 @@ export function warmRightSidebarWindowCache() {
  * leaves behind a permanent false dedupe marker. A newer rapid switch can
  * supersede an older request before that older request mutates the stack.
  */
-export function frontBlockInRightSidebar(taskUid) {
+export function frontBlockInRightSidebar(taskUid, assertActive = () => {}) {
+  assertActive();
   if (!taskUid) return Promise.resolve({ ok: false, reason: 'missing-uid' });
   const sidebar = api()?.ui?.rightSidebar;
   if (typeof sidebar?.addWindow !== 'function') {
@@ -769,7 +776,7 @@ export function frontBlockInRightSidebar(taskUid) {
   }
 
   const intent = ++latestSidebarIntent;
-  const isCurrent = () => intent === latestSidebarIntent;
+  const isCurrent = () => { assertActive(); return intent === latestSidebarIntent; };
   const openRequest = (() => {
     try { return Promise.resolve(sidebar.open?.()).catch(() => undefined); }
     catch (_error) { return Promise.resolve(); }
@@ -850,6 +857,7 @@ export function frontBlockInRightSidebar(taskUid) {
       if (typeof sidebar.setWindowOrder === 'function') {
         try {
           await sidebar.setWindowOrder({ window: blockSidebarWindow(taskUid, 0) });
+          assertActive();
           await sidebar.expandWindow?.({ window: blockSidebarWindow(taskUid) });
           return { ok: true, deduped: true, reordered: true };
         } catch (_error) {
@@ -892,6 +900,7 @@ export function frontBlockInRightSidebar(taskUid) {
             message: 'Roam could not move the Timing Line sidebar window to the top.',
           };
         }
+        assertActive();
         await sidebar.expandWindow?.({ window: blockSidebarWindow(taskUid) });
         rememberSidebarWindow(sidebar, taskUid);
         return { ok: true, added: true, recovered: true };
@@ -908,8 +917,9 @@ export function frontBlockInRightSidebar(taskUid) {
   }));
 }
 
-export async function openTaskInRightSidebar(taskUid) {
-  const result = await frontBlockInRightSidebar(taskUid);
+export async function openTaskInRightSidebar(taskUid, assertActive = () => {}) {
+  const result = await frontBlockInRightSidebar(taskUid, assertActive);
+  assertActive();
   if (!result.ok && !result.skipped) throw new Error(result.message || 'Could not open this task in the right sidebar.');
   return result;
 }
