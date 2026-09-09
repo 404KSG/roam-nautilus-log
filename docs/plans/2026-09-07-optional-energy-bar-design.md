@@ -59,9 +59,8 @@ projection.
 ## Interface
 
 Full density becomes one compact two-level instrument. The upper-left row is a
-continuous 136×6px depth-gauge body with a restrained 1px corner and symmetric
-vertical end caps. The lower row becomes one quiet, left-aligned
-sentence, such as `70% left · 3h20m planned`, whose left edge
+continuous 136×6px fully rounded depth-gauge capsule. The lower row becomes one
+quiet, left-aligned sentence, such as `70% left · 3h20m planned`, whose left edge
 matches the track. CLOCK or POMO elapsed time occupies a separate right cell
 that spans both rows and centers on the Roam topbar axis, so the track never
 shrinks or changes scale when timing starts. The previous percentage to the
@@ -73,13 +72,10 @@ The Nautilus icon and divider dot disappear while the complete energy
 instrument has authoritative capacity data. The entire instrument remains the
 same clickable trigger. If data is unavailable, or responsive density yields to
 Roam search, the Nautilus icon returns as the safe 30px navigation affordance.
-The semantic track has no metallic border, bevel, internal quarter ticks, or
-idle animation. Each decorative end is a complete 1px-wide, 10px-tall vertical
-cap: it rises 2px above and below the 6px body and uses the primary control-icon
-color at full opacity, without a gradient or shadow. The caps remain outside the
-136px data scale and never encode capacity or warning state. Its lower labels
-separate stronger tabular values from quieter words; only a real warning turns either
-metric into a status color.
+The capsule has no metallic border, bevel, internal quarter ticks, shadow,
+decorative end structure, or idle animation. Its lower labels separate stronger
+tabular values from quieter words; only a real warning turns the lower metric
+into a status color.
 
 The palette is restrained and theme-safe:
 
@@ -92,11 +88,10 @@ The palette is restrained and theme-safe:
 - overload or no-slot: the existing warning color appears only in the exact
   lower `OVER +Xm` or `NO SLOT Xm` cue, without a duplicate track marker.
 
-Track and fill layers stay flat: no border, inset ring, outer shadow, boundary
-shadow, body gradient, idle pulse, or continuous glow. Two static pseudo-elements
-form solid vertical end caps with no gradient, shadow, horizontal point, or
-animation. Two equal 14px rows place the track center 7px above the Roam topbar
-axis and the lower summary center 7px below it.
+Track and fill layers stay flat and fully rounded: no border, inset ring, outer
+shadow, boundary shadow, body gradient, decorative pseudo-elements, idle pulse,
+or continuous glow. Two equal 14px rows place the track center 7px above the
+Roam topbar axis and the lower summary center 7px below it.
 The 13px tabular timer spans both rows and centers directly on that axis; POMO's
 smaller mode label remains secondary, and its adjacent stop glyph
 uses the same axis without shrinking its button target. The lower values and

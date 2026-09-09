@@ -1478,35 +1478,13 @@
   row-gap: 0;
 }
 
-.nautilus-log-timing__capacity-token.is-energy::before,
-.nautilus-log-timing__capacity-token.is-energy::after {
-  background: currentColor;
-  box-shadow: none;
-  color: var(--nautilus-log-control-icon);
-  content: "";
-  height: 10px;
-  opacity: 1;
-  pointer-events: none;
-  position: absolute;
-  top: 2px;
-  width: 1px;
-}
-
-.nautilus-log-timing__capacity-token.is-energy::before {
-  left: -1px;
-}
-
-.nautilus-log-timing__capacity-token.is-energy::after {
-  left: 136px;
-}
-
 .nautilus-log-timing__energy-track {
   --nautilus-energy-available: 0%;
   --nautilus-energy-reserve: 0%;
   align-self: center;
   background: #dce1e5;
   border: 0;
-  border-radius: 1px;
+  border-radius: 999px;
   box-shadow: none;
   box-sizing: border-box;
   display: block;

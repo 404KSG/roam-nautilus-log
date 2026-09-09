@@ -13,14 +13,11 @@
   themes. Its borderless two-level depth gauge uses a fixed 136×6px track above
   a left-aligned `% left · planned duration` summary. Those rows fold evenly
   around the Roam topbar centerline, where the larger CLOCK/POMO timer and stop
-  control remain centered without changing the track scale. The restrained 1px
-  track uses Roam theme gray for free reserve, keeps planned demand lighter
-  green, and adds one complete 1px vertical end cap at each side. Free reserve
-  and both crisp, shadowless caps reuse the primary control-icon color exactly;
-  the caps rise 2px above and below the body without layout growth. Overload and
-  no-slot warnings appear once in the exact lower text instead of adding a
-  duplicate track marker. The shortcut tooltip uses a
-  seam-free two-layer pointer. The full
+  control remain centered without changing the track scale. The fully rounded
+  capsule uses the primary control-icon gray for free reserve, keeps planned
+  demand lighter green, and carries no border, shadow, decorative end structure,
+  or overload marker. Overload and no-slot warnings appear once in the exact
+  lower text. The shortcut tooltip uses a seam-free two-layer pointer. The full
   gauge replaces the leading icon, while missing data or constrained space
   restores the 30px icon fallback.
   Existing `left` text remains unchanged while the option is off.
