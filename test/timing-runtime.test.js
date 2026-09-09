@@ -1240,7 +1240,7 @@ test('standalone POMO restores its absolute start and is cleared if CLOCK is alr
   assert.equal(settings.get('standalone-pomodoro-state'), null);
 });
 
-async function coordinatedRuntimes(t, {BroadcastChannel} = {}) {
+async function coordinatedRuntimes(t, {BroadcastChannel, ...runtimeOptions} = {}) {
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
   const load = () => import(`data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#clock-client-${Math.random()}`);
   const {roam, blocks, trace} = graphMock();
@@ -1251,6 +1251,7 @@ async function coordinatedRuntimes(t, {BroadcastChannel} = {}) {
   let current = new Date(2026, 7, 22, 10);
   const settings = new Map([['timing-line-sidebar', false]]);
   const options = {
+    ...runtimeOptions,
     extensionAPI: {settings: {get: (key) => settings.get(key), set: async (key, value) => settings.set(key, value)}},
     now: () => new Date(current),
   };
@@ -1340,4 +1341,190 @@ test('a changed graph cannot receive a CLOCK from an old runtime', async (t) => 
   const before = blocks.size;
   await assert.rejects(first.startTask('task-a'), /graph.*changed/i);
   assert.equal(blocks.size, before);
+});
+
+test('background and direct refreshes cannot publish ready during a pending CLOCK write', async (t) => {
+  const {first, roam, trace} = await coordinatedRuntimes(t);
+  let release;
+  let entered;
+  const gate = new Promise((resolve) => {release = resolve;});
+  const writing = new Promise((resolve) => {entered = resolve;});
+  t.after(() => release());
+  const create = roam.createBlock;
+  roam.createBlock = async (payload) => {
+    if (/^CLOCK:/.test(payload.block.string)) {entered(); await gate;}
+    return create(payload);
+  };
+  const pending = first.startTask('task-a');
+  await writing;
+  const readCount = trace.length;
+  const requested = first.requestRefresh({immediate: true});
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(first.getSnapshot().status, 'working');
+    assert.equal(first.refresh().status, 'working');
+    assert.equal(trace.length, readCount, 'background work should defer graph reads while a writer is pending');
+  } finally {
+    release();
+    await pending;
+  }
+  const completed = await pending;
+  assert.equal(completed.status, 'ready');
+  assert.equal((await requested).activeWork.focused.taskUid, 'task-a');
+});
+
+test('Clock Out preserves a newer foreign CLOCK and reschedules the cancelled refresh', async (t) => {
+  const {first, second, setNow} = await coordinatedRuntimes(t);
+  const idle = new Map();
+  let nextId = 0;
+  window.requestIdleCallback = (callback) => {const id = ++nextId; idle.set(id, callback); return id;};
+  window.cancelIdleCallback = (id) => idle.delete(id);
+  await first.startTask('task-a');
+  setNow(new Date(2026, 7, 22, 10, 2));
+  await second.startTask('task-b');
+  const requested = first.requestRefresh();
+  const stopped = await first.stopTask();
+  assert.equal(stopped.activeWork.focused?.taskUid, 'task-b', 'do not show idle or retarget an old Stop click to another task');
+  assert.ok(idle.size > 0, 'the cancelled idle read must be scheduled again');
+  for (const [id, callback] of [...idle]) {idle.delete(id); callback();}
+  assert.equal((await requested).activeWork.focused?.taskUid, 'task-b');
+  assert.equal(second.refresh().activeWork.focused?.taskUid, 'task-b');
+});
+
+test('a stale Delete cannot remove a CLOCK closed by another tab', async (t) => {
+  const {first, second, blocks, setNow} = await coordinatedRuntimes(t);
+  await first.startTask('task-a');
+  const originalUid = first.getSnapshot().activeWork.focused.clockUid;
+  setNow(new Date(2026, 7, 22, 10, 2));
+  await second.startTask('task-b');
+  const history = blocks.get(originalUid).string;
+  await assert.rejects(first.deleteCurrentClock('task-a'), /changed|running/i);
+  assert.equal(blocks.get(originalUid)?.string, history);
+  assert.equal(first.getSnapshot().activeWork.focused?.taskUid, 'task-b');
+});
+
+test('a stale Delete never retargets a new CLOCK for the same task', async (t) => {
+  const {first, second, blocks, setNow} = await coordinatedRuntimes(t);
+  await first.startTask('task-a');
+  const originalUid = first.getSnapshot().activeWork.focused.clockUid;
+  second.refresh();
+  setNow(new Date(2026, 7, 22, 10, 1));
+  await second.stopTask();
+  await second.startTask('task-a');
+  const newUid = second.getSnapshot().activeWork.focused.clockUid;
+  await assert.rejects(first.deleteCurrentClock('task-a'), /changed|running/i);
+  assert.ok(blocks.has(originalUid));
+  assert.ok(blocks.has(newUid));
+  assert.equal(first.getSnapshot().activeWork.focused?.clockUid, newUid);
+});
+
+test('completion closes a target task CLOCK even when only another tab knew it', async (t) => {
+  const {first, second, setNow} = await coordinatedRuntimes(t);
+  await second.startTask('task-a');
+  setNow(new Date(2026, 7, 22, 10, 4));
+  const completed = await first.completeTask('task-a');
+  assert.equal(completed.activeWork.focused, null);
+  assert.equal(second.refresh().entries.some((entry) => entry.running), false);
+  assert.equal(completed.dailyReview.rows.find((row) => row.uid === 'task-a').actualMinutes, 4);
+});
+
+test('Delete revalidates the selected block after the running-CLOCK query', async (t) => {
+  const {first, roam, blocks} = await coordinatedRuntimes(t);
+  await first.startTask('task-a');
+  const uid = first.getSnapshot().activeWork.focused.clockUid;
+  const history = 'CLOCK: [2026-08-22 Sat 10:00]--[2026-08-22 Sat 10:02] => 0:02';
+  const pull = roam.data.pull;
+  roam.data.pull = (pattern, lookup) => {
+    if (lookup[1] === uid) blocks.get(uid).string = history;
+    return pull(pattern, lookup);
+  };
+  await assert.rejects(first.deleteCurrentClock('task-a'), /changed|historical/i);
+  assert.equal(blocks.get(uid)?.string, history);
+});
+
+test('failed completion shows an already-closed CLOCK rather than restoring stale running state', async (t) => {
+  const {first, roam, setNow} = await coordinatedRuntimes(t);
+  await first.startTask('task-a');
+  setNow(new Date(2026, 7, 22, 10, 2));
+  const update = roam.updateBlock;
+  roam.updateBlock = (payload) => {
+    if (payload.block.uid === 'task-a') throw new Error('Completion refused');
+    return update(payload);
+  };
+  await assert.rejects(first.completeTask('task-a'), /Completion refused/);
+  const state = first.getSnapshot();
+  assert.equal(state.status, 'ready');
+  assert.equal(state.activeWork.focused, null);
+  assert.equal(state.entries.find((entry) => entry.taskUid === 'task-a').minutes, 2);
+  assert.match(state.notice, /Completion refused/);
+});
+
+test('a source-completion watch arriving during a write is reconciled after settlement', {timeout: 3000}, async (t) => {
+  const watchers = [];
+  const {first, roam, blocks} = await coordinatedRuntimes(t, {
+    watchPlan: (_uid, callback) => {watchers.push(callback); return () => {};},
+  });
+  let release;
+  let entered;
+  const gate = new Promise((resolve) => {release = resolve;});
+  const writing = new Promise((resolve) => {entered = resolve;});
+  t.after(() => release());
+  const create = roam.createBlock;
+  roam.createBlock = async (payload) => {
+    if (/^CLOCK:/.test(payload.block.string)) {entered(); await gate;}
+    return create(payload);
+  };
+  const completed = new Promise((resolve) => {
+    const stop = first.subscribe((state) => {
+      if (state.status === 'ready' && state.entries.some((entry) => entry.status === 'DONE' && !entry.running)) {
+        stop(); resolve(state);
+      }
+    });
+  });
+  const pending = first.startTask('task-a');
+  await writing;
+  blocks.get('task-a').string = '{{[[DONE]]}} Alpha 30m';
+  watchers[0](null);
+  release();
+  await pending;
+  assert.equal((await completed).activeWork.focused, null);
+});
+
+test('queued source reconciliation cannot overwrite a newer foreign CLOCK with captured entries', {timeout: 3000}, async (t) => {
+  const watchers = [];
+  const {first, second, blocks} = await coordinatedRuntimes(t, {
+    watchPlan: (_uid, callback) => {watchers.push(callback); return () => {};},
+  });
+  await first.startTask('task-a');
+  blocks.get('task-a').string = '{{[[DONE]]}} Alpha 30m';
+  let release;
+  let entered;
+  const gate = new Promise((resolve) => {release = resolve;});
+  const held = new Promise((resolve) => {entered = resolve;});
+  t.after(() => release());
+  const locks = globalThis.navigator.locks;
+  let holdNext = true;
+  window.navigator = {locks: {
+    request: (name, options, operation) => locks.request(name, options, async () => {
+      if (holdNext) {holdNext = false; entered(); await gate;}
+      return operation();
+    }),
+  }};
+  const foreign = second.startTask('task-b');
+  await held;
+  const waiting = new Promise((resolve) => {
+    const stop = first.subscribe((state) => {if (state.status === 'working') {stop(); resolve();}});
+  });
+  const reconciled = new Promise((resolve) => {
+    const stop = first.subscribe((state) => {
+      if (state.status === 'ready' && state.entries.some((entry) => entry.taskUid === 'task-a' && !entry.running)) {
+        stop(); resolve(state);
+      }
+    });
+  });
+  watchers[0](null);
+  await waiting;
+  release();
+  await foreign;
+  assert.equal((await reconciled).activeWork.focused?.taskUid, 'task-b');
 });

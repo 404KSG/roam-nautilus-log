@@ -18,6 +18,13 @@ change task ownership, add calendar automation, or authorize publishing.
   Missing lock/scope support must not silently claim cross-tab safety. Browser
   locks do not coordinate separate storage partitions, profiles, or devices;
   Roam remains the graph authority, including its synchronization limitations.
+- Keep mutation state separate from refresh state. Defer external reads while a
+  write is pending, then resume cancelled reads without settling their callers
+  with stale data. Revalidate live CLOCKs inside the lock for completion,
+  reconciliation, stop, delete, and disable as well as start. Bind stop/delete
+  intent to the CLOCK UID visible when clicked; never retarget a stale action to
+  a newer CLOCK, even for the same task. Recheck the selected block before delete
+  and reread graph state after a partially failed write.
 - Use one cached minute-level capacity projection for the energy bar and its
   open panel. Preserve the existing cached text-only mode. Update minute-level
   metadata without replacing every task action or running a graph query.
@@ -51,8 +58,11 @@ host Roam API, browser coordination primitives, and time are faked.
 4. Existing Node and browser suites remain green, including task-reference
    ownership, CLOCK/POMO priority, sidebar ordering, warning states, themes,
    reduced motion, and today-plan creation.
-5. Build the checked-in bundle, run a focused self-review and an independent
+5. Build the production bundle, run a focused self-review and an independent
    Grok review of the source/tests/docs diff, and resolve actionable findings.
 
 Validation uses synthetic local data only. No personal Roam graph, OAuth flow,
-calendar service, release version, Git push, or Depot update is involved.
+calendar service, release version, or Depot update is involved. The implementation
+commands do not commit or push. The host's separate auto-backup mechanism did
+commit and push `c33e112` to the existing feature branch; that external behavior
+was verified and disclosed rather than silently changing the host configuration.

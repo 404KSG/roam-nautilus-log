@@ -79,6 +79,9 @@ export function createTimingRuntime({
   let refreshPromise = null;
   let resolveRefresh = null;
   let mutationQueue = Promise.resolve();
+  let mutationInFlight = false;
+  let refreshAfterMutation = false;
+  let projectionStatus = 'loading';
   const pendingMutationStarts = new Set();
   let standaloneClearPromise = null;
   let watchedPlanUid = null;
@@ -105,6 +108,14 @@ export function createTimingRuntime({
     }
   };
 
+  const reconcileSourceCompletion = (next) => {
+    if (destroyed || !next.entries.some((entry) => entry.running && entry.status === 'DONE')) return;
+    enqueue(async () => {
+      const entries = await closeDoneClocks(readCurrentClockEntries());
+      return refresh({ planSnapshot: snapshot.planSnapshot, entries });
+    }).catch((error) => console.error('[Nautilus Log] source completion reconciliation failed', error));
+  };
+
   const syncPlanWatch = () => {
     const planUid = snapshot.planSnapshot?.plan?.uid || null;
     if (planUid === watchedPlanUid) return;
@@ -114,16 +125,10 @@ export function createTimingRuntime({
     if (!planUid || typeof watchPlan !== 'function') return;
     stopPlanWatch = watchPlan(planUid, (planPull) => {
       if (destroyed || snapshot.planSnapshot?.plan?.uid !== planUid) return;
-      if (!planPull) {
-        // Compatibility fallback for custom watch adapters that only signal
-        // invalidation. The built-in bridge always supplies the direct Pull.
-        void requestRefresh({ immediate: true }).then((next) => {
-          if (!next.entries.some((entry) => entry.running && entry.status === 'DONE')) return;
-          enqueue(async () => {
-            const entries = await closeDoneClocks(next.entries);
-            return refresh({ planSnapshot: next.planSnapshot, entries });
-          }).catch((error) => console.error('[Nautilus Log] source completion reconciliation failed', error));
-        });
+      if (!planPull || mutationInFlight) {
+        // Invalidation-only adapters and writes in progress need a later
+        // authoritative read, not a Pull projected over a partial mutation.
+        void requestRefresh({ immediate: true }).then(reconcileSourceCompletion);
         return;
       }
       pendingWatchedPlanPull = planPull;
@@ -136,6 +141,10 @@ export function createTimingRuntime({
         const latestPull = pendingWatchedPlanPull;
         pendingWatchedPlanPull = null;
         if (destroyed || snapshot.planSnapshot?.plan?.uid !== planUid) return;
+        if (mutationInFlight) {
+          void requestRefresh({ immediate: true }).then(reconcileSourceCompletion);
+          return;
+        }
         const planSnapshot = projectPrimaryPlanPull(
           latestPull,
           snapshot.planSnapshot,
@@ -145,11 +154,7 @@ export function createTimingRuntime({
           planSnapshot: planSnapshot || snapshot.planSnapshot,
           entries: snapshot.entries,
         });
-        if (!next.entries.some((entry) => entry.running && entry.status === 'DONE')) return;
-        enqueue(async () => {
-          const entries = await closeDoneClocks(next.entries);
-          return refresh({ planSnapshot: next.planSnapshot, entries });
-        }).catch((error) => console.error('[Nautilus Log] source completion reconciliation failed', error));
+        reconcileSourceCompletion(next);
       }, 0);
     }, { emitInitial: false });
   };
@@ -272,9 +277,10 @@ export function createTimingRuntime({
       if (activeWork.focused && extensionAPI.settings.get(STANDALONE_POMODORO_STATE_KEY)) {
         clearPersistedStandalonePomodoro();
       }
+      projectionStatus = 'ready';
       snapshot = {
         revision: snapshot.revision + 1,
-        status: 'ready',
+        status: mutationInFlight ? 'working' : projectionStatus,
         notice,
         planSnapshot,
         entries,
@@ -286,10 +292,11 @@ export function createTimingRuntime({
       };
       syncPlanWatch();
     } catch (error) {
+      projectionStatus = 'error';
       snapshot = {
         ...snapshot,
         revision: snapshot.revision + 1,
-        status: 'error',
+        status: mutationInFlight ? 'working' : projectionStatus,
         notice: error.message || 'Timing data could not be refreshed.',
         now: now(),
       };
@@ -298,9 +305,35 @@ export function createTimingRuntime({
     return snapshot;
   };
 
+  const refreshWhenIdle = (options) => {
+    if (destroyed) return snapshot;
+    if (mutationInFlight) {
+      refreshAfterMutation = true;
+      return snapshot;
+    }
+    return refresh(options);
+  };
+
+  const scheduleRefresh = (immediate) => {
+    if (destroyed || mutationInFlight || refreshHandle !== null || !refreshRunner) return;
+    if (!immediate && typeof window.requestIdleCallback === 'function') {
+      refreshHandleKind = 'idle';
+      // Never force recovery work into a busy typing frame.
+      refreshHandle = window.requestIdleCallback(refreshRunner);
+    } else {
+      refreshHandleKind = 'timeout';
+      refreshHandle = window.setTimeout(refreshRunner, 0);
+    }
+  };
+
   const requestRefresh = ({ notice = '', immediate = false } = {}) => {
     if (destroyed) return Promise.resolve(snapshot);
+    if (mutationInFlight) {
+      refreshAfterMutation = true;
+      return refreshPromise || mutationQueue.then(() => requestRefresh({ notice, immediate }));
+    }
     if (refreshPromise) {
+      scheduleRefresh(immediate);
       if (immediate && refreshHandleKind === 'idle' && refreshRunner) {
         window.cancelIdleCallback?.(refreshHandle);
         refreshHandleKind = 'timeout';
@@ -311,8 +344,13 @@ export function createTimingRuntime({
     refreshPromise = new Promise((resolve) => {
       resolveRefresh = resolve;
       const run = () => {
+        if (destroyed || refreshRunner !== run) return;
         refreshHandle = null;
         refreshHandleKind = null;
+        if (mutationInFlight) {
+          refreshAfterMutation = true;
+          return;
+        }
         refreshRunner = null;
         let next = snapshot;
         try { next = refresh({ notice }); }
@@ -324,31 +362,28 @@ export function createTimingRuntime({
         }
       };
       refreshRunner = run;
-      if (!immediate && typeof window.requestIdleCallback === 'function') {
-        refreshHandleKind = 'idle';
-        // Recovery is background work. A forced idle timeout can fire while
-        // the user is typing and recreate the exact intermittent Enter stall
-        // this scheduler is meant to avoid.
-        refreshHandle = window.requestIdleCallback(run);
-      } else {
-        refreshHandleKind = 'timeout';
-        refreshHandle = window.setTimeout(run, 0);
-      }
+      scheduleRefresh(immediate);
     });
     return refreshPromise;
   };
 
-  const cancelScheduledRefresh = () => {
-    if (refreshHandle === null) return false;
-    if (refreshHandleKind === 'idle') window.cancelIdleCallback?.(refreshHandle);
-    else window.clearTimeout(refreshHandle);
+  const cancelScheduledRefresh = ({ settle = false } = {}) => {
+    if (!refreshPromise) return false;
+    if (refreshHandle !== null) {
+      if (refreshHandleKind === 'idle') window.cancelIdleCallback?.(refreshHandle);
+      else window.clearTimeout(refreshHandle);
+    }
     refreshHandle = null;
     refreshHandleKind = null;
-    refreshRunner = null;
-    const finish = resolveRefresh;
-    resolveRefresh = null;
-    refreshPromise = null;
-    finish?.(snapshot);
+    // A user mutation pauses this read; its callers still deserve a fresh
+    // result afterward. Only destruction settles without another graph read.
+    if (settle) {
+      refreshRunner = null;
+      const finish = resolveRefresh;
+      resolveRefresh = null;
+      refreshPromise = null;
+      finish?.(snapshot);
+    }
     return true;
   };
 
@@ -379,33 +414,40 @@ export function createTimingRuntime({
 
   const enqueue = (operation, { deferStart = false, clockMutation = true } = {}) => {
     const run = mutationQueue.then(async () => {
-      // A scheduled graph refresh is lower priority than an explicit user
-      // mutation. Cancel it before it can compete with Clock Out on the main
-      // thread; the mutation schedules a fresh authoritative read afterward.
-      cancelScheduledRefresh();
-      if (deferStart) {
-        const scheduled = await waitForMutationStart();
-        if (!scheduled) throw new Error('Actual Time Tracking is no longer active.');
-      }
-      assertActive();
-      snapshot = { ...snapshot, revision: snapshot.revision + 1, status: 'working', notice: '' };
-      publish();
+      // Pause background reads without discarding their pending promises.
+      if (cancelScheduledRefresh()) refreshAfterMutation = true;
+      mutationInFlight = true;
       const changedTaskUids = new Set(snapshot.entries.map((entry) => entry.taskUid));
       try {
-        return await (clockMutation ? clockCoordinator.run(operation) : operation());
+        if (deferStart) {
+          const scheduled = await waitForMutationStart();
+          if (!scheduled) throw new Error('Actual Time Tracking is no longer active.');
+        }
+        assertActive();
+        snapshot = { ...snapshot, revision: snapshot.revision + 1, status: 'working', notice: '' };
+        publish();
+        await (clockMutation ? clockCoordinator.run(operation) : operation());
       } catch (error) {
-        refresh({
-          notice: error.message || 'The graph change could not be confirmed.',
-          planSnapshot: snapshot.planSnapshot,
-          entries: snapshot.entries,
-        });
+        // A failed operation may already have closed/written a block. Re-read
+        // those owners rather than restoring a pre-mutation cache as truth.
+        refresh({ notice: error.message || 'The graph change could not be confirmed.' });
         throw error;
       } finally {
-        if (clockMutation) {
-          snapshot.entries.forEach((entry) => changedTaskUids.add(entry.taskUid));
-          clockCoordinator.notify([...changedTaskUids]);
+        mutationInFlight = false;
+        if (!destroyed) {
+          snapshot = { ...snapshot, revision: snapshot.revision + 1, status: projectionStatus };
+          publish();
+          if (clockMutation) {
+            snapshot.entries.forEach((entry) => changedTaskUids.add(entry.taskUid));
+            clockCoordinator.notify([...changedTaskUids]);
+          }
+          if (refreshAfterMutation || invalidatedTaskUids.size > 0 || refreshPromise) {
+            refreshAfterMutation = false;
+            void requestRefresh({ notice: snapshot.notice });
+          }
         }
       }
+      return snapshot;
     });
     mutationQueue = run.catch(() => undefined);
     return run;
@@ -459,6 +501,37 @@ export function createTimingRuntime({
     return reconciled;
   };
 
+  // Call only while holding the CLOCK lock. Cached running rows are never
+  // authority; keep closed history, but reread known owners and live CLOCKs.
+  const readCurrentClockEntries = (taskUids = []) => {
+    const owners = [
+      ...taskUids,
+      ...invalidatedTaskUids,
+      ...snapshot.entries.filter((entry) => entry.running).map((entry) => entry.taskUid),
+    ];
+    const byUid = new Map([
+      ...snapshot.entries.filter((entry) => !entry.running),
+      ...readEntriesForTaskUids(owners),
+      ...readRunningEntries(),
+    ].map((entry) => [entry.clockUid, entry]));
+    const liveTasks = new Map();
+    const entries = [...byUid.values()].map((entry) => {
+      if (!entry.running) return entry;
+      if (!liveTasks.has(entry.taskUid)) {
+        liveTasks.set(entry.taskUid, timingCore.resolveTaskInstance({
+          uid: entry.taskUid, localString: entry.taskString, readString: readBlockString,
+        }));
+      }
+      // A bare daily wrapper inherits its source's TODO/DONE status. Raw
+      // CLOCK query rows alone do not resolve that ownership chain.
+      return { ...entry, status: liveTasks.get(entry.taskUid).status };
+    });
+    // Preserve discovered owners even if a subsequent write fails, so the
+    // error refresh can still see a foreign task outside today's Plan.
+    snapshot = { ...snapshot, entries };
+    return entries;
+  };
+
   const startTask = (taskUid) => {
     // Sidebar navigation is reversible UI feedback, so begin it from the
     // trusted Plan-row UID before graph validation and CLOCK confirmation.
@@ -483,15 +556,7 @@ export function createTimingRuntime({
       if (typeof taskString !== 'string' || timingCore.resolveTaskInstance({
         uid: taskUid, localString: taskString, readString: readBlockString,
       }).status !== 'TODO') throw new Error('This task is no longer unfinished. Refresh the Plan.');
-      // The per-tab cache cannot authorize a second CLOCK. Read only current
-      // running records globally, plus the exact cached owners' closed history.
-      const knownOwners = snapshot.entries.filter((entry) => entry.running).map((entry) => entry.taskUid);
-      const entriesByUid = new Map([
-        ...snapshot.entries.filter((entry) => !entry.running),
-        ...readEntriesForTaskUids(knownOwners),
-        ...readRunningEntries(),
-      ].map((entry) => [entry.clockUid, entry]));
-      const before = [...entriesByUid.values()];
+      const before = readCurrentClockEntries();
       const focused = timingCore.chooseFocusedEntry(before);
       // CLOCK is authoritative even when the caller re-selects the already
       // focused task, so clear any stale standalone state before the early
@@ -525,28 +590,29 @@ export function createTimingRuntime({
     }, { deferStart: hasSidebarIntent });
   };
 
-  const stopTask = () => enqueue(async () => {
-    // The visible Timing Line already carries one confirmed CLOCK UID. Close
-    // that exact block and update the cached Plan/entries projection first;
-    // an idle aggregate refresh then reconciles any external graph changes.
-    const entries = snapshot.entries;
-    const running = entries.filter((entry) => entry.running);
-    if (running.length === 0) {
-      await setPomodoro(null);
-      return refresh({ planSnapshot: snapshot.planSnapshot, entries });
-    }
-    const updatedEntries = await closeEntriesAt(entries, now());
-    await setPomodoro(timingCore.nextPomodoroState(snapshot.pomodoro, { action: 'stop' }));
-    return refresh({ planSnapshot: snapshot.planSnapshot, entries: updatedEntries });
-  });
+  const stopTask = () => {
+    // Bind user intent before waiting for the lock. A stale Stop click must
+    // not stop a different CLOCK that another tab has just started.
+    const clockUid = timingCore.chooseFocusedEntry(snapshot.entries)?.clockUid;
+    return enqueue(async () => {
+      const entries = readCurrentClockEntries();
+      const updatedEntries = await closeEntriesAt(entries, now(), (entry) => entry.clockUid === clockUid);
+      if (!timingCore.chooseFocusedEntry(updatedEntries)) await setPomodoro(null);
+      return refresh({ planSnapshot: snapshot.planSnapshot, entries: updatedEntries });
+    });
+  };
 
   const finishTask = (taskUid) => enqueue(async () => {
     const task = snapshot.planSnapshot?.tasks?.find((candidate) => candidate.uid === taskUid);
     if (!task || task.status !== 'TODO') {
       throw new Error('Only an unfinished task in today’s Nautilus Plan can be completed.');
     }
+    const liveTask = timingCore.resolveTaskInstance({
+      uid: taskUid, localString: readBlockString(taskUid), readString: readBlockString,
+    });
+    if (liveTask.status !== 'TODO') throw new Error('This daily task instance is no longer unfinished.');
     const instant = now();
-    const entries = snapshot.entries;
+    const entries = readCurrentClockEntries([taskUid]);
     const ownedRunning = entries.filter((entry) => entry.running && entry.taskUid === taskUid);
     const updatedEntries = await closeEntriesAt(
       entries,
@@ -554,27 +620,32 @@ export function createTimingRuntime({
       (entry) => entry.taskUid === taskUid,
     );
     assertActive();
-    await completeTask(taskUid, task.statusOwnerUid || taskUid);
+    await completeTask(taskUid, liveTask.statusOwnerUid || taskUid);
     assertActive();
-    if (ownedRunning.length > 0) await setPomodoro(null);
+    if (ownedRunning.length > 0 && !timingCore.chooseFocusedEntry(updatedEntries)) await setPomodoro(null);
     return refresh({
       planSnapshot: readAuthoritativePlan(instant),
       entries: updatedEntries,
     });
   });
 
-  const deleteCurrentClock = (taskUid) => enqueue(async () => {
-    const focused = timingCore.chooseFocusedEntry(snapshot.entries);
-    if (!focused || focused.taskUid !== taskUid) {
-      throw new Error('Only the current Timing CLOCK can be deleted.');
-    }
-    await deleteClock(focused);
-    await setPomodoro(null);
-    return refresh({
-      planSnapshot: snapshot.planSnapshot,
-      entries: snapshot.entries.filter((entry) => entry.clockUid !== focused.clockUid),
+  const deleteCurrentClock = (taskUid) => {
+    const clockUid = timingCore.chooseFocusedEntry(snapshot.entries)?.clockUid;
+    return enqueue(async () => {
+      const entries = readCurrentClockEntries([taskUid]);
+      const focused = timingCore.chooseFocusedEntry(entries);
+      if (!focused || focused.clockUid !== clockUid || focused.taskUid !== taskUid) {
+        throw new Error('The current running CLOCK changed. Refresh before deleting it.');
+      }
+      await deleteClock(focused);
+      assertActive();
+      await setPomodoro(null);
+      return refresh({
+        planSnapshot: snapshot.planSnapshot,
+        entries: entries.filter((entry) => entry.clockUid !== focused.clockUid),
+      });
     });
-  });
+  };
 
   const startStandalonePomodoro = () => enqueue(async () => {
     // Re-check inside the serialized mutation queue so CLOCK always wins a
@@ -631,8 +702,8 @@ export function createTimingRuntime({
     const reconcileDoneClocks = (next, label) => {
       if (!next.entries.some((entry) => entry.running && entry.status === 'DONE')) return;
       enqueue(async () => {
-        const entries = await closeDoneClocks(next.entries);
-        return refresh({ planSnapshot: next.planSnapshot, entries });
+        const entries = await closeDoneClocks(readCurrentClockEntries());
+        return refresh({ planSnapshot: snapshot.planSnapshot, entries });
       }).catch((error) => console.error(`[Nautilus Log] ${label} reconciliation failed`, error));
     };
     const scheduleRecoveryRefresh = (label = 'background') => {
@@ -676,7 +747,7 @@ export function createTimingRuntime({
 
   const disable = async () => {
     await enqueue(async () => {
-      const entries = snapshot.entries;
+      const entries = readCurrentClockEntries();
       const updatedEntries = await closeEntriesAt(entries, now());
       await setPomodoro(null);
       await setStandalonePomodoro(null);
@@ -704,16 +775,13 @@ export function createTimingRuntime({
     stopPlanWatch = null;
     watchedPlanUid = null;
     for (const pending of [...pendingMutationStarts]) pending.cancel();
-    cancelScheduledRefresh();
-    resolveRefresh?.(snapshot);
-    resolveRefresh = null;
-    refreshPromise = null;
+    cancelScheduledRefresh({ settle: true });
     listeners.clear();
   }
 
   return {
     initialize,
-    refresh,
+    refresh: refreshWhenIdle,
     requestRefresh,
     startTask,
     stopTask,

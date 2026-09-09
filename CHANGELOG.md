@@ -27,6 +27,10 @@
 - CLOCK starts now check running records under a graph-scoped browser Web Lock;
   cross-tab invalidation refreshes other execution views without per-second queries.
   This is browser-local coordination, not a distributed lock across devices.
+- Background refreshes no longer enable actions before a pending write settles.
+  Cancelled reads resume afterward. Stop/delete retain the selected CLOCK UID,
+  preserve newer foreign CLOCKs and closed history, and completion/reconciliation
+  reread current records before writing. Failed writes refresh actual graph state.
 - Plan labels preserve next-day times instead of truncating them to `24:00`.
   In energy mode, the topbar and open panel share one minute-level capacity projection.
 - Panel updates preserve task-control focus and list position. Tabs support arrow

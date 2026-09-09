@@ -622,6 +622,10 @@ export async function closeClock(entry, now) {
 
 export async function deleteClock(entry) {
   if (!entry?.running || !entry.clockUid) throw new Error('Only the current running CLOCK can be deleted.');
+  const current = timingCore.parseClockLine(readBlockString(entry.clockUid));
+  if (!current?.running || current.start.getTime() !== entry.start.getTime()) {
+    throw new Error('The running CLOCK changed. Historical CLOCK records cannot be deleted here.');
+  }
   await deleteGraphBlock(entry.clockUid);
   return true;
 }
