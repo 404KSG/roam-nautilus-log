@@ -14,7 +14,13 @@
   historical notes. Execution Layer off still has this launcher, but not CLOCK
   writes, a 1s ticker, or the execution popover. After a confirmed create, the
   existing capacity text / 136×6 energy bar returns and the plan opens in the
-  main window.
+  main window. Running CLOCK/POMO remains visible when no plan exists, with a
+  create action in the Plan empty-state.
+- Creation is guarded by graph-scoped Web Locks, a reserved date-specific block
+  UID, fresh reads, and frozen-date readback. Unsupported locking, unreadable
+  query results, and occupied UIDs fail closed. There is no automatic retry
+  insert; read failures offer a read-only check. Midnight or graph changes stop
+  subsequent writes, and unchanged timing ticks do not republish launcher state.
 
 ## 1.1.0 — 2026-08-30
 

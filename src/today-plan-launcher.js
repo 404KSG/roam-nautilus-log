@@ -51,7 +51,7 @@ export function createTodayPlanLauncher({ todayPlan, extensionAPI } = {}) {
       'is-read-failed',
       'is-creating',
     );
-    trigger.disabled = status === 'creating';
+    trigger.disabled = status === 'creating' || status === 'checking';
     let mode = status;
     let label = labels.checking;
     if (status === 'ready-absent') {
@@ -67,11 +67,11 @@ export function createTodayPlanLauncher({ todayPlan, extensionAPI } = {}) {
       label = labels.locate;
     } else if (status === 'ready-blocked') {
       mode = 'blocked';
-      label = labels.blocked;
+      label = labels.manual;
       trigger.classList.add('is-blocked');
     } else if (status === 'read-failed') {
       mode = 'failed';
-      label = labels.failed;
+      label = labels.retry;
       trigger.classList.add('is-read-failed');
     } else {
       mode = 'checking';
@@ -79,7 +79,7 @@ export function createTodayPlanLauncher({ todayPlan, extensionAPI } = {}) {
       trigger.classList.add('is-checking');
     }
     if (triggerMode !== mode) {
-      if (mode === 'create' || mode === 'creating') {
+      if (mode !== 'present') {
         trigger.replaceChildren(
           brandIcon(),
           element('span', 'nautilus-log-timing__create-label', label),
@@ -88,12 +88,12 @@ export function createTodayPlanLauncher({ todayPlan, extensionAPI } = {}) {
         trigger.replaceChildren(brandIcon());
       }
       triggerMode = mode;
-    } else if (mode === 'create' || mode === 'creating') {
+    } else if (mode !== 'present') {
       const textNode = trigger.querySelector('.nautilus-log-timing__create-label');
       if (textNode) textNode.textContent = label;
     }
-    trigger.setAttribute('aria-label', label);
-    trigger.title = label;
+    trigger.setAttribute('aria-label', `${label} · ${state?.pageTitle || ''}`);
+    trigger.title = `${state?.message || label} · ${state?.pageTitle || ''}`;
   };
 
   const runClick = (event) => {
@@ -103,7 +103,11 @@ export function createTodayPlanLauncher({ todayPlan, extensionAPI } = {}) {
     if (status === 'ready-present' || status === 'nav-failed') {
       return todayPlan.locateToday({ locateMode });
     }
-    return todayPlan.ensureToday({ locateMode });
+    if (status === 'ready-absent') return todayPlan.ensureToday({ locateMode });
+    if (status === 'read-failed' || status === 'ready-blocked') {
+      return todayPlan.discover({ authoritative: true });
+    }
+    return undefined;
   };
 
   const syncResponsiveDensity = () => {

@@ -398,7 +398,7 @@ test('createBlock throw after disk write locates without retry or delete', async
   session.destroy();
 });
 
-test('createBlock throw with still-absent page retries once', async (t) => {
+test('a failed write is retried only on an explicit second action', async (t) => {
   const extension = await loadExtension();
   const graph = createGraph();
   graph.addPage('September 9th, 2026', 'day');
@@ -411,6 +411,9 @@ test('createBlock throw with still-absent page retries once', async (t) => {
     return graph.defaultCreateBlock(payload);
   });
   const session = extension.createTodayPlanSession(sessionOptions().options);
+  const first = await session.ensureToday();
+  assert.equal(first.status, 'read-failed');
+  assert.equal(attempts, 1);
   const result = await session.ensureToday();
   assert.equal(result.status, 'ready-present');
   assert.equal(attempts, 2);
@@ -471,22 +474,22 @@ test('tracking-off session never reads CLOCK entries', async (t) => {
   session.destroy();
 });
 
-test('occupied uid is skipped without overwriting the occupant', async (t) => {
+test('an occupied reserved date UID is never overwritten or bypassed', async (t) => {
   const extension = await loadExtension();
   const graph = createGraph();
   graph.addPage('September 9th, 2026', 'day');
-  graph.addBlock({ uid: 'taken', string: 'user block', parentUid: 'day', order: 0 });
-  graph.queueUids('taken', 'fresh');
+  const reserved = 'nautilus-log-plan-2026-09-09';
+  graph.addBlock({ uid: reserved, string: 'user block', parentUid: 'day', order: 0 });
   installHost(graph.roam);
   t.after(() => { delete global.window; delete global.navigator; delete global.localStorage; });
   const session = extension.createTodayPlanSession(sessionOptions().options);
   await session.ensureToday();
-  assert.equal(graph.blocks.get('taken').string, 'user block');
-  assert.equal(graph.trace.find((row) => row[0] === 'createBlock')[3], 'fresh');
+  assert.equal(graph.blocks.get(reserved).string, 'user block');
+  assert.equal(graph.counts().createBlock, 0);
   session.destroy();
 });
 
-test('two sessions share in-tab inflight and one write', async (t) => {
+test('independent sessions serialize through a graph-scoped lock and each receive the plan', async (t) => {
   const extension = await loadExtension();
   const graph = createGraph();
   const locks = exclusiveLocks();
@@ -506,7 +509,10 @@ test('two sessions share in-tab inflight and one write', async (t) => {
   release();
   await Promise.all([first, second]);
   assert.equal(graph.counts().createBlock, 1);
-  assert.equal(locks.names[0], 'nautilus-log:today-plan:September 9th, 2026');
+  assert.equal(locks.names.length, 2);
+  assert.equal(locks.names[0], 'nautilus-log:today-plan:test-graph:September 9th, 2026');
+  assert.equal(a.getState().status, 'ready-present');
+  assert.equal(b.getState().status, 'ready-present');
   a.destroy();
   b.destroy();
 });
@@ -627,7 +633,26 @@ test('inspectCanonicalTemplate distinguishes missing, standard, and custom', asy
     order: 0,
     parentUid: 'render',
   });
-  assert.equal(extension.inspectCanonicalTemplate('{{[[roam/render]]:((roam-render-Nautilus-Log-cljs))').kind, 'custom');
+  const inspect = () => extension.inspectCanonicalTemplate('{{[[roam/render]]:((roam-render-Nautilus-Log-cljs))');
+  assert.equal(inspect().kind, 'custom');
+  blocks.delete('desc');
+  const originalString = blocks.get('render').string;
+  for (const string of [
+    `${originalString} extra content`,
+    originalString.replace('21}}', '21 extra-parameter}}'),
+    `${originalString} ${originalString}`,
+  ]) {
+    blocks.get('render').string = string;
+    assert.equal(inspect().kind, 'custom');
+  }
+  blocks.get('render').string = originalString;
+  const query = roam.q;
+  for (const badRows of [null, undefined, [[null]], [[{}]]]) {
+    roam.q = () => badRows;
+    assert.throws(inspect, /unreadable/);
+    roam.q = (q) => q.includes(':block/children') ? badRows : query(q);
+    assert.throws(inspect, /unreadable/);
+  }
 });
 
 test('partial page create does not insert a component', async (t) => {
@@ -775,11 +800,141 @@ test('lagging plan query after a successful write never causes another insert', 
   await session.ensureToday();
   await session.ensureToday();
   assert.equal(graph.counts().createBlock, 1);
+  const reloaded = extension.createTodayPlanSession(sessionOptions().options);
+  await reloaded.ensureToday();
+  assert.equal(graph.counts().createBlock, 1, 'a fresh session must not bypass the reserved UID');
+  reloaded.destroy();
   hidePlan = false;
   const confirmed = await session.ensureToday();
   assert.equal(confirmed.status, 'ready-present');
   assert.equal(graph.counts().createBlock, 1);
   session.destroy();
+});
+
+test('two graph contexts never share an in-flight action', async (t) => {
+  const extension = await loadExtension();
+  const a = createGraph();
+  a.roam.graph.name = 'graph-a';
+  a.addPage(a.title, 'day-a');
+  installHost(a.roam);
+  let start;
+  let release;
+  const started = new Promise((resolve) => { start = resolve; });
+  const gate = new Promise((resolve) => { release = resolve; });
+  const sessionA = extension.createTodayPlanSession(sessionOptions({
+    buildComponentString: async () => { start(); await gate; return COMPONENT; },
+  }).options);
+  const first = sessionA.ensureToday();
+  await started;
+  const b = createGraph();
+  b.roam.graph.name = 'graph-b';
+  b.addPage(b.title, 'day-b');
+  const locks = exclusiveLocks();
+  installHost(b.roam, { locks });
+  t.after(() => { delete global.window; delete global.navigator; delete global.localStorage; });
+  const sessionB = extension.createTodayPlanSession(sessionOptions().options);
+  const second = sessionB.ensureToday();
+  release();
+  await Promise.all([first, second]);
+  assert.equal(a.counts().createBlock, 0, 'the old graph context was abandoned');
+  assert.equal(b.counts().createBlock, 1);
+  assert.equal(b.trace.find((row) => row[0] === 'createBlock')[1], 'day-b');
+  assert.match(locks.names[0], /graph-b/);
+  assert.equal(sessionB.getState().status, 'ready-present');
+  sessionA.destroy();
+  sessionB.destroy();
+});
+
+test('separate module instances use the native lock rather than a shared JS map', async (t) => {
+  const a = await loadExtension();
+  const b = await loadExtension();
+  const graph = createGraph();
+  const locks = exclusiveLocks();
+  installHost(graph.roam, { locks });
+  t.after(() => { delete global.window; delete global.navigator; delete global.localStorage; });
+  const sessionA = a.createTodayPlanSession(sessionOptions().options);
+  const sessionB = b.createTodayPlanSession(sessionOptions().options);
+  await Promise.all([sessionA.ensureToday(), sessionB.ensureToday()]);
+  assert.equal(locks.names.length, 2);
+  assert.equal(graph.counts().createBlock, 1);
+  assert.equal(sessionA.getState().planUid, sessionB.getState().planUid);
+  sessionA.destroy();
+  sessionB.destroy();
+});
+
+test('midnight during a committed insert confirms the frozen date without writing again', async (t) => {
+  const extension = await loadExtension();
+  const graph = createGraph();
+  graph.addPage(graph.title, 'day');
+  installHost(graph.roam);
+  t.after(() => { delete global.window; delete global.navigator; delete global.localStorage; });
+  let current = new Date(2026, 8, 9, 23, 59, 59);
+  graph.setCreateBlock(async (payload) => {
+    await graph.defaultCreateBlock(payload);
+    current = new Date(2026, 8, 10, 0, 0, 1);
+  });
+  const session = extension.createTodayPlanSession(sessionOptions({ now: () => current }).options);
+  const result = await session.ensureToday();
+  assert.equal(graph.counts().createBlock, 1);
+  assert.equal(graph.counts().createPage, 0);
+  assert.equal(graph.counts().openBlock, 0);
+  assert.equal(result.error, 'dateChangedAfterCreate');
+  assert.equal(result.pageTitle, 'September 10th, 2026');
+  session.destroy();
+});
+
+test('unknown graph scope and occupied Daily Note UID both fail closed', async (t) => {
+  const extension = await loadExtension();
+  t.after(() => { delete global.window; delete global.navigator; delete global.localStorage; });
+  for (const scenario of ['unknown-scope', 'occupied-day-uid']) {
+    const graph = createGraph();
+    if (scenario === 'unknown-scope') delete graph.roam.graph;
+    else {
+      graph.addPage('Notes', 'notes');
+      graph.addBlock({ uid: '09-09-2026', string: 'user block', parentUid: 'notes', order: 0 });
+    }
+    installHost(graph.roam);
+    const session = extension.createTodayPlanSession(sessionOptions().options);
+    const result = await session.ensureToday();
+    assert.equal(result.status, 'read-failed');
+    assert.equal(graph.counts().createPage, 0);
+    assert.equal(graph.counts().createBlock, 0);
+    session.destroy();
+  }
+});
+
+test('unavailable APIs are distinct from read failure and do not leave a new empty page', async (t) => {
+  const extension = await loadExtension();
+  t.after(() => { delete global.window; delete global.navigator; delete global.localStorage; });
+  for (const missing of ['query', 'block-create']) {
+    const graph = createGraph();
+    if (missing === 'query') delete graph.roam.q;
+    else delete graph.roam.data.block.create;
+    installHost(graph.roam);
+    const session = extension.createTodayPlanSession(sessionOptions().options);
+    const result = await session.ensureToday();
+    assert.equal(result.error, 'apiUnavailable');
+    assert.equal(graph.counts().createPage, 0);
+    assert.equal(graph.counts().createBlock, 0);
+    session.destroy();
+  }
+});
+
+test('malformed page and plan query rows never authorize a write', async (t) => {
+  const extension = await loadExtension();
+  t.after(() => { delete global.window; delete global.navigator; delete global.localStorage; });
+  for (const badQuery of ['?page-uid ?uid ?string ?order ?parent-uid', '[:find ?uid :in $ ?page-title']) {
+    const graph = createGraph();
+    const original = graph.roam.q;
+    graph.roam.q = (q, ...args) => q.includes(badQuery) ? [[null]] : original(q, ...args);
+    installHost(graph.roam);
+    const session = extension.createTodayPlanSession(sessionOptions().options);
+    const result = await session.ensureToday();
+    assert.equal(result.status, 'read-failed');
+    assert.equal(graph.counts().createPage, 0);
+    assert.equal(graph.counts().createBlock, 0);
+    session.destroy();
+  }
 });
 
 test('UID lookup errors cannot be treated as a free UID', async (t) => {

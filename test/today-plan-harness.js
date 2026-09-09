@@ -1,5 +1,6 @@
 import { createTimingTopbar } from '../src/timing-topbar.js';
 import { createTodayPlanLauncher } from '../src/today-plan-launcher.js';
+import * as timingCore from '../src/timing-core.js';
 
 function task(uid, title, plannedMinutes) {
   return {
@@ -51,35 +52,6 @@ const DEFAULT_TASKS = [
   task('task-b', 'Beta', 60),
 ];
 
-const LABELS = {
-  en: {
-    create: "+ Create today's plan",
-    creating: 'Creating…',
-    locate: "Open today's plan",
-    checking: "Checking today's plan",
-    blocked: "Today's Nautilus template has extra custom blocks. Use ;; to insert it.",
-    failed: "Could not read today's Daily Note.",
-    navFailed: "The plan is on today's Daily Note, but Roam could not open it.",
-    created: "Created today's plan.",
-    busy: "Today's plan is already being created.",
-    retry: 'Retry',
-    retryLocate: "Open today's plan",
-  },
-  zh: {
-    create: '＋ 创建今日计划',
-    creating: '正在创建…',
-    locate: '打开今日计划',
-    checking: '正在检查今日计划',
-    blocked: '今日计划模板含有额外自定义内容。请使用 ;; 插入。',
-    failed: '无法读取今日 Daily Note。',
-    navFailed: '计划已在今日 Daily Note 上，但 Roam 无法打开。',
-    created: '已创建今日计划。',
-    busy: '今日计划正在创建中。',
-    retry: '重试',
-    retryLocate: '打开今日计划',
-  },
-};
-
 let topbar = null;
 let launcher = null;
 let snapshot = null;
@@ -88,6 +60,7 @@ let runtimeListeners = new Set();
 let planListeners = new Set();
 let ensureCalls = [];
 let locateCalls = [];
+let discoverCalls = [];
 
 function publishRuntime() {
   for (const listener of runtimeListeners) listener(snapshot);
@@ -130,7 +103,7 @@ function createPlanSession() {
       locateCalls.push(options);
       return planState;
     },
-    discover: () => planState,
+    discover: (options) => { discoverCalls.push(options); return planState; },
   };
 }
 
@@ -181,7 +154,7 @@ function basePlan(status, language = 'en') {
     error: null,
     language,
     trackingOn: true,
-    labels: LABELS[language] || LABELS.en,
+    labels: timingCore.executionCopy(language).createToday,
   };
 }
 
@@ -200,6 +173,8 @@ function mountLauncher(options = {}) {
   destroy();
   ensureCalls = [];
   locateCalls = [];
+  discoverCalls = [];
+  snapshot = snapshotFrom({ now: new Date(2026, 8, 9, 10, 0, 0) });
   const language = options.language || 'en';
   planState = basePlan(options.status || 'ready-absent', language);
   planState.trackingOn = false;
@@ -217,6 +192,7 @@ function mountTopbar(options = {}) {
   destroy();
   ensureCalls = [];
   locateCalls = [];
+  discoverCalls = [];
   const language = options.language || 'en';
   const now = options.now instanceof Date ? options.now : new Date(2026, 8, 9, 10, 0, 0);
   const status = options.status || 'ready-present';
@@ -238,6 +214,7 @@ function mountTopbar(options = {}) {
     now,
     plan: hasPlan ? { uid: 'plan' } : null,
     focused,
+    standalonePomodoro: options.pomo ? { startedAt: now.getTime() - 65000 } : null,
   });
   topbar = createTimingTopbar({
     runtime: createRuntime(),
@@ -257,6 +234,7 @@ function api() {
   return {
     ensureCalls: () => ensureCalls.slice(),
     locateCalls: () => locateCalls.slice(),
+    discoverCalls: () => discoverCalls.slice(),
     setStatus(status, extra = {}) {
       planState = { ...planState, status, ...extra };
       const hasPlan = status === 'ready-present' || status === 'nav-failed';

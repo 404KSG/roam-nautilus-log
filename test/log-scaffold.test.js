@@ -758,6 +758,63 @@ test('tracking on still starts the timing runtime; unload writes no graph rows',
   assert.equal(window.nautilusLogExtensionData.timingEnabled, false);
 });
 
+test('switching tracking keeps exactly one topbar and a failed start restores the lite launcher', async (t) => {
+  const { roam } = createRoamMock();
+  const { document, topbar } = createMiniDom();
+  const intervals = new Set();
+  let intervalId = 0;
+  global.window = {
+    roamAlphaAPI: roam,
+    dispatchEvent() {}, addEventListener() {}, removeEventListener() {},
+    setTimeout: () => 1, clearTimeout() {},
+    setInterval: () => { const id = ++intervalId; intervals.add(id); return id; },
+    clearInterval: (id) => intervals.delete(id),
+    requestIdleCallback: (fn) => { fn(); return 1; }, cancelIdleCallback() {},
+  };
+  global.document = document;
+  global.MutationObserver = class { observe() {} disconnect() {} };
+  t.after(() => { delete global.window; delete global.document; delete global.MutationObserver; });
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const extension = (await import(`data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#switch-${Date.now()}`)).default;
+  const settings = new Map();
+  const commands = new Map();
+  let panel;
+  let failStart = false;
+  const extensionAPI = {
+    settings: {
+      get: (key) => settings.get(key), set: async (key, value) => settings.set(key, value),
+      panel: { create: (next) => { panel = next; } },
+    },
+    ui: { commandPalette: {
+      addCommand: (command) => {
+        if (failStart && command.label.includes('1. Focus')) throw new Error('test start failure');
+        commands.set(command.label, command);
+      },
+      removeCommand: ({ label }) => commands.delete(label),
+    } },
+  };
+  const hostCount = () => topbar.children.filter((node) => node.id === 'nautilus-log-timing-topbar').length;
+  const toggle = (enabled) => panel.settings.find((item) => item.id === 'actual-time-tracking').action.onChange(enabled);
+  await extension.onload({ extensionAPI });
+  assert.equal(hostCount(), 1);
+  assert.equal(intervals.size, 0);
+  for (const enabled of [true, false, true, false]) {
+    await toggle(enabled);
+    assert.equal(hostCount(), 1);
+    assert.equal(intervals.size, enabled ? 1 : 0);
+    assert.equal(commands.has('Nautilus Log: Create or open today’s plan'), true);
+    assert.equal(commands.has('Nautilus Log: 1. Focus current block'), enabled);
+  }
+  failStart = true;
+  await assert.rejects(toggle(true), /test start failure/);
+  assert.equal(settings.get('actual-time-tracking'), false);
+  assert.equal(hostCount(), 1);
+  assert.equal(intervals.size, 0);
+  await extension.onunload();
+  assert.equal(hostCount(), 0);
+  assert.equal(commands.size, 0);
+});
+
 function pageUidOfForTest(blocks, pages, block) {
   let current = block;
   while (current?.parentUid) {

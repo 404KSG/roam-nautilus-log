@@ -1157,10 +1157,9 @@
   }
 }
 
-/* Optional execution layer -------------------------------------------------
- * This namespace is mounted only while Actual Time Tracking is enabled.
- * Keeping it separate from the spiral guarantees that the default-off state
- * leaves no topbar layout, polling, or hidden interaction surface behind.
+/* Shared topbar / optional execution layer ---------------------------------
+ * The lightweight create-or-open launcher does not enable timing. The capacity
+ * gauge, execution popover and CLOCK controls remain opt-in.
  */
 
 .nautilus-log-timing__topbar {
@@ -1515,8 +1514,15 @@
 }
 
 .nautilus-log-timing__energy-track[hidden],
-.nautilus-log-timing__energy-timer[hidden] {
+.nautilus-log-timing__energy-timer[hidden],
+.nautilus-log-timing__energy-bottom[hidden] {
   display: none;
+}
+
+.nautilus-log-timing__capacity-token.is-timer-only {
+  display: inline-flex;
+  height: auto;
+  margin-left: 0;
 }
 
 .nautilus-log-timing__energy-timer {

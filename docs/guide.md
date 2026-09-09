@@ -91,16 +91,31 @@ until enabled. While it is off, Nautilus Log still mounts a 30px today-plan laun
 and one create-or-open command, but it loads no execution panel, 1s ticker, CLOCK
 writer, or LOGBOOK reader.
 
-Click **+ Create today's plan** (or the command) to insert one canonical component
-at the end of today's Daily Note from the live renderer identity and settings. If
-any legal Nautilus renderer is already on that page, including an empty plan, the
-control only locates the tree-order Primary. Custom templates with extra sibling
-blocks or render-block descendants are blocked in this first version: use `;;` so
-nothing is copied or dropped. The button never auto-creates at midnight or on load.
+Click **+ Create today's plan** (or the command) to append one canonical component
+to the local-calendar Daily Note, regardless of the page you are viewing. The
+component uses the configured renderer identity and current settings, including
+custom prefixes. Any recognized Nautilus renderer already on that page, including
+an empty or all-DONE plan, is locate-only. Extra template siblings, render
+children, or unsupported custom content require native `;;` insertion. No custom
+content is silently dropped, and nothing is created on load or at midnight.
+
+Loading, confirmed absence, unsupported templates, and failures have separate
+states. **Check again** only rereads; a navigation failure only retries opening.
+Creation requires a known graph and Web Locks. If those or the required Roam APIs
+are unavailable, use `;;` on the target Daily Note. Occupied identifiers are never
+overwritten, and an unconfirmed write never triggers an automatic second insert.
+A date or graph change stops subsequent writes rather than retargeting the action.
+
+No new per-second graph queries are added. With execution on, discovery reuses
+runtime data; with it off, checks occur at initialization, throttled foreground,
+midnight, and explicit actions. A manually inserted template is found at the next
+check, not by scanning on every keystroke.
 
 When Execution Layer is enabled, the first Nautilus Log on today's Daily Note becomes
 the **Primary Plan** used by the topbar panel. After a successful create, the existing
 capacity text or 136×6 energy bar returns and the plan is opened in the main window.
+If CLOCK/POMO is already running without a plan, its timer and applicable stop
+controls stay visible; use the create button in the panel's **Plan** empty-state.
 
 Click the Nautilus topbar trigger to open the panel, Option/Alt-click it to locate
 the Primary Plan in the main window, or Shift-click it to open or bring the same

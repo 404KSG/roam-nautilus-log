@@ -1,78 +1,127 @@
-# One-click today's Nautilus plan (v1)
+# One-click creation of today's Nautilus plan
 
 ## Decision
 
-Add one create-or-locate control in the existing 30px topbar slot. It inserts a
-single canonical Nautilus component at the end of the local-calendar Daily Note
-when that page has no legal renderer. It is not an auto-daily creator, not a
-template copier, and not a renderer reinstall.
+Use the existing 30px topbar control to create or open the Primary Plan on the
+local-calendar Daily Note. Creation appends one canonical component, built from
+the configured renderer identity and current settings. It works from any viewed
+page and does not require the Execution Layer.
 
-## Interface
+This action creates an instance, not another global template. It never copies
+yesterday's tasks, DONE state, CLOCK history, or custom template subtrees. It does
+not start Google sync, move existing content, or create anything automatically.
 
-All callers use `createTodayPlanSession` in `src/today-plan.js`:
+The accepted capacity bar remains unchanged: see the
+[capacity-bar design](./2026-09-07-optional-energy-bar-design.md).
 
-- `discover()` — read only
-- `ensureToday({ locateMode })` — coalesced create-or-locate
-- `locateToday(options)` — open only
-- `getState()` / `subscribe()` / `initialize()` / `destroy()`
+## Shared interface
 
-Lite topbar, execution topbar, Plan empty-state, and one command share this
-writer. `timing-topbar.js` still must not call `readPrimaryPlan` or
-`readAllEntries`.
+`createTodayPlanSession` in `src/today-plan.js` owns discovery, creation, readback,
+and navigation for the lightweight launcher, execution topbar, Plan empty-state,
+and **Nautilus Log: Create or open today’s plan** command.
 
-## Write gate
+- `discover({ authoritative })`: read only; reuse tracking snapshots by default.
+- `ensureToday({ locateMode })`: create or locate after fresh checks.
+- `locateToday({ locateMode })`: re-read and navigate, without creating.
+- `getState()`, `subscribe()`, `initialize()`, `destroy()`: shared state and cleanup.
 
-1. Same-tab inflight map keyed by page title.
-2. Cross-tab `navigator.locks` when present; otherwise a localStorage TTL lock
-   (~8s). After lock, re-read before write.
-3. Query failure is `read-failed`, never absent.
-4. Any legal renderer (current or legacy) is locate-only.
-5. Missing page may create today's Daily Note and must confirm the uid before
-   inserting a block. Empty pages reuse the existing uid.
-6. Confirm by re-read. At most one retry insert. Never delete user blocks.
-7. Custom templates (`inspectCanonicalTemplate` → extra siblings or render
-   descendants) block this path and keep `;;`.
+`timing-topbar.js` does not call `readPrimaryPlan` or `readAllEntries`.
 
-Clicks and the command write. Onload, midnight, and visibility only rediscover.
-Midnight never writes. Overnight workday windows do not retarget create.
+## UI states
 
-## Tracking
+| State | Meaning and action |
+| --- | --- |
+| `checking` | No confirmed result yet; the checking button is disabled. |
+| `ready-absent` | No recognized plan; **+ Create today's plan** starts the action. |
+| `creating` | A requested action is pending; disable repeated activation. |
+| `ready-present` | Restore existing execution/capacity UI, or the lightweight open control when execution is off. |
+| `ready-blocked` | Extra or unsupported template content; explain the native `;;` path. Clicking rechecks only. |
+| `read-failed` | Read, capability, collision, or unconfirmed-write failure; show the reason and a read-only **Check again** action. |
+| `nav-failed` | The plan is confirmed but navigation failed; retry opening, not insertion. |
 
-Execution Layer remains opt-in. Off: lite launcher + create command, no runtime,
-no LOGBOOK reads, no 1s ticker, no execution popover. On: existing CLOCK/POMO
-topbar consumes the same session; a running timer is never replaced by the
-create label (Plan empty-state keeps the CTA). After create, tracking refresh
-reattaches Pull Watch and the capacity / 136×6 energy bar returns.
+The create label belongs to a normal button, never inside the 6px capacity track.
+A running CLOCK/POMO keeps its timer and applicable stop controls visible even
+without capacity data; creation remains available in the Plan empty-state.
+Read-only retries do not silently turn into creation on the same click.
 
-Discovery does not add a 1s graph lane. Tracking-on background reads the runtime
-snapshot; create click always re-reads. Tracking-off discovers on initialize,
-throttled visibility (≥1.5s), local date change, midnight timeout, and click.
+## Write safety
 
-## Unverified APIs
+1. Capture the graph identity and local date when the action starts. Ignore the
+   viewed page and the configured overnight workday window.
+2. Read today's plan before requesting any write. Any recognized renderer is
+   locate-only, including legacy Nautilus/Flow, custom prefixes, empty plans,
+   and plans whose tasks are all DONE. Invalid query results are errors, not
+   proof of absence.
+3. Coalesce repeated calls within the shared session. Independent sessions use
+   an exclusive Web Lock named by graph and date, then re-read under that lock.
+   There is no localStorage lock approximation. If graph identity or Web Locks
+   is unavailable, refuse creation and explain the native `;;` fallback. Opening
+   an existing plan remains available.
+4. Inspect the managed template. Standard single-component templates are
+   supported. Extra siblings, render descendants, or unsupported render content
+   require `;;`; nothing is silently dropped or blindly copied.
+5. Validate the captured graph/date after asynchronous preparation and before
+   every mutation. Unloading aborts queued lock requests and prevents subsequent
+   writes; changing graph or date also stops subsequent writes.
+6. Look up the Daily Note by title separately from its children. Reuse an empty
+   existing page. For a missing page, use Roam's `dateToPageUid(date)`, check that
+   UID, create the page, and read its UID back before inserting the component.
+7. Reserve `nautilus-log-plan-YYYY-MM-DD` for the one-click component. Check it
+   before insertion and append with `order: 'last'`. An occupied or moved UID
+   is never overwritten or bypassed with another UID. This also protects a new
+   session when a prior write is visible by UID but not yet in the day query.
+8. Read back against the frozen target date, including when a mutation succeeds
+   and then throws. There is no automatic second insert. An explicit retry
+   rechecks the same reserved UID and today's Primary Plan.
+9. If midnight passes during an in-flight insert, confirm the original date and
+   report the date change; do not insert on the new day. A page created just
+   before midnight may remain empty if the block write is stopped. Never delete
+   user content to repair partial outcomes or duplicates.
 
-These have fallbacks and are not treated as guarantees:
+The capacity bar returns only from confirmed plan data. Refresh or navigation
+failure after a confirmed write does not authorize another insert.
 
-- `navigator.locks` in Roam Desktop
-- `roam.data.page.create` vs `roam.createPage`
-- whether a new Daily Note already has a blank child (`order: 'last'` is still
-  used; blanks are not deleted)
-- same-UID create behavior
-- `roamAlphaAPI.graph.name` lock scoping (v1 keys by page title; residual
-  cross-graph web risk remains)
+## Performance and lifecycle
 
-Without `navigator.locks` and without `localStorage`, two tabs can still
-double-insert. Confirm-by-re-read then locates whichever Primary exists and does
-not delete the extra block.
+With execution off, only the launcher and create/open command are mounted. There
+is no timing runtime, LOGBOOK reader, CLOCK writer, 1s ticker, or execution panel.
+Changing the setting swaps the existing control rather than mounting a second
+one. A failed runtime start restores the lightweight launcher.
 
-## Verification
+With execution on, background discovery consumes existing runtime snapshots and
+plan-watch results. Unchanged second ticks do not query the graph, inspect the
+template again, notify today-plan subscribers, or rebuild the popover. Missing
+or previous-day snapshots remain `checking`, not `ready-absent`.
+
+Read-only recovery is bounded to initialization, throttled foreground/focus
+(1.5 seconds minimum), local midnight, and explicit actions. A date mismatch can
+request the existing runtime's coalesced refresh. There is no graph scan on
+keystrokes or DOM mutations, and no new per-second graph reader.
+
+A manually inserted `;;` plan is found at the next applicable recovery or action;
+instant detection on every edit is not promised. Every create action rechecks
+first, so a stale create label does not by itself authorize another component.
+
+## Verification and platform limits
+
+Automated verification uses mock Roam APIs and isolated browser fixtures, not a
+user graph. It covers independent sessions/modules, graph changes, unsupported
+locking, malformed reads, UID collisions, uncertain writes and reloads, midnight,
+unload, execution toggles/start failure, timer visibility, responsive layout,
+dark themes, and reduced motion.
 
 ```bash
 npm test
 npm run build
 python3 test/energy-bar-settlement.py
 python3 test/today-plan-launcher.py
+npm audit --omit=dev --audit-level=moderate
 git diff --check
 ```
 
-Do not run `build.sh` (it includes `npm ci`) unless install is required.
-No Depot/PR, no real Roam graph, no commit/push.
+Live Roam validation is still needed for Desktop Web Locks availability, native
+page/block mutation behavior, and cross-client UID conflict handling. Web Locks
+coordinate participating tabs in the same browser origin, not separate devices,
+profiles, or unrelated manual writers. The reserved UID is an additional guard,
+not a claim of a distributed transaction. Unsupported APIs or occupied UIDs fail
+closed; the native template remains the fallback.

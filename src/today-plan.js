@@ -3,7 +3,6 @@ import {
   blockUidExists,
   createDailyPage,
   createGraphBlock,
-  generateUID,
   openPrimaryPlan,
   pageTitleFor,
   readDailyPageUid,
@@ -29,12 +28,10 @@ function fault(code) {
   return error;
 }
 
-function allocateComponentUid() {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const uid = generateUID();
-    if (uid && !blockUidExists(uid)) return uid;
-  }
-  throw fault('uidCollision');
+function componentUid(date) {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `nautilus-log-plan-${date.getFullYear()}-${month}-${day}`;
 }
 
 /**
@@ -137,8 +134,13 @@ export function createTodayPlanSession({
   const absent = (target, kind) => setState({
     status: kind === 'custom' ? 'ready-blocked' : 'ready-absent',
     pageTitle: target.pageTitle, pageUid: null, planUid: null, templateKind: kind,
-    outcome: null, error: kind === 'custom' ? 'blocked' : null,
+    outcome: kind === 'custom' ? 'blocked' : null, error: kind === 'custom' ? 'blocked' : null,
   });
+  const blockTemplate = (target) => {
+    const result = absent(target, 'custom');
+    if (!destroyed) notify?.(labels().blocked, 'warning');
+    return result;
+  };
   const checking = (target) => setState({
     status: 'checking', pageTitle: target.pageTitle, pageUid: null, planUid: null,
     templateKind: null, outcome: null, error: null,
@@ -211,7 +213,7 @@ export function createTodayPlanSession({
   const ensureLocked = async (target, locateMode) => {
     let snapshot = readTarget(target);
     if (snapshot.plan) return finish(target, snapshot, locateMode, 'located');
-    if (inspectKind() === 'custom') return absent(target, 'custom');
+    if (inspectKind() === 'custom') return blockTemplate(target);
     if (typeof buildComponentString !== 'function') throw fault('failed');
     const string = await buildComponentString();
     assertTarget(target);
@@ -220,10 +222,14 @@ export function createTodayPlanSession({
     // before the first page/block write, including after every awaited mutation.
     snapshot = readTarget(target);
     if (snapshot.plan) return finish(target, snapshot, locateMode, 'located');
-    if (inspectKind() === 'custom') return absent(target, 'custom');
+    if (inspectKind() === 'custom') return blockTemplate(target);
+    if (typeof target.roam?.data?.block?.create !== 'function'
+      && typeof target.roam?.createBlock !== 'function') throw fault('apiUnavailable');
     let intent = intents.get(target.key);
     if (!intent) {
-      intent = { uid: allocateComponentUid(), attempted: false };
+      // The reserved date UID also protects retries after a tab reload while
+      // the broader day query is lagging. A collision never means overwrite.
+      intent = { uid: componentUid(target.date), attempted: false };
       intents.set(target.key, intent);
     }
     if (blockUidExists(intent.uid)) throw fault(intent.attempted ? 'unconfirmed' : 'uidCollision');
@@ -261,7 +267,7 @@ export function createTodayPlanSession({
       setState({ status: 'creating', pageTitle: target.pageTitle, outcome: null, error: null });
       const snapshot = readTarget(target);
       if (snapshot.plan) return finish(target, snapshot, locateMode, 'located');
-      if (inspectKind() === 'custom') return absent(target, 'custom');
+      if (inspectKind() === 'custom') return blockTemplate(target);
       if (!target.name) throw fault('scopeUnavailable');
       const locks = host.navigator?.locks;
       if (typeof locks?.request !== 'function') throw fault('lockUnavailable');

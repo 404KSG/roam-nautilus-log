@@ -124,6 +124,7 @@ def run() -> int:
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page(viewport={"width": 1280, "height": 720})
+        page.on("pageerror", lambda error: failures.append(f"browser error: {error}"))
         page.goto((OUT / "index.html").as_uri())
         page.wait_for_function("() => window.todayPlanHarness && window.todayPlanHarness.mountLauncher")
 
@@ -175,6 +176,23 @@ def run() -> int:
             failures,
         )
 
+        for mode in ("clock", "pomo"):
+            page.evaluate("mode => todayPlanHarness.mountTopbar({ status: 'ready-absent', [mode]: true, energyBarEnabled: true })", mode)
+            assert_true(page.locator(".nautilus-log-timing__elapsed").is_visible(), f"{mode}: energy mode hid timer without a plan", failures)
+            page.locator(".nautilus-log-timing__trigger").click()
+            page.get_by_role("tab", name="Plan").click()
+            assert_true(page.locator(".nautilus-log-timing__plan-create").is_visible(), f"{mode}: missing Plan CTA", failures)
+            if mode == "pomo":
+                assert_true(page.locator(".nautilus-log-timing__pomodoro-close").is_visible(), "pomo: stop control hidden", failures)
+
+        for mount in ("mountLauncher", "mountTopbar"):
+            page.evaluate("mount => todayPlanHarness[mount]({ status: 'checking' })", mount)
+            assert_true(page.locator(".nautilus-log-timing__trigger").is_disabled(), f"{mount}: checking is actionable", failures)
+            page.evaluate("mount => todayPlanHarness[mount]({ status: 'read-failed' })", mount)
+            page.locator(".nautilus-log-timing__trigger").click()
+            assert_true(page.evaluate("() => todayPlanHarness.api.ensureCalls().length") == 0, f"{mount}: read retry tried to create", failures)
+            assert_true(page.evaluate("() => todayPlanHarness.api.discoverCalls().length") == 1, f"{mount}: retry did not re-read", failures)
+
         page.evaluate("() => todayPlanHarness.mountTopbar({ status: 'read-failed' })")
         failed = trigger_info(page)
         screenshot(page, "04-read-failed.png")
@@ -214,6 +232,7 @@ def run() -> int:
 
         page.close()
         reduced = browser.new_page(viewport={"width": 1280, "height": 720})
+        reduced.on("pageerror", lambda error: failures.append(f"reduced-motion browser error: {error}"))
         reduced.emulate_media(reduced_motion="reduce")
         reduced.goto((OUT / "index.html").as_uri())
         reduced.wait_for_function("() => window.todayPlanHarness && window.todayPlanHarness.mountLauncher")

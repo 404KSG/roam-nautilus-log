@@ -859,6 +859,7 @@ async function onload({ extensionAPI }) {
       await extensionAPI.settings.set("actual-time-tracking", false);
       publishRuntimeSettings(extensionAPI);
       extensionAPI.settings.panel.create(panelConfig(extensionAPI, language));
+      todayPlanSession.initialize();
       mountTodayPlanLauncher(extensionAPI);
       console.error("[Nautilus Log] Actual Time Tracking could not start", error);
     }

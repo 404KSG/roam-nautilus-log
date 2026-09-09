@@ -68,6 +68,10 @@ function api() {
   return typeof window !== 'undefined' ? window.roamAlphaAPI : null;
 }
 
+function apiUnavailable(message) {
+  return Object.assign(new Error(message), { code: 'apiUnavailable' });
+}
+
 const sidebarOperationQueues = new WeakMap();
 const knownSidebarWindows = new WeakMap();
 const sidebarWindowCacheRevisions = new WeakMap();
@@ -161,7 +165,7 @@ function normalizeSequence(value) {
 function query(datalog, ...args) {
   const roam = api();
   const run = roam?.data?.fast?.q || roam?.q || roam?.data?.q;
-  if (typeof run !== 'function') throw new Error('Roam graph query is unavailable.');
+  if (typeof run !== 'function') throw apiUnavailable('Roam graph query is unavailable.');
   const owner = run === roam?.data?.fast?.q ? roam.data.fast : run === roam?.data?.q ? roam.data : roam;
   const rows = normalizeSequence(run.call(owner, datalog, ...args));
   if (!rows) throw new Error('Roam returned an unreadable graph result.');
@@ -213,6 +217,11 @@ export function readPrimaryPlan(date = new Date(), fallbackMinutes = 15) {
     reviewTasks: [],
     fixedEvents: [],
   };
+  if (rows.some((row) => row.length !== 5
+    || ![row[0], row[1], row[4]].every((uid) => typeof uid === 'string' && uid)
+    || typeof row[2] !== 'string' || !Number.isFinite(row[3]))) {
+    throw new Error('Roam returned an unreadable Daily Note tree.');
+  }
   const normalized = rows.map(([pageUid, uid, string, order, parentUid]) => ({
     pageUid,
     uid,
@@ -438,10 +447,6 @@ export function readChildren(uid) {
     .sort((left, right) => left.order - right.order);
 }
 
-export function generateUID() {
-  return generateUid();
-}
-
 export function blockUidExists(uid) {
   if (!uid) throw new Error('A block UID is required.');
   const roam = api();
@@ -449,8 +454,8 @@ export function blockUidExists(uid) {
   if (typeof pull === 'function') {
     const owner = pull === roam?.data?.pull ? roam.data : roam;
     const entity = pull.call(owner, '[:block/uid]', [':block/uid', uid]);
-    if (entity === null || entity === undefined) return false;
-    const found = entity[':block/uid'] ?? entity['block/uid'] ?? entity.uid;
+    if (entity === null) return false;
+    const found = entity?.[':block/uid'] ?? entity?.['block/uid'] ?? entity?.uid;
     if (found !== uid) throw new Error('Roam returned an unreadable UID lookup.');
     return true;
   }
@@ -460,8 +465,12 @@ export function blockUidExists(uid) {
 export function readDailyPageUid(title) {
   if (!title) return null;
   const rows = query(PAGE_UID_QUERY, title);
+  if (rows.length === 0) return null;
   const uid = rows[0]?.[0];
-  return typeof uid === 'string' && uid ? uid : null;
+  if (rows.length !== 1 || rows[0].length !== 1 || typeof uid !== 'string' || !uid) {
+    throw new Error('Roam returned an unreadable Daily Note UID.');
+  }
+  return uid;
 }
 
 export async function createDailyPage(title, date) {
@@ -472,13 +481,13 @@ export async function createDailyPage(title, date) {
   const modern = roam?.data?.page?.create;
   const legacy = roam?.createPage;
   if (typeof modern !== 'function' && typeof legacy !== 'function') {
-    throw new Error('Roam page creation is unavailable.');
+    throw apiUnavailable('Roam page creation is unavailable.');
   }
   const existing = readDailyPageUid(title);
   if (existing) return existing;
   const uid = roam?.util?.dateToPageUid?.(date);
   if (typeof uid !== 'string' || !uid) {
-    throw new Error('Roam Daily Note UID generation is unavailable. Use ;; on today’s Daily Note.');
+    throw apiUnavailable('Roam Daily Note UID generation is unavailable. Use ;; on today’s Daily Note.');
   }
   if (blockUidExists(uid)) throw new Error('The Daily Note UID is already in use. No content was changed.');
   try {
@@ -505,7 +514,7 @@ export async function createGraphBlock({
   uid: requestedUid,
 } = {}) {
   const create = resolveMutation('create');
-  if (!create) throw new Error('Roam block creation is unavailable.');
+  if (!create) throw apiUnavailable('Roam block creation is unavailable.');
   const uid = requestedUid || generateUid();
   await create({ location: { 'parent-uid': parentUid, order }, block: { uid, string, open } });
   return uid;

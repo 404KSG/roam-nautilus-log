@@ -26,9 +26,9 @@
 
 1. 从 Roam Depot 安装 **Nautilus Log**；更新处于审核阶段时，使用对应 Depot PR
    中给出的 ShortHand。
-2. 打开今天的 Daily Note，点击顶栏 **＋ 创建今日计划**（或运行
-   **Nautilus Log: Create or open today’s plan**）。需要完整原生模板时，仍可输入
-   `;;` 并选择 **Nautilus Log**。
+2. 点击顶栏 **＋ 创建今日计划**，或运行 **Nautilus Log: Create or open today’s plan**。
+   无论当前浏览哪个页面，都以今天的 Daily Note 为目标。需要完整自定义模板时，打开
+   目标 Daily Note，输入 `;;` 并选择 **Nautilus Log**。
 3. 把固定事件和 TODO 写成组件的直接子级。
 4. 排列任务，并为每项任务填写粗略时长。
 
@@ -64,7 +64,8 @@ Google 原始事件目标，并在浏览器登录多个 Google 账号时优先�
 入口不会启动 CLOCK 写入、1 秒计时器或执行面板。一键插入只写入一条来自当前设置的
 规范组件（包含自定义前缀）；不会复制昨天、模板额外兄弟块或 render 子孙。自定义
 模板请继续使用 `;;`。今天 Daily Note 上已有任何合法 Nautilus 组件（包括空任务
-计划）都只定位，不重复创建。
+计划或全部完成的计划）都只定位，不重复创建。创建需要确认当前图谱并获得 Web Locks；
+不支持的环境会提示改用原生 `;;`。读取失败后的“重新检查”只读，不会自动插入。
 
 需要在可视化规划之外进一步执行时，可在设置中开启 **Execution Layer · Advanced**。
 精简顶栏面板提供：

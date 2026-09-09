@@ -107,18 +107,27 @@ async function createBlock(parentUid, order, string, uid, extra = {}) {
   return uid;
 }
 
-function childBlocks(parentUid) {
+function templateQueryRows(rows, strict) {
+  if (strict && (!Array.isArray(rows) || rows.some((row) => (
+    !Array.isArray(row) || row.length !== 1
+    || typeof row[0]?.uid !== 'string' || !row[0].uid
+    || typeof row[0].string !== 'string'
+  )))) throw new Error('Roam returned unreadable template content.');
+  return rows || [];
+}
+
+function childBlocks(parentUid, strict = false) {
   const roam = api();
   if (!roam?.q || !parentUid) return [];
-  return (roam.q(`[:find (pull ?child [:block/uid :block/string :block/order])
+  return templateQueryRows(roam.q(`[:find (pull ?child [:block/uid :block/string :block/order])
                  :where [?parent :block/uid "${parentUid}"]
-                        [?parent :block/children ?child]]`) || [])
+                        [?parent :block/children ?child]]`), strict)
     .map((row) => row?.[0])
     .filter(Boolean)
     .sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
-function pageBlocksContaining(searchString) {
+function pageBlocksContaining(searchString, strict = false) {
   const roam = api();
   if (!roam?.q || !searchString) return [];
   const query = `[:find (pull ?node [:block/string :block/uid :block/order])
@@ -126,7 +135,7 @@ function pageBlocksContaining(searchString) {
                         [?node :block/page ?page]
                         [?node :block/string ?node-string]
                         [(clojure.string/includes? ?node-string "${searchString}")]]`;
-  return (roam.q(query) || []).map((row) => row?.[0]).filter(Boolean);
+  return templateQueryRows(roam.q(query), strict).map((row) => row?.[0]).filter(Boolean);
 }
 
 function managedRenderCores(renderStringCore) {
@@ -157,17 +166,17 @@ function parseTemplateSettings(string, renderStringCores) {
   const workdayEnd = Number(tokens[4]);
   if (Number.isFinite(workdayEnd)) settings["workday-end"] = workdayEnd;
 
-  return { renderStringCore, settings };
+  return { renderStringCore, settings, unsupported: tokens.length > 5 };
 }
 
-function managedTemplateCandidates(renderStringCore) {
+function managedTemplateCandidates(renderStringCore, strict = false) {
   const renderStringCores = managedRenderCores(renderStringCore);
-  return pageBlocksContaining(TEMPLATE_MARKER)
+  return pageBlocksContaining(TEMPLATE_MARKER, strict)
     .map((template, index) => {
       const knownTemplate = template.string === CURRENT_TEMPLATE_NAME
         || LEGACY_TEMPLATE_NAMES.has(template.string);
       if (!knownTemplate) return null;
-      const renderBlock = childBlocks(template.uid).find((child) => (
+      const renderBlock = childBlocks(template.uid, strict).find((child) => (
         renderStringCores.some((core) => child.string?.includes(core))
       ));
       const parsed = renderBlock
@@ -214,15 +223,21 @@ export function readExistingTemplateState(renderStringCore) {
  * or render-block descendants are blocked so this path never copies or drops them.
  */
 export function inspectCanonicalTemplate(renderStringCore) {
-  const candidates = managedTemplateCandidates(renderStringCore);
+  if (typeof api()?.q !== 'function') {
+    throw Object.assign(new Error('Roam template inspection is unavailable.'), { code: 'apiUnavailable' });
+  }
+  const candidates = managedTemplateCandidates(renderStringCore, true);
   const candidate = preferredTemplateCandidate(candidates, renderStringCore);
-  if (!candidate?.renderBlock) return { kind: 'missing' };
+  if (!candidate) return { kind: 'missing' };
+  if (!candidate.renderBlock || !candidate.parsed || candidate.parsed.unsupported) return { kind: 'custom' };
+  const source = candidate.renderBlock.string || '';
+  if (source.slice(source.lastIndexOf('}}') + 2).trim()) return { kind: 'custom' };
   const renderStringCores = managedRenderCores(renderStringCore);
-  const matchesCore = renderStringCores.some((core) => candidate.renderBlock.string?.includes(core));
-  if (!matchesCore) return { kind: 'missing' };
-  const siblings = childBlocks(candidate.template.uid);
+  const coreCount = renderStringCores.reduce((count, core) => count + source.split(core).length - 1, 0);
+  if (coreCount !== 1) return { kind: 'custom' };
+  const siblings = childBlocks(candidate.template.uid, true);
   if (siblings.length !== 1) return { kind: 'custom' };
-  if (childBlocks(candidate.renderBlock.uid).length > 0) return { kind: 'custom' };
+  if (childBlocks(candidate.renderBlock.uid, true).length > 0) return { kind: 'custom' };
   return { kind: 'standard' };
 }
 
