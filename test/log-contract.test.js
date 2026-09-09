@@ -530,10 +530,14 @@ test('the optional energy bar layers live reserve over committed capacity withou
   assert.match(css, /\.nautilus-log-timing__trigger\.has-energy \.nautilus-log-timing__brand-icon\s*\{[^}]*display:\s*none;/s);
   assert.match(css, /\.nautilus-log-timing__trigger\.is-energy-unavailable \.nautilus-log-timing__brand-icon\s*\{[^}]*display:\s*inline-flex;/s);
   assert.match(css, /\.nautilus-log-timing__capacity-token\.is-energy\s*\{[^}]*grid-template-columns:\s*136px max-content;[^}]*grid-template-rows:\s*14px 14px;[^}]*height:\s*28px;[^}]*row-gap:\s*0;/s);
-  assert.match(css, /\.nautilus-log-timing__energy-track\s*\{[^}]*border:\s*0;[^}]*border-radius:\s*999px;[^}]*box-shadow:\s*none;[^}]*box-sizing:\s*border-box;[^}]*height:\s*6px;[^}]*width:\s*136px;/s);
+  assert.match(css, /\.nautilus-log-timing__energy-track\s*\{[^}]*border:\s*0;[^}]*border-radius:\s*0;[^}]*box-shadow:\s*none;[^}]*box-sizing:\s*border-box;[^}]*height:\s*6px;[^}]*width:\s*136px;/s);
   assert.match(css, /\.nautilus-log-timing__energy-timer\s*\{[^}]*align-self:\s*center;[^}]*font-size:\s*13px;[^}]*grid-row:\s*1 \/ 3;[^}]*line-height:\s*14px;/s);
+  assert.match(css, /--nautilus-log-energy-reserve:\s*var\(--secondary-text-color,\s*#888\)/);
   assert.match(css, /\.nautilus-log-timing__energy-committed\s*\{[^}]*background:\s*#a8cfba;[^}]*box-shadow:\s*none;/s);
-  assert.match(css, /\.nautilus-log-timing__energy-reserve\s*\{[^}]*background:\s*#58a984;[^}]*box-shadow:\s*none;/s);
+  assert.match(css, /\.nautilus-log-timing__energy-reserve\s*\{[^}]*background:\s*var\(--nautilus-log-energy-reserve\);[^}]*box-shadow:\s*none;/s);
+  assert.doesNotMatch(timingTopbar, /nautilus-log-timing__energy-warning/);
+  assert.doesNotMatch(css, /nautilus-log-timing__energy-warning/);
+  assert.match(timingTopbar, /planned\.classList\.toggle\('is-warning', model\.warning\)/);
   assert.match(css, /\.nautilus-log-timing__energy-bottom\s*\{[^}]*align-self:\s*center;[^}]*gap:\s*4px;[^}]*justify-content:\s*flex-start;[^}]*text-align:\s*left;/s);
   assert.match(css, /\.nautilus-log-timing__energy-summary-separator\s*\{[^}]*color:\s*#9aa4ae;/s);
   assert.doesNotMatch(css, /\.nautilus-log-timing__trigger\.has-energy \+ \.nautilus-log-timing__pomodoro-close/);

@@ -155,7 +155,6 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       energyTrack.append(
         element('span', 'nautilus-log-timing__energy-committed'),
         element('span', 'nautilus-log-timing__energy-reserve'),
-        element('span', 'nautilus-log-timing__energy-warning'),
       );
       const energyTimer = element('span', 'nautilus-log-timing__energy-timer');
       energyTimer.hidden = nodes.length === 0;
@@ -229,7 +228,6 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       const model = timingCore.energyBarModel(execution);
       energyTrack.style.setProperty('--nautilus-energy-available', `${model.availablePercent}%`);
       energyTrack.style.setProperty('--nautilus-energy-reserve', `${model.reservePercent}%`);
-      energyTrack.classList.toggle('is-warning', model.warning);
       capacity.classList.toggle('is-status-cue', model.warning);
       planned.classList.toggle('is-warning', model.warning);
       plannedValue.textContent = summary.planned.value;

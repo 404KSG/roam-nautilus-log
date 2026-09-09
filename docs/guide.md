@@ -110,17 +110,17 @@ Clock In also opens or moves the active task to the top of Roam's sidebar.
 ### Optional capacity energy bar
 
 Enable **Show capacity as an energy bar** to replace the ordinary one-line
-topbar token with a borderless two-level depth gauge. The fixed-scale track sits
+topbar token with a borderless, square-ended two-level depth gauge. The fixed-scale track sits
 above the topbar centerline, while the lower row is one left-aligned phrase such
 as `42% left · 3h20m planned`. The two rows fold symmetrically around the
 centerline. While CLOCK or POMO runs, its timer and stop control remain centered
 on that line instead of aligning to the track:
 
-- deeper sea green is flexible reserve after all unfinished demand;
+- Roam's theme gray is flexible reserve after all unfinished demand;
 - lighter sea green is unfinished planned demand reserved within today;
-- the flat cool-gray track is flexible capacity that has elapsed;
-- a warning cap plus `OVER +Xm` or `NO SLOT Xm` preserves the exact existing
-  overload or fragmentation state.
+- the quieter cool-gray track is flexible capacity that has elapsed;
+- `OVER +Xm` or `NO SLOT Xm` appears once in the lower summary, using the
+  existing warning color without duplicating the warning on the track.
 
 Every width uses the full day's flexible capacity as its denominator. Fixed events
 remain excluded, untimed work uses Default Todo Duration, and the clock contracts

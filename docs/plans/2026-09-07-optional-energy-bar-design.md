@@ -59,8 +59,8 @@ projection.
 ## Interface
 
 Full density becomes one compact two-level instrument. The upper-left row is a
-continuous 136×6px depth-gauge capsule. The lower row becomes one quiet,
-left-aligned sentence, such as `70% left · 3h20m planned`, whose left edge
+continuous 136×6px square-ended depth-gauge track. The lower row becomes one
+quiet, left-aligned sentence, such as `70% left · 3h20m planned`, whose left edge
 matches the track. CLOCK or POMO elapsed time occupies a separate right cell
 that spans both rows and centers on the Roam topbar axis, so the track never
 shrinks or changes scale when timing starts. The previous percentage to the
@@ -72,23 +72,25 @@ The Nautilus icon and divider dot disappear while the complete energy
 instrument has authoritative capacity data. The entire instrument remains the
 same clickable trigger. If data is unavailable, or responsive density yields to
 Roam search, the Nautilus icon returns as the safe 30px navigation affordance.
-The capsule has no metallic border, bevel, internal quarter ticks, or idle
-animation. Its lower labels separate stronger tabular values from quieter words;
-only a real warning turns either metric into a status color.
+The square-ended track has no metallic border, bevel, internal quarter ticks,
+or idle animation. Its lower labels separate stronger tabular values from
+quieter words; only a real warning turns either metric into a status color.
 
 The palette is restrained and theme-safe:
 
-- reserve: soft sea green (`#58a984`);
-- committed: lighter sea green (`#a8cfba`, dark-theme `#8fbfa6`) so both still
-  belong to today's capacity while luminance distinguishes free from reserved;
+- reserve: Roam theme gray (`var(--secondary-text-color, #888)`, with a `#aaa`
+  dark-theme fallback);
+- committed: lighter sea green (`#a8cfba`, dark-theme `#8fbfa6`) so unfinished
+  planned demand remains distinct from both neutral time states;
 - elapsed track: cool low-contrast gray (`#dce1e5` in light themes);
 - ordinary percentage, planned duration, and timer: neutral gray-blue;
-- overload or no-slot: the existing warning color, a static cap, and an exact
-  `OVER +Xm` or `NO SLOT Xm` cue in place of the lower planned duration.
+- overload or no-slot: the existing warning color appears only in the exact
+  lower `OVER +Xm` or `NO SLOT Xm` cue, without a duplicate track marker.
 
-Track and fill layers are flat: no border, inset ring, outer shadow, boundary
-shadow, gradient, idle pulse, or continuous glow. Two equal 14px rows place the
-track center 7px above the Roam topbar axis and the lower summary center 7px
+Track and fill layers are flat and square-ended: no border, inset ring, outer
+shadow, boundary shadow, gradient, idle pulse, or continuous glow. Two equal
+14px rows place the track center 7px above the Roam topbar axis and the lower
+summary center 7px
 below it. The 13px tabular timer spans both rows and centers directly on that
 axis; POMO's smaller mode label remains secondary, and its adjacent stop glyph
 uses the same axis without shrinking its button target. The lower values and

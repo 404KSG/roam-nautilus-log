@@ -14,6 +14,7 @@
   --nautilus-log-task: #0899c8;
   --nautilus-log-task-fill: rgba(8, 153, 200, 0.28);
   --nautilus-log-control-icon: #888;
+  --nautilus-log-energy-reserve: var(--secondary-text-color, #888);
   --nautilus-log-now: #d44b4b;
   --nautilus-log-past-overlay: rgba(86, 101, 116, 0.08);
   --nautilus-log-unplanned-stripe: rgba(86, 101, 116, 0.34);
@@ -38,6 +39,7 @@
   --nautilus-log-task: #47b8df;
   --nautilus-log-task-fill: rgba(71, 184, 223, 0.32);
   --nautilus-log-control-icon: #aaa;
+  --nautilus-log-energy-reserve: var(--secondary-text-color, #aaa);
   --nautilus-log-now: #ff8b78;
   --nautilus-log-past-overlay: rgba(255, 255, 255, 0.06);
   --nautilus-log-unplanned-stripe: rgba(255, 255, 255, 0.24);
@@ -50,6 +52,7 @@
 
 .dark {
   --nautilus-log-positive: #70c49f;
+  --nautilus-log-energy-reserve: var(--secondary-text-color, #aaa);
 }
 
 .nautilus-log-container {
@@ -1484,7 +1487,7 @@
   align-self: center;
   background: #dce1e5;
   border: 0;
-  border-radius: 999px;
+  border-radius: 0;
   box-shadow: none;
   box-sizing: border-box;
   display: block;
@@ -1605,24 +1608,9 @@
 }
 
 .nautilus-log-timing__energy-reserve {
-  background: #58a984;
+  background: var(--nautilus-log-energy-reserve);
   box-shadow: none;
   width: var(--nautilus-energy-reserve);
-}
-
-.nautilus-log-timing__energy-warning {
-  background: var(--nautilus-log-warning);
-  border-radius: 999px;
-  bottom: 0;
-  opacity: 0;
-  position: absolute;
-  right: 0;
-  top: 0;
-  width: 2px;
-}
-
-.nautilus-log-timing__energy-track.is-warning .nautilus-log-timing__energy-warning {
-  opacity: 1;
 }
 
 .nautilus-log-timing__capacity-token.is-settling .nautilus-log-timing__energy-reserve {
