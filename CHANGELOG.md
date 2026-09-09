@@ -13,10 +13,12 @@
   themes. Its borderless two-level depth gauge uses a fixed 136×6px track above
   a left-aligned `% left · planned duration` summary. Those rows fold evenly
   around the Roam topbar centerline, where the larger CLOCK/POMO timer and stop
-  control remain centered without changing the track scale. The square-ended
+  control remain centered without changing the track scale. The restrained 1px
   track uses Roam theme gray for free reserve, keeps planned demand lighter
-  green, and carries no outline or shadow. Overload and no-slot warnings appear
-  once in the exact lower text instead of adding a duplicate track marker. The
+  green, and adds symmetric two-tier theme-gray end lights inside the existing
+  trigger padding without blur, animation, or layout growth. Overload and
+  no-slot warnings appear once in the exact lower text instead of adding a
+  duplicate track marker. The
   shortcut tooltip uses a seam-free two-layer pointer. The full
   gauge replaces the leading icon, while missing data or constrained space
   restores the 30px icon fallback.
