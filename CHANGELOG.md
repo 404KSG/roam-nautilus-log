@@ -15,10 +15,11 @@
   around the Roam topbar centerline, where the larger CLOCK/POMO timer and stop
   control remain centered without changing the track scale. The restrained 1px
   track uses Roam theme gray for free reserve, keeps planned demand lighter
-  green, and adds one slim vertical theme-gray end cap at each side. The caps
-  rise 2px above and below the body with a restrained halo but no animation or
-  layout growth. Overload and no-slot warnings appear once in the exact lower
-  text instead of adding a duplicate track marker. The shortcut tooltip uses a
+  green, and adds one complete 1px vertical end cap at each side. Free reserve
+  and both crisp, shadowless caps reuse the primary control-icon color exactly;
+  the caps rise 2px above and below the body without layout growth. Overload and
+  no-slot warnings appear once in the exact lower text instead of adding a
+  duplicate track marker. The shortcut tooltip uses a
   seam-free two-layer pointer. The full
   gauge replaces the leading icon, while missing data or constrained space
   restores the 30px icon fallback.
