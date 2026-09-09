@@ -571,6 +571,8 @@ test('execution surface copy follows the extension language', () => {
   assert.equal(timing.executionCopy('zh').capacity.energy, '容量精力槽');
   assert.equal(timing.executionCopy('zh').capacity.noSlotCue, '无空档');
   assert.equal(timing.executionCopy('zh').actions.openPanelHint, '单击：面板 · ⌥/Alt：主界面 · ⇧：侧边栏');
+  assert.equal(timing.executionCopy('en').createToday.create, '+ Create today\'s plan');
+  assert.equal(timing.executionCopy('zh').createToday.create, '＋ 创建今日计划');
   assert.equal(timing.executionCopy('en').empty.noActive, 'No active work. Open Plan to start a task.');
 });
 

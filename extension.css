@@ -1198,6 +1198,22 @@
   white-space: nowrap;
 }
 
+.nautilus-log-timing__trigger.is-create-today {
+  gap: 6px;
+}
+
+.nautilus-log-timing__create-label {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.nautilus-log-timing__trigger.is-creating,
+.nautilus-log-timing__trigger:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
 .nautilus-log-timing__brand-icon {
   align-items: center;
   color: var(--nl-exec-muted, #6b7280);
@@ -2115,6 +2131,29 @@ button.nautilus-log-timing__plan-heading:focus-visible {
   line-height: 1.5;
   padding: 24px 18px;
   text-align: center;
+}
+
+.nautilus-log-timing__plan-create {
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(117, 126, 140, 0.28);
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 8px 12px;
+}
+
+.nautilus-log-timing__plan-create:hover,
+.nautilus-log-timing__plan-create:focus-visible {
+  background: rgba(111, 120, 132, 0.1);
+  outline: none;
+}
+
+.nautilus-log-timing__plan-create:disabled {
+  cursor: progress;
+  opacity: 0.72;
 }
 
 .nautilus-log-timing__located {

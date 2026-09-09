@@ -20,6 +20,9 @@ const timingCore = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-cor
 const timingRuntime = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-runtime.js'), 'utf8');
 const timingCommands = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-commands.js'), 'utf8');
 const timingRoam = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-roam.js'), 'utf8');
+const todayPlan = fs.readFileSync(path.join(__dirname, '..', 'src', 'today-plan.js'), 'utf8');
+const todayPlanLauncher = fs.readFileSync(path.join(__dirname, '..', 'src', 'today-plan-launcher.js'), 'utf8');
+const todayPlanCommands = fs.readFileSync(path.join(__dirname, '..', 'src', 'today-plan-commands.js'), 'utf8');
 const tidyPlan = fs.readFileSync(path.join(__dirname, '..', 'src', 'tidy-plan.js'), 'utf8');
 const logCore = fs.readFileSync(path.join(__dirname, '..', 'src', 'log-core.js'), 'utf8');
 
@@ -335,11 +338,27 @@ test('Log scaffolding is isolated and unload is graph-safe', () => {
   assert.doesNotMatch(helpers, /deleteBlock\(/);
 });
 
-test('Actual Time Tracking is opt-in and owns no disabled topbar interaction', () => {
+test('Actual Time Tracking is opt-in; lite launcher and create command stay available while tracking is off', () => {
   assert.match(entry, /"actual-time-tracking": false/);
   assert.match(entry, /"energy-bar-enabled": false/);
   assert.match(entry, /if \(extensionAPI\.settings\.get\("actual-time-tracking"\) === true\)/);
   assert.match(entry, /stopTiming\(\{ closeActive: false \}\)/);
+  assert.match(entry, /createTodayPlanSession/);
+  assert.match(entry, /createTodayPlanLauncher/);
+  assert.match(entry, /createTodayPlanCommands/);
+  assert.match(entry, /todayPlanSession\.initialize\(\)/);
+  assert.match(entry, /startTiming\(/);
+  assert.match(todayPlanLauncher, /TOPBAR_ID/);
+  assert.match(todayPlanLauncher, /placeAfterNavigation/);
+  assert.doesNotMatch(todayPlanLauncher, /createTimingRuntime|readAllEntries|CLOCK/);
+  assert.match(todayPlanCommands, /Nautilus Log: Create or open today’s plan/);
+  assert.doesNotMatch(todayPlanCommands, /Nautilus Log: 1\. Focus current block/);
+  assert.match(timingCommands, /Nautilus Log: 1\. Focus current block/);
+  assert.match(timingCommands, /Nautilus Log: 2\. Clock out Timing Line/);
+  assert.match(timingCommands, /Nautilus Log: 3\. Locate Primary Plan/);
+  assert.doesNotMatch(timingCommands, /Create or open/);
+  assert.doesNotMatch(todayPlan, /readAllEntries|createRunningClock|deleteGraphBlock/);
+  assert.doesNotMatch(timingTopbar, /readAllEntries|readPrimaryPlan/);
   assert.match(timingTopbar, /bp3-icon-\$\{name\}/);
   assert.match(timingTopbar, /const brandIcon = \(\) => \{[\s\S]*icon\('unresolve'\)/);
   assert.match(timingTopbar, /trigger\.replaceChildren\(\.\.\.triggerNodes\(\)\)/);
@@ -356,7 +375,6 @@ test('Actual Time Tracking is opt-in and owns no disabled topbar interaction', (
   assert.match(timingCommands, /palette\.addCommand/);
   assert.match(timingCommands, /const contextMenu = window\.roamAlphaAPI\?\.ui\?\.blockContextMenu/);
   assert.match(timingCommands, /contextMenu\.addCommand/);
-  assert.match(timingCommands, /Nautilus Log: 2\. Clock out Timing Line/);
   assert.match(timingRuntime, /await closeEntriesAt\(before, instant\);[\s\S]*await createRunningClock\(taskUid, instant, taskString\);/);
   assert.match(timingRuntime, /deleteCurrentClock/);
 });

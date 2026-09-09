@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- A 30px topbar control and **Nautilus Log: Create or open today’s plan** can
+  create or locate today's Primary Plan without turning on the Execution Layer.
+  The click path inserts one canonical component at the end of the local-calendar
+  Daily Note from the live renderer identity and settings (custom prefix included).
+  Any legal renderer already on that page is locate-only. Custom templates with
+  extra sibling blocks or render-block descendants stay on the native `;;` path;
+  this entry does not copy or drop them, auto-create at midnight, or rewrite
+  historical notes. Execution Layer off still has this launcher, but not CLOCK
+  writes, a 1s ticker, or the execution popover. After a confirmed create, the
+  existing capacity text / 136×6 energy bar returns and the plan opens in the
+  main window.
+
 ## 1.1.0 — 2026-08-30
 
 ### Added

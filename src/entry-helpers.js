@@ -208,6 +208,24 @@ export function readExistingTemplateState(renderStringCore) {
   };
 }
 
+/**
+ * Classify the managed canonical template for one-click Daily Note insert.
+ * `missing` still allows v1 create from live settings. `custom` extra siblings
+ * or render-block descendants are blocked so this path never copies or drops them.
+ */
+export function inspectCanonicalTemplate(renderStringCore) {
+  const candidates = managedTemplateCandidates(renderStringCore);
+  const candidate = preferredTemplateCandidate(candidates, renderStringCore);
+  if (!candidate?.renderBlock) return { kind: 'missing' };
+  const renderStringCores = managedRenderCores(renderStringCore);
+  const matchesCore = renderStringCores.some((core) => candidate.renderBlock.string?.includes(core));
+  if (!matchesCore) return { kind: 'missing' };
+  const siblings = childBlocks(candidate.template.uid);
+  if (siblings.length !== 1) return { kind: 'custom' };
+  if (childBlocks(candidate.renderBlock.uid).length > 0) return { kind: 'custom' };
+  return { kind: 'standard' };
+}
+
 async function updateBlockIfChanged(uid, string) {
   const roam = api();
   if (!roam?.updateBlock || !uid || getBlockContentStringByUID(uid) === string) return false;

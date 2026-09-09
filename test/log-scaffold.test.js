@@ -537,6 +537,227 @@ test('shorthand migration preserves an existing intentionally empty prefix', asy
   await extension.onunload();
 });
 
+function createMiniDom() {
+  const byId = new Map();
+  const node = (tag, className = '') => {
+    const element = {
+      tagName: String(tag).toUpperCase(),
+      className,
+      _id: '',
+      children: [],
+      parentNode: null,
+      parentElement: null,
+      hidden: false,
+      disabled: false,
+      style: {},
+      dataset: {},
+      textContent: '',
+      type: '',
+      title: '',
+      isConnected: true,
+      classList: {
+        add() {},
+        remove() {},
+        toggle() {},
+        contains: () => false,
+      },
+      setAttribute(name, value) {
+        if (name === 'id') element.id = value;
+      },
+      getAttribute() { return null; },
+      removeAttribute() {},
+      append(...kids) {
+        for (const kid of kids) {
+          if (!kid || typeof kid === 'string') continue;
+          kid.parentNode = element;
+          kid.parentElement = element;
+          element.children.push(kid);
+        }
+      },
+      replaceChildren(...kids) {
+        element.children = [];
+        element.append(...kids);
+      },
+      addEventListener() {},
+      removeEventListener() {},
+      contains(candidate) {
+        return element === candidate || element.children.some((child) => child === candidate || child.contains?.(candidate));
+      },
+      remove() {
+        if (!element.parentNode) return;
+        element.parentNode.children = element.parentNode.children.filter((child) => child !== element);
+        element.parentNode = null;
+        element.parentElement = null;
+        element.isConnected = false;
+        if (element.id) byId.delete(element.id);
+      },
+      insertBefore(child) {
+        element.append(child);
+        return child;
+      },
+      querySelector(selector) {
+        if (selector?.startsWith('#')) {
+          if (element.id === selector.slice(1)) return element;
+          for (const child of element.children) {
+            const hit = child.querySelector(selector);
+            if (hit) return hit;
+          }
+          return null;
+        }
+        if (selector?.startsWith('.')) {
+          const cls = selector.split(',')[0].trim().slice(1);
+          if (String(element.className).includes(cls)) return element;
+          for (const child of element.children) {
+            const hit = child.querySelector(selector);
+            if (hit) return hit;
+          }
+        }
+        return null;
+      },
+      querySelectorAll: () => [],
+      getBoundingClientRect: () => ({ left: 10, right: 40, top: 0, bottom: 30, width: 30, height: 30 }),
+      closest: () => null,
+    };
+    Object.defineProperty(element, 'id', {
+      get() { return element._id || ''; },
+      set(value) {
+        if (element._id) byId.delete(element._id);
+        element._id = String(value || '');
+        if (element._id) byId.set(element._id, element);
+      },
+    });
+    Object.defineProperty(element, 'firstChild', { get() { return element.children[0] || null; } });
+    Object.defineProperty(element, 'nextSibling', {
+      get() {
+        if (!element.parentNode) return null;
+        const index = element.parentNode.children.indexOf(element);
+        return element.parentNode.children[index + 1] || null;
+      },
+    });
+    return element;
+  };
+  const topbar = node('div', 'rm-topbar');
+  const search = node('div', 'rm-find-or-create-wrapper');
+  topbar.append(search);
+  const body = node('body', '');
+  body.append(topbar);
+  const document = {
+    body,
+    visibilityState: 'visible',
+    querySelector(selector) {
+      if (selector === '.rm-topbar') return topbar;
+      if (selector?.startsWith('#')) return byId.get(selector.slice(1)) || null;
+      return topbar.querySelector(selector);
+    },
+    querySelectorAll: () => [],
+    getElementById: (id) => byId.get(id) || null,
+    createElement: (tag) => node(tag, ''),
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  return { document, topbar, byId };
+}
+
+test('tracking off mounts the lite launcher host and never starts CLOCK queries', async (t) => {
+  const { roam } = createRoamMock();
+  const queries = [];
+  const originalQ = roam.q;
+  roam.q = (query, ...args) => {
+    queries.push(query);
+    return originalQ(query, ...args);
+  };
+  const { document } = createMiniDom();
+  global.window = {
+    roamAlphaAPI: roam,
+    dispatchEvent: () => {},
+    addEventListener() {},
+    removeEventListener() {},
+    setTimeout: () => 1,
+    clearTimeout() {},
+    setInterval: () => 1,
+    clearInterval() {},
+  };
+  global.document = document;
+  global.MutationObserver = class { observe() {} disconnect() {} };
+  t.after(() => {
+    delete global.window;
+    delete global.document;
+    delete global.MutationObserver;
+  });
+
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const extension = (await import(`data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#launcher-${Date.now()}`)).default;
+  const settings = new Map();
+  const extensionAPI = {
+    settings: {
+      get: (key) => settings.get(key),
+      set: async (key, value) => settings.set(key, value),
+      panel: { create: () => {} },
+    },
+    ui: {
+      commandPalette: {
+        addCommand() {},
+        removeCommand() {},
+      },
+    },
+  };
+
+  await extension.onload({ extensionAPI });
+  assert.equal(window.nautilusLogExtensionData.timingEnabled, undefined);
+  assert.equal(Boolean(document.getElementById('nautilus-log-timing-topbar')), true);
+  assert.equal(queries.some((query) => query.includes('?clock-uid ?clock-string')), false);
+  await extension.onunload();
+  assert.equal(document.getElementById('nautilus-log-timing-topbar'), null);
+});
+
+test('tracking on still starts the timing runtime; unload writes no graph rows', async (t) => {
+  const { roam, blocks } = createRoamMock();
+  const { document } = createMiniDom();
+  global.window = {
+    roamAlphaAPI: roam,
+    dispatchEvent: () => {},
+    addEventListener() {},
+    removeEventListener() {},
+    setTimeout: () => 1,
+    clearTimeout() {},
+    setInterval: () => 1,
+    clearInterval() {},
+    requestIdleCallback: (fn) => { fn(); return 1; },
+    cancelIdleCallback() {},
+  };
+  global.document = document;
+  global.MutationObserver = class { observe() {} disconnect() {} };
+  t.after(() => {
+    delete global.window;
+    delete global.document;
+    delete global.MutationObserver;
+  });
+
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const extension = (await import(`data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#runtime-${Date.now()}`)).default;
+  const settings = new Map([['actual-time-tracking', true]]);
+  const extensionAPI = {
+    settings: {
+      get: (key) => settings.get(key),
+      set: async (key, value) => settings.set(key, value),
+      panel: { create: () => {} },
+    },
+    ui: {
+      commandPalette: {
+        addCommand() {},
+        removeCommand() {},
+      },
+    },
+  };
+
+  await extension.onload({ extensionAPI });
+  assert.equal(window.nautilusLogExtensionData.timingEnabled, true);
+  const blockCount = blocks.size;
+  await extension.onunload();
+  assert.equal(blocks.size, blockCount);
+  assert.equal(window.nautilusLogExtensionData.timingEnabled, false);
+});
+
 function pageUidOfForTest(blocks, pages, block) {
   let current = block;
   while (current?.parentUid) {

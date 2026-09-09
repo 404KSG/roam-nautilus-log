@@ -87,11 +87,20 @@ visual noise.
 ## Execution Layer
 
 The optional Execution Layer defaults to **off**. Its advanced settings remain hidden
-until enabled, and Nautilus Log loads no execution panel, timer poller, commands, or
-CLOCK writer while it is off.
+until enabled. While it is off, Nautilus Log still mounts a 30px today-plan launcher
+and one create-or-open command, but it loads no execution panel, 1s ticker, CLOCK
+writer, or LOGBOOK reader.
 
-When enabled, the first Nautilus Log on today's Daily Note becomes the **Primary
-Plan** used by the topbar panel.
+Click **+ Create today's plan** (or the command) to insert one canonical component
+at the end of today's Daily Note from the live renderer identity and settings. If
+any legal Nautilus renderer is already on that page, including an empty plan, the
+control only locates the tree-order Primary. Custom templates with extra sibling
+blocks or render-block descendants are blocked in this first version: use `;;` so
+nothing is copied or dropped. The button never auto-creates at midnight or on load.
+
+When Execution Layer is enabled, the first Nautilus Log on today's Daily Note becomes
+the **Primary Plan** used by the topbar panel. After a successful create, the existing
+capacity text or 136×6 energy bar returns and the plan is opened in the main window.
 
 Click the Nautilus topbar trigger to open the panel, Option/Alt-click it to locate
 the Primary Plan in the main window, or Shift-click it to open or bring the same
@@ -222,12 +231,13 @@ flexible TODO/DONE rows with the configured Default Todo Duration. See
 
 The Command Palette exposes:
 
-- **Nautilus Log: 1. Focus current block**
-- **Nautilus Log: 2. Clock out Timing Line**
-- **Nautilus Log: 3. Locate Primary Plan**
+- **Nautilus Log: Create or open today’s plan** (always available)
+- **Nautilus Log: 1. Focus current block** (Execution Layer on)
+- **Nautilus Log: 2. Clock out Timing Line** (Execution Layer on)
+- **Nautilus Log: 3. Locate Primary Plan** (Execution Layer on)
 
 Bind them in **Roam Settings → Hotkeys**. TODO context menus also expose Clock In and
-Clock Out.
+Clock Out while tracking is on.
 
 ## Data and safety
 

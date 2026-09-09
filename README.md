@@ -31,7 +31,9 @@ fill suitable gaps from the current moment. Tasks that cannot fit appear in
 
 1. Install **Nautilus Log** from Roam Depot. While an update is under review,
    use the ShortHand shown in that Depot pull request.
-2. On today's Daily Note, type `;;` and choose **Nautilus Log**.
+2. Open today's Daily Note, then click **+ Create today's plan** in the topbar
+   (or run **Nautilus Log: Create or open today’s plan**). Type `;;` and choose
+   **Nautilus Log** when you need the full native template instead.
 3. Add fixed events and TODOs as direct children.
 4. Order the tasks and give each one a rough duration.
 
@@ -75,6 +77,14 @@ See [Google Calendar sync](./docs/google-calendar-sync.md) for the block shape,
 authorization, scopes, merge rules, and [privacy contract](./PRIVACY.md).
 
 ## Optional Execution Layer
+
+A 30px topbar control and one command can create or locate today's Primary Plan
+even while the Execution Layer is off. That launcher does not start CLOCK
+writes, a 1s ticker, or the execution popover. One-click insert writes a single
+canonical component from live settings (custom prefix included). It does not
+copy yesterday, extra template siblings, or render-block descendants; use `;;`
+for those custom templates. Existing legal Nautilus renderers on today's Daily
+Note, including empty plans, are locate-only.
 
 Enable **Execution Layer · Advanced** in Settings when you want more than visual
 planning. The compact topbar panel provides:

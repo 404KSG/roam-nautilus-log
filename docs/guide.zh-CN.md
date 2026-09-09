@@ -78,11 +78,18 @@ Schedule，避免裁切和视觉干扰。
 
 ## 执行层
 
-可选的执行层默认**关闭**。启用前会隐藏进阶执行设置，也不会加载执行面板、计时轮询、
-命令或 CLOCK 写入者。
+可选的执行层默认**关闭**。启用前会隐藏进阶执行设置。关闭时仍会加载 30px 的今日计划
+入口和一条创建/打开命令，但不会加载执行面板、1 秒计时器、CLOCK 写入者或 LOGBOOK
+读取。
 
-开启后，当天 Daily Note 中的第一个 Nautilus Log 会成为顶栏面板使用的 **Primary
-Plan**。
+点击 **＋ 创建今日计划**（或命令）会按当前 renderer 身份和设置，在今天 Daily Note
+末尾插入一条规范组件。若该页已有任何合法 Nautilus 组件（包括空任务计划），则只定位
+树序 Primary。模板若含额外兄弟块或 render 子孙，首版会明确提示改用 `;;`，以免复制或
+丢内容。按钮不会在午夜或加载时自动创建。
+
+开启执行层后，当天 Daily Note 中的第一个 Nautilus Log 会成为顶栏面板使用的
+**Primary Plan**。创建成功并读回后，会恢复原有容量文本或 136×6 精力槽，并在主窗口
+打开计划。
 
 单击 Nautilus 顶栏按钮会打开面板；Option/Alt + 单击会在主界面定位 Primary Plan；
 Shift + 单击则会在 Roam 右侧边栏打开同一个 block，已存在时只将其移到顶部并展开。
@@ -187,9 +194,10 @@ Google Calendar 通过一个明确的连接状态行配置：点击 **连接**�
 
 命令面板提供：
 
-- **Nautilus Log: 1. Focus current block**
-- **Nautilus Log: 2. Clock out Timing Line**
-- **Nautilus Log: 3. Locate Primary Plan**
+- **Nautilus Log: Create or open today’s plan**（始终可用）
+- **Nautilus Log: 1. Focus current block**（执行层开启时）
+- **Nautilus Log: 2. Clock out Timing Line**（执行层开启时）
+- **Nautilus Log: 3. Locate Primary Plan**（执行层开启时）
 
 可以在 **Roam Settings → Hotkeys** 自行绑定；TODO 右键菜单也提供 Clock In 与 Clock Out。
 

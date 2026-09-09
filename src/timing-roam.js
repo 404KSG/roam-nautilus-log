@@ -28,6 +28,11 @@ const DAILY_PAGE_TREE_QUERY = `[:find ?page-uid ?uid ?string ?order ?parent-uid
   [?parent :block/children ?block]
   [?parent :block/uid ?parent-uid]]`;
 
+const PAGE_UID_QUERY = `[:find ?uid :in $ ?page-title
+  :where
+  [?e :node/title ?page-title]
+  [?e :block/uid ?uid]]`;
+
 const ENTRIES_QUERY = `[:find ?clock-uid ?clock-string ?drawer-string ?task-uid ?task-string ?page-title
   :in $ [?drawer-string ...]
   :where
@@ -433,10 +438,75 @@ export function readChildren(uid) {
     .sort((left, right) => left.order - right.order);
 }
 
-export async function createGraphBlock({ parentUid, order = 'last', string, open = false }) {
+export function generateUID() {
+  return generateUid();
+}
+
+export function blockUidExists(uid) {
+  if (!uid) throw new Error('A block UID is required.');
+  const roam = api();
+  const pull = roam?.data?.pull || roam?.pull;
+  if (typeof pull === 'function') {
+    const owner = pull === roam?.data?.pull ? roam.data : roam;
+    const entity = pull.call(owner, '[:block/uid]', [':block/uid', uid]);
+    if (entity === null || entity === undefined) return false;
+    const found = entity[':block/uid'] ?? entity['block/uid'] ?? entity.uid;
+    if (found !== uid) throw new Error('Roam returned an unreadable UID lookup.');
+    return true;
+  }
+  return query('[:find ?uid :in $ ?uid :where [?e :block/uid ?uid]]', uid).length > 0;
+}
+
+export function readDailyPageUid(title) {
+  if (!title) return null;
+  const rows = query(PAGE_UID_QUERY, title);
+  const uid = rows[0]?.[0];
+  return typeof uid === 'string' && uid ? uid : null;
+}
+
+export async function createDailyPage(title, date) {
+  if (!title || !(date instanceof Date) || !Number.isFinite(date.getTime())) {
+    throw new Error('A Daily Note title and date are required.');
+  }
+  const roam = api();
+  const modern = roam?.data?.page?.create;
+  const legacy = roam?.createPage;
+  if (typeof modern !== 'function' && typeof legacy !== 'function') {
+    throw new Error('Roam page creation is unavailable.');
+  }
+  const existing = readDailyPageUid(title);
+  if (existing) return existing;
+  const uid = roam?.util?.dateToPageUid?.(date);
+  if (typeof uid !== 'string' || !uid) {
+    throw new Error('Roam Daily Note UID generation is unavailable. Use ;; on today’s Daily Note.');
+  }
+  if (blockUidExists(uid)) throw new Error('The Daily Note UID is already in use. No content was changed.');
+  try {
+    if (typeof modern === 'function') {
+      await modern.call(roam.data.page, { page: { title, uid } });
+    } else {
+      await legacy.call(roam, { page: { title, uid } });
+    }
+  } catch (error) {
+    const confirmed = readDailyPageUid(title);
+    if (confirmed) return confirmed;
+    throw error;
+  }
+  const confirmed = readDailyPageUid(title);
+  if (!confirmed) throw new Error('Daily page creation could not be confirmed.');
+  return confirmed;
+}
+
+export async function createGraphBlock({
+  parentUid,
+  order = 'last',
+  string,
+  open = false,
+  uid: requestedUid,
+} = {}) {
   const create = resolveMutation('create');
   if (!create) throw new Error('Roam block creation is unavailable.');
-  const uid = generateUid();
+  const uid = requestedUid || generateUid();
   await create({ location: { 'parent-uid': parentUid, order }, block: { uid, string, open } });
   return uid;
 }

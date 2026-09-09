@@ -1,10 +1,14 @@
 import {
+  inspectCanonicalTemplate,
   isRightSidebarRenderContext,
   readExistingTemplateState,
   shouldSuppressRenderContext,
   toggleRenderComponent,
   updateTemplateString,
 } from "./entry-helpers";
+import { createTodayPlanSession } from "./today-plan";
+import { createTodayPlanLauncher } from "./today-plan-launcher";
+import { createTodayPlanCommands } from "./today-plan-commands";
 import * as logCore from "./log-core";
 import * as timingCore from "./timing-core";
 import { createTimingCommands } from "./timing-commands";
@@ -78,6 +82,9 @@ const calendarDefaults = {
 let timingRuntime = null;
 let timingTopbar = null;
 let timingCommands = null;
+let todayPlanSession = null;
+let todayPlanLauncher = null;
+let todayPlanCommands = null;
 let planWatchBridge = null;
 let planTidy = null;
 let tidyCommands = null;
@@ -267,6 +274,21 @@ async function migratePreviewDefaults(extensionAPI, recoveredTemplateSettings = 
   await extensionAPI.settings.set("product-defaults-version", productDefaultsVersion);
 }
 
+function destroyTodayPlanLauncher() {
+  todayPlanLauncher?.destroy();
+  todayPlanLauncher = null;
+}
+
+function mountTodayPlanLauncher(extensionAPI) {
+  destroyTodayPlanLauncher();
+  if (typeof document === "undefined" || !todayPlanSession) return;
+  todayPlanLauncher = createTodayPlanLauncher({
+    todayPlan: todayPlanSession,
+    extensionAPI,
+  });
+  todayPlanLauncher.initialize();
+}
+
 async function startTiming(extensionAPI) {
   if (timingRuntime || typeof document === "undefined") return true;
   const runtime = createTimingRuntime({
@@ -278,13 +300,14 @@ async function startTiming(extensionAPI) {
   let commands = null;
   try {
     await runtime.initialize();
-    topbar = createTimingTopbar({ runtime, extensionAPI });
+    topbar = createTimingTopbar({ runtime, extensionAPI, todayPlan: todayPlanSession });
     topbar.initialize();
     commands = createTimingCommands({ runtime, extensionAPI });
     commands.initialize();
     timingRuntime = runtime;
     timingTopbar = topbar;
     timingCommands = commands;
+    todayPlanSession?.initialize?.();
   } catch (error) {
     commands?.destroy();
     topbar?.destroy();
@@ -317,9 +340,12 @@ async function setTrackingEnabled(extensionAPI, enabled) {
   if (enabled) {
     await extensionAPI.settings.set("actual-time-tracking", true);
     try {
+      destroyTodayPlanLauncher();
       await startTiming(extensionAPI);
     } catch (error) {
       await extensionAPI.settings.set("actual-time-tracking", false);
+      mountTodayPlanLauncher(extensionAPI);
+      todayPlanSession?.initialize?.();
       publishRuntimeSettings(extensionAPI);
       throw error;
     }
@@ -327,6 +353,8 @@ async function setTrackingEnabled(extensionAPI, enabled) {
     try {
       await stopTiming({ closeActive: true });
       await extensionAPI.settings.set("actual-time-tracking", false);
+      todayPlanSession?.initialize?.();
+      mountTodayPlanLauncher(extensionAPI);
     } catch (error) {
       await extensionAPI.settings.set("actual-time-tracking", true);
       publishRuntimeSettings(extensionAPI);
@@ -801,19 +829,50 @@ async function onload({ extensionAPI }) {
     componentName,
     await generateTemplateString(extensionAPI),
   );
+  todayPlanSession?.destroy?.();
+  todayPlanSession = createTodayPlanSession({
+    extensionAPI,
+    buildComponentString: () => generateTemplateString(extensionAPI, activeRenderStringCore),
+    inspectTemplate: () => inspectCanonicalTemplate(activeRenderStringCore),
+    trackingEnabled: () => extensionAPI.settings.get("actual-time-tracking") === true,
+    readTrackingSnapshot: () => (
+      typeof timingRuntime?.getSnapshot === "function" ? timingRuntime.getSnapshot() : null
+    ),
+    requestTrackingRefresh: (options) => timingRuntime?.requestRefresh?.(options),
+    subscribeTracking: (listener) => {
+      if (typeof timingRuntime?.subscribe !== "function") return () => {};
+      return timingRuntime.subscribe(listener);
+    },
+  });
+  todayPlanSession.initialize();
+  todayPlanCommands?.destroy?.();
+  todayPlanCommands = createTodayPlanCommands({
+    extensionAPI,
+    todayPlan: todayPlanSession,
+  });
+  todayPlanCommands.initialize();
   if (extensionAPI.settings.get("actual-time-tracking") === true) {
     try {
+      destroyTodayPlanLauncher();
       await startTiming(extensionAPI);
     } catch (error) {
       await extensionAPI.settings.set("actual-time-tracking", false);
       publishRuntimeSettings(extensionAPI);
       extensionAPI.settings.panel.create(panelConfig(extensionAPI, language));
+      mountTodayPlanLauncher(extensionAPI);
       console.error("[Nautilus Log] Actual Time Tracking could not start", error);
     }
+  } else {
+    mountTodayPlanLauncher(extensionAPI);
   }
 }
 
 function onunload() {
+  todayPlanCommands?.destroy();
+  todayPlanCommands = null;
+  destroyTodayPlanLauncher();
+  todayPlanSession?.destroy();
+  todayPlanSession = null;
   stopTiming({ closeActive: false });
   planWatchBridge?.destroy();
   planWatchBridge = null;
@@ -848,6 +907,10 @@ function onunload() {
 export {
   createTimingRuntime,
   createTimingCommands,
+  createTodayPlanSession,
+  createTodayPlanLauncher,
+  createTodayPlanCommands,
+  inspectCanonicalTemplate,
   createPlanWatchBridge,
   createPlanTidy,
   createTidyCommands,

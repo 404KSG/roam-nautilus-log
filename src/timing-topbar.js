@@ -54,7 +54,7 @@ function placeAfterNavigation(topbar, container) {
   else topbar.insertBefore(container, topbar.firstChild?.nextSibling || null);
 }
 
-export function createTimingTopbar({ runtime, extensionAPI }) {
+export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   let destroyed = false;
   let container = null;
   let trigger = null;
@@ -63,6 +63,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
   let popover = null;
   let observers = [];
   let unsubscribe = null;
+  let unsubscribePlan = null;
   let outsideHandler = null;
   let keyHandler = null;
   let view = 'timing';
@@ -85,6 +86,12 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
 
   const ui = () => timingCore.executionCopy(extensionAPI.settings.get('language') || 'en');
   const energyBarEnabled = () => extensionAPI.settings.get('energy-bar-enabled') === true;
+  const todayPlanState = () => todayPlan?.getState?.() || null;
+  const shouldUseTodayPlanEntry = () => {
+    const status = todayPlanState()?.status;
+    if (!status) return false;
+    return status !== 'ready-present' && status !== 'nav-failed';
+  };
 
   const currentTriggerExecution = () => {
     const snapshot = state.planSnapshot;
@@ -640,6 +647,45 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       .forEach((button) => { button.disabled = disabled; });
   };
 
+  const planEmptyNode = (planUi, text) => {
+    const status = planUi?.status;
+    if (status === 'ready-absent' || status === 'creating') {
+      const button = element(
+        'button',
+        'nautilus-log-timing__plan-create',
+        status === 'creating' ? planUi.labels.creating : planUi.labels.create,
+      );
+      button.type = 'button';
+      button.disabled = status === 'creating';
+      button.addEventListener('click', () => {
+        runAction(() => todayPlan.ensureToday({ locateMode: 'main' }));
+      });
+      const wrap = element('div', 'nautilus-log-timing__empty is-create');
+      wrap.append(button);
+      return wrap;
+    }
+    if (status === 'ready-blocked') {
+      return element('div', 'nautilus-log-timing__empty', planUi.labels.blocked);
+    }
+    if (status === 'read-failed') {
+      const wrap = element('div', 'nautilus-log-timing__empty');
+      wrap.append(element('div', '', planUi.labels.failed));
+      return wrap;
+    }
+    if (status === 'nav-failed') {
+      const wrap = element('div', 'nautilus-log-timing__empty');
+      wrap.append(element('div', '', planUi.labels.navFailed));
+      const retry = element('button', 'nautilus-log-timing__plan-create', planUi.labels.retryLocate);
+      retry.type = 'button';
+      retry.addEventListener('click', () => {
+        runAction(() => todayPlan.locateToday({ locateMode: 'main' }));
+      });
+      wrap.append(retry);
+      return wrap;
+    }
+    return element('div', 'nautilus-log-timing__empty', text.empty.noLog);
+  };
+
   const renderPopover = ({ force = false } = {}) => {
     if (!popover) return;
     const text = ui();
@@ -764,7 +810,7 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
         tasks.forEach((task) => list.append(taskRow(task)));
       }
       if (!state.planSnapshot?.plan) {
-        list.append(element('div', 'nautilus-log-timing__empty', text.empty.noLog));
+        list.append(planEmptyNode(todayPlanState(), text));
       } else if (!tasks.length) {
         list.append(element('div', 'nautilus-log-timing__empty', text.empty.noPlanTasks));
       }
@@ -863,6 +909,8 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
         state.now,
         pomodoroMinutes,
       ));
+      trigger.disabled = false;
+      trigger.classList.remove('is-create-today', 'is-creating', 'is-checking', 'is-blocked', 'is-read-failed');
       trigger.querySelector('.nautilus-log-timing__elapsed').textContent = elapsed;
       trigger.querySelector('.nautilus-log-timing__pomodoro-label').textContent = 'POMO';
       updateTriggerCapacity({ ariaLabel: `${elapsed}, POMO` });
@@ -874,6 +922,50 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       return;
     }
     if (!focused) {
+      const planUi = todayPlanState();
+      const planStatus = planUi?.status;
+      if (planStatus === 'ready-absent' || planStatus === 'creating') {
+        const label = planStatus === 'creating' ? planUi.labels.creating : planUi.labels.create;
+        const mode = `plan-${planStatus}`;
+        if (triggerMode !== mode) {
+          trigger.replaceChildren(
+            brandIcon(),
+            element('span', 'nautilus-log-timing__create-label', label),
+          );
+          triggerMode = mode;
+        } else {
+          const labelNode = trigger.querySelector('.nautilus-log-timing__create-label');
+          if (labelNode) labelNode.textContent = label;
+        }
+        trigger.classList.remove('is-active', 'is-overdue', 'is-forgotten', 'is-pomodoro', 'has-energy');
+        trigger.classList.add('is-create-today');
+        trigger.classList.toggle('is-creating', planStatus === 'creating');
+        trigger.disabled = planStatus === 'creating';
+        trigger.setAttribute('aria-label', label);
+        if (pomoCloseButton) pomoCloseButton.hidden = true;
+        return;
+      }
+      trigger.disabled = false;
+      trigger.classList.remove('is-create-today', 'is-creating');
+      if (planStatus === 'checking' || planStatus === 'ready-blocked' || planStatus === 'read-failed') {
+        if (triggerMode !== 'idle') {
+          trigger.replaceChildren(...triggerNodes());
+          triggerMode = 'idle';
+        }
+        trigger.classList.remove('is-active', 'is-overdue', 'is-forgotten', 'is-pomodoro');
+        trigger.classList.toggle('is-checking', planStatus === 'checking');
+        trigger.classList.toggle('is-blocked', planStatus === 'ready-blocked');
+        trigger.classList.toggle('is-read-failed', planStatus === 'read-failed');
+        const label = planStatus === 'checking'
+          ? planUi.labels.checking
+          : planStatus === 'ready-blocked'
+            ? planUi.labels.blocked
+            : planUi.labels.failed;
+        updateTriggerCapacity({ ariaLabel: label });
+        if (pomoCloseButton) pomoCloseButton.hidden = true;
+        return;
+      }
+      trigger.classList.remove('is-checking', 'is-blocked', 'is-read-failed');
       if (triggerMode !== 'idle') {
         trigger.replaceChildren(...triggerNodes());
         triggerMode = 'idle';
@@ -882,6 +974,8 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       updateTriggerCapacity({ ariaLabel: text.actions.openPanel });
       if (pomoCloseButton) pomoCloseButton.hidden = true;
     } else {
+      trigger.disabled = false;
+      trigger.classList.remove('is-create-today', 'is-creating', 'is-checking', 'is-blocked', 'is-read-failed');
       const elapsed = timingCore.formatElapsed(state.now - focused.start);
       const count = state.activeWork.count;
       const pomodoroMinutes = Number(extensionAPI.settings.get('pomodoro-minutes')) || 45;
@@ -941,18 +1035,25 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       trigger.setAttribute('aria-describedby', SHORTCUT_TOOLTIP_ID);
       trigger.setAttribute('aria-expanded', 'false');
       trigger.addEventListener('click', (event) => {
+        const liveTimer = Boolean(state.activeWork?.focused || state.standalonePomodoro);
         if (event.shiftKey) {
           event.preventDefault();
           event.stopPropagation();
           closePopover();
-          runAction(() => runtime.locate({ sidebar: true }));
+          if (!liveTimer && shouldUseTodayPlanEntry()) runAction(() => todayPlan.ensureToday({ locateMode: 'sidebar' }));
+          else runAction(() => runtime.locate({ sidebar: true }));
           return;
         }
         if (event.altKey) {
           event.preventDefault();
           event.stopPropagation();
           closePopover();
-          runAction(() => runtime.locate());
+          if (!liveTimer && shouldUseTodayPlanEntry()) runAction(() => todayPlan.ensureToday({ locateMode: 'main' }));
+          else runAction(() => runtime.locate());
+          return;
+        }
+        if (!liveTimer && shouldUseTodayPlanEntry()) {
+          runAction(() => todayPlan.ensureToday({ locateMode: 'main' }));
           return;
         }
         if (event.target.closest?.('.nautilus-log-timing__capacity-token')) view = 'plan';
@@ -1045,6 +1146,10 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
       ensureMounted();
       if (popover) renderPopover();
     });
+    unsubscribePlan = todayPlan?.subscribe?.(() => {
+      renderTrigger();
+      if (popover) renderPopover({ force: true });
+    }) || null;
     return true;
   };
 
@@ -1054,6 +1159,8 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
     closePopover();
     unsubscribe?.();
     unsubscribe = null;
+    unsubscribePlan?.();
+    unsubscribePlan = null;
     if (settingsListener) window.removeEventListener('nautilus-log:settings-changed', settingsListener);
     settingsListener = null;
     resetObservers();
@@ -1073,3 +1180,5 @@ export function createTimingTopbar({ runtime, extensionAPI }) {
 
   return { initialize, destroy, ensureMounted };
 }
+
+export { TOPBAR_ID, findSearchSurface, placeAfterNavigation };
