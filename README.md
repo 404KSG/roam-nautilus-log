@@ -97,8 +97,10 @@ planning. The compact topbar panel provides:
 - **Review** for Planned versus Actual results.
 - **POMO** for independent count-up focus without writing a CLOCK.
 
-Only one task CLOCK runs at a time. CLOCK takes priority over POMO, and can keep
-the active task at the top of Roam's right sidebar. An additional default-off
+Switching tasks closes the previous CLOCK before starting the next. Graph-scoped
+Web Locks coordinate CLOCK writes across tabs in the same browser storage partition;
+see the guide for synchronization limits. CLOCK takes priority over POMO and can
+keep the active task at the top of Roam's right sidebar. An additional default-off
 **Show capacity as an energy bar** setting can replace the ordinary topbar token
 with a two-level time-capacity gauge: one layered track above a left-aligned
 `% left · planned duration` summary. The two rows fold around the Roam topbar
@@ -107,6 +109,20 @@ Execution Layer defaults to off, so estimate-only planning stays light.
 
 See the [user guide](./docs/guide.md) for settings, commands, syntax, history
 rules, and safety boundaries.
+
+## Local verification
+
+```sh
+npm test
+npm run test:ui
+```
+
+The browser suites require an existing Python Playwright installation and Chromium.
+They use synthetic local fixtures, not a live Roam graph. The refinement suite covers
+cross-midnight labels, minute-level capacity consistency, keyboard focus, and scroll
+continuity. Runtime tests cover cross-tab CLOCK coordination and unload cancellation.
+See the [refinement design](./docs/plans/2026-09-09-execution-refinement-design.md)
+for the bounded scope and acceptance criteria.
 
 ## Credits
 

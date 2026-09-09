@@ -15,6 +15,16 @@ test('CLOCK records round-trip in compatible Org format', () => {
   assert.equal(timing.parseClockLine(closed).minutes, 19);
 });
 
+test('Plan clock labels preserve explicit next-day schedule minutes', () => {
+  assert.equal(timing.formatPlanClock(0), '00:00');
+  assert.equal(timing.formatPlanClock(1410), '23:30');
+  assert.equal(timing.formatPlanClock(1440), 'next day 00:00');
+  assert.equal(timing.formatPlanClock(1470), 'next day 00:30');
+  assert.equal(timing.formatPlanClock(1530, 'zh'), '次日 01:30');
+  assert.equal(timing.formatPlanClock(-10), '00:00');
+  assert.equal(timing.formatPlanClock(Infinity), '00:00');
+});
+
 test('Nautilus component identity follows the stable renderer rather than its display prefix', () => {
   const renderer = '{{[[roam/render]]:((roam-render-Nautilus-Log-cljs)) 22 15 5 "" 21}}';
 

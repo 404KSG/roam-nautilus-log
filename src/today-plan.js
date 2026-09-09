@@ -1,4 +1,5 @@
 import * as timingCore from './timing-core';
+import { graphName } from './graph-context';
 import {
   blockUidExists,
   createDailyPage,
@@ -13,14 +14,6 @@ import {
 const VISIBILITY_THROTTLE_MS = 1500;
 const hostGlobal = () => (typeof window !== 'undefined' ? window : globalThis);
 const copyFor = (language) => timingCore.executionCopy(language).createToday;
-
-function graphName(host) {
-  const name = host.roamAlphaAPI?.graph?.name;
-  if (typeof name === 'string' && name) return name;
-  const match = String(host.location?.hash || '').match(/^#\/app\/([^/?#]+)/);
-  if (!match) return '';
-  try { return decodeURIComponent(match[1]); } catch (_error) { return ''; }
-}
 
 function fault(code) {
   const error = new Error(code);

@@ -22,6 +22,20 @@
   insert; read failures offer a read-only check. Midnight or graph changes stop
   subsequent writes, and unchanged timing ticks do not republish launcher state.
 
+### Fixed
+
+- CLOCK starts now check running records under a graph-scoped browser Web Lock;
+  cross-tab invalidation refreshes other execution views without per-second queries.
+  This is browser-local coordination, not a distributed lock across devices.
+- Plan labels preserve next-day times instead of truncating them to `24:00`.
+  In energy mode, the topbar and open panel share one minute-level capacity projection.
+- Panel updates preserve task-control focus and list position. Tabs support arrow
+  keys and Home/End; Escape returns focus to the trigger.
+- Cancelled or repeated runtime initialization no longer leaves timers or resurrects
+  commands and UI after unload. Rapid tracking toggles settle in request order.
+- Trying to start standalone POMO while CLOCK is focused no longer leaves the
+  execution actions in a working state.
+
 ## 1.1.0 — 2026-08-30
 
 ### Added

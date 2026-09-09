@@ -28,6 +28,7 @@ function createRoamMock() {
   };
 
   const roam = {
+    graph: { name: 'scaffold-test-graph' },
     util: { generateUID: () => `logtest${++generated}` },
     data: {
       pull: (_pattern, lookup) => entity(lookup?.[1]),
@@ -805,6 +806,12 @@ test('switching tracking keeps exactly one topbar and a failed start restores th
     assert.equal(commands.has('Nautilus Log: Create or open today’s plan'), true);
     assert.equal(commands.has('Nautilus Log: 1. Focus current block'), enabled);
   }
+  await toggle(true);
+  await Promise.all([toggle(false), toggle(true)]);
+  assert.equal(settings.get('actual-time-tracking'), true);
+  assert.equal(intervals.size, 1, 'a later enable must not be erased by an earlier pending disable');
+  assert.equal(hostCount(), 1);
+  await toggle(false);
   failStart = true;
   await assert.rejects(toggle(true), /test start failure/);
   assert.equal(settings.get('actual-time-tracking'), false);
@@ -813,6 +820,50 @@ test('switching tracking keeps exactly one topbar and a failed start restores th
   await extension.onunload();
   assert.equal(hostCount(), 0);
   assert.equal(commands.size, 0);
+});
+
+test('unload during runtime initialization cannot resurrect timers, commands, or topbar', async (t) => {
+  const {roam} = createRoamMock();
+  const {document, topbar} = createMiniDom();
+  const intervals = new Set();
+  const commands = new Set();
+  let nextInterval = 0;
+  global.window = {
+    roamAlphaAPI: roam, dispatchEvent() {}, addEventListener() {}, removeEventListener() {},
+    setTimeout: () => 1, clearTimeout() {},
+    setInterval: () => {const id = ++nextInterval; intervals.add(id); return id;},
+    clearInterval: (id) => intervals.delete(id),
+  };
+  global.document = document;
+  global.MutationObserver = class {observe() {} disconnect() {}};
+  t.after(() => {delete global.window; delete global.document; delete global.MutationObserver;});
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const extension = (await import(`data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#unload-initialize-${Math.random()}`)).default;
+  const settings = new Map([['actual-time-tracking', true]]);
+  const extensionAPI = {
+    settings: {
+      get: (key) => settings.get(key), set: async (key, value) => settings.set(key, value),
+      panel: {create() {}},
+    },
+    ui: {commandPalette: {
+      addCommand: ({label}) => commands.add(label), removeCommand: ({label}) => commands.delete(label),
+    }},
+  };
+  const originalQ = roam.q;
+  let unload = null;
+  roam.q = (query, ...args) => {
+    if (!unload && query.includes('?clock-uid ?clock-string')) unload = extension.onunload();
+    return originalQ(query, ...args);
+  };
+  await extension.onload({extensionAPI});
+  await unload;
+  assert.ok(unload, 'the fixture must interrupt the actual timing initialization');
+  assert.equal(intervals.size, 0);
+  assert.equal(commands.size, 0);
+  assert.equal(topbar.children.filter((node) => node.id === 'nautilus-log-timing-topbar').length, 0);
+  assert.equal(window.nautilusLogExtensionData.running, false);
+  assert.notEqual(window.nautilusLogExtensionData.timingEnabled, true);
+  await extension.onunload();
 });
 
 function pageUidOfForTest(blocks, pages, block) {

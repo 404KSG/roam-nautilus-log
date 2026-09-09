@@ -46,6 +46,13 @@ const ENTRIES_QUERY = `[:find ?clock-uid ?clock-string ?drawer-string ?task-uid 
   [(get-else $ ?t :block/page "") ?p]
   [(get-else $ ?p :node/title "") ?page-title]]`;
 
+// Filter inside DataScript so a user Clock In does not materialize unrelated
+// closed CLOCK history. The normal one-second lane never runs this query.
+const RUNNING_ENTRIES_QUERY = ENTRIES_QUERY
+  .replace(':in $ [?drawer-string ...]', ':in $ [?drawer-string ...] ?running-pattern')
+  .replace('[?c :block/string ?clock-string]', '[?c :block/string ?clock-string]\n  [(re-find ?running-pattern ?clock-string)]');
+const RUNNING_CLOCK_PATTERN = /^\s*:?CLOCK:{1,2}\s*\[[^\]]+\]\s*(?:=>\s*\d+:[0-5]\d)?\s*$/i;
+
 const TASK_ENTRIES_QUERY = `[:find ?clock-uid ?clock-string ?drawer-string ?task-uid ?task-string ?page-title
   :in $ [?task-uid ...] [?drawer-string ...]
   :where
@@ -353,6 +360,11 @@ export function readAllEntries() {
   return normalizeEntryRows(query(ENTRIES_QUERY, DRAWER_QUERY_STRINGS));
 }
 
+export function readRunningEntries() {
+  return normalizeEntryRows(query(RUNNING_ENTRIES_QUERY, DRAWER_QUERY_STRINGS, RUNNING_CLOCK_PATTERN))
+    .filter((entry) => entry.running);
+}
+
 export function readEntriesForTaskUids(taskUids = []) {
   const uids = [...new Set((Array.isArray(taskUids) ? taskUids : []).filter(Boolean))];
   if (uids.length === 0) return [];
@@ -553,23 +565,27 @@ export async function moveGraphBlock({ uid, parentUid, order }) {
   return true;
 }
 
-export async function ensureDrawer(taskUid) {
+export async function ensureDrawer(taskUid, assertActive = () => {}) {
+  assertActive();
   const existing = readChildren(taskUid).find((child) => DRAWER_RE.test(child.string));
   if (existing) return existing.uid;
   const uid = await createGraphBlock({ parentUid: taskUid, order: 0, string: DRAWER_LABEL, open: false });
+  assertActive();
   const confirmed = readChildren(taskUid).find((child) => child.uid === uid && DRAWER_RE.test(child.string));
   if (!confirmed) throw new Error('LOGBOOK drawer creation could not be confirmed.');
   return uid;
 }
 
-export async function createRunningClock(taskUid, now, knownTaskString = '') {
-  const drawerUid = await ensureDrawer(taskUid);
+export async function createRunningClock(taskUid, now, knownTaskString = '', assertActive = () => {}) {
+  const drawerUid = await ensureDrawer(taskUid, assertActive);
+  assertActive();
   const clockUid = await createGraphBlock({
     parentUid: drawerUid,
     order: 0,
     string: timingCore.formatClockLine(now),
     open: false,
   });
+  assertActive();
   const parsed = timingCore.parseClockLine(readBlockString(clockUid));
   if (!parsed?.running) throw new Error('Clock In could not be confirmed.');
   const taskString = knownTaskString || readBlockString(taskUid) || '';

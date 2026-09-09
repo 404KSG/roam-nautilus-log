@@ -127,9 +127,20 @@ block to the top of Roam's right sidebar.
 | Plan | Unfinished direct-child tasks from the Primary Plan |
 | Review | Today's Planned, Actual, and valid variance states |
 
-Only one CLOCK runs at a time. Switching tasks closes the previous CLOCK and opens the
-next at the same instant. With **Keep Timing Line first in right sidebar** enabled,
-Clock In also opens or moves the active task to the top of Roam's sidebar.
+Switching tasks closes the previous CLOCK and opens the next at the same instant.
+Before starting, Nautilus checks running CLOCKs rather than trusting a tab's cache.
+Graph-scoped Web Locks serialize CLOCK writes across tabs in the same browser storage
+partition, and notifications prompt other tabs to reread the graph. Missing graph
+identity or Web Locks blocks CLOCK mutations. These locks do not coordinate other
+profiles or devices, nor guarantee that Roam has finished synchronizing their data;
+avoid controlling timers concurrently from those environments.
+With **Keep Timing Line first in right sidebar** enabled, Clock In also opens or moves
+the active task to the top of Roam's sidebar.
+
+In the panel, Left/Right arrows and Home/End navigate the tabs. Structural updates
+preserve focus and list position; completing a row moves focus to a surviving task
+or the selected tab. Escape closes the panel and returns focus to its trigger.
+Plan times after midnight include an explicit **next day** label.
 
 ### Optional capacity energy bar
 
@@ -150,7 +161,9 @@ on that line instead of aligning to the track:
 
 Every width uses the full day's flexible capacity as its denominator. Fixed events
 remain excluded, untimed work uses Default Todo Duration, and the clock contracts
-the bar once per minute without another Roam read or timer. Confirmed completion
+the bar once per minute without another Roam read or timer. In energy mode, the open
+panel uses the same projection; time-only updates preserve task action nodes.
+Text-only mode retains its existing cached projection. Confirmed completion
 from the panel keeps the exact planned reading visible, confirms that number in
 place, and settles both track layers on one short width transition. A failed write
 changes nothing; external TODO/DONE or duration edits redraw silently without a

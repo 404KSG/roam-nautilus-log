@@ -126,6 +126,9 @@ def open_plan(page) -> None:
     page.wait_for_selector(".nautilus-log-timing__popover")
     if page.locator(".nautilus-log-timing__icon-button.is-complete").count() == 0:
         page.get_by_role("tab", name="Plan").click()
+        collapsed = page.locator('.nautilus-log-timing__plan-heading[aria-expanded="false"]')
+        if collapsed.count():
+            collapsed.click()
         page.wait_for_selector(".nautilus-log-timing__icon-button.is-complete")
 
 

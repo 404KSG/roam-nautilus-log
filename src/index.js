@@ -79,6 +79,10 @@ const calendarDefaults = {
   "google-calendar-sync-state": "",
 };
 
+let lifecycleGeneration = 0;
+let trackingRequest = 0;
+let trackingQueue = Promise.resolve();
+let timingStartup = null;
 let timingRuntime = null;
 let timingTopbar = null;
 let timingCommands = null;
@@ -291,36 +295,55 @@ function mountTodayPlanLauncher(extensionAPI) {
 
 async function startTiming(extensionAPI) {
   if (timingRuntime || typeof document === "undefined") return true;
+  if (timingStartup) return timingStartup.promise;
+  const generation = lifecycleGeneration;
   const runtime = createTimingRuntime({
     extensionAPI,
     readPlan: planWatchBridge?.read,
     watchPlan: planWatchBridge?.subscribe,
   });
-  let topbar = null;
-  let commands = null;
-  try {
-    await runtime.initialize();
-    topbar = createTimingTopbar({ runtime, extensionAPI, todayPlan: todayPlanSession });
-    topbar.initialize();
-    commands = createTimingCommands({ runtime, extensionAPI });
-    commands.initialize();
-    timingRuntime = runtime;
-    timingTopbar = topbar;
-    timingCommands = commands;
-    todayPlanSession?.initialize?.();
-  } catch (error) {
-    commands?.destroy();
-    topbar?.destroy();
-    runtime.destroy();
-    throw error;
-  }
-  if (window.nautilusLogExtensionData) {
-    window.nautilusLogExtensionData.timingEnabled = true;
-  }
-  return true;
+  const startup = { runtime, promise: null };
+  timingStartup = startup;
+  const assertStartup = () => {
+    if (timingStartup !== startup || generation !== lifecycleGeneration || runtime.isDestroyed()) {
+      throw new Error("Actual Time Tracking is no longer active.");
+    }
+  };
+  startup.promise = Promise.resolve().then(async () => {
+    let topbar = null;
+    let commands = null;
+    try {
+      assertStartup();
+      await runtime.initialize();
+      assertStartup();
+      topbar = createTimingTopbar({ runtime, extensionAPI, todayPlan: todayPlanSession });
+      topbar.initialize();
+      assertStartup();
+      commands = createTimingCommands({ runtime, extensionAPI });
+      commands.initialize();
+      assertStartup();
+      timingRuntime = runtime;
+      timingTopbar = topbar;
+      timingCommands = commands;
+      todayPlanSession?.initialize?.();
+      if (window.nautilusLogExtensionData) window.nautilusLogExtensionData.timingEnabled = true;
+      return true;
+    } catch (error) {
+      commands?.destroy();
+      topbar?.destroy();
+      runtime.destroy();
+      throw error;
+    } finally {
+      if (timingStartup === startup) timingStartup = null;
+    }
+  });
+  return startup.promise;
 }
 
 async function stopTiming({ closeActive = false } = {}) {
+  const pending = timingStartup;
+  timingStartup = null;
+  if (pending?.runtime !== timingRuntime) pending?.runtime.destroy();
   if (!timingRuntime) return true;
   if (closeActive) await timingRuntime.disable();
   else timingRuntime.destroy();
@@ -336,14 +359,28 @@ async function stopTiming({ closeActive = false } = {}) {
   return true;
 }
 
-async function setTrackingEnabled(extensionAPI, enabled) {
+function setTrackingEnabled(extensionAPI, enabled) {
+  const request = ++trackingRequest;
+  const generation = lifecycleGeneration;
+  const current = () => request === trackingRequest && generation === lifecycleGeneration;
+  const run = trackingQueue.then(() => current()
+    ? applyTrackingSetting(extensionAPI, enabled, current)
+    : extensionAPI.settings.get("actual-time-tracking"));
+  trackingQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function applyTrackingSetting(extensionAPI, enabled, current) {
   if (enabled) {
     await extensionAPI.settings.set("actual-time-tracking", true);
+    if (!current()) return extensionAPI.settings.get("actual-time-tracking");
     try {
       destroyTodayPlanLauncher();
       await startTiming(extensionAPI);
     } catch (error) {
+      if (!current()) return extensionAPI.settings.get("actual-time-tracking");
       await extensionAPI.settings.set("actual-time-tracking", false);
+      if (!current()) return extensionAPI.settings.get("actual-time-tracking");
       mountTodayPlanLauncher(extensionAPI);
       todayPlanSession?.initialize?.();
       publishRuntimeSettings(extensionAPI);
@@ -352,16 +389,20 @@ async function setTrackingEnabled(extensionAPI, enabled) {
   } else {
     try {
       await stopTiming({ closeActive: true });
+      if (!current()) return extensionAPI.settings.get("actual-time-tracking");
       await extensionAPI.settings.set("actual-time-tracking", false);
+      if (!current()) return extensionAPI.settings.get("actual-time-tracking");
       todayPlanSession?.initialize?.();
       mountTodayPlanLauncher(extensionAPI);
     } catch (error) {
+      if (!current()) return extensionAPI.settings.get("actual-time-tracking");
       await extensionAPI.settings.set("actual-time-tracking", true);
+      if (!current()) return extensionAPI.settings.get("actual-time-tracking");
       publishRuntimeSettings(extensionAPI);
       throw error;
     }
   }
-  publishRuntimeSettings(extensionAPI);
+  if (current()) publishRuntimeSettings(extensionAPI);
   return enabled;
 }
 
@@ -755,6 +796,10 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
 }
 
 async function onload({ extensionAPI }) {
+  const generation = ++lifecycleGeneration;
+  trackingRequest += 1;
+  trackingQueue = Promise.resolve();
+  const currentLoad = () => generation === lifecycleGeneration;
   activeCodeBlockUID = codeBlockUID;
   activeRenderStringCore = renderStringCore;
   calendarPanelState = { action: "", error: "" };
@@ -798,8 +843,11 @@ async function onload({ extensionAPI }) {
     if (recoveredUid) activeCodeBlockUID = recoveredUid;
   }
   await setDefaultSettings(extensionAPI, recoveredTemplateState?.settings);
+  if (!currentLoad()) return;
   await migratePreviewDefaults(extensionAPI, recoveredTemplateState?.settings);
+  if (!currentLoad()) return;
   const language = await initializeLanguage(extensionAPI);
+  if (!currentLoad()) return;
   calendarRuntime?.destroy();
   calendarRuntime = createCalendarRuntime({
     extensionAPI,
@@ -819,6 +867,8 @@ async function onload({ extensionAPI }) {
   tidyCommands.initialize();
   publishRuntimeSettings(extensionAPI);
   extensionAPI.settings.panel.create(panelConfig(extensionAPI, language));
+  const templateString = await generateTemplateString(extensionAPI);
+  if (!currentLoad()) return;
   await toggleRenderComponent(
     true,
     titleblockUID,
@@ -827,8 +877,9 @@ async function onload({ extensionAPI }) {
     disabledReplacementString,
     activeCodeBlockUID,
     componentName,
-    await generateTemplateString(extensionAPI),
+    templateString,
   );
+  if (!currentLoad()) return;
   todayPlanSession?.destroy?.();
   todayPlanSession = createTodayPlanSession({
     extensionAPI,
@@ -856,7 +907,9 @@ async function onload({ extensionAPI }) {
       destroyTodayPlanLauncher();
       await startTiming(extensionAPI);
     } catch (error) {
+      if (!currentLoad()) return;
       await extensionAPI.settings.set("actual-time-tracking", false);
+      if (!currentLoad()) return;
       publishRuntimeSettings(extensionAPI);
       extensionAPI.settings.panel.create(panelConfig(extensionAPI, language));
       todayPlanSession.initialize();
@@ -869,6 +922,8 @@ async function onload({ extensionAPI }) {
 }
 
 function onunload() {
+  lifecycleGeneration += 1;
+  trackingRequest += 1;
   todayPlanCommands?.destroy();
   todayPlanCommands = null;
   destroyTodayPlanLauncher();

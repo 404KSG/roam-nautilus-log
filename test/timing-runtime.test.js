@@ -42,12 +42,14 @@ function graphMock({
       return rows;
     }
     if (query.includes('?clock-uid ?clock-string')) {
-      trace.push('query:entries');
+      const runningOnly = query.includes('?running-pattern');
+      trace.push(runningOnly ? 'query:running-entries' : 'query:entries');
       const rows = [];
       for (const clock of blocks.values()) {
         if (!/^CLOCK:/.test(clock.string)) continue;
         const drawer = blocks.get(clock.parentUid);
         const task = blocks.get(drawer.parentUid);
+        if (runningOnly && !args[1].test(clock.string)) continue;
         rows.push([clock.uid, clock.string, drawer.string, task.uid, task.string, 'August 22nd, 2026']);
       }
       return rows;
@@ -65,6 +67,7 @@ function graphMock({
   }
 
   const roam = {
+    graph: { name: 'timing-test-graph' },
     util: {
       generateUID: () => `clock-${++generated}`,
       dateToPageTitle: () => 'August 22nd, 2026',
@@ -1171,6 +1174,9 @@ test('standalone POMO persists without graph writes and CLOCK takes priority', a
   assert.equal(runtime.getSnapshot().standalonePomodoro, null);
   assert.equal(settings.get('standalone-pomodoro-state'), null);
   assert.equal(runtime.getSnapshot().activeWork.focused.taskUid, 'task-a');
+  await runtime.startStandalonePomodoro();
+  assert.equal(runtime.getSnapshot().status, 'ready', 'a rejected POMO start must not leave actions disabled');
+  assert.equal(runtime.getSnapshot().standalonePomodoro, null);
 
   await runtime.stopTask();
   const restarted = await runtime.startStandalonePomodoro();
@@ -1232,4 +1238,106 @@ test('standalone POMO restores its absolute start and is cleared if CLOCK is alr
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(restored.getSnapshot().standalonePomodoro, null);
   assert.equal(settings.get('standalone-pomodoro-state'), null);
+});
+
+async function coordinatedRuntimes(t, {BroadcastChannel} = {}) {
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const load = () => import(`data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#clock-client-${Math.random()}`);
+  const {roam, blocks, trace} = graphMock();
+  global.window = {
+    roamAlphaAPI: roam, navigator: globalThis.navigator, BroadcastChannel,
+    setInterval: () => 99, clearInterval: () => {}, setTimeout, clearTimeout,
+  };
+  let current = new Date(2026, 7, 22, 10);
+  const settings = new Map([['timing-line-sidebar', false]]);
+  const options = {
+    extensionAPI: {settings: {get: (key) => settings.get(key), set: async (key, value) => settings.set(key, value)}},
+    now: () => new Date(current),
+  };
+  const first = (await load()).createTimingRuntime(options);
+  const second = (await load()).createTimingRuntime(options);
+  t.after(() => {first.destroy(); second.destroy(); delete global.window;});
+  await Promise.all([first.initialize(), second.initialize()]);
+  return {first, second, roam, blocks, trace, setNow: (date) => {current = date;}};
+}
+
+test('two independent clients switch CLOCK ownership without overlapping records', async (t) => {
+  const {first, second, setNow} = await coordinatedRuntimes(t);
+  await first.startTask('task-a');
+  setNow(new Date(2026, 7, 22, 10, 1));
+  await second.startTask('task-b');
+  const state = first.refresh();
+  assert.deepEqual(state.entries.filter((entry) => entry.running).map((entry) => entry.taskUid), ['task-b']);
+  assert.equal(state.entries.find((entry) => entry.taskUid === 'task-a').minutes, 1);
+});
+
+test('simultaneous starts from separate module instances leave one CLOCK', async (t) => {
+  const {first, second} = await coordinatedRuntimes(t);
+  await Promise.all([first.startTask('task-a'), second.startTask('task-b')]);
+  assert.equal(first.refresh().entries.filter((entry) => entry.running).length, 1);
+});
+
+test('two clients starting the same task do not duplicate its CLOCK', async (t) => {
+  const {first, second} = await coordinatedRuntimes(t);
+  await Promise.all([first.startTask('task-a'), second.startTask('task-a')]);
+  assert.equal(first.refresh().entries.length, 1);
+});
+
+test('CLOCK notifications refresh another tab and channels close on unload', async (t) => {
+  const channels = new Set();
+  class Channel {
+    constructor(name) {this.name = name; channels.add(this);}
+    postMessage(data) {
+      for (const peer of channels) {
+        if (peer !== this && peer.name === this.name) queueMicrotask(() => peer.onmessage?.({data}));
+      }
+    }
+    close() {channels.delete(this);}
+  }
+  const {first, second} = await coordinatedRuntimes(t, {BroadcastChannel: Channel});
+  const changed = new Promise((resolve) => {
+    const stop = second.subscribe((state) => {
+      if (state.activeWork.focused?.taskUid === 'task-a') {stop(); resolve();}
+    });
+  });
+  await first.startTask('task-a');
+  await changed;
+  assert.equal(second.getSnapshot().activeWork.focused.taskUid, 'task-a');
+  first.destroy();
+  second.destroy();
+  assert.equal(channels.size, 0);
+});
+
+test('CLOCK start fails closed without native coordination and leaves the graph unchanged', async (t) => {
+  const {first, blocks} = await coordinatedRuntimes(t);
+  global.window.navigator = {};
+  const before = blocks.size;
+  await assert.rejects(first.startTask('task-a'), /cross-tab|coordination|lock/i);
+  assert.equal(blocks.size, before);
+});
+
+test('destroy cancels a queued cross-tab CLOCK request before any write', async (t) => {
+  const {first, blocks} = await coordinatedRuntimes(t);
+  let entered;
+  const waiting = new Promise((resolve) => {entered = resolve;});
+  global.window.navigator = {locks: {
+    request: (_name, {signal}, _operation) => new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(new Error('Actual Time Tracking is no longer active.')), {once: true});
+      entered();
+    }),
+  }};
+  const before = blocks.size;
+  const pending = first.startTask('task-a');
+  await waiting;
+  first.destroy();
+  await assert.rejects(pending, /no longer active/);
+  assert.equal(blocks.size, before);
+});
+
+test('a changed graph cannot receive a CLOCK from an old runtime', async (t) => {
+  const {first, roam, blocks} = await coordinatedRuntimes(t);
+  roam.graph.name = 'another-graph';
+  const before = blocks.size;
+  await assert.rejects(first.startTask('task-a'), /graph.*changed/i);
+  assert.equal(blocks.size, before);
 });

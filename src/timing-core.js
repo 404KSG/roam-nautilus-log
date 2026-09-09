@@ -34,7 +34,7 @@ const EXECUTION_COPY = Object.freeze({
       noSlot: 'No fitting slot', totalConnector: 'of', energy: 'Capacity energy bar',
       reserve: 'reserve', committed: 'planned', elapsed: 'elapsed', overCue: 'OVER', noSlotCue: 'NO SLOT',
     },
-    plan: { scheduled: 'Scheduled today', unscheduled: 'Unscheduled today', today: 'Today' },
+    plan: { scheduled: 'Scheduled today', unscheduled: 'Unscheduled today', today: 'Today', nextDay: 'next day' },
     timing: { timing: 'Timing', actual: 'Actual', planned: 'Planned', remaining: 'Remaining', recent: 'Recent', left: 'left', check: 'Check CLOCK' },
     review: {
       summary: 'Today review summary', completed: 'Completed', compared: 'Compared', actual: 'Actual',
@@ -84,7 +84,7 @@ const EXECUTION_COPY = Object.freeze({
       noSlot: '没有连续空档', totalConnector: '共', energy: '容量精力槽',
       reserve: '余量', committed: '计划占用', elapsed: '已流逝', overCue: '超载', noSlotCue: '无空档',
     },
-    plan: { scheduled: '今日已安排', unscheduled: '今日未排入', today: '今天' },
+    plan: { scheduled: '今日已安排', unscheduled: '今日未排入', today: '今天', nextDay: '次日' },
     timing: { timing: '计时', actual: '实际', planned: '预计', remaining: '剩余', recent: '最近', left: '后移出', check: '检查 CLOCK' },
     review: {
       summary: '今日复盘摘要', completed: '已完成', compared: '已对比', actual: '实际',
@@ -737,6 +737,15 @@ function durationMetadata({ taskUid, plannedMinutes: planned = 15, entries = [],
   };
 }
 
+function formatPlanClock(minutes, language = 'en') {
+  const number = Number(minutes);
+  const safe = Number.isFinite(number) ? Math.max(0, Math.round(number)) : 0;
+  const day = Math.floor(safe / 1440);
+  const clock = `${pad(Math.floor(safe % 1440 / 60))}:${pad(safe % 60)}`;
+  const prefix = day === 1 ? executionCopy(language).plan.nextDay : `+${day}d`;
+  return day ? `${prefix} ${clock}` : clock;
+}
+
 function formatElapsed(milliseconds) {
   const total = Math.max(0, Math.floor((Number(milliseconds) || 0) / 1000));
   const hours = Math.floor(total / 3600);
@@ -829,6 +838,7 @@ module.exports = {
   executionStructureKey,
   formatClockLine,
   formatElapsed,
+  formatPlanClock,
   isNautilusComponent,
   isStructuralBlock,
   isForgottenClock,

@@ -1,4 +1,5 @@
 import { createTimingTopbar } from '../src/timing-topbar.js';
+import * as timingCore from '../src/timing-core.js';
 
 function task(uid, title, plannedMinutes) {
   return {
@@ -56,6 +57,7 @@ const WARNING_TASKS = [
 
 let topbar = null;
 let snapshot = null;
+let extensionAPI = null;
 let listeners = new Set();
 let failNextComplete = false;
 let completeCalls = [];
@@ -87,16 +89,25 @@ function publish() {
   for (const listener of listeners) listener(snapshot);
 }
 
+function projectSnapshot() {
+  snapshot.planSnapshot.execution = timingCore.executionProjection(snapshot.planSnapshot, snapshot.now, {
+    workdayStart: extensionAPI.settings.get('workday-start'),
+    workdayEnd: extensionAPI.settings.get('workday-end'),
+  });
+}
+
 function removeTask(uid) {
   const tasks = (snapshot.planSnapshot.tasks || []).filter((item) => item.uid !== uid);
   snapshot = {
     ...snapshot,
     revision: snapshot.revision + 1,
+    status: 'ready',
     planSnapshot: {
       ...snapshot.planSnapshot,
       tasks,
     },
   };
+  projectSnapshot();
   publish();
 }
 
@@ -110,8 +121,13 @@ function createRuntime() {
     requestRefresh: async () => snapshot,
     completeTask: async (uid) => {
       completeCalls.push(uid);
+      snapshot = { ...snapshot, revision: snapshot.revision + 1, status: 'working' };
+      publish();
+      await Promise.resolve();
       if (failNextComplete) {
         failNextComplete = false;
+        snapshot = { ...snapshot, revision: snapshot.revision + 1, status: 'ready', notice: 'complete failed' };
+        publish();
         throw new Error('complete failed');
       }
       removeTask(uid);
@@ -126,12 +142,12 @@ function createRuntime() {
   };
 }
 
-function createSettings(energyEnabled = true) {
+function createSettings(options = {}) {
   const values = {
-    'energy-bar-enabled': energyEnabled,
-    language: 'en',
-    'workday-start': 5,
-    'workday-end': 21,
+    'energy-bar-enabled': options.energyBarEnabled !== false,
+    language: options.language || 'en',
+    'workday-start': options.workdayStart ?? 5,
+    'workday-end': options.workdayEnd ?? 21,
     'todo-duration': 15,
     'forgotten-timer-minutes': 120,
     'pomodoro-minutes': 45,
@@ -150,12 +166,11 @@ function mount(options = {}) {
   failNextComplete = Boolean(options.failNextComplete);
   const now = options.now instanceof Date ? options.now : new Date(2026, 8, 9, 10, 0, 0);
   const tasks = options.tasks || DEFAULT_TASKS;
+  extensionAPI = createSettings(options);
   snapshot = snapshotFrom(tasks, now, options.fixedEvents);
+  projectSnapshot();
   listeners = new Set();
-  topbar = createTimingTopbar({
-    runtime: createRuntime(),
-    extensionAPI: createSettings(options.energyBarEnabled !== false),
-  });
+  topbar = createTimingTopbar({ runtime: createRuntime(), extensionAPI });
   topbar.initialize();
   const current = api();
   window.energyBarHarness.api = current;
@@ -183,10 +198,10 @@ function api() {
     externalComplete(uid) {
       removeTask(uid || snapshot.planSnapshot.tasks[0]?.uid);
     },
-    tickMinute() {
+    tickMinute(minutes = 1) {
       snapshot = {
         ...snapshot,
-        now: new Date(snapshot.now.getTime() + 60000),
+        now: new Date(snapshot.now.getTime() + minutes * 60000),
       };
       publish();
     },

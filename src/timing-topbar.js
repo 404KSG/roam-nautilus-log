@@ -22,6 +22,7 @@ function iconButton(name, label, onClick) {
   const button = element('button', 'nautilus-log-timing__icon-button');
   button.type = 'button';
   button.title = label;
+  button.dataset.focusKey = name;
   button.setAttribute('aria-label', label);
   button.append(icon(name));
   button.addEventListener('click', onClick);
@@ -69,6 +70,8 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   let view = 'timing';
   let state = runtime.getSnapshot();
   let lastPopoverKey = null;
+  let lastPopoverExecution = null;
+  let pendingPopoverFocus = null;
   let deferredRefreshFrame = null;
   let deferredRefreshTimer = null;
   let triggerMode = null;
@@ -392,6 +395,8 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     popover.remove();
     popover = null;
     lastPopoverKey = null;
+    lastPopoverExecution = null;
+    pendingPopoverFocus = null;
     document.removeEventListener('mousedown', outsideHandler, true);
     document.removeEventListener('keydown', keyHandler, true);
     outsideHandler = null;
@@ -403,6 +408,20 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
 
   const runAction = async (action) => {
     try { await action(); } catch (error) { console.error('[Nautilus Log] timing action failed', error); }
+  };
+
+  const plannedTaskDuration = (task) => {
+    const text = ui();
+    const remaining = Math.max(0, Number(task.remainingMinutes) || 0);
+    return remaining > 0 && remaining < task.plannedMinutes
+      ? `${text.timing.remaining} ${timingCore.compactMinutes(remaining)} · ${text.timing.planned} ${timingCore.compactMinutes(task.plannedMinutes)}`
+      : `${text.timing.planned} ${timingCore.compactMinutes(task.plannedMinutes)}`;
+  };
+
+  const scheduledTaskMeta = (task, start, end) => {
+    const language = extensionAPI.settings.get('language') || 'en';
+    const today = Number(start) < 1440 ? `${ui().plan.today} ` : '';
+    return `${today}${timingCore.formatPlanClock(start, language)}–${timingCore.formatPlanClock(end, language)} · ${plannedTaskDuration(task)}`;
   };
 
   const taskRow = (task, {
@@ -425,6 +444,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     const copy = element('div', 'nautilus-log-timing__row-copy');
     const title = element('button', 'nautilus-log-timing__row-title', task.title);
     title.type = 'button';
+    title.dataset.focusKey = 'title';
     title.title = task.title;
     title.addEventListener('click', (event) => {
       closePopover();
@@ -444,13 +464,10 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     const timingText = focused
       ? `${text.timing.timing} ${timingCore.formatElapsed(state.now - state.activeWork.focused.start)} · ${duration.detailLabel}`
       : '';
-    const remainingPlanMinutes = Math.max(0, Number(task.remainingMinutes) || 0);
-    const planDurationText = remainingPlanMinutes > 0 && remainingPlanMinutes < task.plannedMinutes
-      ? `${text.timing.remaining} ${timingCore.compactMinutes(remainingPlanMinutes)} · ${text.timing.planned} ${timingCore.compactMinutes(task.plannedMinutes)}`
-      : `${text.timing.planned} ${timingCore.compactMinutes(task.plannedMinutes)}`;
+    const planDurationText = plannedTaskDuration(task);
     let metaText = duration.detailLabel;
     if (planState === 'scheduled') {
-      metaText = `${text.plan.today} ${formatPlanClock(planStart)}–${formatPlanClock(planEnd)} · ${planDurationText}`;
+      metaText = scheduledTaskMeta(task, planStart, planEnd);
     } else if (planState === 'unscheduled') {
       metaText = `${text.plan.unscheduled} · ${planDurationText}`;
     } else if (focused) {
@@ -474,6 +491,8 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       });
     });
     completeAction.classList.add('is-complete');
+    timingAction.dataset.focusKey = 'clock';
+    completeAction.dataset.focusKey = 'complete';
     timingAction.disabled = state.status === 'working';
     completeAction.disabled = state.status === 'working';
     actions.append(timingAction, completeAction);
@@ -503,12 +522,6 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     }
     row.append(actions);
     return row;
-  };
-
-  const formatPlanClock = (minutes) => {
-    const safe = Math.max(0, Math.min(1440, Math.round(Number(minutes) || 0)));
-    if (safe === 1440) return '24:00';
-    return `${String(Math.floor(safe / 60)).padStart(2, '0')}:${String(safe % 60).padStart(2, '0')}`;
   };
 
   const capacityStrip = (execution) => {
@@ -546,6 +559,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     const header = element(tag, `nautilus-log-timing__plan-heading${collapsible ? ' is-collapsible' : ''}`);
     if (collapsible) {
       header.type = 'button';
+      header.dataset.focusKey = 'unscheduled';
       header.setAttribute('aria-expanded', String(expanded));
     }
     const labelNode = element('span', 'nautilus-log-timing__plan-label');
@@ -609,6 +623,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     const heading = element('div', 'nautilus-log-timing__review-row-heading');
     const title = element('button', 'nautilus-log-timing__review-title', task.title);
     title.type = 'button';
+    title.dataset.focusKey = 'title';
     title.title = task.title;
     title.addEventListener('click', (event) => {
       closePopover();
@@ -727,29 +742,90 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     return element('div', 'nautilus-log-timing__empty', text.empty.noLog);
   };
 
+  const capturePopoverFocus = () => {
+    const active = document.activeElement;
+    if (!popover?.contains(active) || !active.dataset.focusKey) return null;
+    const row = active.closest('[data-task-uid]');
+    const order = [...popover.querySelectorAll('[data-task-uid]')].map((item) => item.dataset.taskUid);
+    const index = order.indexOf(row?.dataset.taskUid);
+    return {
+      key: active.dataset.focusKey,
+      uid: row?.dataset.taskUid || null,
+      successors: index < 0 ? [] : [...order.slice(index + 1), ...order.slice(0, index).reverse()],
+    };
+  };
+
+  const restorePopoverFocus = (focus) => {
+    if (!focus || !popover) return;
+    // A user who moved to another control while a mutation was pending keeps
+    // that focus. Automatic blur caused by disabling/removing a row does not.
+    if (document.activeElement !== document.body && !popover.contains(document.activeElement)) return;
+    const keyed = (root, key) => [...root.querySelectorAll('[data-focus-key]')]
+      .find((node) => node.dataset.focusKey === key && !node.disabled);
+    let target = null;
+    if (focus.uid) {
+      const rows = [...popover.querySelectorAll('[data-task-uid]')];
+      const row = [focus.uid, ...focus.successors].map((uid) => rows.find((item) => item.dataset.taskUid === uid)).find(Boolean);
+      if (row) target = keyed(row, focus.key) || keyed(row, 'title');
+    } else {
+      target = keyed(popover, focus.key);
+    }
+    (target || popover.querySelector('[role="tab"][aria-selected="true"]'))?.focus({ preventScroll: true });
+  };
+
+  const updatePopoverProjection = (execution) => {
+    if (!popover || execution === lastPopoverExecution) return;
+    lastPopoverExecution = execution;
+    const strip = popover.querySelector('.nautilus-log-timing__capacity');
+    if (execution && strip) strip.replaceWith(capacityStrip(execution));
+    if (view !== 'plan') return;
+    const rows = new Map([...popover.querySelectorAll('.nautilus-log-timing__row')]
+      .map((row) => [row.dataset.taskUid, row]));
+    for (const task of execution?.scheduledTasks || []) {
+      const meta = rows.get(task.uid)?.querySelector('.nautilus-log-timing__row-meta');
+      if (meta) meta.textContent = scheduledTaskMeta(task, task.start, task.end);
+    }
+  };
+
   const renderPopover = ({ force = false } = {}) => {
     if (!popover) return;
     const text = ui();
+    const execution = currentTriggerExecution();
     if (!force && state.status === 'working' && lastPopoverKey !== null) {
       // A queued graph mutation changes only button availability. Rebuilding
       // every task row here competes with Roam's native sidebar first paint;
       // the confirmed refresh below will render the new data once.
+      pendingPopoverFocus = capturePopoverFocus() || pendingPopoverFocus;
       syncActionAvailability();
       updateLiveElapsed();
+      updatePopoverProjection(execution);
       return;
     }
-    const structureKey = timingCore.executionStructureKey(state, view);
+    const structureKey = JSON.stringify([
+      timingCore.executionStructureKey(state, view),
+      view === 'plan' ? [
+        (execution?.scheduledTasks || []).map((task) => task.uid),
+        (execution?.overflowTasks || []).map((task) => task.uid),
+      ] : null,
+    ]);
     if (!force && structureKey === lastPopoverKey) {
       updateLiveElapsed();
+      updatePopoverProjection(execution);
       return;
     }
+    const focus = capturePopoverFocus() || pendingPopoverFocus;
+    pendingPopoverFocus = null;
+    const scrollTop = popover.querySelector('.nautilus-log-timing__list')?.scrollTop || 0;
     lastPopoverKey = structureKey;
+    lastPopoverExecution = execution;
+    clearDeleteConfirmation();
     popover.replaceChildren();
 
     const header = element('div', 'nautilus-log-timing__popover-header');
     const headerMain = element('div', 'nautilus-log-timing__popover-header-main');
     const identity = element('button', 'nautilus-log-timing__identity');
     identity.type = 'button';
+    identity.dataset.focusKey = 'identity';
     identity.title = text.identity.locate;
     identity.setAttribute('aria-label', text.identity.locate);
     const identityHint = icon('chevron-right');
@@ -769,6 +845,21 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       button.type = 'button';
       button.setAttribute('role', 'tab');
       button.setAttribute('aria-selected', String(view === name));
+      button.dataset.focusKey = `tab-${name}`;
+      button.tabIndex = view === name ? 0 : -1;
+      button.addEventListener('keydown', (event) => {
+        const names = ['timing', 'plan', 'review'];
+        const index = names.indexOf(name);
+        const target = event.key === 'Home' ? 0 : event.key === 'End' ? 2
+          : event.key === 'ArrowRight' ? (index + 1) % 3
+            : event.key === 'ArrowLeft' ? (index + 2) % 3 : null;
+        if (target === null) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const next = [...tabs.children][target];
+        next.focus();
+        next.click();
+      });
       button.addEventListener('click', () => {
         if (view === name) return;
         view = name;
@@ -803,7 +894,6 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       popover.append(notice);
     }
 
-    const execution = state.planSnapshot?.execution;
     if (execution) popover.append(capacityStrip(execution));
 
     const list = element('div', 'nautilus-log-timing__list');
@@ -867,6 +957,8 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       }
     }
     popover.append(list);
+    restorePopoverFocus(focus);
+    list.scrollTop = scrollTop;
   };
 
   const positionPopover = () => {
@@ -887,7 +979,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     if (fontFamily) popover.style.setProperty('--nl-exec-font-family', fontFamily);
   };
 
-  const openPopover = async () => {
+  const openPopover = async ({ focusPanel = false } = {}) => {
     if (popover) return closePopover({ restoreFocus: true });
     popover = element('div', 'nautilus-log-timing__popover');
     popover.id = POPOVER_ID;
@@ -898,6 +990,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     trigger.setAttribute('aria-expanded', 'true');
     renderPopover({ force: true });
     positionPopover();
+    if (focusPanel) popover.querySelector('[role="tab"][aria-selected="true"]')?.focus({ preventScroll: true });
     const refreshAfterPaint = () => {
       deferredRefreshFrame = null;
       deferredRefreshTimer = window.setTimeout(() => {
@@ -917,7 +1010,11 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       if (!popover?.contains(event.target) && !container?.contains(event.target)) closePopover();
     };
     keyHandler = (event) => {
-      if (event.key === 'Escape') closePopover({ restoreFocus: true });
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        closePopover({ restoreFocus: true });
+      }
     };
     document.addEventListener('mousedown', outsideHandler, true);
     document.addEventListener('keydown', keyHandler, true);
@@ -1083,7 +1180,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
           return;
         }
         if (event.target.closest?.('.nautilus-log-timing__capacity-token')) view = 'plan';
-        openPopover();
+        openPopover({ focusPanel: event.detail === 0 });
       });
       pomoCloseButton = element('button', 'nautilus-log-timing__pomodoro-close');
       pomoCloseButton.type = 'button';

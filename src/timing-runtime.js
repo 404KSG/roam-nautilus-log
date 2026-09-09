@@ -1,4 +1,5 @@
 import * as timingCore from './timing-core';
+import { createClockCoordinator } from './clock-coordinator';
 import {
   closeClock,
   completeTask,
@@ -15,6 +16,7 @@ import {
   readEntriesForTaskUids,
   readBlockString,
   readPrimaryPlan,
+  readRunningEntries,
   showToast,
   updateGraphBlock,
   warmRightSidebarWindowCache,
@@ -55,6 +57,19 @@ export function createTimingRuntime({
   readPlan = null,
 }) {
   let destroyed = false;
+  let initializationPromise = null;
+  const assertActive = () => {
+    if (destroyed) throw new Error('Actual Time Tracking is no longer active.');
+    clockCoordinator.assertCurrent();
+  };
+  const invalidatedTaskUids = new Set();
+  const clockCoordinator = createClockCoordinator({
+    onChange: (uids) => {
+      if (destroyed) return;
+      uids.forEach((uid) => invalidatedTaskUids.add(uid));
+      void requestRefresh();
+    },
+  });
   let ticker = null;
   let removeVisibilityListener = null;
   let cancelSidebarWarmup = null;
@@ -140,6 +155,7 @@ export function createTimingRuntime({
   };
 
   const setPomodoro = async (value) => {
+    assertActive();
     snapshot = { ...snapshot, pomodoro: value };
     await extensionAPI.settings.set(POMODORO_STATE_KEY, value);
   };
@@ -151,6 +167,7 @@ export function createTimingRuntime({
     // A refresh can discover stale persisted POMO while CLOCK is active. Do
     // not let that asynchronous cleanup overwrite a subsequent user start.
     if (standaloneClearPromise) await standaloneClearPromise;
+    assertActive();
     const saved = extensionAPI.settings.get(STANDALONE_POMODORO_STATE_KEY);
     const savedStartedAt = Number(saved?.startedAt);
     const persistedMatches = next
@@ -171,7 +188,11 @@ export function createTimingRuntime({
     if (standaloneClearPromise) return standaloneClearPromise;
     if (!extensionAPI.settings.get(STANDALONE_POMODORO_STATE_KEY)) return;
     standaloneClearPromise = Promise.resolve()
-      .then(() => extensionAPI.settings.set(STANDALONE_POMODORO_STATE_KEY, null))
+      .then(() => {
+        if (destroyed) return undefined;
+        assertActive();
+        return extensionAPI.settings.set(STANDALONE_POMODORO_STATE_KEY, null);
+      })
       .catch((error) => console.error('[Nautilus Log] standalone POMO restore cleanup failed', error))
       .finally(() => { standaloneClearPromise = null; });
     return standaloneClearPromise;
@@ -201,6 +222,7 @@ export function createTimingRuntime({
   const refresh = ({ notice = '', planSnapshot: suppliedPlanSnapshot, entries: suppliedEntries } = {}) => {
     if (destroyed) return snapshot;
     try {
+      assertActive();
       const currentNow = now();
       const sourcePlanSnapshot = suppliedPlanSnapshot === undefined
         ? readAuthoritativePlan(currentNow)
@@ -222,6 +244,7 @@ export function createTimingRuntime({
         )
         : []);
       const relevantTaskUids = [
+        ...invalidatedTaskUids,
         ...reviewTasks.map((task) => task.uid),
         ...snapshot.entries
           .filter((entry) => entry.running || snapshot.activeWork?.items?.some((item) => item.taskUid === entry.taskUid))
@@ -230,6 +253,7 @@ export function createTimingRuntime({
       const rawEntries = suppliedEntries === undefined
         ? readEntriesForTaskUids(relevantTaskUids)
         : suppliedEntries;
+      if (suppliedEntries === undefined) invalidatedTaskUids.clear();
       const tasksByUid = new Map(reviewTasks.map((task) => [task.uid, task]));
       const entries = rawEntries.map((entry) => {
         const task = tasksByUid.get(entry.taskUid);
@@ -353,7 +377,7 @@ export function createTimingRuntime({
     }
   });
 
-  const enqueue = (operation, { deferStart = false } = {}) => {
+  const enqueue = (operation, { deferStart = false, clockMutation = true } = {}) => {
     const run = mutationQueue.then(async () => {
       // A scheduled graph refresh is lower priority than an explicit user
       // mutation. Cancel it before it can compete with Clock Out on the main
@@ -363,11 +387,12 @@ export function createTimingRuntime({
         const scheduled = await waitForMutationStart();
         if (!scheduled) throw new Error('Actual Time Tracking is no longer active.');
       }
-      if (destroyed) throw new Error('Actual Time Tracking is no longer active.');
+      assertActive();
       snapshot = { ...snapshot, revision: snapshot.revision + 1, status: 'working', notice: '' };
       publish();
+      const changedTaskUids = new Set(snapshot.entries.map((entry) => entry.taskUid));
       try {
-        return await operation();
+        return await (clockMutation ? clockCoordinator.run(operation) : operation());
       } catch (error) {
         refresh({
           notice: error.message || 'The graph change could not be confirmed.',
@@ -375,6 +400,11 @@ export function createTimingRuntime({
           entries: snapshot.entries,
         });
         throw error;
+      } finally {
+        if (clockMutation) {
+          snapshot.entries.forEach((entry) => changedTaskUids.add(entry.taskUid));
+          clockCoordinator.notify([...changedTaskUids]);
+        }
       }
     });
     mutationQueue = run.catch(() => undefined);
@@ -384,7 +414,9 @@ export function createTimingRuntime({
   const closeEntriesAt = async (entries, instant, shouldClose = () => true) => {
     const updated = new Map();
     for (const entry of entries.filter((candidate) => candidate.running && shouldClose(candidate))) {
+      assertActive();
       const closed = await closeClock(entry, instant);
+      assertActive();
       if (closed) updated.set(entry.clockUid, closed);
     }
     if (updated.size === 0) return entries;
@@ -409,7 +441,9 @@ export function createTimingRuntime({
     const focused = running[0];
     const updates = new Map();
     for (const stale of running.slice(1)) {
+      assertActive();
       await updateGraphBlock(stale.clockUid, timingCore.formatClockLine(stale.start, focused.start));
+      assertActive();
       updates.set(stale.clockUid, {
         ...stale,
         end: new Date(focused.start),
@@ -441,21 +475,39 @@ export function createTimingRuntime({
       if (!task || task.status !== 'TODO') {
         throw new Error('Only an unfinished task in today’s Nautilus Plan can own the Timing Line.');
       }
-      const taskString = readBlockString(taskUid);
-      const before = snapshot.entries;
-      const focused = timingCore.chooseFocusedEntry(before);
       const instant = now();
+      if (snapshot.planSnapshot?.pageTitle !== pageTitleFor(instant)) {
+        throw new Error('The Plan date changed. Refresh today’s Plan before starting a task.');
+      }
+      const taskString = readBlockString(taskUid);
+      if (typeof taskString !== 'string' || timingCore.resolveTaskInstance({
+        uid: taskUid, localString: taskString, readString: readBlockString,
+      }).status !== 'TODO') throw new Error('This task is no longer unfinished. Refresh the Plan.');
+      // The per-tab cache cannot authorize a second CLOCK. Read only current
+      // running records globally, plus the exact cached owners' closed history.
+      const knownOwners = snapshot.entries.filter((entry) => entry.running).map((entry) => entry.taskUid);
+      const entriesByUid = new Map([
+        ...snapshot.entries.filter((entry) => !entry.running),
+        ...readEntriesForTaskUids(knownOwners),
+        ...readRunningEntries(),
+      ].map((entry) => [entry.clockUid, entry]));
+      const before = [...entriesByUid.values()];
+      const focused = timingCore.chooseFocusedEntry(before);
       // CLOCK is authoritative even when the caller re-selects the already
       // focused task, so clear any stale standalone state before the early
       // return as well.
       if (snapshot.standalonePomodoro || extensionAPI.settings.get(STANDALONE_POMODORO_STATE_KEY)) {
         await setStandalonePomodoro(null);
       }
+      assertActive();
       if (focused?.taskUid === taskUid) {
-        return refresh({ planSnapshot: snapshot.planSnapshot, entries: before });
+        const entries = await closeEntriesAt(before, instant, (entry) => entry.clockUid !== focused.clockUid);
+        return refresh({ planSnapshot: snapshot.planSnapshot, entries });
       }
       const closedEntries = await closeEntriesAt(before, instant);
-      const created = await createRunningClock(taskUid, instant, taskString);
+      assertActive();
+      const created = await createRunningClock(taskUid, instant, taskString, assertActive);
+      assertActive();
       created.entry = {
         ...created.entry,
         title: task.title,
@@ -501,7 +553,9 @@ export function createTimingRuntime({
       instant,
       (entry) => entry.taskUid === taskUid,
     );
+    assertActive();
     await completeTask(taskUid, task.statusOwnerUid || taskUid);
+    assertActive();
     if (ownedRunning.length > 0) await setPomodoro(null);
     return refresh({
       planSnapshot: readAuthoritativePlan(instant),
@@ -525,7 +579,9 @@ export function createTimingRuntime({
   const startStandalonePomodoro = () => enqueue(async () => {
     // Re-check inside the serialized mutation queue so CLOCK always wins a
     // same-tick race with the header stopwatch action.
-    if (timingCore.chooseFocusedEntry(snapshot.entries)) return snapshot;
+    if (timingCore.chooseFocusedEntry(snapshot.entries)) {
+      return refresh({ planSnapshot: snapshot.planSnapshot, entries: snapshot.entries });
+    }
     const instant = now();
     const next = timingCore.nextStandalonePomodoroState(snapshot.standalonePomodoro, {
       action: 'start',
@@ -533,25 +589,35 @@ export function createTimingRuntime({
     });
     await setStandalonePomodoro(next);
     return refresh({ planSnapshot: snapshot.planSnapshot, entries: snapshot.entries });
-  });
+  }, { clockMutation: false });
 
   const stopStandalonePomodoro = () => enqueue(async () => {
     await setStandalonePomodoro(null);
     return refresh({ planSnapshot: snapshot.planSnapshot, entries: snapshot.entries });
-  });
+  }, { clockMutation: false });
 
-  const initialize = async () => {
+  const initializeOnce = async () => {
+    assertActive();
     if (legacyLogbookIsRunning()) {
       const message = 'Disable Roam Logbook before enabling Nautilus Log Actual Time Tracking. Only one extension may write CLOCK records.';
       showToast(message, 'danger');
       throw new Error(message);
     }
     let initialEntries = readAllEntries();
-    initialEntries = await reconcileLegacyOverlap(initialEntries);
-    initialEntries = await closeDoneClocks(initialEntries);
+    if (initialEntries.filter((entry) => entry.running).length > 1
+      || initialEntries.some((entry) => entry.running && entry.status === 'DONE')) {
+      initialEntries = await clockCoordinator.run(async () => {
+        const reconciled = await reconcileLegacyOverlap(readAllEntries());
+        assertActive();
+        return closeDoneClocks(reconciled);
+      });
+    }
+    assertActive();
     refresh({ entries: initialEntries });
+    assertActive();
     if (!snapshot.activeWork.focused && extensionAPI.settings.get(POMODORO_STATE_KEY)) {
       await setPomodoro(null);
+      assertActive();
     }
     if (extensionAPI.settings.get('timing-line-sidebar') !== false) {
       cancelSidebarWarmup = scheduleMutationStart(() => {
@@ -559,6 +625,8 @@ export function createTimingRuntime({
         if (!destroyed) void warmRightSidebarWindowCache();
       });
     }
+    assertActive();
+    clockCoordinator.start();
     let lastGraphRefresh = wallNow();
     const reconcileDoneClocks = (next, label) => {
       if (!next.entries.some((entry) => entry.running && entry.status === 'DONE')) return;
@@ -595,19 +663,34 @@ export function createTimingRuntime({
     return snapshot;
   };
 
-  const disable = () => enqueue(async () => {
-    const entries = snapshot.entries;
-    const updatedEntries = await closeEntriesAt(entries, now());
-    await setPomodoro(null);
-    await setStandalonePomodoro(null);
-    refresh({ planSnapshot: snapshot.planSnapshot, entries: updatedEntries });
+  const initialize = () => {
+    if (destroyed) return Promise.reject(new Error('Actual Time Tracking is no longer active.'));
+    if (!initializationPromise) {
+      initializationPromise = Promise.resolve().then(initializeOnce).catch((error) => {
+        destroy();
+        throw error;
+      });
+    }
+    return initializationPromise;
+  };
+
+  const disable = async () => {
+    await enqueue(async () => {
+      const entries = snapshot.entries;
+      const updatedEntries = await closeEntriesAt(entries, now());
+      await setPomodoro(null);
+      await setStandalonePomodoro(null);
+      refresh({ planSnapshot: snapshot.planSnapshot, entries: updatedEntries });
+    });
     destroy();
     return true;
-  });
+  };
 
   function destroy() {
     if (destroyed) return;
     destroyed = true;
+    clockCoordinator.destroy();
+    invalidatedTaskUids.clear();
     if (ticker !== null) window.clearInterval(ticker);
     ticker = null;
     removeVisibilityListener?.();
