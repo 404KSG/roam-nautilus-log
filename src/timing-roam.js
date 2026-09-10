@@ -276,19 +276,19 @@ export function readPrimaryPlan(date = new Date(), fallbackMinutes = 15) {
  */
 export function projectPrimaryPlanPull(pullSnapshot, previous = null, fallbackMinutes = 15) {
   const value = pullSnapshot && typeof pullSnapshot === 'object' ? pullSnapshot : null;
+  if (!value || value.missing || value.unavailable) return null;
   const planUid = String(
     value?.['block/uid']
       ?? value?.[':block/uid']
-      ?? previous?.plan?.uid
       ?? '',
   );
-  if (!value || !planUid) return null;
+  if (!planUid) return null;
   const planString = String(
     value['block/string']
       ?? value[':block/string']
-      ?? previous?.plan?.string
       ?? '',
   );
+  if (!timingCore.isNautilusComponent(planString)) return null;
   const childrenValue = value['block/children'] ?? value[':block/children'] ?? [];
   const children = Array.isArray(childrenValue) ? childrenValue : [];
   const pageUid = previous?.pageUid || null;

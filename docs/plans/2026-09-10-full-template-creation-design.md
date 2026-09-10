@@ -152,9 +152,15 @@ Google/OAuth changes, or user browser automation were performed.
   with only host graph/time faked. Both launchers must clone the full anonymous
   tree and navigate after one click. Additional cases cover errors, partial/reload,
   tooltips, Chinese/dark/keyboard/narrow screens, modifier clicks, pending controls,
-  CLOCK/POMO priority, midnight, missing provider, and the shared command.
+  CLOCK/POMO priority, midnight, missing provider, the shared command, and
+  watched or silent whole-root deletion followed by an actual button click.
+- `test/today-plan-recreate.test.js`: real watch bridge, timing runtime, and
+  session against the same host graph. Whole-root deletion must become confirmed
+  absence without background writes; empty or all-DONE trees remain locate-only.
+  See [Whole-root deletion and explicit recreation](./2026-09-10-template-deletion-recreation-design.md).
 - Older presentation-only harnesses remain visual regression tests, not evidence
-  of real creation. Existing CLOCK ownership/concurrency tests are retained.
+  of real creation or live Roam Pull Watch. Existing CLOCK ownership/concurrency
+  tests are retained.
 
 Run `npm test`, `PYTHONDONTWRITEBYTECODE=1 npm run test:ui`, and `git diff --check`.
 The real-session suite writes screenshots/results to `/tmp/nautilus-real-today-plan`

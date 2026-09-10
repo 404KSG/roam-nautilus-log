@@ -71,7 +71,7 @@ function publishPlan() {
 }
 
 function createPlanSession() {
-  return {
+  const session = {
     getState: () => planState,
     subscribe(listener) {
       planListeners.add(listener);
@@ -103,8 +103,19 @@ function createPlanSession() {
       locateCalls.push(options);
       return planState;
     },
+    activateToday(options = {}) {
+      const status = planState.status;
+      if (status === 'ready-absent') return session.ensureToday(options);
+      if (status === 'nav-failed') return session.locateToday(options);
+      if (status === 'ready-present') {
+        if (options.ifPresent === 'keep') return { ...planState, activation: 'keep' };
+        return session.locateToday(options);
+      }
+      return planState;
+    },
     discover: (options) => { discoverCalls.push(options); return planState; },
   };
+  return session;
 }
 
 function createRuntime() {

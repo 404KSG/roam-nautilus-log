@@ -111,10 +111,13 @@ export function createTodayPlanLauncher({ todayPlan, extensionAPI } = {}) {
     const state = ui();
     const locateMode = event.shiftKey ? 'sidebar' : 'main';
     const status = state?.status;
-    if (status === 'ready-present' || status === 'nav-failed') {
-      return todayPlan.locateToday({ locateMode });
+    if (status === 'ready-present' || status === 'ready-absent' || status === 'nav-failed') {
+      return Promise.resolve(todayPlan.activateToday({ locateMode })).then((result) => {
+        const next = todayPlan.getState()?.status;
+        if (['read-failed', 'ready-blocked', 'partial'].includes(next)) return diagnostics.show();
+        return result;
+      });
     }
-    if (status === 'ready-absent') return todayPlan.ensureToday({ locateMode });
     if (['ready-blocked','partial','read-failed'].includes(status)) return diagnostics.show();
     return undefined;
   };

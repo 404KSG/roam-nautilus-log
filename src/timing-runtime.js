@@ -88,6 +88,10 @@ export function createTimingRuntime({
   let stopPlanWatch = null;
   let watchedPlanRefreshHandle = null;
   let pendingWatchedPlanPull = null;
+  let planEpoch = 0;
+  let refreshAgain = false;
+  let refreshRunning = false;
+  let forcePlanRescan = false;
   let snapshot = {
     revision: 0,
     status: 'loading',
@@ -116,6 +120,25 @@ export function createTimingRuntime({
     }).catch((error) => console.error('[Nautilus Log] source completion reconciliation failed', error));
   };
 
+  const watchedPlanIsUsable = (planPull) => {
+    if (!planPull || planPull.missing || planPull.unavailable) return false;
+    const string = planPull['block/string'] ?? planPull[':block/string'] ?? '';
+    return timingCore.isNautilusComponent(string);
+  };
+
+  const invalidateWatchedProjection = () => {
+    planEpoch += 1;
+    pendingWatchedPlanPull = null;
+    if (watchedPlanRefreshHandle !== null) {
+      window.clearTimeout(watchedPlanRefreshHandle);
+      watchedPlanRefreshHandle = null;
+    }
+  };
+
+  const refreshWatchedPlan = () => {
+    void requestRefresh({ immediate: true }).then(reconcileSourceCompletion);
+  };
+
   const syncPlanWatch = () => {
     const planUid = snapshot.planSnapshot?.plan?.uid || null;
     if (planUid === watchedPlanUid) return;
@@ -125,10 +148,11 @@ export function createTimingRuntime({
     if (!planUid || typeof watchPlan !== 'function') return;
     stopPlanWatch = watchPlan(planUid, (planPull) => {
       if (destroyed || snapshot.planSnapshot?.plan?.uid !== planUid) return;
-      if (!planPull || mutationInFlight) {
-        // Invalidation-only adapters and writes in progress need a later
-        // authoritative read, not a Pull projected over a partial mutation.
-        void requestRefresh({ immediate: true }).then(reconcileSourceCompletion);
+      if (!watchedPlanIsUsable(planPull) || mutationInFlight) {
+        // Missing, unsigned, or in-flight roots need a later authoritative
+        // read. Never keep a cheap projection that can resurrect a ghost plan.
+        invalidateWatchedProjection();
+        refreshWatchedPlan();
         return;
       }
       pendingWatchedPlanPull = planPull;
@@ -136,13 +160,15 @@ export function createTimingRuntime({
       // Roam can emit several Pull Watch callbacks for one edit. Leave the
       // trusted input stack first, then project only the newest cheap Plan
       // Pull. This keeps Enter free of Daily-page and LOGBOOK queries.
+      const epoch = planEpoch;
       watchedPlanRefreshHandle = window.setTimeout(() => {
         watchedPlanRefreshHandle = null;
         const latestPull = pendingWatchedPlanPull;
         pendingWatchedPlanPull = null;
-        if (destroyed || snapshot.planSnapshot?.plan?.uid !== planUid) return;
-        if (mutationInFlight) {
-          void requestRefresh({ immediate: true }).then(reconcileSourceCompletion);
+        if (destroyed || epoch !== planEpoch || snapshot.planSnapshot?.plan?.uid !== planUid) return;
+        if (mutationInFlight || !watchedPlanIsUsable(latestPull)) {
+          invalidateWatchedProjection();
+          refreshWatchedPlan();
           return;
         }
         const planSnapshot = projectPrimaryPlanPull(
@@ -150,8 +176,13 @@ export function createTimingRuntime({
           snapshot.planSnapshot,
           Number(extensionAPI.settings.get('todo-duration')) || 15,
         );
+        if (!planSnapshot || !timingCore.isNautilusComponent(planSnapshot.plan?.string)) {
+          invalidateWatchedProjection();
+          refreshWatchedPlan();
+          return;
+        }
         const next = refresh({
-          planSnapshot: planSnapshot || snapshot.planSnapshot,
+          planSnapshot,
           entries: snapshot.entries,
         });
         reconcileSourceCompletion(next);
@@ -203,10 +234,10 @@ export function createTimingRuntime({
     return standaloneClearPromise;
   };
 
-  const readAuthoritativePlan = (currentNow) => {
+  const readAuthoritativePlan = (currentNow, { rescanPlan = false } = {}) => {
     const previous = snapshot.planSnapshot;
     const currentPageTitle = pageTitleFor(currentNow);
-    const reusablePlanUid = previous?.pageTitle === currentPageTitle
+    const reusablePlanUid = !rescanPlan && previous?.pageTitle === currentPageTitle
       ? previous?.plan?.uid
       : null;
     if (reusablePlanUid && typeof readPlan === 'function') {
@@ -224,14 +255,15 @@ export function createTimingRuntime({
     return readPrimaryPlan(currentNow, Number(extensionAPI.settings.get('todo-duration')) || 15);
   };
 
-  const refresh = ({ notice = '', planSnapshot: suppliedPlanSnapshot, entries: suppliedEntries } = {}) => {
+  const refresh = ({ notice = '', planSnapshot: suppliedPlanSnapshot, entries: suppliedEntries, rescanPlan = false } = {}) => {
     if (destroyed) return snapshot;
     try {
       assertActive();
       const currentNow = now();
       const sourcePlanSnapshot = suppliedPlanSnapshot === undefined
-        ? readAuthoritativePlan(currentNow)
+        ? readAuthoritativePlan(currentNow, { rescanPlan: rescanPlan || forcePlanRescan })
         : suppliedPlanSnapshot;
+      if (suppliedPlanSnapshot === undefined) forcePlanRescan = false;
       const planSnapshot = sourcePlanSnapshot
         ? {
           ...sourcePlanSnapshot,
@@ -326,18 +358,23 @@ export function createTimingRuntime({
     }
   };
 
-  const requestRefresh = ({ notice = '', immediate = false } = {}) => {
+  const requestRefresh = ({ notice = '', immediate = false, rescanPlan = false } = {}) => {
+    if (rescanPlan) forcePlanRescan = true;
     if (destroyed) return Promise.resolve(snapshot);
     if (mutationInFlight) {
       refreshAfterMutation = true;
-      return refreshPromise || mutationQueue.then(() => requestRefresh({ notice, immediate }));
+      return refreshPromise || mutationQueue.then(() => requestRefresh({ notice, immediate, rescanPlan: forcePlanRescan }));
     }
     if (refreshPromise) {
-      scheduleRefresh(immediate);
-      if (immediate && refreshHandleKind === 'idle' && refreshRunner) {
-        window.cancelIdleCallback?.(refreshHandle);
-        refreshHandleKind = 'timeout';
-        refreshHandle = window.setTimeout(refreshRunner, 0);
+      if (refreshRunning) {
+        refreshAgain = true;
+      } else {
+        scheduleRefresh(immediate);
+        if (immediate && refreshHandleKind === 'idle' && refreshRunner) {
+          window.cancelIdleCallback?.(refreshHandle);
+          refreshHandleKind = 'timeout';
+          refreshHandle = window.setTimeout(refreshRunner, 0);
+        }
       }
       return refreshPromise;
     }
@@ -352,13 +389,19 @@ export function createTimingRuntime({
           return;
         }
         refreshRunner = null;
+        refreshRunning = true;
         let next = snapshot;
         try { next = refresh({ notice }); }
         finally {
+          refreshRunning = false;
           const finish = resolveRefresh;
           resolveRefresh = null;
           refreshPromise = null;
           finish?.(next);
+          if (!destroyed && refreshAgain) {
+            refreshAgain = false;
+            void requestRefresh({ notice, immediate: true });
+          }
         }
       };
       refreshRunner = run;
@@ -379,6 +422,8 @@ export function createTimingRuntime({
     // result afterward. Only destruction settles without another graph read.
     if (settle) {
       refreshRunner = null;
+      refreshRunning = false;
+      refreshAgain = false;
       const finish = resolveRefresh;
       resolveRefresh = null;
       refreshPromise = null;

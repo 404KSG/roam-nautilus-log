@@ -87,6 +87,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   let observedSearch = null;
   let liveExecutionCache = null;
   let energyConfirmTimer = null;
+  let activationGeneration = 0;
 
   const ui = () => timingCore.executionCopy(extensionAPI.settings.get('language') || 'en');
   const energyBarEnabled = () => extensionAPI.settings.get('energy-bar-enabled') === true;
@@ -106,6 +107,26 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       return diagnostics.show();
     }
     return undefined;
+  };
+  const invalidateActivation = () => { activationGeneration += 1; };
+  const recoverPresentPlan = (locateMode, onPresent) => {
+    if (!todayPlan?.activateToday) return false;
+    const roam = typeof window !== 'undefined' ? window.roamAlphaAPI : null;
+    const generation = ++activationGeneration;
+    void runAction(async () => {
+      const result = await todayPlan.activateToday({ locateMode, ifPresent: 'keep' });
+      if (destroyed || generation !== activationGeneration) return;
+      if (typeof window !== 'undefined' && window.roamAlphaAPI !== roam) return;
+      const status = result?.status || todayPlanState()?.status;
+      if (['read-failed', 'ready-blocked', 'partial'].includes(status)) {
+        closePopover();
+        diagnostics.show();
+        return;
+      }
+      if (result?.activation !== 'keep') return;
+      if (status === 'ready-present' || status === 'nav-failed') await onPresent?.();
+    });
+    return true;
   };
 
   const currentTriggerExecution = () => {
@@ -396,6 +417,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
 
   const closePopover = ({ restoreFocus = false } = {}) => {
     if (!popover) return;
+    invalidateActivation();
     cancelDeferredRefresh();
     clearDeleteConfirmation();
     popover.remove();
@@ -1133,6 +1155,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
           event.stopPropagation();
           closePopover();
           if (!liveTimer && shouldUseTodayPlanEntry()) activateTodayPlanEntry('sidebar');
+          else if (!liveTimer && recoverPresentPlan('sidebar', () => runtime.locate({ sidebar: true }))) return;
           else runAction(() => runtime.locate({ sidebar: true }));
           return;
         }
@@ -1141,6 +1164,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
           event.stopPropagation();
           closePopover();
           if (!liveTimer && shouldUseTodayPlanEntry()) activateTodayPlanEntry('main');
+          else if (!liveTimer && recoverPresentPlan('main', () => runtime.locate())) return;
           else runAction(() => runtime.locate());
           return;
         }
@@ -1148,8 +1172,12 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
           activateTodayPlanEntry('main');
           return;
         }
-        if (event.target.closest?.('.nautilus-log-timing__capacity-token')) view = 'plan';
-        openPopover({ focusPanel: event.detail === 0 });
+        const openPlanPanel = () => {
+          if (event.target.closest?.('.nautilus-log-timing__capacity-token')) view = 'plan';
+          return openPopover({ focusPanel: event.detail === 0 });
+        };
+        if (!liveTimer && recoverPresentPlan('main', openPlanPanel)) return;
+        openPlanPanel();
       });
       pomoCloseButton = element('button', 'nautilus-log-timing__pomodoro-close');
       pomoCloseButton.type = 'button';
@@ -1248,6 +1276,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   const destroy = () => {
     if (destroyed) return;
     destroyed = true;
+    invalidateActivation();
     closePopover();
     diagnostics.destroy();
     unsubscribe?.();

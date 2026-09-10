@@ -417,18 +417,65 @@ export function createTodayPlanSession({ extensionAPI, now = () => new Date(), b
     }
     return finish(t,intent,result.snapshot,mode,'created');
   }
+  function captureCreateIntent(t) {
+    let frozen, clickError, snapshot;
+    try {
+      snapshot = readTarget(t);
+      if (!snapshot.plan && !intents.get(t.key)?.attempted) {
+        try { frozen = freezeTemplate(); } catch (error) { frozen = { error }; }
+      }
+    } catch (error) { clickError = error; }
+    return { frozen, clickError, snapshot };
+  }
+  function activateToday({ locateMode = 'main', ifPresent = 'locate' } = {}) {
+    if (destroyed) return Promise.resolve(getState());
+    if (operation) return operation.promise;
+    const status = state.status;
+    if (status === 'creating' || status === 'checking') return Promise.resolve(getState());
+    if (['read-failed', 'ready-blocked', 'partial'].includes(status)) return Promise.resolve(getState());
+    if (status === 'nav-failed') return locateToday({ locateMode });
+    let t;
+    try { t = targetNow(); }
+    catch (error) { return Promise.resolve(fail(error)); }
+    if (status === 'ready-absent') return ensureForTarget(t, { locateMode });
+    const intentCapture = captureCreateIntent(t);
+    if (intentCapture.clickError) {
+      fail(intentCapture.clickError, t);
+      return Promise.resolve(getState());
+    }
+    if (!intentCapture.snapshot?.plan) return ensureForTarget(t, { locateMode, intentCapture });
+    const liveUid = intentCapture.snapshot.plan.uid;
+    return Promise.resolve(checkReceipt(t, true)).then(async () => {
+      if (destroyed) return getState();
+      try { assertTarget(t); }
+      catch (error) { return fail(error, t); }
+      const next = getState();
+      if (['read-failed', 'ready-blocked', 'partial', 'ready-absent', 'checking'].includes(next.status)) {
+        return next;
+      }
+      const runtimeUid = trackingEnabled() ? readTrackingSnapshot()?.planSnapshot?.plan?.uid : next.planUid;
+      if (trackingEnabled() && requestTrackingRefresh && (next.planUid !== liveUid || runtimeUid !== next.planUid)) {
+        try { await requestTrackingRefresh({ immediate: true, rescanPlan: true }); }
+        catch (_) { /* never clone again for a refresh failure */ }
+        try { assertTarget(t); }
+        catch (error) { return fail(error, t); }
+      }
+      if (ifPresent === 'keep') return { ...getState(), activation: 'keep' };
+      return locateToday({ locateMode });
+    });
+  }
   function ensureToday({locateMode='main',resume=false} = {}) {
+    if (destroyed) return Promise.resolve(getState());
+    if (operation) return operation.promise;
+    try { return ensureForTarget(targetNow(), { locateMode, resume }); }
+    catch (error) { return Promise.resolve(fail(error)); }
+  }
+  function ensureForTarget(t, {locateMode='main',resume=false,intentCapture} = {}) {
     if(destroyed) return Promise.resolve(getState());
     if(operation) return operation.promise;
-    const t=targetNow(), controller=new AbortController();
-    let frozen,clickError,snapshot;
-    // Capture in the click stack, not after waiting for a WebLock or a receipt.
-    try {
-      snapshot=readTarget(t);
-      if (!snapshot.plan && !intents.get(t.key)?.attempted) {
-        try { frozen=freezeTemplate(); } catch(error) { frozen={error}; }
-      }
-    } catch(e) {clickError=e;}
+    const controller=new AbortController();
+    const captured = intentCapture || captureCreateIntent(t);
+    const frozen = captured.frozen, clickError = captured.clickError;
     const current={controller,promise:null};operation=current;
     current.promise=Promise.resolve().then(async()=>{
       setState({...base(t),status:'creating'});
@@ -496,6 +543,6 @@ export function createTodayPlanSession({ extensionAPI, now = () => new Date(), b
   }
   function destroy(){destroyed=true;operation?.controller.abort();clearMidnight();unsubscribe?.();listeners.clear();intents.clear();
     host.document?.removeEventListener?.('visibilitychange',foreground);host.removeEventListener?.('focus',foreground);}
-  return {getState,discover,ensureToday,locateToday,openTemplate,initialize,destroy,
+  return {getState,discover,ensureToday,activateToday,locateToday,openTemplate,initialize,destroy,
     subscribe:listener=>{if(!destroyed)listeners.add(listener);return()=>listeners.delete(listener);}};
 }

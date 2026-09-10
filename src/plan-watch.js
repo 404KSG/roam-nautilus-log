@@ -1,5 +1,5 @@
 const PLAN_PULL_PATTERN = '[:block/string {:block/children [:block/uid :block/string :block/order {:block/refs [:block/uid :block/string]}]}]';
-const PLAN_MEMBERSHIP_WATCH_PATTERN = '[:block/children]';
+const PLAN_MEMBERSHIP_WATCH_PATTERN = '[:block/string :block/children]';
 const CHILD_WATCH_PATTERN = '[:block/string :block/order]';
 const SOURCE_WATCH_PATTERN = '[:block/string]';
 const BLOCK_REF_RE = /\(\(([a-zA-Z0-9_-]{6,})\)\)/g;
@@ -37,7 +37,17 @@ function normalizeChild(child) {
   };
 }
 
+function emptyPlanPull(flags = {}) {
+  return {
+    'block/uid': '',
+    'block/string': '',
+    'block/children': [],
+    ...flags,
+  };
+}
+
 export function normalizePlanPull(entity, uid = '') {
+  if (entity == null) return emptyPlanPull({ missing: true });
   return {
     'block/uid': String(field(entity, ':block/uid', uid) || uid || ''),
     'block/string': String(field(entity, ':block/string', '') || ''),
@@ -176,21 +186,21 @@ export function createPlanWatchBridge({
   };
 
   const read = (uid) => {
-    if (!uid) return normalizePlanPull(null, uid);
+    if (!uid) return emptyPlanPull({ unavailable: true });
     const pull = roam?.data?.pull || roam?.pull;
-    if (typeof pull !== 'function') return normalizePlanPull(null, uid);
+    if (typeof pull !== 'function') return emptyPlanPull({ unavailable: true });
     const owner = pull === roam?.data?.pull ? roam.data : roam;
     try {
-      const snapshot = normalizePlanPull(
-        pull.call(owner, PLAN_PULL_PATTERN, [':block/uid', uid]),
-        uid,
+      const entity = pull.call(owner, PLAN_PULL_PATTERN, [':block/uid', uid]);
+      if (entity == null) return normalizePlanPull(null, uid);
+      return hydratePlanReferences(
+        normalizePlanPull(entity, uid),
+        readReferencedString,
+        { authoritative: hasAuthoritativeReader },
       );
-      return hydratePlanReferences(snapshot, readReferencedString, {
-        authoritative: hasAuthoritativeReader,
-      });
     } catch (error) {
       console.debug('[Nautilus Log] Plan snapshot pull unavailable', error);
-      return normalizePlanPull(null, uid);
+      return emptyPlanPull({ unavailable: true });
     }
   };
 

@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { exclusiveLocks, installTestHostLocks } = require('./test-host-locks.cjs');
 
 function graphMock({
   trace = [],
@@ -137,6 +138,7 @@ test('execution capacity ignores former progress tokens and keeps the full estim
     setTimeout,
     clearTimeout,
   };
+  installTestHostLocks(global.window);
   const extensionAPI = {
     settings: {
       get: (key) => settings.get(key),
@@ -187,6 +189,7 @@ test('execution capacity resolves direct block-reference tasks exactly like the 
     setTimeout,
     clearTimeout,
   };
+  installTestHostLocks(global.window);
   const extensionAPI = {
     settings: {
       get: (key) => settings.get(key),
@@ -242,6 +245,7 @@ test('runtime capacity excludes inherited DONE and outer TODO reopens the source
     setTimeout,
     clearTimeout,
   };
+  installTestHostLocks(global.window);
   const extensionAPI = {
     settings: {
       get: (key) => settings.get(key),
@@ -297,6 +301,7 @@ test('Plan Pull Watch refreshes capacity immediately when a moved wrapper reopen
     setTimeout,
     clearTimeout,
   };
+  installTestHostLocks(global.window);
   const runtime = extension.createTimingRuntime({
     extensionAPI: {
       settings: {
@@ -373,6 +378,7 @@ test('authoritative recovery reuses the Primary Plan Pull and reads CLOCK only f
     setTimeout,
     clearTimeout,
   };
+  installTestHostLocks(global.window);
   const runtime = extension.createTimingRuntime({
     extensionAPI: {
       settings: {
@@ -441,6 +447,7 @@ test('one-second Timing ticks stay graph-free and recovery waits for a real idle
     },
     cancelIdleCallback: () => {},
   };
+  installTestHostLocks(global.window);
   const runtime = extension.createTimingRuntime({
     extensionAPI: {
       settings: {
@@ -516,6 +523,7 @@ test('referenced and plain daily instances can CLOCK and complete without mutati
     setTimeout,
     clearTimeout,
   };
+  installTestHostLocks(global.window);
   const extensionAPI = {
     settings: {
       get: (key) => settings.get(key),
@@ -578,6 +586,7 @@ test('completing a bare source-owned TODO closes the wrapper CLOCK and completes
     setTimeout,
     clearTimeout,
   };
+  installTestHostLocks(global.window);
   const runtime = extension.createTimingRuntime({
     extensionAPI: {
       settings: {
@@ -643,6 +652,7 @@ test('a manual source TODO to DONE transition closes the active daily wrapper CL
     setTimeout,
     clearTimeout,
   };
+  installTestHostLocks(global.window);
   const runtime = extension.createTimingRuntime({
     extensionAPI: {
       settings: {
@@ -733,6 +743,7 @@ test('runtime serializes close-before-switch and close-before-complete', async (
     setTimeout,
     clearTimeout,
   };
+  installTestHostLocks(global.window);
   t.after(() => { delete global.window; });
 
   const extensionAPI = {
@@ -881,6 +892,7 @@ test('completing another task leaves the focused CLOCK and Pomodoro running', as
     setTimeout,
     clearTimeout,
   };
+  installTestHostLocks(global.window);
   const extensionAPI = {
     settings: {
       get: (key) => settings.get(key),
@@ -947,6 +959,7 @@ test('Primary Plan location opens one deduplicated right-sidebar window without 
     setTimeout,
     clearTimeout,
   };
+  installTestHostLocks(global.window);
   t.after(() => { delete global.window; });
 
   const extensionAPI = {
@@ -1028,6 +1041,7 @@ test('chart task location scrolls in its current surface and falls back to offic
       return 1;
     },
   };
+  installTestHostLocks(global.window);
   global.document = surface;
   t.after(() => {
     delete global.window;
@@ -1082,6 +1096,7 @@ test('Clock Out uses the confirmed Timing snapshot and cancels a competing idle 
       idleCallbacks.delete(id);
     },
   };
+  installTestHostLocks(global.window);
   t.after(() => { delete global.window; });
 
   const extensionAPI = {
@@ -1143,6 +1158,7 @@ test('standalone POMO persists without graph writes and CLOCK takes priority', a
     setTimeout,
     clearTimeout,
   };
+  installTestHostLocks(global.window);
   const extensionAPI = {
     settings: {
       get: (key) => settings.get(key),
@@ -1204,6 +1220,7 @@ test('standalone POMO restores its absolute start and is cleared if CLOCK is alr
     setTimeout,
     clearTimeout,
   };
+  installTestHostLocks(global.window);
   const extensionAPI = {
     settings: {
       get: (key) => settings.get(key),
@@ -1244,10 +1261,12 @@ async function coordinatedRuntimes(t, {BroadcastChannel, ...runtimeOptions} = {}
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
   const load = () => import(`data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#clock-client-${Math.random()}`);
   const {roam, blocks, trace} = graphMock();
+  const locks = exclusiveLocks();
   global.window = {
-    roamAlphaAPI: roam, navigator: globalThis.navigator, BroadcastChannel,
+    roamAlphaAPI: roam, BroadcastChannel,
     setInterval: () => 99, clearInterval: () => {}, setTimeout, clearTimeout,
   };
+  installTestHostLocks(global.window, locks);
   let current = new Date(2026, 7, 22, 10);
   const settings = new Map([['timing-line-sidebar', false]]);
   const options = {
@@ -1502,7 +1521,7 @@ test('queued source reconciliation cannot overwrite a newer foreign CLOCK with c
   const gate = new Promise((resolve) => {release = resolve;});
   const held = new Promise((resolve) => {entered = resolve;});
   t.after(() => release());
-  const locks = globalThis.navigator.locks;
+  const locks = window.navigator.locks;
   let holdNext = true;
   window.navigator = {locks: {
     request: (name, options, operation) => locks.request(name, options, async () => {

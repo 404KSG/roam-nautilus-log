@@ -52,6 +52,19 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                 assert next(b for b in blocks if b['uid']=='weekly-tag')['string']=='#[[2026-W37]]'
                 assert next(b for b in blocks if b['uid']=='source-step')['string']=='**First step** ((source-event))'
                 assert len([b for b in blocks if b['uid'].startswith('clone-')])==6
+            def replacement_tree():
+                tree=page.evaluate('realPlan.tree()')
+                assert tree['string']=='[[My day]] {{[[roam/render]]:((roam-render-Nautilus-Log-cljs)) 28 25 8 "focus" 22}}'
+                children=tree['children']
+                assert [c['string'] for c in children[:4]]==['09:00-09:30 Stand-up','{{[[TODO]]}} Write 30m ((external-note))','{{[[DONE]]}} Prepared 15m','---']
+                event=children[0]; step=children[1]['children'][0]
+                assert step['string']==f"**First step** (({event['uid']}))"
+                assert children[4]['string']==f"(({step['uid']})) and ((external-note))"
+                assert step['properties']=={'open':False,'heading':0,'text-align':'right','children-view-type':'document'}
+                blocks=page.evaluate('realPlan.blocks()')
+                assert next(b for b in blocks if b['uid']==ROOT_UID)['parentUid']=='day'
+                assert next(b for b in blocks if b['uid']=='weekly-tag')['string']=='#[[2026-W37]]'
+                assert next(b for b in blocks if b['uid']=='source-step')['string']=='**First step** ((source-event))'
             def tooltip_bounds():
                 page.locator(TRIGGER).focus()
                 page.locator(TRIGGER).hover()
@@ -114,6 +127,142 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     page.evaluate('realPlan.recover()');page.locator(TRIGGER).click();state('ready-present')
                     full_tree()
                 check(surface+'-navigation',navigation)
+                def watched_recreate():
+                    mount(surface)
+                    page.locator(TRIGGER).click();state('ready-present');full_tree()
+                    writes=page.evaluate('realPlan.writes()')
+                    page.evaluate('realPlan.deleteRoot()')
+                    fired=page.evaluate('realPlan.fireRoot()')
+                    if surface=='execution':
+                        assert fired>=1, fired
+                        page.wait_for_function('realPlan.state().status==="ready-absent"')
+                        assert page.evaluate('realPlan.hasRoot()') is False
+                        assert page.evaluate('realPlan.writes()')==writes
+                    page.locator(TRIGGER).click();state('ready-present');replacement_tree()
+                    assert page.evaluate('realPlan.writes()')-writes==7
+                check(surface+'-watched-recreate',watched_recreate)
+                def silent_recreate():
+                    mount(surface)
+                    page.locator(TRIGGER).click();state('ready-present');full_tree()
+                    writes=page.evaluate('realPlan.writes()')
+                    nav_before=page.evaluate('realPlan.navs()')
+                    page.evaluate('realPlan.deleteRoot()')
+                    assert page.evaluate('realPlan.fireRoot(true)')==0
+                    page.locator(TRIGGER).click();state('ready-present');replacement_tree()
+                    assert page.evaluate('realPlan.writes()')-writes==7
+                    nav=page.evaluate('realPlan.navs()')
+                    assert len(nav)==len(nav_before)+1, nav
+                    assert nav[-1][0]=='open'
+                    assert page.evaluate('realPlan.popoverOpen()') is False
+                    assert page.evaluate('realPlan.popoverCount()')==0
+                check(surface+'-silent-recreate',silent_recreate)
+                def silent_shift_alt():
+                    if surface!='execution':
+                        return
+                    for modifier, expected in (('Shift','sidebar'),('Alt','open')):
+                        mount(surface)
+                        page.locator(TRIGGER).click();state('ready-present');full_tree()
+                        writes=page.evaluate('realPlan.writes()')
+                        nav_before=page.evaluate('realPlan.navs()')
+                        page.evaluate('realPlan.deleteRoot()')
+                        assert page.evaluate('realPlan.fireRoot(true)')==0
+                        page.locator(TRIGGER).click(modifiers=[modifier]);state('ready-present');replacement_tree()
+                        assert page.evaluate('realPlan.writes()')-writes==7
+                        nav=page.evaluate('realPlan.navs()')
+                        assert len(nav)==len(nav_before)+1, (modifier, nav)
+                        assert nav[-1][0]==expected, (modifier, nav[-1])
+                        assert page.evaluate('realPlan.popoverOpen()') is False
+                check(surface+'-silent-shift-alt',silent_shift_alt)
+                def present_panel_once():
+                    if surface!='execution':
+                        return
+                    mount(surface)
+                    page.locator(TRIGGER).click();state('ready-present');full_tree()
+                    nav_before=page.evaluate('realPlan.navs()')
+                    page.locator(TRIGGER).click()
+                    page.locator('.nautilus-log-timing__popover').wait_for()
+                    assert page.evaluate('realPlan.popoverCount()')==1
+                    assert page.evaluate('realPlan.navs()')==nav_before
+                    page.locator(TRIGGER).click()
+                    page.wait_for_function('realPlan.popoverOpen()===false')
+                    assert page.evaluate('realPlan.navs()')==nav_before
+                    page.locator(TRIGGER).click(modifiers=['Shift'])
+                    page.wait_for_function('(n)=>realPlan.navs().length===n', arg=len(nav_before)+1)
+                    assert page.evaluate('realPlan.navs()')[-1][0]=='sidebar'
+                    assert page.evaluate('realPlan.popoverOpen()') is False
+                    page.locator(TRIGGER).click(modifiers=['Alt'])
+                    page.wait_for_function('(n)=>realPlan.navs().filter(r=>r[0]==="open").length===n', arg=len([r for r in nav_before if r[0]=='open'])+1)
+                    assert page.evaluate('realPlan.navs()')[-1][0]=='open'
+                check(surface+'-present-panel-once',present_panel_once)
+                def delayed_keep_cancelled():
+                    if surface!='execution':
+                        return
+                    mount(surface)
+                    page.locator(TRIGGER).click();state('ready-present');full_tree()
+                    nav_before=page.evaluate('realPlan.navs()')
+                    page.evaluate('realPlan.holdIntegrity()')
+                    page.locator(TRIGGER).click()
+                    assert page.evaluate('realPlan.popoverOpen()') is False
+                    page.evaluate('realPlan.cleanup()')
+                    page.evaluate('realPlan.releaseIntegrity()')
+                    page.wait_for_timeout(80)
+                    assert page.evaluate('realPlan.popoverCount()')==0
+                    assert page.evaluate('realPlan.navs()')==nav_before
+                check(surface+'-delayed-keep-cancelled',delayed_keep_cancelled)
+                def children_only_locate():
+                    mount(surface)
+                    page.locator(TRIGGER).click();state('ready-present');full_tree()
+                    writes=page.evaluate('realPlan.writes()')
+                    page.evaluate('realPlan.deleteChildren()')
+                    page.evaluate('realPlan.fireRoot()')
+                    page.wait_for_timeout(50)
+                    assert page.evaluate('realPlan.hasRoot()') is True
+                    assert page.evaluate('realPlan.childCount()')==0
+                    page.locator(TRIGGER).click()
+                    if surface=='launcher':
+                        state('ready-present')
+                    else:
+                        page.locator('.nautilus-log-timing__popover').wait_for()
+                    assert page.evaluate('realPlan.writes()')==writes
+                    assert page.evaluate('realPlan.childCount()')==0
+                check(surface+'-children-only-no-refill',children_only_locate)
+                def present_read_failed():
+                    mount(surface)
+                    page.locator(TRIGGER).click();state('ready-present');full_tree()
+                    writes=page.evaluate('realPlan.writes()')
+                    opens=len([r for r in page.evaluate('realPlan.trace()') if r[0] in ('open','sidebar')])
+                    page.evaluate('realPlan.deleteRoot()')
+                    page.evaluate('realPlan.fireRoot(true)')
+                    page.evaluate('realPlan.failDailyRead()')
+                    page.locator(TRIGGER).click()
+                    dialog=page.get_by_role('dialog')
+                    dialog.wait_for()
+                    assert 'unreadable' in dialog.inner_text().lower()
+                    assert page.evaluate('realPlan.popoverOpen()') is False
+                    assert page.evaluate('realPlan.writes()')==writes
+                    page.get_by_role('button',name='Check again',exact=True).click()
+                    assert page.evaluate('realPlan.writes()')==writes
+                    page.locator(TRIGGER).click(modifiers=['Shift'])
+                    assert page.evaluate('realPlan.writes()')==writes
+                    assert len([r for r in page.evaluate('realPlan.trace()') if r[0] in ('open','sidebar')])==opens
+                    page.locator(TRIGGER).click(modifiers=['Alt'])
+                    assert page.evaluate('realPlan.writes()')==writes
+                    assert len([r for r in page.evaluate('realPlan.trace()') if r[0] in ('open','sidebar')])==opens
+                check(surface+'-present-read-failed',present_read_failed)
+                def replacement_keep():
+                    if surface!='execution':
+                        return
+                    mount(surface)
+                    page.locator(TRIGGER).click();state('ready-present');full_tree()
+                    writes=page.evaluate('realPlan.writes()')
+                    page.evaluate('realPlan.moveRootOffDay()')
+                    page.evaluate('realPlan.addManualPlan()')
+                    page.locator(TRIGGER).click()
+                    page.locator('.nautilus-log-timing__popover').wait_for()
+                    assert page.evaluate('realPlan.state().planUid')=='manual-other-plan'
+                    assert page.evaluate('realPlan.runtimePlanUid()')=='manual-other-plan'
+                    assert page.evaluate('realPlan.writes()')==writes
+                check(surface+'-replacement-keep',replacement_keep)
                 def narrow():
                     page.set_viewport_size({'width':360,'height':700})
                     mount(surface,language='zh',dark=True)

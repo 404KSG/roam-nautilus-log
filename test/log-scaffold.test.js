@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { installTestHostLocks } = require('./test-host-locks.cjs');
 
 const delay = () => new Promise((resolve) => setTimeout(resolve, 2));
 
@@ -97,6 +98,7 @@ test('built extension creates Log scaffolding sequentially and unload is graph-s
     roamAlphaAPI: roam,
     dispatchEvent: (event) => dispatchedEvents.push(event),
   };
+  installTestHostLocks(global.window);
   t.after(() => { delete global.window; });
 
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
@@ -160,6 +162,7 @@ test('a fresh install defaults the settings panel and rendered UI to English', a
     roamAlphaAPI: roam,
     dispatchEvent: () => {},
   };
+  installTestHostLocks(global.window);
   t.after(() => { delete global.window; });
 
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
@@ -241,6 +244,7 @@ test('legacy preview installs migrate the old automatic Chinese default once', a
     roamAlphaAPI: roam,
     dispatchEvent: () => {},
   };
+  installTestHostLocks(global.window);
   t.after(() => { delete global.window; });
 
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
@@ -292,6 +296,7 @@ test('preview defaults migrate once from an empty prefix and midnight end', asyn
       panel: { create: () => {} },
     },
   };
+  installTestHostLocks(global.window);
 
   await extension.onload({ extensionAPI });
   assert.equal(settings.get('prefix-str'), '[[Nautilus Log]]');
@@ -436,6 +441,7 @@ test('a new shorthand reuses one customized legacy template without rewriting hi
       panel: { create: (config) => { latestPanel = config; } },
     },
   };
+  installTestHostLocks(global.window);
 
   await extension.onload({ extensionAPI });
 
@@ -527,6 +533,7 @@ test('shorthand migration preserves an existing intentionally empty prefix', asy
       panel: { create: () => {} },
     },
   };
+  installTestHostLocks(global.window);
 
   await extension.onload({ extensionAPI });
 
@@ -678,6 +685,7 @@ test('tracking off mounts the lite launcher host and never starts CLOCK queries'
     setInterval: () => 1,
     clearInterval() {},
   };
+  installTestHostLocks(global.window);
   global.document = document;
   global.MutationObserver = class { observe() {} disconnect() {} };
   t.after(() => {
@@ -726,6 +734,7 @@ test('tracking on still starts the timing runtime; unload writes no graph rows',
     requestIdleCallback: (fn) => { fn(); return 1; },
     cancelIdleCallback() {},
   };
+  installTestHostLocks(global.window);
   global.document = document;
   global.MutationObserver = class { observe() {} disconnect() {} };
   t.after(() => {
@@ -772,6 +781,7 @@ test('switching tracking keeps exactly one topbar and a failed start restores th
     clearInterval: (id) => intervals.delete(id),
     requestIdleCallback: (fn) => { fn(); return 1; }, cancelIdleCallback() {},
   };
+  installTestHostLocks(global.window);
   global.document = document;
   global.MutationObserver = class { observe() {} disconnect() {} };
   t.after(() => { delete global.window; delete global.document; delete global.MutationObserver; });
@@ -834,6 +844,7 @@ test('unload during runtime initialization cannot resurrect timers, commands, or
     setInterval: () => {const id = ++nextInterval; intervals.add(id); return id;},
     clearInterval: (id) => intervals.delete(id),
   };
+  installTestHostLocks(global.window);
   global.document = document;
   global.MutationObserver = class {observe() {} disconnect() {}};
   t.after(() => {delete global.window; delete global.document; delete global.MutationObserver;});
