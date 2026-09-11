@@ -5,6 +5,11 @@ const TOPBAR_ID = 'nautilus-log-timing-topbar';
 const POPOVER_ID = 'nautilus-log-timing-popover';
 const SHORTCUT_TOOLTIP_ID = 'nautilus-log-timing-shortcut-tooltip';
 const ENERGY_CONFIRM_MS = 320;
+// Paint-first yield budget: a healthy rAF plus a 0ms macrotask usually
+// finishes within one or two frames. 50ms is ~3 frames at 60Hz, long
+// enough that the frame path should win, short enough to cap a starved
+// animation frame. This is a scheduler budget, not a busy-loop SLA.
+const POPOVER_PAINT_BUDGET_MS = 50;
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -65,7 +70,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   let popover = null;
   let popoverPending = false;
   let pendingPresentChecks = 0;
-  let settleDeferredRefresh = null;
+  let deferredPaintWait = null;
   let observers = [];
   let unsubscribe = null;
   let unsubscribePlan = null;
@@ -76,8 +81,6 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   let lastPopoverKey = null;
   let lastPopoverExecution = null;
   let pendingPopoverFocus = null;
-  let deferredRefreshFrame = null;
-  let deferredRefreshTimer = null;
   let triggerMode = null;
   let deleteConfirmation = null;
   let unscheduledExpanded = false;
@@ -430,30 +433,52 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   };
 
   const cancelDeferredRefresh = () => {
-    if (deferredRefreshFrame !== null) window.cancelAnimationFrame?.(deferredRefreshFrame);
-    if (deferredRefreshTimer !== null) window.clearTimeout(deferredRefreshTimer);
-    deferredRefreshFrame = null;
-    deferredRefreshTimer = null;
-    const settle = settleDeferredRefresh;
-    settleDeferredRefresh = null;
+    const wait = deferredPaintWait;
+    deferredPaintWait = null;
+    if (!wait) return;
+    if (wait.frame !== null) window.cancelAnimationFrame?.(wait.frame);
+    if (wait.yieldTimer !== null) window.clearTimeout(wait.yieldTimer);
+    if (wait.fallbackTimer !== null) window.clearTimeout(wait.fallbackTimer);
+    wait.frame = wait.yieldTimer = wait.fallbackTimer = null;
+    const settle = wait.resolve;
+    wait.resolve = null;
     settle?.(false);
   };
 
   const afterPopoverPaint = () => new Promise((resolve) => {
     cancelDeferredRefresh();
-    settleDeferredRefresh = resolve;
+    const wait = {
+      frame: null,
+      yieldTimer: null,
+      fallbackTimer: null,
+      resolve,
+    };
+    deferredPaintWait = wait;
+    const belongs = () => deferredPaintWait === wait;
     const finish = () => {
-      deferredRefreshTimer = null;
-      settleDeferredRefresh = null;
+      if (!belongs()) return;
+      if (wait.frame !== null) window.cancelAnimationFrame?.(wait.frame);
+      if (wait.yieldTimer !== null) window.clearTimeout(wait.yieldTimer);
+      if (wait.fallbackTimer !== null) window.clearTimeout(wait.fallbackTimer);
+      wait.frame = wait.yieldTimer = wait.fallbackTimer = null;
+      wait.resolve = null;
+      deferredPaintWait = null;
       resolve(!destroyed && Boolean(popover));
     };
+    wait.fallbackTimer = window.setTimeout(finish, POPOVER_PAINT_BUDGET_MS);
     if (typeof window.requestAnimationFrame === 'function') {
-      deferredRefreshFrame = window.requestAnimationFrame(() => {
-        deferredRefreshFrame = null;
-        deferredRefreshTimer = window.setTimeout(finish, 0);
+      wait.frame = window.requestAnimationFrame(() => {
+        if (!belongs()) return;
+        wait.frame = null;
+        const yielded = window.setTimeout(finish, 0);
+        if (!belongs()) {
+          window.clearTimeout(yielded);
+          return;
+        }
+        wait.yieldTimer = yielded;
       });
     } else {
-      deferredRefreshTimer = window.setTimeout(finish, 0);
+      wait.yieldTimer = window.setTimeout(finish, 0);
     }
   });
 

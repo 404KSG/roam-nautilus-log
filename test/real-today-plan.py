@@ -4,12 +4,112 @@ import json
 import subprocess
 import traceback
 from pathlib import Path
+from unittest import SkipTest
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = Path('/tmp/nautilus-real-today-plan')
 TRIGGER = '.nautilus-log-timing__trigger'
+TOKEN = '.nautilus-log-timing__capacity-token'
 ROOT_UID = 'nautilus-log-plan-2026-09-09'
+DAILY_READ = 'realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length'
+HOLD_RAF_JS = '''() => {
+    if (window.__nlHeldRaf) window.__nlHeldRaf.restore();
+    const request=window.requestAnimationFrame, cancel=window.cancelAnimationFrame;
+    const nativeSet=window.setTimeout, nativeClear=window.clearTimeout;
+    const frames=new Map();
+    const leaked=[];
+    const marks={};
+    const zeros=[];
+    const zeroById=new Map();
+    const nativeTimers=new Map();
+    let nextId=9000000;
+    let holdZero=false;
+    const stats={framesRegistered:0,framesCancelled:0,framesFired:0,framesForced:0,zerosRegistered:0,zerosCancelled:0,zerosFired:0,zerosForced:0,nativeRegistered:0,nativeCancelled:0};
+    const pendingZeros=()=>zeros.filter(z=>!z.cancelled&&!z.fired).length;
+    window.requestAnimationFrame=fn=>{
+        const handle=++nextId;
+        const entry={handle,fn,fired:false,forced:false};
+        frames.set(handle,entry);
+        leaked.push(entry);
+        stats.framesRegistered+=1;
+        return handle;
+    };
+    window.cancelAnimationFrame=n=>{
+        if (frames.delete(n)) { stats.framesCancelled+=1; return; }
+        if (typeof cancel==='function') cancel.call(window,n);
+    };
+    window.setTimeout=(fn,delay,...args)=>{
+        const ms=Number(delay)||0;
+        if (holdZero && ms===0) {
+            const id=++nextId;
+            const entry={id,fn:()=>fn(...args),cancelled:false,fired:false};
+            zeros.push(entry);
+            zeroById.set(id,entry);
+            stats.zerosRegistered+=1;
+            return id;
+        }
+        let id;
+        const wrapped=(...a)=>{ nativeTimers.delete(id); fn(...a); };
+        id=nativeSet(wrapped,ms,...args);
+        nativeTimers.set(id,{id,delay:ms,cancelled:false});
+        stats.nativeRegistered+=1;
+        return id;
+    };
+    window.clearTimeout=n=>{
+        const z=zeroById.get(n);
+        if (z) {
+            if (!z.cancelled && !z.fired) { z.cancelled=true; stats.zerosCancelled+=1; }
+            return;
+        }
+        const t=nativeTimers.get(n);
+        if (t && !t.cancelled) { t.cancelled=true; stats.nativeCancelled+=1; nativeTimers.delete(n); }
+        nativeClear(n);
+    };
+    const runFrames=(name,force)=>{
+        let n=0;
+        holdZero=true;
+        try {
+            (marks[name]||[]).forEach(entry=>{
+                if (!force && (entry.fired || entry.forced || !frames.has(entry.handle))) return;
+                frames.delete(entry.handle);
+                if (force) { entry.forced=true; stats.framesForced+=1; }
+                else { entry.fired=true; stats.framesFired+=1; }
+                n+=1;
+                entry.fn(performance.now());
+            });
+        } finally { holdZero=false; }
+        return n;
+    };
+    window.__nlHeldRaf={
+        size(){ return frames.size; },
+        pendingZeros,
+        snapshotHandles(){ return [...frames.keys()]; },
+        stats(){ return Object.assign({},stats,{pendingFrames:frames.size,pendingZeros:pendingZeros()}); },
+        mark(name){ marks[name]=leaked.slice(); },
+        fireMark(name){ return runFrames(name,false); },
+        forceMark(name){ return runFrames(name,true); },
+        firePendingZeros(){
+            const pending=zeros.filter(z=>!z.cancelled&&!z.fired);
+            pending.forEach(z=>{ z.fired=true; stats.zerosFired+=1; z.fn(); });
+            return pending.length;
+        },
+        forceCancelledZeros(){
+            const cancelled=zeros.filter(z=>z.cancelled&&!z.fired);
+            cancelled.forEach(z=>{ z.fired=true; stats.zerosForced+=1; z.fn(); });
+            return cancelled.length;
+        },
+        restore(){
+            window.requestAnimationFrame=request;
+            window.cancelAnimationFrame=cancel;
+            window.setTimeout=nativeSet;
+            window.clearTimeout=nativeClear;
+            frames.clear(); leaked.length=0; zeros.length=0; zeroById.clear(); nativeTimers.clear();
+            window.__nlHeldRaf=null;
+        }
+    };
+}'''
+RESTORE_RAF_JS = '() => window.__nlHeldRaf && window.__nlHeldRaf.restore()'
 
 
 def run():
@@ -19,7 +119,7 @@ def run():
 <link rel="stylesheet" href="{(ROOT/'extension.css').as_uri()}"><style>
 main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;font:14px system-ui;background:#f4f6f8}} .rm-topbar {{height:45px;display:flex;gap:6px;align-items:center;padding:0 12px;background:white}} .rm-find-or-create-wrapper {{margin-left:auto;width:180px}} input {{max-width:100%}} .bp3-dark {{background:#182026;color:#eee}} .bp3-dark .rm-topbar {{background:#293742}} @media(max-width:500px){{.rm-find-or-create-wrapper{{display:none}}}}
 </style></head><body><div class="rm-topbar"><button aria-label="back">←</button><button aria-label="forward">→</button><div class="rm-find-or-create-wrapper"><input placeholder="Find or create"></div></div><main><h1>Unrelated page</h1></main><script src="{(OUT/'harness.js').as_uri()}"></script></body></html>''')
-    failures, passed, console = [], [], []
+    failures, passed, skipped, console = [], [], [], []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         try:
@@ -38,7 +138,9 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                 try:
                     fn()
                     passed.append(name)
-                except Exception as e:
+                except SkipTest:
+                    skipped.append(name)
+                except Exception:
                     failures.append(name+': '+traceback.format_exc())
                     page.screenshot(path=str(OUT/(name+'-FAILED.png')))
             def full_tree():
@@ -159,7 +261,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                 check(surface+'-silent-recreate',silent_recreate)
                 def silent_shift_alt():
                     if surface!='execution':
-                        return
+                        raise SkipTest('launcher has no execution popover seam')
                     for modifier, expected in (('Shift','sidebar'),('Alt','open')):
                         mount(surface)
                         page.locator(TRIGGER).click();state('ready-present');full_tree()
@@ -176,7 +278,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                 check(surface+'-silent-shift-alt',silent_shift_alt)
                 def present_panel_once():
                     if surface!='execution':
-                        return
+                        raise SkipTest('launcher has no execution popover seam')
                     mount(surface)
                     page.locator(TRIGGER).click();state('ready-present');full_tree()
                     nav_before=page.evaluate('realPlan.navs()')
@@ -197,42 +299,45 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                 check(surface+'-present-panel-once',present_panel_once)
                 def responsive_popup():
                     if surface!='execution':
-                        return
+                        raise SkipTest('launcher has no execution popover seam')
                     mount(surface)
                     page.locator(TRIGGER).click();state('ready-present');full_tree()
-                    reads=page.evaluate('realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length')
+                    reads=page.evaluate(DAILY_READ)
                     # Hold the scheduling boundary, not the app/session. The
                     # shell must be usable before graph validation can start.
-                    page.evaluate('''() => {
-                        const request=window.requestAnimationFrame, cancel=window.cancelAnimationFrame;
-                        const frames=new Map(); let id=1000000;
-                        window.requestAnimationFrame=fn=>{frames.set(++id,fn);return id;};
-                        window.cancelAnimationFrame=n=>{if(!frames.delete(n))cancel.call(window,n);};
-                        window.popupFrameGate={release(){
-                            window.requestAnimationFrame=request;window.cancelAnimationFrame=cancel;
-                            const pending=[...frames.values()];frames.clear();
-                            pending.forEach(fn=>fn(performance.now()));
-                        }};
-                    }''')
+                    # Snapshot open/close in one turn so a later bounded timer
+                    # cannot start validation before this check.
+                    page.evaluate(HOLD_RAF_JS)
                     try:
-                        page.locator('.nautilus-log-timing__capacity-token').click()
-                        dialog=page.locator('.nautilus-log-timing__popover')
-                        assert dialog.is_visible()
-                        assert dialog.get_attribute('aria-busy')=='true'
-                        assert dialog.locator('button').count()==0, 'unverified data must expose no actions'
-                        assert page.evaluate('realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length')==reads
-                        page.locator(TRIGGER).click()
-                        assert page.evaluate('realPlan.popoverOpen()') is False
-                        assert page.evaluate('realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length')==reads
+                        snap=page.evaluate('''() => {
+                            const reads=()=>realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length;
+                            const before=reads();
+                            document.querySelector('.nautilus-log-timing__capacity-token').click();
+                            const dialog=document.querySelector('.nautilus-log-timing__popover');
+                            const opened={
+                                visible:Boolean(dialog),
+                                busy:dialog?dialog.getAttribute('aria-busy'):null,
+                                buttons:dialog?dialog.querySelectorAll('button').length:0,
+                                reads:reads()-before,
+                            };
+                            document.querySelector('.nautilus-log-timing__trigger').click();
+                            return Object.assign(opened,{closed:!realPlan.popoverOpen(),readsAfterClose:reads()-before});
+                        }''')
+                        assert snap['visible']
+                        assert snap['busy']=='true'
+                        assert snap['buttons']==0, 'unverified data must expose no actions'
+                        assert snap['reads']==0
+                        assert snap['closed']
+                        assert snap['readsAfterClose']==0
                     finally:
-                        page.evaluate('window.popupFrameGate.release()')
+                        page.evaluate(RESTORE_RAF_JS)
                     page.wait_for_timeout(60)
                     assert page.evaluate('realPlan.popoverOpen()') is False
-                    assert page.evaluate('realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length')==reads
-                    page.locator('.nautilus-log-timing__capacity-token').click()
+                    assert page.evaluate(DAILY_READ)==reads
+                    page.locator(TOKEN).click()
                     page.wait_for_selector('.nautilus-log-timing__popover[aria-busy="false"]')
                     assert page.get_by_role('tab',name='Plan',exact=True).get_attribute('aria-selected')=='true'
-                    assert page.evaluate('realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length')==reads+1
+                    assert page.evaluate(DAILY_READ)==reads+1
                     # Ordinary close must not perform even an indexed graph read.
                     close=page.evaluate('''() => {
                         const reads=()=>realPlan.trace().filter(r=>r[0]==='query'||r[0]==='pull').length;
@@ -242,9 +347,289 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     }''')
                     assert close=={'closed':True,'reads':0}, close
                 check(surface+'-responsive-popup',responsive_popup)
+                def held_raf_bounded_ready():
+                    if surface!='execution':
+                        raise SkipTest('launcher has no execution popover seam')
+                    mount(surface)
+                    page.locator(TRIGGER).click();state('ready-present');full_tree()
+                    reads=page.evaluate(DAILY_READ)
+                    page.evaluate(HOLD_RAF_JS)
+                    try:
+                        snap=page.evaluate('''() => {
+                            const reads=()=>realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length;
+                            const before=reads();
+                            document.querySelector('.nautilus-log-timing__capacity-token').click();
+                            const dialog=document.querySelector('.nautilus-log-timing__popover');
+                            window.__nlHeldRaf.mark('open');
+                            return {
+                                visible:Boolean(dialog),
+                                busy:dialog?dialog.getAttribute('aria-busy'):null,
+                                buttons:dialog?dialog.querySelectorAll('button').length:0,
+                                reads:reads()-before,
+                                pendingFrames:window.__nlHeldRaf.size(),
+                                pendingZeros:window.__nlHeldRaf.pendingZeros(),
+                            };
+                        }''')
+                        assert snap['visible'] and snap['busy']=='true', snap
+                        assert snap['buttons']==0
+                        assert snap['reads']==0
+                        assert snap['pendingFrames']>=1, snap
+                        assert snap['pendingZeros']==0, snap
+                        page.wait_for_selector('.nautilus-log-timing__popover[aria-busy="false"]', timeout=800)
+                        dialog=page.locator('.nautilus-log-timing__popover')
+                        assert dialog.locator('[data-task-uid]').count()>=1
+                        assert dialog.locator('.nautilus-log-timing__row-actions button').count()>=1
+                        ready_reads=page.evaluate(DAILY_READ)
+                        assert ready_reads==reads+1
+                        st=page.evaluate('window.__nlHeldRaf.stats()')
+                        assert st['pendingFrames']==0, st
+                        assert st['framesCancelled']>=1, st
+                        forced=page.evaluate('window.__nlHeldRaf.forceMark("open")')
+                        assert forced>=1, 'must force the cancelled rAF, not an empty run'
+                        assert page.evaluate(DAILY_READ)==ready_reads, 'late cancelled rAF must not reread'
+                        assert page.evaluate('realPlan.popoverCount()')==1
+                    finally:
+                        page.evaluate(RESTORE_RAF_JS)
+                check(surface+'-held-raf-bounded-ready',held_raf_bounded_ready)
+                def held_raf_stale_callbacks():
+                    if surface!='execution':
+                        raise SkipTest('launcher has no execution popover seam')
+                    mount(surface)
+                    page.locator(TRIGGER).click();state('ready-present');full_tree()
+                    reads=page.evaluate(DAILY_READ)
+                    page.evaluate(HOLD_RAF_JS)
+                    try:
+                        snap=page.evaluate('''() => {
+                            const reads=()=>realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length;
+                            const before=reads();
+                            document.querySelector('.nautilus-log-timing__capacity-token').click();
+                            const dialog=document.querySelector('.nautilus-log-timing__popover');
+                            window.__nlHeldRaf.mark('first');
+                            const fired=window.__nlHeldRaf.fireMark('first');
+                            return {
+                                visible:Boolean(dialog),
+                                busy:dialog?dialog.getAttribute('aria-busy'):null,
+                                buttons:dialog?dialog.querySelectorAll('button').length:0,
+                                reads:reads()-before,
+                                fired,
+                                pendingFrames:window.__nlHeldRaf.size(),
+                                pendingZeros:window.__nlHeldRaf.pendingZeros(),
+                            };
+                        }''')
+                        assert snap['visible'] and snap['busy']=='true', snap
+                        assert snap['buttons']==0
+                        assert snap['reads']==0
+                        assert snap['fired']>=1, snap
+                        assert snap['pendingZeros']>=1, 'rAF arrival must leave a held 0ms yield'
+                        assert snap['pendingFrames']==0, snap
+                        page.wait_for_selector('.nautilus-log-timing__popover[aria-busy="false"]', timeout=800)
+                        ready_reads=page.evaluate(DAILY_READ)
+                        assert ready_reads==reads+1
+                        rows=page.evaluate('[...document.querySelectorAll("[data-task-uid]")].map(row=>row.dataset.taskUid)')
+                        assert rows
+                        st=page.evaluate('window.__nlHeldRaf.stats()')
+                        assert st['zerosCancelled']>=1, st
+                        empty=page.evaluate('window.__nlHeldRaf.firePendingZeros()')
+                        assert empty==0, 'cancelled 0ms must not run on the normal queue'
+                        forced=page.evaluate('window.__nlHeldRaf.forceCancelledZeros()')
+                        assert forced>=1, 'must force the cancelled 0ms, not an empty run'
+                        assert page.evaluate(DAILY_READ)==ready_reads, 'late 0ms must not reread after fallback won'
+                        assert page.evaluate('realPlan.popoverCount()')==1
+                        assert page.evaluate('[...document.querySelectorAll("[data-task-uid]")].map(row=>row.dataset.taskUid)')==rows
+                    finally:
+                        page.evaluate(RESTORE_RAF_JS)
+                check(surface+'-held-raf-stale-callbacks',held_raf_stale_callbacks)
+                def held_raf_close_reopen_stale():
+                    if surface!='execution':
+                        raise SkipTest('launcher has no execution popover seam')
+                    mount(surface)
+                    page.locator(TRIGGER).click();state('ready-present');full_tree()
+                    reads=page.evaluate(DAILY_READ)
+                    page.evaluate(HOLD_RAF_JS)
+                    try:
+                        first=page.evaluate('''() => {
+                            const reads=()=>realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length;
+                            const before=reads();
+                            document.querySelector('.nautilus-log-timing__capacity-token').click();
+                            window.__nlHeldRaf.mark('first');
+                            const fired=window.__nlHeldRaf.fireMark('first');
+                            const opened=Boolean(document.querySelector('.nautilus-log-timing__popover[aria-busy="true"]'));
+                            const pendingZeros=window.__nlHeldRaf.pendingZeros();
+                            document.querySelector('.nautilus-log-timing__trigger').click();
+                            const st=window.__nlHeldRaf.stats();
+                            return {opened, closed:!realPlan.popoverOpen(), fired, pendingZeros, reads:reads()-before, zerosCancelled:st.zerosCancelled, nativeCancelled:st.nativeCancelled};
+                        }''')
+                        assert first['opened'] and first['closed'], first
+                        assert first['fired']>=1, first
+                        assert first['pendingZeros']>=1, first
+                        assert first['reads']==0, first
+                        assert first['zerosCancelled']>=1, first
+                        assert first['nativeCancelled']>=1, first
+                        second=page.evaluate('''() => {
+                            const reads=()=>realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length;
+                            const before=reads();
+                            document.querySelector('.nautilus-log-timing__capacity-token').click();
+                            const dialog=document.querySelector('.nautilus-log-timing__popover');
+                            const handles=window.__nlHeldRaf.snapshotHandles();
+                            const forcedFrames=window.__nlHeldRaf.forceMark('first');
+                            const forcedZeros=window.__nlHeldRaf.forceCancelledZeros();
+                            const after=window.__nlHeldRaf.snapshotHandles();
+                            return {
+                                visible:Boolean(dialog),
+                                busy:dialog?dialog.getAttribute('aria-busy'):null,
+                                buttons:dialog?dialog.querySelectorAll('button').length:0,
+                                reads:reads()-before,
+                                held:handles.length,
+                                after:after.length,
+                                same:JSON.stringify(handles)===JSON.stringify(after),
+                                forcedFrames,
+                                forcedZeros,
+                            };
+                        }''')
+                        assert second['visible'] and second['busy']=='true', second
+                        assert second['buttons']==0
+                        assert second['reads']==0
+                        assert second['held']>=1, second
+                        assert second['same'], second
+                        assert second['forcedFrames']>=1, second
+                        assert second['forcedZeros']>=1, second
+                        page.wait_for_selector('.nautilus-log-timing__popover[aria-busy="false"]', timeout=800)
+                        assert page.locator('.nautilus-log-timing__popover [data-task-uid]').count()>=1
+                        assert page.evaluate('realPlan.popoverCount()')==1
+                        assert page.evaluate(DAILY_READ)==reads+1, 'cancelled first wait must not read; reopen reads once'
+                        closed=page.evaluate('''() => {
+                            const reads=()=>realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length;
+                            const before=reads();
+                            document.querySelector('.nautilus-log-timing__trigger').click();
+                            window.__nlHeldRaf.forceMark('first');
+                            window.__nlHeldRaf.forceCancelledZeros();
+                            return {closed:!realPlan.popoverOpen(), count:realPlan.popoverCount(), reads:reads()-before};
+                        }''')
+                        assert closed=={'closed':True,'count':0,'reads':0}, closed
+                    finally:
+                        page.evaluate(RESTORE_RAF_JS)
+                check(surface+'-held-raf-close-reopen-stale',held_raf_close_reopen_stale)
+                def held_raf_cancel():
+                    if surface!='execution':
+                        raise SkipTest('launcher has no execution popover seam')
+                    for action in ['escape','outside','destroy']:
+                        mount(surface)
+                        page.locator(TRIGGER).click();state('ready-present');full_tree()
+                        reads=page.evaluate(DAILY_READ)
+                        page.evaluate(HOLD_RAF_JS)
+                        try:
+                            snap=page.evaluate('''(action)=>{
+                                const reads=()=>realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length;
+                                const before=reads();
+                                document.querySelector('.nautilus-log-timing__capacity-token').click();
+                                const dialog=document.querySelector('.nautilus-log-timing__popover');
+                                const openedFrames=window.__nlHeldRaf.size();
+                                if(action==='escape'){
+                                    document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+                                }else if(action==='outside'){
+                                    document.querySelector('main').dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,clientX:5,clientY:5,view:window}));
+                                }else{
+                                    realPlan.cleanup();
+                                }
+                                const st=window.__nlHeldRaf.stats();
+                                return {
+                                    visible:Boolean(dialog),
+                                    busy:dialog?dialog.getAttribute('aria-busy'):null,
+                                    buttons:dialog?dialog.querySelectorAll('button').length:0,
+                                    openedFrames,
+                                    closed:!realPlan.popoverOpen(),
+                                    reads:reads()-before,
+                                    framesCancelled:st.framesCancelled,
+                                    nativeCancelled:st.nativeCancelled,
+                                    pendingFrames:window.__nlHeldRaf.size(),
+                                    pendingZeros:window.__nlHeldRaf.pendingZeros(),
+                                    zerosRegistered:st.zerosRegistered,
+                                };
+                            }''', action)
+                            assert snap['visible'] and snap['busy']=='true', (action, snap)
+                            assert snap['buttons']==0, (action, snap)
+                            assert snap['openedFrames']>=1, (action, snap)
+                            assert snap['closed'], (action, snap)
+                            assert snap['reads']==0, (action, snap)
+                            assert snap['framesCancelled']>=1, (action, snap)
+                            assert snap['nativeCancelled']>=1, (action, snap)
+                            assert snap['pendingFrames']==0, (action, snap)
+                            assert snap['pendingZeros']==0, (action, snap)
+                            after=page.evaluate('''() => new Promise(resolve=>{
+                                const reads=()=>realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length;
+                                const before=reads();
+                                const empty=window.__nlHeldRaf.firePendingZeros();
+                                setTimeout(()=>{
+                                    resolve({
+                                        empty,
+                                        open:realPlan.popoverOpen(),
+                                        count:realPlan.popoverCount(),
+                                        reads:reads()-before,
+                                    });
+                                }, 80);
+                            })''')
+                            assert after['empty']==0, (action, after)
+                            assert after['open'] is False, (action, after)
+                            assert after['count']==0, (action, after)
+                            assert after['reads']==0, (action, after)
+                            assert page.evaluate(DAILY_READ)==reads, action
+                        finally:
+                            page.evaluate(RESTORE_RAF_JS)
+                check(surface+'-held-raf-cancel',held_raf_cancel)
+                def no_raf_compat():
+                    if surface!='execution':
+                        raise SkipTest('launcher has no execution popover seam')
+                    mount(surface)
+                    page.locator(TRIGGER).click();state('ready-present');full_tree()
+                    page.evaluate('''() => {
+                        window.__nlOrigRaf=window.requestAnimationFrame;
+                        window.__nlOrigCaf=window.cancelAnimationFrame;
+                        window.requestAnimationFrame=undefined;
+                        window.cancelAnimationFrame=undefined;
+                    }''')
+                    try:
+                        page.locator(TOKEN).click()
+                        page.wait_for_selector('.nautilus-log-timing__popover[aria-busy="false"]', timeout=800)
+                        assert page.locator('.nautilus-log-timing__popover [data-task-uid]').count()>=1
+                        assert page.locator('.nautilus-log-timing__row-actions button').count()>=1
+                    finally:
+                        page.evaluate('''() => {
+                            if (window.__nlOrigRaf) window.requestAnimationFrame=window.__nlOrigRaf;
+                            if (window.__nlOrigCaf) window.cancelAnimationFrame=window.__nlOrigCaf;
+                        }''')
+                check(surface+'-no-raf-compat',no_raf_compat)
+                def paint_yield_before_read():
+                    if surface!='execution':
+                        raise SkipTest('launcher has no execution popover seam')
+                    mount(surface)
+                    page.locator(TRIGGER).click();state('ready-present');full_tree()
+                    snap=page.evaluate('''() => {
+                        const reads=()=>realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length;
+                        const orig=window.requestAnimationFrame;
+                        let registered=0;
+                        window.requestAnimationFrame=fn=>{registered+=1;return orig.call(window, fn);};
+                        const before=reads();
+                        document.querySelector('.nautilus-log-timing__capacity-token').click();
+                        const dialog=document.querySelector('.nautilus-log-timing__popover');
+                        const sync={
+                            registered,
+                            busy:dialog?dialog.getAttribute('aria-busy'):null,
+                            buttons:dialog?dialog.querySelectorAll('button').length:0,
+                            reads:reads()-before,
+                        };
+                        window.requestAnimationFrame=orig;
+                        return sync;
+                    }''')
+                    assert snap['registered']>=1, 'healthy path must still request a paint opportunity'
+                    assert snap['busy']=='true'
+                    assert snap['buttons']==0
+                    assert snap['reads']==0, 'click must not read the Daily Note before a paint yield'
+                    page.wait_for_selector('.nautilus-log-timing__popover[aria-busy="false"]')
+                    assert page.locator('.nautilus-log-timing__popover [data-task-uid]').count()>=1
+                check(surface+'-paint-yield-before-read',paint_yield_before_read)
                 def delayed_keep_cancelled():
                     if surface!='execution':
-                        return
+                        raise SkipTest('launcher has no execution popover seam')
                     mount(surface)
                     page.locator(TRIGGER).click();state('ready-present');full_tree()
                     nav_before=page.evaluate('realPlan.navs()')
@@ -260,7 +645,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                 check(surface+'-delayed-keep-cancelled',delayed_keep_cancelled)
                 def dismiss_pending():
                     if surface!='execution':
-                        return
+                        raise SkipTest('launcher has no execution popover seam')
                     for action in ['escape','outside','trigger']:
                         mount(surface)
                         page.locator(TRIGGER).click();state('ready-present')
@@ -287,7 +672,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                 check(surface+'-dismiss-pending',dismiss_pending)
                 def pending_graph_changed():
                     if surface!='execution':
-                        return
+                        raise SkipTest('launcher has no execution popover seam')
                     mount(surface)
                     page.locator(TRIGGER).click();state('ready-present')
                     writes=page.evaluate('realPlan.writes()')
@@ -301,7 +686,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                 check(surface+'-pending-graph-changed',pending_graph_changed)
                 def confirmed_rows_are_fresh():
                     if surface!='execution':
-                        return
+                        raise SkipTest('launcher has no execution popover seam')
                     mount(surface)
                     page.locator(TRIGGER).click();state('ready-present')
                     # Simulate a host edit with a missed watch notification.
@@ -324,7 +709,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                 check(surface+'-confirmed-rows-are-fresh',confirmed_rows_are_fresh)
                 def unchanged_refresh():
                     if surface!='execution':
-                        return
+                        raise SkipTest('launcher has no execution popover seam')
                     mount(surface)
                     page.locator(TRIGGER).click();state('ready-present')
                     page.locator('.nautilus-log-timing__capacity-token').click()
@@ -378,7 +763,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                 check(surface+'-present-read-failed',present_read_failed)
                 def replacement_keep():
                     if surface!='execution':
-                        return
+                        raise SkipTest('launcher has no execution popover seam')
                     mount(surface)
                     page.locator(TRIGGER).click();state('ready-present');full_tree()
                     writes=page.evaluate('realPlan.writes()')
@@ -459,9 +844,9 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
             page.evaluate('realPlan.cleanup()')
         finally:
             browser.close()
-    (OUT/'results.json').write_text(json.dumps({'passed':passed,'failures':failures},indent=2))
+    (OUT/'results.json').write_text(json.dumps({'passed':passed,'skipped':skipped,'failures':failures},indent=2))
     (OUT/'console.log').write_text('\n'.join(console))
-    print(f'Real-session browser acceptance: {len(passed)} passed, {len(failures)} failed. Artifacts: {OUT}')
+    print(f'Real-session browser acceptance: {len(passed)} passed, {len(skipped)} skipped, {len(failures)} failed. Artifacts: {OUT}')
     for failure in failures: print(failure)
     return bool(failures)
 
