@@ -36,6 +36,13 @@
 
 ### Fixed
 
+- Opening the idle execution popover now shows a cancellable checking shell
+  before the full Daily Note read. A scoped root hint allows that read to wait
+  until after paint; it never certifies Primary selection or a creation receipt.
+  Same-turn discovery is reused instead of reading the Daily Note twice. Closing
+  performs no graph reads, and Escape/outside clicks cannot reopen a dismissed
+  panel when validation finishes. Whole-root recreation and partial-tree guards
+  remain intact.
 - The actual execution shortcut tooltip and lightweight tooltip now share a
   border-box, viewport-clamped, wrapping theme; long explanations no longer escape
   a 320px bubble. Absent/unconfirmed plans show no fake 100% capacity. Unsupported,

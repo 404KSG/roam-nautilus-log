@@ -21,6 +21,27 @@ test('production uses the registered callback alias and Preview forwards it exac
   );
 });
 
+test('async route failures return a sanitized service error, including CORS for client requests', async () => {
+  const origin = 'https://roamresearch.com';
+  const cases = [
+    { path: '/token', body: { connectionId: 'a'.repeat(24), connectionSecret: 'b'.repeat(32) } },
+    { path: '/desktop/session', body: { nonce: 'c'.repeat(32) } },
+    { path: `/authorize?origin=${encodeURIComponent(origin)}&nonce=${'d'.repeat(32)}` },
+  ];
+  for (const { path, body } of cases) {
+    const request = new Request(`https://auth.example${path}`, body ? {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    } : undefined);
+    const response = await handleRequest(request, { GOOGLE_CLIENT_ID: 'synthetic-client' });
+    assert.equal(response.status, 500, path);
+    const payload = await response.json();
+    assert.equal(payload.code, 'service_error');
+    assert.doesNotMatch(JSON.stringify(payload), /NAUTILUS_AUTH_DB|not configured|synthetic-client/);
+    if (body) assert.equal(response.headers.get('Access-Control-Allow-Origin'), origin);
+  }
+});
+
 class MemoryD1 {
   constructor() {
     this.rows = new Map();

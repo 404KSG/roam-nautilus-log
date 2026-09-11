@@ -116,6 +116,32 @@ function graphMock({
   return { roam, blocks, trace };
 }
 
+test('Recent expires on the time lane without querying CLOCK history', async (t) => {
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const extension = await import(`data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#recent-expiry`);
+  const { roam, blocks, trace } = graphMock();
+  blocks.set('drawer-a', { uid: 'drawer-a', parentUid: 'task-a', order: 0, string: 'LOGBOOK::' });
+  blocks.set('old-clock', { uid: 'old-clock', parentUid: 'drawer-a', order: 0,
+    string: 'CLOCK: [2026-08-22 Sat 09:00]--[2026-08-22 Sat 09:16] => 0:16' });
+  let instant = new Date(2026, 7, 22, 10), wall = 1000, tick;
+  global.window = { roamAlphaAPI: roam, setTimeout, clearTimeout,
+    setInterval: fn => { tick = fn; return 1; }, clearInterval() {} };
+  installTestHostLocks(window);
+  const settings = new Map([['recent-retention-minutes', 45], ['timing-line-sidebar', false]]);
+  const runtime = extension.createTimingRuntime({
+    extensionAPI: { settings: { get: k => settings.get(k), set: async (k,v) => settings.set(k,v) } },
+    now: () => instant, wallNow: () => wall,
+  });
+  t.after(() => { runtime.destroy(); delete global.window; });
+  await runtime.initialize();
+  assert.equal(runtime.getSnapshot().activeWork.recent.length, 1);
+  const reads = trace.length;
+  instant = new Date(2026, 7, 22, 10, 1); wall += 60000; tick();
+  assert.equal(runtime.getSnapshot().activeWork.recent.length, 0);
+  assert.equal(runtime.getSnapshot().activeWork.count, 0);
+  assert.equal(trace.length, reads);
+});
+
 test('execution capacity ignores former progress tokens and keeps the full estimate', async (t) => {
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#progress-${Date.now()}`;

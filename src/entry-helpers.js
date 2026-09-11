@@ -220,7 +220,9 @@ function parseTemplateSettings(string, renderStringCores) {
     if (Number.isFinite(value)) settings[key] = value;
   });
   if (tokens.length >= 4) {
-    settings["color-1-trigger"] = tokens[3].replace(/^"|"$/g, "");
+    try {
+      settings["color-1-trigger"] = tokens[3].startsWith('"') ? JSON.parse(tokens[3]) : tokens[3];
+    } catch (_error) { return null; }
   }
   const workdayEnd = Number(tokens[4]);
   if (Number.isFinite(workdayEnd)) settings["workday-end"] = workdayEnd;

@@ -36,6 +36,11 @@ function cleanParsedText(text, token) {
   return String(text ?? '').replace(token, '').replace(/\s+/g, ' ').trim();
 }
 
+function hasUrgentKeyword({ text = '', keyword = '' } = {}) {
+  const token = String(keyword ?? '').trim();
+  return Boolean(token) && String(text ?? '').split(/\s+/).includes(token);
+}
+
 function stripGoogleCalendarSourceSuffix(value) {
   return String(value ?? '').replace(GOOGLE_CALENDAR_SOURCE_SUFFIX_RE, '').trim();
 }
@@ -1656,6 +1661,7 @@ module.exports = {
   parseDurationToken,
   parseTimeRangeToken,
   stripGoogleCalendarSourceSuffix,
+  hasUrgentKeyword,
   alignIntervalToWindow,
   resolveRendererSettings,
   hourlyGridSegments,

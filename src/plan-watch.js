@@ -113,6 +113,7 @@ function referencedUids(snapshot, readString, maxDepth = 8) {
     }
   }
   const sourceCache = new Map(supplied);
+  const visitedDepth = new Map();
   const sourceString = (uid) => {
     if (sourceCache.has(uid)) return sourceCache.get(uid);
     let value = '';
@@ -125,7 +126,8 @@ function referencedUids(snapshot, readString, maxDepth = 8) {
     if (stack.length >= maxDepth) return;
     for (const match of string.matchAll(new RegExp(BLOCK_REF_RE.source, BLOCK_REF_RE.flags))) {
       const uid = match[1];
-      if (!uid || stack.includes(uid)) continue;
+      if (!uid || stack.includes(uid) || (visitedDepth.get(uid) ?? Infinity) <= stack.length) continue;
+      visitedDepth.set(uid, stack.length);
       result.add(uid);
       const nested = sourceString(uid);
       if (nested) visit(nested, [...stack, uid]);
@@ -146,6 +148,10 @@ function referencedUids(snapshot, readString, maxDepth = 8) {
 export function createPlanWatchBridge({
   roam = globalThis.window?.roamAlphaAPI,
   readString,
+  schedule = (callback) => {
+    const handle = setTimeout(callback, 0);
+    return () => clearTimeout(handle);
+  },
 } = {}) {
   const watches = new Map();
   let destroyed = false;
@@ -204,8 +210,12 @@ export function createPlanWatchBridge({
     }
   };
 
-  const syncEntityWatches = (uid, entry) => {
-    const refresh = () => {
+  const scheduleRead = (uid, entry) => {
+    if (destroyed || watches.get(uid) !== entry || entry.refreshPending) return;
+    entry.refreshPending = true;
+    entry.cancelRefresh = schedule(() => {
+      entry.refreshPending = false;
+      entry.cancelRefresh = null;
       if (destroyed || watches.get(uid) !== entry) return;
       const snapshot = read(uid);
       entry.snapshot = snapshot;
@@ -214,7 +224,11 @@ export function createPlanWatchBridge({
         try { subscriber(snapshot); }
         catch (error) { console.error('[Nautilus Log] Plan subscriber failed', error); }
       }
-    };
+    });
+  };
+
+  const syncEntityWatches = (uid, entry) => {
+    const refresh = () => scheduleRead(uid, entry);
     const sync = (watchMap, targetUids, pattern) => {
       for (const [targetUid, watch] of [...watchMap]) {
         if (targetUids.has(targetUid)) continue;
@@ -237,6 +251,9 @@ export function createPlanWatchBridge({
   const remove = (uid, entry) => {
     if (!entry || entry.removing) return entry?.removing;
     watches.delete(uid);
+    entry.cancelRefresh?.();
+    entry.cancelRefresh = null;
+    entry.refreshPending = false;
     const entityWatches = [entry.parentWatch, ...entry.childWatches.values(), ...entry.sourceWatches.values()]
       .filter(Boolean);
     entry.childWatches.clear();
@@ -254,26 +271,17 @@ export function createPlanWatchBridge({
       entry = {
         listeners: new Set(),
         callback: null,
+        cancelRefresh: null,
+        refreshPending: false,
         snapshot: read(uid),
         parentWatch: null,
         childWatches: new Map(),
         sourceWatches: new Map(),
         removing: null,
       };
-      entry.callback = () => {
-        if (destroyed || watches.get(uid) !== entry) return;
-        // A parent pull watch reliably reports membership changes, but Roam
-        // does not consistently invalidate it when only a nested child's
-        // string changes. Always read a fresh authoritative snapshot and keep
-        // direct child/source watches in sync with the latest membership.
-        const snapshot = read(uid);
-        entry.snapshot = snapshot;
-        syncEntityWatches(uid, entry);
-        for (const subscriber of [...entry.listeners]) {
-          try { subscriber(snapshot); }
-          catch (error) { console.error('[Nautilus Log] Plan subscriber failed', error); }
-        }
-      };
+      // Parent, child and source notifications share one deferred read. Do not
+      // hydrate the entire Plan repeatedly inside Roam's input handler.
+      entry.callback = () => scheduleRead(uid, entry);
       watches.set(uid, entry);
       entry.parentWatch = addWatch(PLAN_MEMBERSHIP_WATCH_PATTERN, uid, entry.callback);
       syncEntityWatches(uid, entry);

@@ -1,4 +1,5 @@
 import * as logCore from './log-core';
+import { createGraphWriteGuard } from './graph-write-guard';
 import {
   moveGraphBlock,
   readChildren,
@@ -47,22 +48,61 @@ function tokenFor(planUid) {
 }
 
 export function createPlanTidy({
-  read = readChildren,
+  read: readRows = readChildren,
   move = moveGraphBlock,
   notify = showToast,
   notifyAction = showActionToast,
   runningTaskUid = () => null,
   setOpen = updateGraphBlockOpen,
+  runExclusive,
 } = {}) {
   const undoStates = new Map();
+  const guard = runExclusive ? null : createGraphWriteGuard('outline');
+  let destroyed = false, queue = Promise.resolve(), attempted = 0;
+  const assertActive = () => {
+    if (destroyed) throw new Error('Tidy was cancelled.');
+    guard?.assertActive();
+  };
+  const read = uid => {
+    assertActive();
+    const rows = readRows(uid);
+    if (!Array.isArray(rows) || rows.some(row=>!row?.uid || typeof row.string !== 'string')
+      || new Set(rows.map(row=>row.uid)).size !== rows.length) throw new Error('The Plan outline is unreadable.');
+    return rows;
+  };
+  const write = async action => {
+    assertActive();
+    attempted++;
+    await action();
+    assertActive();
+  };
+  const exclusive = action => {
+    const next = queue.then(async () => {
+      attempted = 0;
+      try {
+        assertActive();
+        return await (runExclusive ? runExclusive(action) : guard.run(action));
+      } catch (error) {
+        undoStates.clear();
+        error.partial = attempted > 0;
+        throw error;
+      }
+    });
+    queue = next.catch(()=>{});
+    return next;
+  };
+  const canNotify = () => { try { assertActive();return true; } catch (_) { return false; } }; 
 
   const applyTarget = async (planUid, currentUids, targetUids) => {
     const outlineState = new Map(read(planUid)
       .filter((child) => child?.uid && typeof child?.open === 'boolean')
       .map((child) => [child.uid, child.open]));
     const moves = logCore.childOrderMoves({ currentUids, targetUids });
+    const expected = currentUids.slice();
     for (const operation of moves) {
-      await move({ uid: operation.uid, parentUid: planUid, order: operation.order });
+      if (!equalOrder(uidOrder(read(planUid)),expected)) throw new Error('The Plan changed during Tidy; further moves were stopped.');
+      await write(() => move({ uid: operation.uid, parentUid: planUid, order: operation.order }));
+      expected.splice(operation.order,0,expected.splice(expected.indexOf(operation.uid),1)[0]);
     }
     const confirmedChildren = read(planUid);
     if (!equalOrder(uidOrder(confirmedChildren), targetUids)) {
@@ -74,7 +114,7 @@ export function createPlanTidy({
     for (const child of confirmedChildren) {
       const previousOpen = outlineState.get(child?.uid);
       if (typeof previousOpen === 'boolean' && child?.open !== previousOpen) {
-        await setOpen(child.uid, previousOpen);
+        await write(() => setOpen(child.uid, previousOpen));
       }
     }
     return moves;
@@ -85,14 +125,15 @@ export function createPlanTidy({
     if (targets.size === 0) return [];
     const changedUids = [];
     for (const child of read(planUid)) {
-      if (!targets.has(child?.uid) || child?.open === open) continue;
-      await setOpen(child.uid, open);
+      if (!targets.has(child?.uid) || child?.open === open || child.uid === runningTaskUid()) continue;
+      if (!read(planUid).some(row=>row.uid===child.uid)) throw new Error('The Plan changed during Tidy.');
+      await write(() => setOpen(child.uid, open));
       changedUids.push(child.uid);
     }
     return changedUids;
   };
 
-  const undo = async ({ planUid, token, language = 'en' } = {}) => {
+  const undoUnlocked = async ({ planUid, token, language = 'en' } = {}) => {
     const copy = copyFor(language);
     const state = undoStates.get(planUid);
     if (!state || state.token !== token) return { ok: false, reason: 'expired' };
@@ -109,12 +150,12 @@ export function createPlanTidy({
       notify(copy.undone, 'success');
       return { ok: true };
     } catch (error) {
-      notify(error?.message || copy.failed, 'danger');
-      return { ok: false, reason: 'failed', error };
+      if (canNotify()) notify(error?.message || copy.failed, 'danger');
+      return { ok: false, partial: attempted > 0, changed: attempted > 0, reason: 'failed', error };
     }
   };
 
-  const tidy = async ({ planUid, settledUids = [], language = 'en' } = {}) => {
+  const tidyUnlocked = async ({ planUid, settledUids = [], language = 'en' } = {}) => {
     if (!planUid) throw new Error('A Nautilus Log Plan UID is required.');
     const runningUid = runningTaskUid();
     const safeSettled = (Array.isArray(settledUids) ? settledUids : [])
@@ -147,6 +188,8 @@ export function createPlanTidy({
     return { ok: true, changed: true, count: changedUids.size, token };
   };
 
+  const tidy = options => exclusive(() => tidyUnlocked(options));
+  const undo = options => exclusive(() => undoUnlocked(options));
   const run = async (options = {}) => {
     const language = options.language === 'zh' ? 'zh' : 'en';
     const copy = copyFor(language);
@@ -168,8 +211,8 @@ export function createPlanTidy({
       });
       return result;
     } catch (error) {
-      notify(error?.message || copy.failed, 'danger');
-      return { ok: false, changed: false, reason: 'failed', error };
+      if (canNotify()) notify(error?.message || copy.failed, 'danger');
+      return { ok: false, changed: Boolean(error.partial), partial: Boolean(error.partial), reason: 'failed', error };
     }
   };
 
@@ -178,5 +221,6 @@ export function createPlanTidy({
     undo,
     run,
     clear: () => undoStates.clear(),
+    destroy: () => { destroyed = true;guard?.destroy();undoStates.clear(); },
   };
 }

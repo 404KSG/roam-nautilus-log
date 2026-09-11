@@ -20,14 +20,16 @@ function tidyHarness(extension, {
     { uid: 'past-event', string: '05:00-06:00 Event', order: 3 },
     { uid: 'active-b', string: '{{[[TODO]]}} B', order: 4 },
   ].map((row) => ({ ...row, open: expandedUids.includes(row.uid) }));
-  const notices = [];
+  const notices = [], writes = [], hooks = {};
   const actions = [];
   const openWrites = [];
   const read = () => rows.map((row, order) => ({ ...row, order }));
   const move = async ({ uid, order }) => {
+    writes.push(uid);
     const from = rows.findIndex((row) => row.uid === uid);
     rows.splice(order, 0, rows.splice(from, 1)[0]);
     if (collapseOnMove) rows = rows.map((row) => ({ ...row, open: false }));
+    await hooks.afterMove?.(uid);
   };
   const setOpen = async (uid, open) => {
     openWrites.push({ uid, open });
@@ -37,12 +39,30 @@ function tidyHarness(extension, {
     read,
     move,
     setOpen,
+    runExclusive: operation => operation(),
     runningTaskUid: () => runningTaskUid,
     notify: (message, intent) => notices.push({ message, intent }),
     notifyAction: (options) => actions.push(options),
   });
-  return { tidy, read, move, notices, actions, openWrites };
+  return { tidy, read, move, notices, actions, openWrites, writes, hooks };
 }
+
+test('Tidy reports partial host writes and stops issuing moves after destruction', async () => {
+  const extension = await loadExtension('tidy-partial');
+  for (const mode of ['failure','destroy']) {
+    const harness = tidyHarness(extension);
+    harness.hooks.afterMove = () => {
+      if (mode === 'failure') throw new Error('injected after move');
+      harness.tidy.destroy?.();
+    };
+    const result = await harness.tidy.run({planUid:'plan',settledUids:['done-a','past-event']});
+    assert.equal(result.ok,false,mode);
+    assert.equal(result.partial,true,mode);
+    assert.equal(result.changed,true,mode);
+    assert.equal(harness.writes.length,1,mode);
+    assert.equal(harness.actions.length,0,mode);
+  }
+});
 
 test('Plan Tidy moves only settled wrappers, preserves active order, and supports one safe Undo', async () => {
   const extension = await loadExtension('tidy-runtime');

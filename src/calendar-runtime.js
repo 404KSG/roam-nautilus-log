@@ -11,8 +11,12 @@ import {
   parseCalendarConnection,
 } from './calendar-auth';
 import { createCalendarReconciler } from './calendar-reconcile';
+import { graphName } from './graph-context';
+import { readPlanIdentity } from './timing-roam';
+import { isNautilusComponent } from './timing-core';
 
 const SYNC_STATE_KEY = 'google-calendar-sync-state';
+const SYNC_JOURNAL_KEY = 'google-calendar-sync-pending';
 const CONNECTION_KEY = 'google-calendar-connection';
 
 function parseSyncState(value) {
@@ -20,10 +24,18 @@ function parseSyncState(value) {
   if (typeof value !== 'string' || !value.trim()) return { version: 1, events: {} };
   try {
     const parsed = JSON.parse(value);
-    return parsed && typeof parsed === 'object' ? parsed : { version: 1, events: {} };
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid mapping');
+    return parsed;
   } catch (_error) {
-    return { version: 1, events: {} };
+    throw new Error('Calendar mapping is unreadable; no graph changes are allowed.');
   }
+}
+
+function parseJournal(value) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value === 'object') return value;
+  try { return JSON.parse(value); }
+  catch (_error) { throw new Error('Calendar operation record is unreadable; inspect it before retrying.'); }
 }
 
 function defaultPageTitleToDate(pageTitle) {
@@ -72,7 +84,13 @@ export function createCalendarRuntime({
 } = {}) {
   if (!extensionAPI?.settings) throw new Error('Calendar sync requires the Roam extension settings API.');
 
+  const host = typeof window !== 'undefined' ? window : globalThis;
+  const originalRoam = host.roamAlphaAPI, originalGraph = graphName(host);
+  const assertGraph = () => {
+    if (host.roamAlphaAPI !== originalRoam || graphName(host) !== originalGraph) throw new Error('The graph changed; Calendar sync was cancelled.');
+  };
   let client = null;
+  let syncController = null;
   let inFlight = false;
   let destroyed = false;
   let generation = 0;
@@ -81,6 +99,7 @@ export function createCalendarRuntime({
   ));
 
   const notifyConnection = (connected) => {
+    if (destroyed || host.roamAlphaAPI !== originalRoam || graphName(host) !== originalGraph) return;
     const next = connected === true;
     if (next === lastConnectionState) return;
     lastConnectionState = next;
@@ -90,6 +109,8 @@ export function createCalendarRuntime({
   const reconciler = reconcilerFactory({
     loadState: () => parseSyncState(extensionAPI.settings.get(SYNC_STATE_KEY)),
     saveState: (state) => extensionAPI.settings.set(SYNC_STATE_KEY, JSON.stringify(state)),
+    loadJournal: () => parseJournal(extensionAPI.settings.get(SYNC_JOURNAL_KEY)),
+    saveJournal: (value) => extensionAPI.settings.set(SYNC_JOURNAL_KEY, value ? JSON.stringify(value) : ''),
   });
 
   const getClient = () => {
@@ -129,16 +150,25 @@ export function createCalendarRuntime({
 
   const connect = async () => {
     if (destroyed) throw new Error('Google Calendar connection is no longer available.');
+    assertGraph();
+    const expectedGeneration = generation;
+    const assertConnecting = () => {
+      assertGraph();
+      if (destroyed || expectedGeneration !== generation) throw new Error('Google Calendar authorization was cancelled.');
+    };
     await extensionAPI.settings.set('google-calendar-enabled', true);
     try {
+      assertConnecting();
       const accessToken = await getClient().authorize?.({ interactive: true });
+      assertConnecting();
       if (!accessToken || !hasConnection()) {
         throw new Error('Google Calendar did not return a persistent connection.');
       }
       notifyConnection(true);
       return true;
     } catch (error) {
-      if (!hasConnection()) {
+      if (!destroyed && expectedGeneration === generation && host.roamAlphaAPI === originalRoam
+        && graphName(host) === originalGraph && !hasConnection()) {
         await extensionAPI.settings.set('google-calendar-enabled', false);
         notifyConnection(false);
       }
@@ -156,7 +186,25 @@ export function createCalendarRuntime({
 
     inFlight = true;
     const expectedGeneration = generation;
+    const controller = new AbortController();
+    syncController = controller;
+    const connectionAtStart = parseCalendarConnection(extensionAPI.settings.get(CONNECTION_KEY));
+    const assertActive = () => {
+      assertGraph();
+      if (destroyed || controller.signal.aborted || expectedGeneration !== generation
+        || extensionAPI.settings.get('google-calendar-enabled') !== true
+        || JSON.stringify(parseCalendarConnection(extensionAPI.settings.get(CONNECTION_KEY))) !== JSON.stringify(connectionAtStart)) {
+        throw new Error('Google Calendar sync was cancelled.');
+      }
+      if (originalRoam) {
+        const identity = readPlanIdentity(planUid);
+        if (!identity || identity.pageTitle !== pageTitle || !isNautilusComponent(identity.string)) {
+          throw new Error('The clicked Nautilus Plan changed; Calendar sync was cancelled.');
+        }
+      }
+    };
     try {
+      assertActive();
       const pageDate = pageTitleToDate(pageTitle);
       const range = planRange(pageDate, {
         startHour: extensionAPI.settings.get('workday-start'),
@@ -194,7 +242,8 @@ export function createCalendarRuntime({
         })
       ));
       const items = [...calendarEvents, ...tasks];
-      const result = await reconciler.sync({ planUid, events: items, force: force === true });
+      const result = await reconciler.sync({ planUid, events: items, force: force === true,
+        signal:controller.signal, assertActive, contextKey:connectionAtStart?.id || '' });
       if (destroyed || expectedGeneration !== generation) {
         throw new Error('Google Calendar sync was cancelled.');
       }
@@ -205,37 +254,44 @@ export function createCalendarRuntime({
       );
       return {
         ...result,
-        calendarEvents: calendarEvents.filter((item) => item.status !== 'cancelled').length,
+        calendarEvents: calendarEvents.filter((item) => !['cancelled','excluded'].includes(item.status)).length,
         tasks: tasks.filter((item) => item.status !== 'cancelled').length,
         allDaySkipped,
         taskAccessPending: !tasksAuthorized,
         tasksUnavailable: Boolean(taskOutcome.error),
       };
     } finally {
+      if (syncController === controller) syncController = null;
       inFlight = false;
     }
   };
 
   const disconnect = async () => {
+    if (destroyed) throw new Error('Google Calendar connection is no longer available.');
+    assertGraph();
     if (!client && !parseCalendarConnection(extensionAPI.settings.get(CONNECTION_KEY))) {
       await extensionAPI.settings.set('google-calendar-enabled', false);
       notifyConnection(false);
       return true;
     }
     generation += 1;
+    const expectedGeneration = generation;
+    syncController?.abort();
     const activeClient = getClient();
     activeClient.cancelSync?.();
     try {
       const result = await activeClient.disconnect?.();
+      assertGraph();
+      if (destroyed || expectedGeneration !== generation) throw new Error('Google Calendar disconnect was cancelled.');
       activeClient.destroy?.();
-      client = null;
+      if (client === activeClient) client = null;
       if (result === false) return false;
       await extensionAPI.settings.set('google-calendar-enabled', false);
       notifyConnection(false);
       return true;
     } catch (error) {
       activeClient.destroy?.();
-      client = null;
+      if (client === activeClient) client = null;
       throw error;
     }
   };
@@ -249,6 +305,8 @@ export function createCalendarRuntime({
   const destroy = () => {
     destroyed = true;
     generation += 1;
+    syncController?.abort();
+    reconciler.destroy?.();
     client?.destroy?.();
     client = null;
   };
@@ -265,4 +323,4 @@ export function createCalendarRuntime({
   };
 }
 
-export { CONNECTION_KEY, SYNC_STATE_KEY };
+export { CONNECTION_KEY, SYNC_STATE_KEY, SYNC_JOURNAL_KEY };

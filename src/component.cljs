@@ -286,7 +286,7 @@
                                                   :sortKey order-key
                                                   :width w
                                                   :height h}]}))
-        fallback-rect (when rects
+        fallback-rect (when (and (nil? external-rect) rects)
                         (assoc
                          (iterate-rect-place {:w w :h h}
                                              rects
@@ -597,13 +597,9 @@
        :cleaned-str (str/replace s done-format "")}
       {:done false :cleaned-str s})))
 
-(def get-color-pattern
-  (memoize (fn [tag]
-             (re-pattern (str "(?<=^|\\s)" tag "(?=$|\\s)")))))
-
 (defn parse-custom-color-1 [s {:keys [custom-color-1-tag]}]
-  (let [color-format (get-color-pattern custom-color-1-tag) 
-        color-found? (re-find color-format s)]
+  (let [color-found? (= true (log-core-call "hasUrgentKeyword"
+                              {:text s :keyword custom-color-1-tag}))]
     (if (and (seq custom-color-1-tag) color-found?)
       {:custom-color custom-color-1
        :cleaned-str s}
@@ -1859,6 +1855,9 @@
                                    (reset! settings-state (resolve-render-settings args)))
                _settings-listener (.addEventListener js/window settings-event-name settings-listener)
                now-time-atom (r/atom (now-minutes))
+               clock-version-state (r/atom 0)
+               clock-listener (fn [_event] (swap! clock-version-state inc))
+               _clock-listener (.addEventListener js/window "nautilus-log:clock-changed" clock-listener)
                collapsed-state (r/atom false)
                render-context-state (r/atom :pending)
                compact-list-open-state (r/atom nil)
@@ -1882,6 +1881,8 @@
                *text-events (r/track
                              (fn []
                                (let [settings @settings-state
+                                     clock-version @clock-version-state
+                                     clock-minute @now-time-atom
                                      children-list (->> @watched-children-state
                                                         (filter #(not= "" (:block/string %)))
                                                         (sort-by :block/order))
@@ -1997,6 +1998,7 @@
       (js/clearInterval check-interval)
       (js/clearInterval clock-interval)
       (.removeEventListener js/window settings-event-name settings-listener)
+      (.removeEventListener js/window "nautilus-log:clock-changed" clock-listener)
       (when stop-plan-watch
         (try
           (.call stop-plan-watch nil)

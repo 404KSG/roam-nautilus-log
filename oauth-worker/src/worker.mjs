@@ -757,9 +757,9 @@ export async function handleRequest(request, env) {
     return json({ ok: true, service: 'nautilus-google-auth' });
   }
   try {
-    if (request.method === 'GET' && url.pathname === '/authorize') return authorize(request, env);
+    if (request.method === 'GET' && url.pathname === '/authorize') return await authorize(request, env);
     if (request.method === 'GET' && url.pathname === '/oauth/callback') {
-      return forwardProductionCallback(request, env) || oauthCallback(request, env);
+      return forwardProductionCallback(request, env) || await oauthCallback(request, env);
     }
   } catch (_error) {
     return json({ code: 'service_error', message: 'Google Calendar connection failed.' }, 500);
@@ -774,11 +774,11 @@ export async function handleRequest(request, env) {
   if (!origin) return json({ code: 'origin_not_allowed', message: 'Origin is not allowed.' }, 403);
 
   try {
-    if (request.method === 'GET' && url.pathname === '/config') return config(request, env, origin);
-    if (request.method === 'POST' && url.pathname === '/desktop/session') return createDesktopAuthorization(request, env, origin);
-    if (request.method === 'POST' && url.pathname === '/desktop/session/result') return desktopAuthorizationResult(request, env, origin);
-    if (request.method === 'POST' && url.pathname === '/token') return refreshToken(request, env, origin);
-    if (request.method === 'POST' && url.pathname === '/disconnect') return disconnect(request, env, origin);
+    if (request.method === 'GET' && url.pathname === '/config') return await config(request, env, origin);
+    if (request.method === 'POST' && url.pathname === '/desktop/session') return await createDesktopAuthorization(request, env, origin);
+    if (request.method === 'POST' && url.pathname === '/desktop/session/result') return await desktopAuthorizationResult(request, env, origin);
+    if (request.method === 'POST' && url.pathname === '/token') return await refreshToken(request, env, origin);
+    if (request.method === 'POST' && url.pathname === '/disconnect') return await disconnect(request, env, origin);
     return json({ code: 'not_found', message: 'Not found.' }, 404, origin);
   } catch (_error) {
     return json({ code: 'service_error', message: 'Google Calendar connection failed.' }, 500, origin);

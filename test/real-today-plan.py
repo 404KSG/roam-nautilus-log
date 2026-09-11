@@ -2,6 +2,7 @@
 """Actual source reader + session + adapter + both launchers. Only the host graph/time is fake."""
 import json
 import subprocess
+import traceback
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
@@ -38,7 +39,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     fn()
                     passed.append(name)
                 except Exception as e:
-                    failures.append(name+': '+str(e))
+                    failures.append(name+': '+traceback.format_exc())
                     page.screenshot(path=str(OUT/(name+'-FAILED.png')))
             def full_tree():
                 tree=page.evaluate('realPlan.tree()')
@@ -194,6 +195,53 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     page.wait_for_function('(n)=>realPlan.navs().filter(r=>r[0]==="open").length===n', arg=len([r for r in nav_before if r[0]=='open'])+1)
                     assert page.evaluate('realPlan.navs()')[-1][0]=='open'
                 check(surface+'-present-panel-once',present_panel_once)
+                def responsive_popup():
+                    if surface!='execution':
+                        return
+                    mount(surface)
+                    page.locator(TRIGGER).click();state('ready-present');full_tree()
+                    reads=page.evaluate('realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length')
+                    # Hold the scheduling boundary, not the app/session. The
+                    # shell must be usable before graph validation can start.
+                    page.evaluate('''() => {
+                        const request=window.requestAnimationFrame, cancel=window.cancelAnimationFrame;
+                        const frames=new Map(); let id=1000000;
+                        window.requestAnimationFrame=fn=>{frames.set(++id,fn);return id;};
+                        window.cancelAnimationFrame=n=>{if(!frames.delete(n))cancel.call(window,n);};
+                        window.popupFrameGate={release(){
+                            window.requestAnimationFrame=request;window.cancelAnimationFrame=cancel;
+                            const pending=[...frames.values()];frames.clear();
+                            pending.forEach(fn=>fn(performance.now()));
+                        }};
+                    }''')
+                    try:
+                        page.locator('.nautilus-log-timing__capacity-token').click()
+                        dialog=page.locator('.nautilus-log-timing__popover')
+                        assert dialog.is_visible()
+                        assert dialog.get_attribute('aria-busy')=='true'
+                        assert dialog.locator('button').count()==0, 'unverified data must expose no actions'
+                        assert page.evaluate('realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length')==reads
+                        page.locator(TRIGGER).click()
+                        assert page.evaluate('realPlan.popoverOpen()') is False
+                        assert page.evaluate('realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length')==reads
+                    finally:
+                        page.evaluate('window.popupFrameGate.release()')
+                    page.wait_for_timeout(60)
+                    assert page.evaluate('realPlan.popoverOpen()') is False
+                    assert page.evaluate('realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length')==reads
+                    page.locator('.nautilus-log-timing__capacity-token').click()
+                    page.wait_for_selector('.nautilus-log-timing__popover[aria-busy="false"]')
+                    assert page.get_by_role('tab',name='Plan',exact=True).get_attribute('aria-selected')=='true'
+                    assert page.evaluate('realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length')==reads+1
+                    # Ordinary close must not perform even an indexed graph read.
+                    close=page.evaluate('''() => {
+                        const reads=()=>realPlan.trace().filter(r=>r[0]==='query'||r[0]==='pull').length;
+                        const before=reads();
+                        document.querySelector('.nautilus-log-timing__trigger').click();
+                        return {closed:!realPlan.popoverOpen(),reads:reads()-before};
+                    }''')
+                    assert close=={'closed':True,'reads':0}, close
+                check(surface+'-responsive-popup',responsive_popup)
                 def delayed_keep_cancelled():
                     if surface!='execution':
                         return
@@ -202,13 +250,78 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     nav_before=page.evaluate('realPlan.navs()')
                     page.evaluate('realPlan.holdIntegrity()')
                     page.locator(TRIGGER).click()
-                    assert page.evaluate('realPlan.popoverOpen()') is False
+                    page.wait_for_selector('.nautilus-log-timing__popover[aria-busy="true"]')
+                    assert page.locator('.nautilus-log-timing__popover button').count()==0
                     page.evaluate('realPlan.cleanup()')
                     page.evaluate('realPlan.releaseIntegrity()')
                     page.wait_for_timeout(80)
                     assert page.evaluate('realPlan.popoverCount()')==0
                     assert page.evaluate('realPlan.navs()')==nav_before
                 check(surface+'-delayed-keep-cancelled',delayed_keep_cancelled)
+                def dismiss_pending():
+                    if surface!='execution':
+                        return
+                    for action in ['escape','outside','trigger']:
+                        mount(surface)
+                        page.locator(TRIGGER).click();state('ready-present')
+                        writes=page.evaluate('realPlan.writes()')
+                        nav=page.evaluate('realPlan.navs()')
+                        page.evaluate('realPlan.holdIntegrity()')
+                        page.locator(TRIGGER).click();state('checking')
+                        assert page.locator('.nautilus-log-timing__popover').get_attribute('aria-busy')=='true'
+                        assert page.locator('.nautilus-log-timing__popover button').count()==0
+                        assert not page.locator(TRIGGER).is_disabled()
+                        if action=='escape':
+                            page.keyboard.press('Escape')
+                            assert page.locator(TRIGGER).evaluate('el=>el===document.activeElement'), 'Escape must restore trigger focus during the read'
+                        elif action=='outside':
+                            page.locator('main').click(position={'x':5,'y':5})
+                        else:
+                            page.locator(TRIGGER).click()
+                        assert page.evaluate('realPlan.popoverOpen()') is False
+                        page.evaluate('realPlan.releaseIntegrity()');state('ready-present')
+                        page.wait_for_timeout(60)
+                        assert page.evaluate('realPlan.popoverOpen()') is False
+                        assert page.evaluate('realPlan.writes()')==writes
+                        assert page.evaluate('realPlan.navs()')==nav
+                check(surface+'-dismiss-pending',dismiss_pending)
+                def pending_graph_changed():
+                    if surface!='execution':
+                        return
+                    mount(surface)
+                    page.locator(TRIGGER).click();state('ready-present')
+                    writes=page.evaluate('realPlan.writes()')
+                    page.evaluate('realPlan.holdIntegrity()')
+                    page.locator(TRIGGER).click();state('checking')
+                    page.evaluate('() => {window.roamAlphaAPI={...window.roamAlphaAPI,graph:{name:"other-graph"}};realPlan.releaseIntegrity();}')
+                    state('read-failed')
+                    page.wait_for_timeout(60)
+                    assert page.evaluate('realPlan.popoverCount()')==0, 'old checking shell must not survive a graph switch'
+                    assert page.evaluate('realPlan.writes()')==writes
+                check(surface+'-pending-graph-changed',pending_graph_changed)
+                def confirmed_rows_are_fresh():
+                    if surface!='execution':
+                        return
+                    mount(surface)
+                    page.locator(TRIGGER).click();state('ready-present')
+                    # Simulate a host edit with a missed watch notification.
+                    uid=page.evaluate('''() => {
+                        const task=realPlan.blocks().find(b=>b.parentUid==='nautilus-log-plan-2026-09-09'&&b.string.startsWith('{{[[TODO]]}} Write'));
+                        task.string=task.string.replace('TODO','DONE');
+                        window.readyTaskUids=null;
+                        const observer=new MutationObserver(()=>{
+                            const panel=document.querySelector('.nautilus-log-timing__popover[aria-busy="false"]');
+                            if(!panel)return;
+                            window.readyTaskUids=[...panel.querySelectorAll('[data-task-uid]')].map(row=>row.dataset.taskUid);
+                            observer.disconnect();
+                        });
+                        observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:['aria-busy']});
+                        return task.uid;
+                    }''')
+                    page.locator('.nautilus-log-timing__capacity-token').click()
+                    page.wait_for_function('window.readyTaskUids !== null')
+                    assert uid not in page.evaluate('window.readyTaskUids'), 'confirmed panel must not briefly offer actions on a stale task'
+                check(surface+'-confirmed-rows-are-fresh',confirmed_rows_are_fresh)
                 def children_only_locate():
                     mount(surface)
                     page.locator(TRIGGER).click();state('ready-present');full_tree()
@@ -258,7 +371,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     page.evaluate('realPlan.moveRootOffDay()')
                     page.evaluate('realPlan.addManualPlan()')
                     page.locator(TRIGGER).click()
-                    page.locator('.nautilus-log-timing__popover').wait_for()
+                    page.wait_for_selector('.nautilus-log-timing__popover[aria-busy="false"]')
                     assert page.evaluate('realPlan.state().planUid')=='manual-other-plan'
                     assert page.evaluate('realPlan.runtimePlanUid()')=='manual-other-plan'
                     assert page.evaluate('realPlan.writes()')==writes

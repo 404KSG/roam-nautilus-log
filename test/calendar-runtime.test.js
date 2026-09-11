@@ -137,7 +137,7 @@ test('calendar runtime syncs only the explicitly clicked Nautilus date and plan'
       sync: async (options) => {
         reconcileCalls.push(options);
         return {
-          created: options.events.length,
+          created: options.events.filter(event=>!['cancelled','excluded'].includes(event.status)).length,
           updated: 0,
           removed: 0,
           localKept: 0,
@@ -162,7 +162,8 @@ test('calendar runtime syncs only the explicitly clicked Nautilus date and plan'
   assert.equal(reconcileCalls[0].planUid, 'tomorrow-plan');
   assert.equal(reconcileCalls[0].force, true);
   assert.equal(reconcileCalls[0].events[0].parentString, '01:00–01:30 Weekly meeting · Google Calendar');
-  assert.equal(reconcileCalls[0].events[1].parentString, '{{[[TODO]]}} Submit report · Google Calendar');
+  assert.equal(reconcileCalls[0].events[1].status, 'excluded');
+  assert.equal(reconcileCalls[0].events[2].parentString, '{{[[TODO]]}} Submit report · Google Calendar');
   assert.equal(result.created, 2);
   assert.equal(result.tasks, 1);
   assert.equal(result.calendarEvents, 1);
@@ -312,6 +313,20 @@ test('calendar runtime makes connection state authoritative for enable and disco
   assert.equal(settings.get('google-calendar-enabled'), false);
   assert.equal(runtime.hasConnection(), false);
   assert.deepEqual(connectionChanges, [true, false]);
+});
+
+test('destroy during an awaited enable does not start a new authorization client', async () => {
+  const extension=await loadExtension('calendar-connect-destroy');
+  let release, clients=0;
+  const gate=new Promise(resolve=>{release=resolve;});
+  const runtime=extension.createCalendarRuntime({
+    extensionAPI:{settings:{get:()=>'',set:()=>gate}},
+    clientFactory:()=>{clients++;return {authorize:async()=>'',destroy(){}};},
+    reconcilerFactory:()=>({sync:async()=>({}),destroy(){}}),
+  });
+  const pending=runtime.connect();runtime.destroy();release();
+  await assert.rejects(pending,/cancelled|no longer/i);
+  assert.equal(clients,0);
 });
 
 test('calendar runtime rolls the legacy enable gate back when connection is cancelled', async () => {

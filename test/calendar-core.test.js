@@ -8,7 +8,7 @@ async function loadExtension(label) {
   return import(`data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#${label}-${Date.now()}`);
 }
 
-test('Google events become compact fixed-event blocks and skip non-blocking rows', async () => {
+test('Google events become fixed blocks while non-blocking identities remain explicit exclusions', async () => {
   const extension = await loadExtension('calendar-normalize');
   const normalize = extension.normalizeGoogleCalendarEvents;
   assert.equal(typeof normalize, 'function');
@@ -53,7 +53,9 @@ test('Google events become compact fixed-event blocks and skip non-blocking rows
     ],
   });
 
-  assert.equal(rows.length, 1);
+  assert.equal(rows.length, 4);
+  assert.deepEqual(rows.slice(1).map(row=>[row.status,row.reason]), [['excluded','all-day'],['excluded','free'],['excluded','declined']]);
+  assert.equal(rows.slice(1).some(row=>row.parentString), false);
   assert.equal(rows[0].key, 'work@example.com:meeting-1');
   assert.equal(rows[0].parentString, '09:30–10:00 Weekly meeting · Google Calendar');
   assert.equal(

@@ -63,6 +63,9 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   let pomoCloseButton = null;
   let shortcutTooltip = null;
   let popover = null;
+  let popoverPending = false;
+  let pendingPresentChecks = 0;
+  let settleDeferredRefresh = null;
   let observers = [];
   let unsubscribe = null;
   let unsubscribePlan = null;
@@ -109,22 +112,40 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     return undefined;
   };
   const invalidateActivation = () => { activationGeneration += 1; };
-  const recoverPresentPlan = (locateMode, onPresent) => {
+  const recoverPresentPlan = (locateMode, onPresent, { deferPresentCheck } = {}) => {
     if (!todayPlan?.activateToday) return false;
     const roam = typeof window !== 'undefined' ? window.roamAlphaAPI : null;
     const generation = ++activationGeneration;
+    const panelCheck = typeof deferPresentCheck === 'function';
+    if (panelCheck) pendingPresentChecks += 1;
     void runAction(async () => {
-      const result = await todayPlan.activateToday({ locateMode, ifPresent: 'keep' });
+      let result;
+      try {
+        result = await todayPlan.activateToday({ locateMode, ifPresent: 'keep', deferPresentCheck });
+      } catch (error) {
+        if (!destroyed && generation === activationGeneration && popoverPending) closePopover();
+        throw error;
+      }
       if (destroyed || generation !== activationGeneration) return;
-      if (typeof window !== 'undefined' && window.roamAlphaAPI !== roam) return;
+      if (typeof window !== 'undefined' && window.roamAlphaAPI !== roam) {
+        if (popoverPending) closePopover();
+        return;
+      }
       const status = result?.status || todayPlanState()?.status;
       if (['read-failed', 'ready-blocked', 'partial'].includes(status)) {
         closePopover();
         diagnostics.show();
         return;
       }
-      if (result?.activation !== 'keep') return;
+      if (result?.activation !== 'keep') {
+        if (popoverPending) closePopover();
+        return;
+      }
       if (status === 'ready-present' || status === 'nav-failed') await onPresent?.();
+    }).finally(() => {
+      if (!panelCheck) return;
+      pendingPresentChecks -= 1;
+      if (!destroyed) renderTrigger();
     });
     return true;
   };
@@ -413,12 +434,34 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     if (deferredRefreshTimer !== null) window.clearTimeout(deferredRefreshTimer);
     deferredRefreshFrame = null;
     deferredRefreshTimer = null;
+    const settle = settleDeferredRefresh;
+    settleDeferredRefresh = null;
+    settle?.(false);
   };
 
+  const afterPopoverPaint = () => new Promise((resolve) => {
+    cancelDeferredRefresh();
+    settleDeferredRefresh = resolve;
+    const finish = () => {
+      deferredRefreshTimer = null;
+      settleDeferredRefresh = null;
+      resolve(!destroyed && Boolean(popover));
+    };
+    if (typeof window.requestAnimationFrame === 'function') {
+      deferredRefreshFrame = window.requestAnimationFrame(() => {
+        deferredRefreshFrame = null;
+        deferredRefreshTimer = window.setTimeout(finish, 0);
+      });
+    } else {
+      deferredRefreshTimer = window.setTimeout(finish, 0);
+    }
+  });
+
   const closePopover = ({ restoreFocus = false } = {}) => {
-    if (!popover) return;
     invalidateActivation();
     cancelDeferredRefresh();
+    popoverPending = false;
+    if (!popover) return;
     clearDeleteConfirmation();
     popover.remove();
     popover = null;
@@ -781,6 +824,16 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   const renderPopover = ({ force = false } = {}) => {
     if (!popover) return;
     const text = ui();
+    if (popoverPending) {
+      const checking = todayPlanState()?.labels?.checking || text.createToday.checking;
+      if (lastPopoverKey !== `checking:${checking}`) {
+        const status = element('div', 'nautilus-log-timing__empty', checking);
+        status.setAttribute('role', 'status');
+        popover.replaceChildren(status);
+        lastPopoverKey = `checking:${checking}`;
+      }
+      return;
+    }
     const execution = currentTriggerExecution();
     if (!force && state.status === 'working' && lastPopoverKey !== null) {
       // A queued graph mutation changes only button availability. Rebuilding
@@ -970,33 +1023,24 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     if (fontFamily) popover.style.setProperty('--nl-exec-font-family', fontFamily);
   };
 
-  const openPopover = async ({ focusPanel = false } = {}) => {
+  const openPopover = async ({ focusPanel = false, pending = false } = {}) => {
     if (popover) return closePopover({ restoreFocus: true });
+    popoverPending = pending;
     popover = element('div', 'nautilus-log-timing__popover');
     popover.id = POPOVER_ID;
     popover.setAttribute('role', 'dialog');
     popover.setAttribute('aria-label', ui().identity.panel);
+    popover.setAttribute('aria-busy', String(pending));
+    popover.tabIndex = -1;
     document.body.append(popover);
     syncPopoverTypography();
     trigger.setAttribute('aria-expanded', 'true');
     renderPopover({ force: true });
     positionPopover();
-    if (focusPanel) popover.querySelector('[role="tab"][aria-selected="true"]')?.focus({ preventScroll: true });
-    const refreshAfterPaint = () => {
-      deferredRefreshFrame = null;
-      deferredRefreshTimer = window.setTimeout(() => {
-        deferredRefreshTimer = null;
-        if (popover) void runtime.requestRefresh();
-      }, 0);
-    };
-    if (typeof window.requestAnimationFrame === 'function') {
-      deferredRefreshFrame = window.requestAnimationFrame(refreshAfterPaint);
-    } else {
-      deferredRefreshTimer = window.setTimeout(() => {
-        deferredRefreshTimer = null;
-        if (popover) void runtime.requestRefresh();
-      }, 0);
-    }
+    if (focusPanel) (pending ? popover : popover.querySelector('[role="tab"][aria-selected="true"]'))?.focus({ preventScroll: true });
+    if (!pending) void runAction(async () => {
+      if (await afterPopoverPaint()) await runtime.requestRefresh();
+    });
     outsideHandler = (event) => {
       if (!popover?.contains(event.target) && !container?.contains(event.target)) closePopover();
     };
@@ -1009,6 +1053,17 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     };
     document.addEventListener('mousedown', outsideHandler, true);
     document.addEventListener('keydown', keyHandler, true);
+  };
+
+  const confirmPopoverOpen = () => {
+    if (!popover) return;
+    const restorePanelFocus = document.activeElement === popover;
+    popoverPending = false;
+    popover.setAttribute('aria-busy', 'false');
+    renderPopover({ force: true });
+    if (restorePanelFocus) popover.querySelector('[role="tab"][aria-selected="true"]')?.focus({ preventScroll: true });
+    // The session already refreshed the runtime before confirming this open.
+    // Do not schedule another identical read/rebuild immediately afterward.
   };
 
   const renderTrigger = () => {
@@ -1069,7 +1124,8 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
         trigger.classList.toggle('is-checking', planStatus === 'checking');
         trigger.classList.toggle('is-blocked', planStatus === 'ready-blocked');
         trigger.classList.toggle('is-read-failed', planStatus === 'read-failed');
-        trigger.disabled = planStatus === 'creating' || planStatus === 'checking';
+        trigger.disabled = !popoverPending && (planStatus === 'creating'
+          || (planStatus === 'checking' && pendingPresentChecks === 0));
         trigger.setAttribute('aria-label', label);
         trigger.setAttribute('aria-description', planUi.message || label);
         if (pomoCloseButton) pomoCloseButton.hidden = true;
@@ -1168,16 +1224,21 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
           else runAction(() => runtime.locate());
           return;
         }
+        // Closing is always local UI work, even while a read is pending or
+        // the underlying plan has changed. Never run creation on a close click.
+        if (popover) {
+          closePopover({ restoreFocus: true });
+          return;
+        }
         if (!liveTimer && shouldUseTodayPlanEntry()) {
+          invalidateActivation();
           activateTodayPlanEntry('main');
           return;
         }
-        const openPlanPanel = () => {
-          if (event.target.closest?.('.nautilus-log-timing__capacity-token')) view = 'plan';
-          return openPopover({ focusPanel: event.detail === 0 });
-        };
-        if (!liveTimer && recoverPresentPlan('main', openPlanPanel)) return;
-        openPlanPanel();
+        if (event.target.closest?.('.nautilus-log-timing__capacity-token')) view = 'plan';
+        const pending = !liveTimer && typeof todayPlan?.activateToday === 'function';
+        openPopover({ focusPanel: event.detail === 0, pending });
+        if (pending) recoverPresentPlan('main', confirmPopoverOpen, { deferPresentCheck: afterPopoverPaint });
       });
       pomoCloseButton = element('button', 'nautilus-log-timing__pomodoro-close');
       pomoCloseButton.type = 'button';
