@@ -320,7 +320,8 @@ test('global and overnight windows use continuous minutes and a start-relative s
   assert.match(component, /windowStartMinutes \(:workday-start settings\)/);
   assert.match(component, /:windowStartMinutes \(:workday-start settings\)/);
   assert.match(component, /:nowMinutes timeline-minute/);
-  assert.match(component, /clock-render-context page-title-val \(mapv :uid mapped\) \(:workday-end settings\)/);
+  assert.match(component, /clock-render-context page-title-val completed-task-uids \(:workday-end settings\)/);
+  assert.match(component, /\(if \(seq completed-task-uids\)/);
   assert.match(guide, /00:00–23:00/);
   assert.match(guide, /21:00–02:00/);
   assert.match(guideZh, /00:00–23:00/);

@@ -50,7 +50,8 @@ Roam Desktop 会在系统浏览器打开真实的 Google 授权页，并自动�
 Calendar 按钮只手动同步当前 Nautilus 图表对应的日期；不会后台轮询，也不会自动创建
 Daily Note。
 
-普通点击会保护你在 Roam 中改写的文字；Option/Alt + 点击只强制刷新 Google 托管字段，
+普通点击保留你在 Roam 中改写的正文与时间；若删掉来源后缀，会补回该后缀。
+Option/Alt + 点击只强制刷新 Google 托管字段，
 仍保留用户自己创建的子 block。全天事件、空闲/透明事件和已拒绝事件不会导入。连接可在
 Roam 刷新后自动恢复，用户无需创建或粘贴 OAuth Client ID、密钥或 Calendar ID。Calendar
 数据由 Roam 客户端直接向 Google 请求，不会经过轻量授权服务。导入的 `Open` 链接保留

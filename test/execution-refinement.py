@@ -39,6 +39,13 @@ def run():
                 now: new Date(2026, 8, 9, 10, 7)
             })''')
             fixture.open_plan(page)
+            layout_reads = page.evaluate('''() => {
+                let count=0;const original=Element.prototype.getBoundingClientRect;
+                Element.prototype.getBoundingClientRect=function(...args){count++;return original.apply(this,args);};
+                try {energyBarHarness.api.tickMinute(0);} finally {Element.prototype.getBoundingClientRect=original;}
+                return count;
+            }''')
+            assert layout_reads == 0, f'unchanged time tick performed {layout_reads} geometry reads'
             panel = page.locator('.nautilus-log-timing__capacity')
             expect(panel).to_contain_text('56% left · 8h53m free')
             page.evaluate('''() => {

@@ -18,7 +18,8 @@ function normalizeState(value, observedAt) {
     throw new Error('Calendar mapping is unreadable. No graph changes are allowed.');
   }
   const events = Object.fromEntries(Object.entries(value.events).map(([key,mapping]) => {
-    if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping)) throw new Error('Calendar mapping contains an unreadable entry.');
+    if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping)
+      || (mapping.creating !== undefined && typeof mapping.creating !== 'boolean')) throw new Error('Calendar mapping contains an unreadable entry.');
     if (mapping.key !== undefined && mapping.key !== key) throw new Error('Calendar mapping identity does not match its key.');
     return [key,{...clone(mapping),key,dateKey:String(mapping.dateKey || ''),
       lastSeenAt:Number.isFinite(Number(mapping.lastSeenAt)) ? Number(mapping.lastSeenAt) : observedAt}];
@@ -74,6 +75,7 @@ export function createCalendarReconciler({
     const observedAt = Number.isFinite(clockValue) ? clockValue : Date.now();
     let state, journal = null, key = '', mapping = null, applied = 0, stage = 'load';
     const summary = summaryFor();
+    const blockedKeys = new Set();
     const scope = `${guard?.scope || ''}:${contextKey || ''}`;
     const readText = uid => {
       assertActive();
@@ -120,16 +122,21 @@ export function createCalendarReconciler({
       if (value === null) delete state.events[eventKey];
       else Object.defineProperty(state.events,eventKey,{value:clone(value),writable:true,enumerable:true,configurable:true});
     };
+    const assertLocation = value => {
+      if (value?.parent?.uid && readText(value.parent.uid) !== null && !belongs(value.parent.uid,value.planUid)) {
+        throw new Error('The imported Calendar parent moved; further writes were stopped.');
+      }
+    };
     const afterMatches = op => {
       if (op.kind === 'remove') return readText(op.uid) === null;
       if (op.kind === 'move') return belongs(op.uid,op.parentUid);
-      return readText(op.uid) === op.string && (op.kind !== 'create' || belongs(op.uid,op.parentUid));
+      return readText(op.uid) === op.string && (!op.parentUid || belongs(op.uid,op.parentUid));
     };
     const beforeMatches = op => {
       if (op.kind === 'create') return readText(op.uid) === null && readText(op.parentUid) !== null;
-      if (op.kind === 'remove') return treeKey(op.uid) === op.beforeTree;
+      if (op.kind === 'remove') return treeKey(op.uid) === op.beforeTree && (!op.parentUid || belongs(op.uid,op.parentUid));
       if (op.kind === 'move') return belongs(op.uid,op.beforeParentUid);
-      return readText(op.uid) === op.beforeString;
+      return readText(op.uid) === op.beforeString && (!op.parentUid || belongs(op.uid,op.parentUid));
     };
     const step = async (op,nextMapping) => {
       assertActive();
@@ -139,15 +146,17 @@ export function createCalendarReconciler({
       if (!beforeMatches(op)) throw new Error(`Calendar ${op.kind} precondition changed for ${op.uid}.`);
       const crypto = globalThis.crypto;
       if (!crypto?.randomUUID) throw new Error('Calendar operation identities are unavailable.');
-      const record = {version:1,scope,id:crypto.randomUUID(),key,op:clone(op),beforeEvent:clone(mapping),afterEvent:clone(nextMapping)};
+      const record = {version:1,scope,graphScope:guard?.scope || '',id:crypto.randomUUID(),key,op:clone(op),beforeEvent:clone(mapping),afterEvent:clone(nextMapping)};
       await persistJournal(record);
       assertActive();
+      assertLocation(mapping);
       if (!beforeMatches(op)) throw new Error(`Calendar block ${op.uid} changed while recording the operation.`);
       if (op.kind === 'create') await create({uid:op.uid,parentUid:op.parentUid,order:op.order ?? 'last',string:op.string,open:false});
       else if (op.kind === 'update') await update(op.uid,op.string);
       else if (op.kind === 'move') await move({uid:op.uid,parentUid:op.parentUid,order:op.order});
       else if (op.kind === 'remove') await remove(op.uid);
       assertActive();
+      assertLocation(nextMapping);
       if (!afterMatches(op)) throw new Error(`Calendar ${op.kind} could not be confirmed for ${op.uid}.`);
       applied++;
       mapping = clone(nextMapping);
@@ -180,12 +189,12 @@ export function createCalendarReconciler({
       if (path !== 'parent' && !belongs(owner.uid,parentUid)) return {changed:false,localKept:true};
       const decision = decideCalendarManagedChange({lastSynced:owner.lastSynced,current,incoming,force});
       if (decision.action === 'update') {
-        await step({kind:'update',uid:owner.uid,beforeString:current,string:decision.value},withField(path,managedBlock(owner.uid,decision.value)));
+        await step({kind:'update',uid:owner.uid,parentUid,beforeString:current,string:decision.value},withField(path,managedBlock(owner.uid,decision.value)));
         return {changed:true,localKept:false};
       }
       if (decision.action === 'delete') {
         if (required || childRows(owner.uid).length) return {changed:false,localKept:true};
-        await step({kind:'remove',uid:owner.uid,beforeTree:treeKey(owner.uid)},withField(path,null));
+        await step({kind:'remove',uid:owner.uid,parentUid,beforeTree:treeKey(owner.uid)},withField(path,null));
         return {changed:true,localKept:false};
       }
       if (decision.action === 'keep-local' && ensureSource && incoming) {
@@ -194,7 +203,7 @@ export function createCalendarReconciler({
         if (!text.endsWith(suffix)) {
           // Preserve the established suffix contract without claiming ownership
           // of the user's edited body by advancing lastSynced.
-          await step({kind:'update',uid:owner.uid,beforeString:current,string:`${text} ${suffix}`},mapping);
+          await step({kind:'update',uid:owner.uid,parentUid,beforeString:current,string:`${text} ${suffix}`},mapping);
           return {changed:true,localKept:true};
         }
       }
@@ -212,6 +221,28 @@ export function createCalendarReconciler({
       };
       return walk(mapping.parent.uid) && visited.size === expected.size;
     };
+    const validRecord = record => {
+      const op = record?.op;
+      const owners = value => value ? [value.parent,value.source,...Object.values(value.details || {})].filter(Boolean) : [];
+      const validMapping = value => value && typeof value === 'object' && !Array.isArray(value)
+        && value.key === record.key && typeof value.planUid === 'string'
+        && (value.creating === undefined || typeof value.creating === 'boolean')
+        && owners(value).every(owner=>typeof owner.uid==='string' && typeof owner.lastSynced==='string');
+      if (record?.version !== 1 || typeof record.scope !== 'string' || typeof record.id !== 'string'
+        || typeof record.key !== 'string' || typeof op?.uid !== 'string' || !op.uid
+        || !['create','update','move','remove'].includes(op.kind)
+        || (['create','update'].includes(op.kind) && typeof op.string !== 'string')
+        || (['create','move'].includes(op.kind) && typeof op.parentUid !== 'string')
+        || (op.kind === 'update' && typeof op.beforeString !== 'string')
+        || (op.kind === 'remove' && typeof op.beforeTree !== 'string')
+        || !validMapping(record.beforeEvent)
+        || (record.afterEvent !== null && !validMapping(record.afterEvent))) return false;
+      if (op.kind === 'create') return owners(record.afterEvent).some(owner=>owner.uid===op.uid && owner.lastSynced===op.string);
+      if (!owners(record.beforeEvent).some(owner=>owner.uid===op.uid)) return false;
+      if (op.kind === 'move') return record.beforeEvent.planUid===op.beforeParentUid && record.afterEvent?.planUid===op.parentUid;
+      if (record.afterEvent === null) return op.kind==='remove' && record.beforeEvent.parent?.uid===op.uid;
+      return true;
+    };
     try {
       state = normalizeState(await loadState(),observedAt);
       assertActive();
@@ -220,35 +251,33 @@ export function createCalendarReconciler({
       if (journal) {
         stage = 'recovery';
         const op = journal.op;
-        const validMapping = value => value && typeof value === 'object' && !Array.isArray(value)
-          && value.key === journal.key && typeof value.planUid === 'string'
-          && [value.parent,value.source,...Object.values(value.details || {})].filter(Boolean)
-            .every(owner=>typeof owner.uid==='string' && typeof owner.lastSynced==='string');
-        if (journal.version !== 1 || journal.scope !== scope || typeof journal.id !== 'string'
-          || typeof journal.key !== 'string' || typeof op?.uid !== 'string' || !op.uid
-          || !['create','update','move','remove'].includes(op.kind)
-          || (['create','update'].includes(op.kind) && typeof op.string !== 'string')
-          || (['create','move'].includes(op.kind) && typeof op.parentUid !== 'string')
-          || (op.kind === 'update' && typeof op.beforeString !== 'string')
-          || (op.kind === 'remove' && typeof op.beforeTree !== 'string')
-          || !validMapping(journal.beforeEvent)
-          || (journal.afterEvent !== null && !validMapping(journal.afterEvent))
-          || (journal.afterEvent === null && (op.kind !== 'remove' || journal.beforeEvent.parent?.uid !== op.uid))) {
-          throw new Error('Calendar operation record is unreadable or belongs to another connection/graph.');
-        }
+        if (!validRecord(journal)) throw new Error('Calendar operation record is unreadable.');
+        const journalGraph = journal.graphScope ?? journal.scope.slice(0,journal.scope.lastIndexOf(':'));
+        if (journalGraph !== (guard?.scope || '')) throw new Error('Calendar operation record belongs to another graph.');
         key = journal.key;
         if (state.journalId !== journal.id) {
           // Recovery is read-only in the graph. Recognize only the recorded
           // UID's before/after state, commit that progress, then re-plan from
           // this click's current input and force setting.
-          if (afterMatches(op)) putMapping(key,journal.afterEvent);
+          if (journal.scope !== scope) {
+            // A reconnected account must not adopt an older connection's
+            // incomplete import. Keep its original scope and evidence under
+            // that event, rather than blocking all other dates with the WAL.
+            putMapping(key,{...journal.beforeEvent,conflict:clone(journal)});
+          } else if (afterMatches(op)) putMapping(key,journal.afterEvent);
           else if (beforeMatches(op)) putMapping(key,journal.beforeEvent);
-          else if (op.kind !== 'create' && readText(op.uid) !== null) {
-            // An existing owned block changed during an update/move/delete.
-            // Keep its prior ownership metadata and let normal local-edit rules
-            // preserve that change; recovery itself never overwrites it.
+          else if (op.kind !== 'create' && (readText(op.uid) !== null || journal.beforeEvent.creating !== true)) {
+            // A previously active owner may have been edited, moved or deleted.
+            // Keep its old ownership metadata: normal sync preserves deletion,
+            // and only a later explicit force may restore that known UID.
             putMapping(key,journal.beforeEvent);
-          } else throw new Error(`Incomplete Calendar block ${op.uid} was edited or moved. Inspect it before retrying.`);
+          } else {
+            // A pre-write record does not prove create succeeded. A missing
+            // owner in a still-incomplete tree is similarly ambiguous. Park
+            // exact evidence without claiming or recreating it, so unrelated
+            // events are not blocked by the shared WAL.
+            putMapping(key,{...journal.beforeEvent,conflict:clone(journal)});
+          }
           state.journalId = journal.id;
           await persist();
         }
@@ -259,13 +288,29 @@ export function createCalendarReconciler({
         if (!event?.key || typeof event.key !== 'string') { summary.skipped++;continue; }
         key = event.key;
         mapping = Object.hasOwn(state.events,key) ? clone(state.events[key]) : null;
+        if (mapping?.conflict) {
+          const conflict = mapping.conflict;
+          if (!validRecord(conflict) || conflict.scope !== scope) {
+            blockedKeys.add(key);continue;
+          }
+          if (afterMatches(conflict.op)) mapping = clone(conflict.afterEvent);
+          else if (beforeMatches(conflict.op)) mapping = clone(conflict.beforeEvent);
+          else { blockedKeys.add(key);continue; }
+          putMapping(key,mapping);
+          await persist(); // Read back recovery before issuing any new write.
+        }
         const excluded = event.status === 'cancelled' || event.status === 'excluded';
         const existingParent = mapping?.parent?.uid ? readText(mapping.parent.uid) : null;
         const locallyDeleted = Boolean(mapping?.parent?.uid) && existingParent === null;
+        if (mapping?.parent?.uid && existingParent !== null && !belongs(mapping.parent.uid,mapping.planUid)) {
+          preserve(summary);
+          if (mapping.creating) blockedKeys.add(key);
+          continue; // Never fill children beneath a user-moved parent.
+        }
         if (excluded) {
           if (!mapping) { summary.skipped++;continue; }
           if (untouchedTree()) {
-            await step({kind:'remove',uid:mapping.parent.uid,beforeTree:treeKey(mapping.parent.uid)},null);
+            await step({kind:'remove',uid:mapping.parent.uid,parentUid:mapping.planUid,beforeTree:treeKey(mapping.parent.uid)},null);
             summary.removed++;
           } else if (mapping.creating && !mapping.parent) {
             putMapping(key,null);
@@ -285,7 +330,7 @@ export function createCalendarReconciler({
             resourceType:event.resourceType,dateKey:String(event.dateKey || event.dueDate || mapping.dateKey || ''),lastSeenAt:observedAt};
           let changed = false, localKept = false;
           if (mapping.planUid !== planUid) {
-            if (!mapping.parent) mapping.planUid = planUid;
+            if (!mapping.parent || (existingParent === null && force)) mapping.planUid = planUid;
             else if (existingParent !== null && (force || existingParent === mapping.parent.lastSynced)
               && belongs(mapping.parent.uid,mapping.planUid)) {
               await step({kind:'move',uid:mapping.parent.uid,beforeParentUid:mapping.planUid,parentUid:planUid,order:childRows(planUid).length}, {...mapping,planUid});
@@ -326,11 +371,25 @@ export function createCalendarReconciler({
       const retention = Math.max(0,Number(orphanRetentionMs) || DEFAULT_ORPHAN_RETENTION_MS);
       for (const [eventKey,value] of Object.entries(state.events)) {
         // Incomplete creations are integrity obligations, not orphan cache.
+        if (value.conflict) {
+          if (value.planUid === planUid) blockedKeys.add(eventKey);
+          continue;
+        }
         if (value.creating || observedAt - value.lastSeenAt <= retention) continue;
         if (!value.parent?.uid || readText(value.parent.uid) === null) delete state.events[eventKey];
       }
       stage = 'save';
       await persist();
+      if (blockedKeys.size) {
+        summary.conflicts = blockedKeys.size;
+        stage = 'conflict';
+        key = [...blockedKeys][0];
+        const targets = [...blockedKeys].map(eventKey => {
+          const value = state.events[eventKey];
+          return `${eventKey} (block ${value?.conflict?.op?.uid || value?.parent?.uid || 'unconfirmed'})`;
+        });
+        throw new Error(`Recorded Calendar conflicts need inspection: ${targets.join(', ')}. Other completed changes were retained.`);
+      }
       return summary;
     } catch (error) {
       const failure = new Error(`Calendar sync incomplete; any written blocks were retained. ${error?.message || error}`);
@@ -339,7 +398,7 @@ export function createCalendarReconciler({
     }
   };
   const sync = (options = {}) => {
-    const args = {events:[],force:false,contextKey:'',...options};
+    const args = {events:[],contextKey:'',...options,force:options.force === true};
     const operation = () => syncLocked(args);
     return runExclusive ? Promise.resolve().then(()=>runExclusive(operation,{signal:args.signal})) : guard.run(operation,{signal:args.signal});
   };

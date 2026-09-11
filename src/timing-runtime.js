@@ -92,8 +92,10 @@ export function createTimingRuntime({
   let refreshAgain = false;
   let refreshRunning = false;
   let forcePlanRescan = false;
+  let lastStructureKey = '';
   let snapshot = {
     revision: 0,
+    structureRevision: 0,
     status: 'loading',
     notice: '',
     planSnapshot: null,
@@ -106,6 +108,15 @@ export function createTimingRuntime({
     now: now(),
   };
   const listeners = new Set();
+
+  const updateStructure = () => {
+    // Compute semantic identity on data changes, not on every elapsed tick.
+    const key = timingCore.executionStructureKey({ ...snapshot, structureRevision: null, status: '', notice: '' }, 'plan');
+    if (key !== lastStructureKey) {
+      lastStructureKey = key;
+      snapshot = { ...snapshot, structureRevision: snapshot.structureRevision + 1 };
+    }
+  };
 
   const publish = () => {
     for (const listener of listeners) {
@@ -313,6 +324,7 @@ export function createTimingRuntime({
       projectionStatus = 'ready';
       snapshot = {
         revision: snapshot.revision + 1,
+        structureRevision: snapshot.structureRevision,
         status: mutationInFlight ? 'working' : projectionStatus,
         notice,
         planSnapshot,
@@ -327,6 +339,7 @@ export function createTimingRuntime({
         standalonePomodoro,
         now: currentNow,
       };
+      updateStructure();
       syncPlanWatch();
     } catch (error) {
       projectionStatus = 'error';
@@ -770,6 +783,7 @@ export function createTimingRuntime({
         || activeWork.focused?.clockUid !== snapshot.activeWork.focused?.clockUid;
       snapshot = { ...snapshot, now: currentNow,
         ...(changed ? { activeWork, revision: snapshot.revision + 1 } : {}) };
+      if (changed) updateStructure();
       publish();
     };
     ticker = window.setInterval(() => {

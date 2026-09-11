@@ -853,6 +853,9 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       ] : null,
     ]);
     if (!force && structureKey === lastPopoverKey) {
+      syncActionAvailability();
+      restorePopoverFocus(pendingPopoverFocus);
+      pendingPopoverFocus = null;
       updateLiveElapsed();
       updatePopoverProjection(execution);
       return;
@@ -1307,6 +1310,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     if (typeof ResizeObserver === 'function') {
       const resizeObserver = new ResizeObserver(syncResponsiveDensity);
       resizeObserver.observe(topbar);
+      if (container) resizeObserver.observe(container);
       if (search) resizeObserver.observe(search);
       observers.push(resizeObserver);
     }
@@ -1324,7 +1328,8 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     window.addEventListener('nautilus-log:settings-changed', settingsListener);
     unsubscribe = runtime.subscribe((next) => {
       state = next;
-      ensureMounted();
+      if (!container?.isConnected) ensureMounted();
+      else renderTrigger();
       if (popover) renderPopover();
     });
     unsubscribePlan = todayPlan?.subscribe?.(() => {

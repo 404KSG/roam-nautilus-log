@@ -296,7 +296,9 @@
                                              center)
                          :text text))
         new-text-rect (assoc (or external-rect fallback-rect {}) :text text)]
-    (assoc new-text-rect :real-rect-radians (real-rect-radians new-text-rect center))))
+    (assoc new-text-rect
+           :core-placement? (boolean external-rect)
+           :real-rect-radians (real-rect-radians new-text-rect center))))
 
 ;; --------------- Log core bridge ----------------------
 
@@ -1086,6 +1088,8 @@
   ([events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy]
    (events->slices events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy []))
   ([events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy init-rects]
+   (events->slices events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy init-rects {}))
+  ([events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy init-rects prepared-rects]
    (let [events (vec (filter #(not= true (:freetime %)) events))
          track-map (label-track-map events)
          conflict-uids (set (or (log-core-call "overlappingFixedEventUids" {:events events}) []))]
@@ -1103,7 +1107,8 @@
             text (:description event)
             radius (+ (nth snail-blueprint-outer-radiuses (spiral-profile-index (:start event) settings))
                       (* 18 (or (get track-map (:uid event)) 0)))
-            new-rect (get-legend-rect rects text mid-radians radius center settings (:start event) anchor-y)]
+            new-rect (or (get prepared-rects (:uid event))
+                         (get-legend-rect rects text mid-radians radius center settings (:start event) anchor-y))]
         (println?debug "RADIUS INSIDE EVENTS-SLICES: " radius)              
         (recur (inc i) (rest events) (conj rects new-rect)
                (conj all-slice-components
@@ -1157,12 +1162,14 @@
               text (:description event)
               radius (+ (nth snail-blueprint-outer-radiuses (spiral-profile-index (:start event) settings))
                         (* 18 (or (get track-map (:uid event)) 0)))
-              new-rect (get-legend-rect rects text mid-radians radius center settings (:start event) anchor-y)]
+              new-rect (assoc (get-legend-rect rects text mid-radians radius center settings (:start event) anchor-y)
+                              :event-uid (:uid event))]
           (recur (inc i) (rest events) (conj rects new-rect) (min left-min (:x new-rect)) (max right-max (+ (:x new-rect) (:w new-rect))) (min top-min (:y new-rect)) (max bottom-max (+ (:y new-rect) (:h new-rect)))))
         [(+ reserve (- center-x left-min))
          (+ reserve (- right-max left-min))
          (+ reserve (- center-y top-min))
-         (+ (* 3 reserve) (- bottom-max top-min) (when (< (:workday-start settings) 420) reserve))])))) ;; when the workday starts before 7:00, the snail has to get more space below
+         (+ (* 3 reserve) (- bottom-max top-min) (when (< (:workday-start settings) 420) reserve))
+         rects])))) ;; when the workday starts before 7:00, the snail has to get more space below
 
 (defn split-and-trim [page-title n]
   (map #(subs % 0 (min n (count %))) (str/split page-title #"," 2)))
@@ -1260,18 +1267,28 @@
         all-events-for-dim (vec (if @show-done-atom? (concat events done-todos) events))
         past-occupied-events (vec (concat events done-todos))
         unplanned-pattern-id (str "nautilus-log-unplanned-" block-uid)
-        [center-x suggested-width center-y suggested-height]
+        [center-x suggested-width center-y suggested-height bounds-rects]
         (if compact?
           [(/ old-width 2) old-width (/ old-height 2) old-height]
           (events->new-dimensions all-events-for-dim {:center-x (/ old-width 2) :center-y (/ old-height 2)} settings))
         center {:center-x center-x :center-y center-y}
+        prepared-rects (if (and (seq bounds-rects)
+                                (every? :core-placement? bounds-rects)
+                                (every? #(seq (:event-uid %)) bounds-rects)
+                                (= (count bounds-rects) (count (set (map :event-uid bounds-rects)))))
+                         (into {} (map (juxt :event-uid identity)
+                                       (or (log-core-call "translateLabelRects"
+                                             {:rects bounds-rects
+                                              :dx (- center-x (/ old-width 2))
+                                              :dy (- center-y (/ old-height 2))}) [])))
+                         {})
         hover-enabled? true
         elapsed-page? (:showElapsed timeline-state)
         interactive? (:interactive timeline-state)
         timeline-minute (:elapsedThroughMinutes timeline-state)
-        [all-slice-components rects] (events->slices events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy)
+        [all-slice-components rects] (events->slices events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy [] prepared-rects)
         done-slices-and-rects (when @show-done-atom?
-                                (events->slices done-todos elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy rects))
+                                (events->slices done-todos elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy rects prepared-rects))
         done-slice-components (first done-slices-and-rects)
         rects (or (second done-slices-and-rects) rects)
         now-visible? (:showNow timeline-state)
@@ -1889,7 +1906,13 @@
                                      mapped (->> children-list
                                                  (mapv #(task-instance-row % settings))
                                                  (filterv #(not= "structure" (:kind %))))
-                                     clock-context (clock-render-context page-title-val (mapv :uid mapped) (:workday-end settings))
+                                     completed-task-uids (->> mapped
+                                                              (filter #(and (= "task" (:kind %))
+                                                                            (= "DONE" (get-in % [:task-instance :status]))))
+                                                              (mapv :uid))
+                                     clock-context (if (seq completed-task-uids)
+                                                     (clock-render-context page-title-val completed-task-uids (:workday-end settings))
+                                                     {:entries []})
                                      parsed (mapv #(parse-row-params % settings clock-context) mapped)
                                      filtered (filterv #(not= "" (:description %)) parsed)]
                                  (let [dones (filterv #(or (:done-at %) (and (:meeting %) (:done %))) filtered)

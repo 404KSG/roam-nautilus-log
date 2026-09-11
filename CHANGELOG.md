@@ -36,6 +36,32 @@
 
 ### Fixed
 
+- Calendar writes use a mapping-level browser lock, stable destination UIDs and
+  a read-back-verified write-ahead journal. Partial writes, failed state saves,
+  retries and multiple tabs no longer blindly create another managed tree.
+  Ambiguous creates and missing incomplete-tree owners are isolated as per-event
+  conflicts without claiming edited or moved blocks. Deleted active owners after
+  interrupted updates/moves remain local deletions instead of blocking all syncs.
+  Errors report incomplete work instead of implying rollback.
+- Calendar checks cancellation, graph, connection and Plan identity at each
+  block boundary. Force restoration follows the clicked date. Explicit busy-to-
+  free, all-day or declined transitions remove only untouched managed trees;
+  missing responses and user descendants remain protected.
+- Historical chart CLOCK reads now use explicit owner coverage and a bounded,
+  graph-scoped cache. CLOCK changes and minute boundaries invalidate the chart's
+  historical projection; ordinary unfinished rows do not request history.
+- Recent entries expire without graph reads. Hidden tabs skip elapsed UI work.
+  Plan watch bursts coalesce before graph reads, and unchanged refreshes preserve
+  execution action nodes, focus and scroll. Stable time ticks do not measure
+  topbar geometry.
+- Urgent keywords are literal rather than regular expressions, and render
+  arguments escape quotes/backslashes. Successful label placement no longer
+  evaluates the legacy fallback algorithm as well. Wide charts translate and
+  reuse the bounds pass's label rectangles for painting instead of solving the
+  same layout twice; compact and compatibility paths retain their fallback.
+- Tidy serializes graph writes, stops after lifecycle changes and reports
+  potentially partial moves rather than claiming nothing changed. OAuth routes
+  catch asynchronous failures and return sanitized errors with the expected CORS.
 - Opening the idle execution popover now shows a cancellable checking shell
   before the full Daily Note read. A scoped root hint allows that read to wait
   until after paint; it never certifies Primary selection or a creation receipt.

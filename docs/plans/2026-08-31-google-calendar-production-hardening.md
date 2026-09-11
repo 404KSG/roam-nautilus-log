@@ -13,9 +13,12 @@ calendar picker or multi-calendar sync.
 - Store the verifier encrypted in a short-lived D1 authorization transaction.
 - Bind every transaction to the Roam origin and nonce, and consume it once
   before exchanging the Google authorization code.
-- Point new production authorizations directly at the production callback.
-  Keep the Preview bridge only as a short transition path for already-open
-  authorization flows.
+- The original plan targeted the production callback directly. The current
+  registered redirect must instead retain the narrow Preview alias described in
+  [the OAuth service setup](../../oauth-worker/README.md) while Google's review
+  prevents callback registration changes. The checked-in Worker test covers this
+  intentional constraint. A direct-callback migration requires a separate,
+  explicitly approved and tested rollout; local reliability fixes do not change it.
 
 ## Sync resilience
 

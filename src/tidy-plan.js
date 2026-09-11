@@ -91,7 +91,7 @@ export function createPlanTidy({
     queue = next.catch(()=>{});
     return next;
   };
-  const canNotify = () => { try { assertActive();return true; } catch (_) { return false; } }; 
+  const canNotify = () => { try { assertActive();return true; } catch (_) { return false; } };
 
   const applyTarget = async (planUid, currentUids, targetUids) => {
     const outlineState = new Map(read(planUid)

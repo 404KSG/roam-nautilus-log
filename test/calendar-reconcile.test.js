@@ -269,6 +269,214 @@ for (const change of ['disconnect','graph']) {
   });
 }
 
+test('force restoring a deleted parent uses the newly clicked date, not its old plan', async () => {
+  const extension=await loadExtension('calendar-force-new-date');
+  const graph=graphHarness(), reconciler=extension.createCalendarReconciler(graph);
+  await reconciler.sync({planUid:'plan-today',events:[meeting()]});
+  const uid=graph.state().events[meeting().key].parent.uid;
+  await graph.remove(uid);
+  await reconciler.sync({planUid:'plan-tomorrow',events:[meeting()],force:true});
+  assert.equal(graph.children('plan-today').length,0);
+  assert.deepEqual(graph.children('plan-tomorrow').map(row=>row.uid),[uid]);
+  assert.equal(graph.state().events[meeting().key].planUid,'plan-tomorrow');
+});
+
+for (const mode of ['pre-collision','edited','moved']) {
+  test(`ambiguous create (${mode}) is isolated by event without claiming its UID or blocking other events`, async () => {
+    const extension=await loadExtension(`calendar-conflict-${mode}`);
+    const graph=graphHarness();let uid;
+    if (mode==='pre-collision') {
+      graph.hooks.afterJournal=record=>{
+        if(record?.op.kind==='create'&&!uid){uid=record.op.uid;graph.blocks.set(uid,{uid,parentUid:'plan-today',order:0,string:'Other writer'});}
+      };
+    } else {
+      graph.hooks.afterCreate=block=>{uid=block.uid;throw new Error('after parent');};
+    }
+    await assert.rejects(extension.createCalendarReconciler(graph).sync({planUid:'plan-today',events:[meeting()]}));
+    delete graph.hooks.afterJournal;delete graph.hooks.afterCreate;
+    if(mode==='edited')graph.blocks.get(uid).string='My edited title';
+    if(mode==='moved')await graph.move({uid,parentUid:'plan-tomorrow',order:0});
+    const record=graph.journal();
+    const other=meeting({key:'primary:other',eventId:'other',parentString:'12:00–12:30 Other · Google Calendar'});
+    const retry=extension.createCalendarReconciler(graph);
+    await assert.rejects(retry.sync({planUid:'plan-today',events:[meeting(),other]}), error=>error.incomplete&&error.summary.created===1);
+    assert.equal(graph.journal(),null);
+    assert.equal(graph.state().events[meeting().key].conflict.id,record.id);
+    assert.equal(graph.state().events[meeting().key].parent,null);
+    assert.equal(graph.children(uid).length,0, 'no source may be written below the uncertain parent');
+    assert.ok(graph.state().events[other.key].parent.uid);
+    await retry.sync({planUid:'plan-tomorrow',events:[meeting({key:'primary:third',eventId:'third'})]});
+    graph.blocks.get(uid).string=record.op.string;
+    await graph.move({uid,parentUid:'plan-today',order:0});
+    await retry.sync({planUid:'plan-today',events:[meeting()]});
+    assert.equal(graph.state().events[meeting().key].conflict,undefined);
+    assert.equal(graph.state().events[meeting().key].parent.uid,uid);
+    assert.equal(graph.children(uid).length,1);
+  });
+}
+
+test('parked conflict keeps the WAL until clearing succeeds and never writes under the uncertain UID', async () => {
+  const extension=await loadExtension('calendar-conflict-clear');
+  const graph=graphHarness();let uid;
+  graph.hooks.afterCreate=block=>{uid=block.uid;throw new Error('after write');};
+  await assert.rejects(extension.createCalendarReconciler(graph).sync({planUid:'plan-today',events:[meeting()]}));
+  delete graph.hooks.afterCreate;graph.blocks.get(uid).string='User text';
+  graph.hooks.beforeJournal=value=>{if(value===null)throw new Error('clear failed');};
+  const writes=graph.writes.length;
+  await assert.rejects(extension.createCalendarReconciler(graph).sync({planUid:'plan-today',events:[meeting()]}));
+  assert.ok(graph.journal());assert.ok(graph.state().events[meeting().key].conflict);
+  assert.equal(graph.writes.length,writes);
+  delete graph.hooks.beforeJournal;
+  await assert.rejects(extension.createCalendarReconciler(graph).sync({planUid:'plan-today',events:[meeting()]}),/conflicts need inspection/i);
+  assert.equal(graph.journal(),null);assert.equal(graph.writes.length,writes);
+});
+
+test('a parent moved while the source journal is saved receives no new source', async () => {
+  const extension=await loadExtension('calendar-parent-moved-in-write');
+  const graph=graphHarness();let moved=false;
+  graph.hooks.afterJournal=record=>{
+    if(record?.op.kind==='create'&&record.beforeEvent.parent&&!moved){
+      moved=true;graph.blocks.get(record.beforeEvent.parent.uid).parentUid='plan-tomorrow';
+    }
+  };
+  await assert.rejects(extension.createCalendarReconciler(graph).sync({planUid:'plan-today',events:[meeting()]}),/parent moved/);
+  assert.equal(graph.writes.length,1);
+  assert.equal(graph.children(graph.children('plan-tomorrow')[0].uid).length,0);
+});
+
+test('an update recovery preserves a user edit, and a delete recovery preserves new descendants', async () => {
+  const extension=await loadExtension('calendar-recover-user-edit');
+  const graph=graphHarness(), reconciler=extension.createCalendarReconciler(graph);
+  await reconciler.sync({planUid:'plan-today',events:[meeting()]});
+  const uid=graph.state().events[meeting().key].parent.uid;
+  graph.hooks.afterUpdate=()=>{throw new Error('after update');};
+  const changed=meeting({parentString:'10:00–10:30 Changed · Google Calendar'});
+  await assert.rejects(reconciler.sync({planUid:'plan-today',events:[changed]}));
+  delete graph.hooks.afterUpdate;graph.blocks.get(uid).string='My own title';
+  assert.equal((await reconciler.sync({planUid:'plan-today',events:[changed]})).localKept,1);
+  assert.equal(graph.read(uid),'My own title · Google Calendar');
+  await reconciler.sync({planUid:'plan-today',events:[meeting()],force:true});
+  let note;
+  graph.hooks.afterJournal=async record=>{if(record?.op.kind==='remove'&&!note)note=await graph.create({parentUid:uid,string:'Keep me'});};
+  await assert.rejects(reconciler.sync({planUid:'plan-today',events:[meeting({status:'cancelled'})]}));
+  delete graph.hooks.afterJournal;
+  assert.equal((await reconciler.sync({planUid:'plan-today',events:[meeting({status:'cancelled'})]})).localKept,1);
+  assert.equal(graph.read(note),'Keep me');assert.notEqual(graph.read(uid),null);
+});
+
+test('a pending previous connection is isolated without adopting its blocks or locking all dates', async () => {
+  const extension=await loadExtension('calendar-old-connection');
+  const graph=graphHarness();graph.hooks.afterCreate=()=>{throw new Error('pending old connection');};
+  await assert.rejects(extension.createCalendarReconciler(graph).sync({planUid:'plan-today',events:[meeting()],contextKey:'old'}));
+  delete graph.hooks.afterCreate;
+  const original=graph.journal(), uid=original.op.uid;
+  const next=extension.createCalendarReconciler(graph);
+  await assert.rejects(next.sync({planUid:'plan-today',events:[meeting({key:'primary:other'})],contextKey:'new'}),/conflicts need inspection/);
+  assert.equal(graph.journal(),null);
+  assert.equal(graph.state().events[meeting().key].conflict.scope,original.scope);
+  assert.equal(graph.state().events[meeting().key].parent,null);
+  assert.equal(graph.children(uid).length,0);
+  await next.sync({planUid:'plan-tomorrow',events:[meeting({key:'primary:third'})],contextKey:'new'});
+});
+
+test('a committed mapping with a failed journal clear retries without any new graph writes', async () => {
+  const extension=await loadExtension('calendar-committed-clear');
+  const graph=graphHarness();graph.hooks.beforeJournal=value=>{if(value===null)throw new Error('cannot clear');};
+  await assert.rejects(extension.createCalendarReconciler(graph).sync({planUid:'plan-today',events:[meeting()]}));
+  assert.equal(graph.state().journalId,graph.journal().id);
+  const writes=graph.writes.length;
+  delete graph.hooks.beforeJournal;
+  await extension.createCalendarReconciler(graph).sync({planUid:'plan-today',events:[meeting()]});
+  assert.equal(graph.journal(),null);assert.equal(graph.writes.length,writes);
+});
+
+for (const invalid of ['format','graph','flag']) {
+  test(`an unreadable or foreign-graph journal (${invalid}) cannot authorize graph writes`, async () => {
+    const extension=await loadExtension(`calendar-invalid-${invalid}`);
+    const graph=graphHarness();graph.hooks.afterCreate=()=>{throw new Error('pending');};
+    await assert.rejects(extension.createCalendarReconciler(graph).sync({planUid:'plan-today',events:[meeting()]}));
+    delete graph.hooks.afterCreate;
+    const record=graph.journal();
+    if(invalid==='format')record.op.kind='unknown';
+    else if(invalid==='flag')record.beforeEvent.creating='true';
+    else record.graphScope='other-graph';
+    await graph.saveJournal(record);
+    const writes=graph.writes.length;
+    await assert.rejects(extension.createCalendarReconciler(graph).sync({planUid:'plan-today',events:[meeting()]}),/unreadable|another graph/);
+    assert.equal(graph.writes.length,writes);assert.ok(graph.journal());
+  });
+}
+
+test('destroying a reconciler queued on the native mapping lock never starts its writer', async (t) => {
+  const extension=await loadExtension('calendar-native-queued-cancel');
+  const {exclusiveLocks}=require('./test-host-locks.cjs');
+  const graph=graphHarness();
+  global.window={roamAlphaAPI:{graph:{name:'calendar-native-queued'}},navigator:{locks:exclusiveLocks()}};
+  const a=extension.createCalendarReconciler({...graph,runExclusive:undefined}), b=extension.createCalendarReconciler({...graph,runExclusive:undefined});
+  t.after(()=>{a.destroy();b.destroy();delete global.window;});
+  let enter,release,first=true;
+  const entered=new Promise(resolve=>{enter=resolve;}), gate=new Promise(resolve=>{release=resolve;});
+  graph.hooks.beforeCreate=async()=>{if(first){first=false;enter();await gate;}};
+  const running=a.sync({planUid:'plan-today',events:[meeting()]});await entered;
+  const queued=b.sync({planUid:'plan-tomorrow',events:[meeting()]}).then(()=>null,error=>error);
+  b.destroy();release();await running;
+  assert.ok(await queued);
+  assert.equal(graph.children('plan-tomorrow').length,0);
+  assert.equal(graph.writes.length,4);
+});
+
+for (const operation of ['update','move']) {
+  test(`a deleted known owner after an interrupted ${operation} is preserved as local deletion, not a global WAL block`, async () => {
+    const extension=await loadExtension(`calendar-missing-known-${operation}`);
+    const graph=graphHarness(), first=extension.createCalendarReconciler(graph);
+    await first.sync({planUid:'plan-today',events:[meeting()]});
+    const uid=graph.state().events[meeting().key].parent.uid;
+    const hook=operation==='update'?'afterUpdate':'afterMove';
+    graph.hooks[hook]=()=>{throw new Error('interrupted known owner');};
+    const target=operation==='move'?'plan-tomorrow':'plan-today';
+    await assert.rejects(first.sync({planUid:target,events:[meeting({parentString:'11:00–11:30 Updated · Google Calendar'})]}));
+    delete graph.hooks[hook];await graph.remove(uid);
+    const next=extension.createCalendarReconciler(graph);
+    const result=await next.sync({planUid:target,events:[meeting(),meeting({key:'primary:other'})]});
+    assert.equal(result.localDeleted,1);
+    assert.equal(graph.read(uid),null);
+    assert.equal(graph.journal(),null);
+    assert.ok(graph.state().events['primary:other'].parent.uid);
+    await next.sync({planUid:'plan-tomorrow',events:[meeting()],force:true});
+    assert.equal(graph.children('plan-tomorrow').some(row=>row.uid===uid),true);
+  });
+}
+
+test('an interrupted partial-tree update with a missing UID is isolated until the exact owner is restored', async () => {
+  const extension=await loadExtension('calendar-missing-partial-update');
+  const graph=graphHarness();let n=0;
+  graph.hooks.beforeCreate=()=>{if(++n===2)throw new Error('source failed');};
+  await assert.rejects(extension.createCalendarReconciler(graph).sync({planUid:'plan-today',events:[meeting()]}));
+  delete graph.hooks.beforeCreate;
+  graph.hooks.afterUpdate=()=>{throw new Error('parent update failed');};
+  await assert.rejects(extension.createCalendarReconciler(graph).sync({planUid:'plan-today',events:[meeting({parentString:'11:00–11:30 Changed · Google Calendar'})]}));
+  const record=graph.journal();assert.equal(record.op.kind,'update');assert.equal(record.beforeEvent.creating,true);
+  delete graph.hooks.afterUpdate;await graph.remove(record.op.uid);
+  await assert.rejects(extension.createCalendarReconciler(graph).sync({planUid:'plan-today',events:[meeting(),meeting({key:'primary:other'})]}),/conflicts need inspection/);
+  assert.equal(graph.journal(),null);
+  assert.equal(graph.read(record.op.uid),null);
+  assert.ok(graph.state().events['primary:other'].parent.uid);
+  await graph.create({uid:record.op.uid,parentUid:record.beforeEvent.planUid,string:record.op.beforeString});
+  await extension.createCalendarReconciler(graph).sync({planUid:'plan-today',events:[meeting()]});
+  assert.equal(graph.state().events[meeting().key].conflict,undefined);
+});
+
+test('only a literal boolean true authorizes force overwrites', async () => {
+  const extension=await loadExtension('calendar-force-boolean');
+  const graph=graphHarness(), reconciler=extension.createCalendarReconciler(graph);
+  await reconciler.sync({planUid:'plan-today',events:[meeting()]});
+  const uid=graph.state().events[meeting().key].parent.uid;
+  await graph.update(uid,'My edited title · Google Calendar');
+  const result=await reconciler.sync({planUid:'plan-today',events:[meeting()],force:'false'});
+  assert.equal(result.localKept,1);
+  assert.equal(graph.read(uid),'My edited title · Google Calendar');
+});
+
 test('first sync writes a compact managed subtree and a stable mapping', async () => {
   const extension = await loadExtension('calendar-create');
   const graph = graphHarness();

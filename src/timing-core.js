@@ -424,7 +424,9 @@ function resolveTaskInstance({
     if (supplied.has(referenceUid)) return supplied.get(referenceUid);
     if (typeof readString !== 'function') return '';
     const value = readString(referenceUid);
-    return typeof value === 'string' ? value : '';
+    const string = typeof value === 'string' ? value : '';
+    supplied.set(referenceUid, string);
+    return string;
   };
   const resolveSource = (referenceUid, stack = []) => {
     if (!referenceUid || stack.includes(referenceUid) || stack.length >= maxDepth) return '';
@@ -697,7 +699,7 @@ function buildDailyReview({ tasks = [], entries = [], now = new Date() } = {}) {
     const currentActual = actualMinutesToday(task.uid, taskEntries, now);
     if (task.status === 'DONE' && task.statusOrigin === 'source' && currentActual <= 0) return null;
     const completed = task.status === 'DONE';
-    const live = !completed && currentActual > 0 && taskEntries.some((entry) => entry.running);
+    const live = !completed && taskEntries.some((entry) => entry.running);
     const comparable = completed && closedActual > 0;
     const actual = completed ? closedActual : currentActual;
     const state = comparable
@@ -804,10 +806,10 @@ function isStandalonePomodoroOverdue(state, now = Date.now(), thresholdMinutes =
 
 function executionStructureKey(snapshot = {}, view = 'timing') {
   const normalizedView = ['timing', 'plan', 'review'].includes(view) ? view : 'timing';
-  if (Number.isInteger(snapshot.revision)) {
+  if (Number.isInteger(snapshot.structureRevision)) {
     return JSON.stringify([
       normalizedView,
-      snapshot.revision,
+      snapshot.structureRevision,
       snapshot.status || '',
       snapshot.notice || '',
     ]);
@@ -823,6 +825,10 @@ function executionStructureKey(snapshot = {}, view = 'timing') {
     Boolean(value.running),
     Number(value.minutes) || 0,
     Number(value.plannedMinutes) || 0,
+    Number(value.remainingMinutes) || 0,
+    value.statusOrigin || '',
+    value.state || '',
+    value.state === 'live' ? null : Number(value.actualMinutes) || 0,
   ] : null;
   const plan = snapshot.planSnapshot || {};
   const active = snapshot.activeWork || {};
@@ -831,7 +837,9 @@ function executionStructureKey(snapshot = {}, view = 'timing') {
     snapshot.status || '',
     snapshot.notice || '',
     plan.plan?.uid || '',
+    plan.pageTitle || '',
     (plan.tasks || []).map(entry),
+    (snapshot.dailyReview?.rows || []).map(entry),
     entry(active.focused),
     (active.recent || []).map(entry),
     (snapshot.entries || []).map(entry),

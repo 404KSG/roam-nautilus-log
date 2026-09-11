@@ -27,7 +27,8 @@ export function createRendererClockReader({
     }
     const instant = now();
     for (const [uid, value] of cache) if (instant - value.at >= ttlMs) cache.delete(uid);
-    const uids = [...new Set(taskUids.filter(uid => typeof uid === 'string' && uid))];
+    const uids = [...new Set((Array.isArray(taskUids) ? taskUids : []).filter(uid => typeof uid === 'string' && uid))];
+    if (!uids.length) return [];
     const covered = new Set(snapshot?.status !== 'error' ? snapshot?.entryTaskUids || [] : []);
     const byOwner = new Map();
     for (const entry of snapshot?.entries || []) {

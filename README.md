@@ -65,7 +65,7 @@ Default Todo Duration because Google's public Tasks API exposes a due date, not
 a reliable time interval. Add an explicit duration such as `30m` only when a
 task needs an override. Imported parent rows carry a quiet `· Google Calendar`
 source suffix; the chart removes that suffix from labels. Normal click preserves
-Roam text you changed.
+Roam text you changed, but restores a removed source suffix.
 Option/Alt-click force-refreshes Google-managed strings while leaving
 user-created children alone. All-day, free/transparent, and declined events are
 ignored. Nautilus normally restores the connection after a Roam reload; users

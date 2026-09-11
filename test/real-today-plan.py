@@ -322,6 +322,20 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     page.wait_for_function('window.readyTaskUids !== null')
                     assert uid not in page.evaluate('window.readyTaskUids'), 'confirmed panel must not briefly offer actions on a stale task'
                 check(surface+'-confirmed-rows-are-fresh',confirmed_rows_are_fresh)
+                def unchanged_refresh():
+                    if surface!='execution':
+                        return
+                    mount(surface)
+                    page.locator(TRIGGER).click();state('ready-present')
+                    page.locator('.nautilus-log-timing__capacity-token').click()
+                    page.wait_for_selector('.nautilus-log-timing__popover[aria-busy="false"]')
+                    page.evaluate('''() => {
+                        window.retainedAction=document.querySelector('.nautilus-log-timing__icon-button.is-complete');
+                        retainedAction.focus();
+                    }''')
+                    page.evaluate('realPlan.refresh()')
+                    assert page.evaluate('retainedAction.isConnected && document.activeElement === retainedAction'), 'unchanged refresh must retain action nodes and focus'
+                check(surface+'-unchanged-refresh',unchanged_refresh)
                 def children_only_locate():
                     mount(surface)
                     page.locator(TRIGGER).click();state('ready-present');full_tree()
