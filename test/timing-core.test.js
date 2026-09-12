@@ -557,13 +557,17 @@ test('execution surface structure ignores one-second ticks but detects real row 
     timing.executionStructureKey(base, 'timing'),
     timing.executionStructureKey({ ...base, standalonePomodoro: { startedAt: 1234 } }, 'timing'),
   );
-  assert.equal(
+  assert.notEqual(
     timing.executionStructureKey({ ...base, revision: 4 }, 'plan'),
     timing.executionStructureKey({ ...changed, revision: 4 }, 'plan'),
   );
-  assert.notEqual(
+  assert.equal(
     timing.executionStructureKey({ ...base, revision: 4 }, 'plan'),
     timing.executionStructureKey({ ...base, revision: 5 }, 'plan'),
+  );
+  assert.notEqual(
+    timing.executionStructureKey({ ...base, structureRevision: 4 }, 'plan'),
+    timing.executionStructureKey({ ...base, structureRevision: 5 }, 'plan'),
   );
 });
 

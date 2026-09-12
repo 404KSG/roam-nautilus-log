@@ -2,7 +2,7 @@ import * as timingCore from './timing-core';
 import { graphName } from './graph-context';
 import { readBlockTree } from './entry-helpers';
 import { blockUidExists, createDailyPage, createGraphBlock, openPrimaryPlan, pageTitleFor,
-  readDailyPageUid, readPrimaryPlan, showToast } from './timing-roam';
+  readDailyPageUid, readPlanIdentity, readPrimaryPlan, showToast } from './timing-roam';
 
 const PREFIX = 'nautilus-log:today-plan-operation:';
 const hostGlobal = () => (typeof window !== 'undefined' ? window : globalThis);
@@ -194,20 +194,23 @@ export function createTodayPlanSession({ extensionAPI, now = () => new Date(), b
     const snapshot = readTarget(t);
     return snapshot.plan ? observedPlan(t,snapshot,authoritative,receiptChecked) : absent(t,inspectTemplate());
   };
-  function checkReceipt(t,authoritative,observedPlanUid = null) {
+  function checkReceipt(t,authoritative,observedPlanUid = null,sameTurnSnapshot = null) {
     if (state.targetKey !== t.key) setState({...base(t),status:'checking'});
     const prior = checks.get(t.key);
     if (prior?.pending) return prior.pending;
     const check = {observedPlanUid,record:prior?.blocked ? prior.record : null};checks.set(t.key,check);
     // Foreground/explicit checks may revisit an edited template. Ticks do not.
     inspected = null;
-    const apply = raw => {
+    const apply = (raw, snapshot = null) => {
       assertTarget(t);
       if (checks.get(t.key) !== check || state.targetKey !== t.key) return getState();
       // Losing a settings value cannot erase an incomplete receipt already
       // verified in this session. It remains a read-only integrity obligation.
       const record = parseRecord(raw,t) || check.record, intent = intents.get(t.key);
-      if (!record && !intent?.attempted) {check.blocked=false;return projectRead(t,authoritative,true);}
+      if (!record && !intent?.attempted) {
+        check.blocked=false;
+        return snapshot?.plan ? observedPlan(t,snapshot,authoritative,true) : projectRead(t,authoritative,true);
+      }
       const r = record || intent.record;
       check.record = r;
       check.observedPlanUid = r.rootUid;
@@ -226,7 +229,9 @@ export function createTodayPlanSession({ extensionAPI, now = () => new Date(), b
         if (check.record) partial(t,check.record,{reason:'Verifying the recorded operation…'});
         else setState({...base(t),status:'checking'});
       }
-      const result = raw?.then ? Promise.resolve(raw).then(apply) : apply(raw);
+      // Only reuse a discovery read from this synchronous turn. If settings
+      // awaited, the plan may have moved or disappeared and must be read again.
+      const result = raw?.then ? Promise.resolve(raw).then(apply) : apply(raw,sameTurnSnapshot);
       if (!result?.then) return result;
       check.pending = result.catch(e=>{
         if (checks.get(t.key) !== check || state.targetKey !== t.key) return getState();
@@ -427,25 +432,9 @@ export function createTodayPlanSession({ extensionAPI, now = () => new Date(), b
     } catch (error) { clickError = error; }
     return { frozen, clickError, snapshot };
   }
-  function activateToday({ locateMode = 'main', ifPresent = 'locate' } = {}) {
-    if (destroyed) return Promise.resolve(getState());
-    if (operation) return operation.promise;
-    const status = state.status;
-    if (status === 'creating' || status === 'checking') return Promise.resolve(getState());
-    if (['read-failed', 'ready-blocked', 'partial'].includes(status)) return Promise.resolve(getState());
-    if (status === 'nav-failed') return locateToday({ locateMode });
-    let t;
-    try { t = targetNow(); }
-    catch (error) { return Promise.resolve(fail(error)); }
-    if (status === 'ready-absent') return ensureForTarget(t, { locateMode });
-    const intentCapture = captureCreateIntent(t);
-    if (intentCapture.clickError) {
-      fail(intentCapture.clickError, t);
-      return Promise.resolve(getState());
-    }
-    if (!intentCapture.snapshot?.plan) return ensureForTarget(t, { locateMode, intentCapture });
-    const liveUid = intentCapture.snapshot.plan.uid;
-    return Promise.resolve(checkReceipt(t, true)).then(async () => {
+  function confirmActivation(t, locateMode, ifPresent, snapshot = null, refreshRows = false) {
+    const liveUid = snapshot?.plan?.uid || state.planUid;
+    return Promise.resolve(checkReceipt(t, true, null, snapshot)).then(async () => {
       if (destroyed) return getState();
       try { assertTarget(t); }
       catch (error) { return fail(error, t); }
@@ -454,15 +443,60 @@ export function createTodayPlanSession({ extensionAPI, now = () => new Date(), b
         return next;
       }
       const runtimeUid = trackingEnabled() ? readTrackingSnapshot()?.planSnapshot?.plan?.uid : next.planUid;
-      if (trackingEnabled() && requestTrackingRefresh && (next.planUid !== liveUid || runtimeUid !== next.planUid)) {
-        try { await requestTrackingRefresh({ immediate: true, rescanPlan: true }); }
-        catch (_) { /* never clone again for a refresh failure */ }
+      const rescanPlan = next.planUid !== liveUid || runtimeUid !== next.planUid;
+      if (trackingEnabled() && requestTrackingRefresh && (refreshRows || rescanPlan)) {
+        // Validate the visible rows too: a missed child watch must not expose
+        // stale task actions for a frame before the next background refresh.
+        // The ordinary same-root path uses the runtime's scoped Pull, not a
+        // second Daily Note scan.
+        try { await requestTrackingRefresh({ immediate: true, rescanPlan }); }
+        catch (error) { return fail(error, t); }
         try { assertTarget(t); }
         catch (error) { return fail(error, t); }
+        const refreshed = readTrackingSnapshot();
+        if (refreshed?.status === 'error' || refreshed?.planSnapshot?.plan?.uid !== next.planUid) {
+          return fail(fault('failed'), t);
+        }
       }
       if (ifPresent === 'keep') return { ...getState(), activation: 'keep' };
       return locateToday({ locateMode });
     });
+  }
+  function activateToday({ locateMode = 'main', ifPresent = 'locate', deferPresentCheck } = {}) {
+    if (destroyed) return Promise.resolve(getState());
+    if (operation) return operation.promise;
+    const status = state.status;
+    if (status === 'creating' || status === 'checking') return Promise.resolve(getState());
+    if (['read-failed', 'ready-blocked', 'partial'].includes(status)) return Promise.resolve(getState());
+    if (status === 'nav-failed') return locateToday({ locateMode });
+    let t;
+    try {
+      t = targetNow();
+      if (ifPresent === 'keep' && typeof deferPresentCheck === 'function' && state.targetKey === t.key) {
+        const identity = readPlanIdentity(state.planUid);
+        if (identity?.pageTitle === t.pageTitle && timingCore.isNautilusComponent(identity.string)) {
+          // Existence is only permission to paint a checking shell, not to use
+          // stale rows. Confirm Primary selection and receipts after that paint.
+          // Disappearance after this boundary must never create a new intent.
+          return Promise.resolve(deferPresentCheck()).then((active) => {
+            if (active === false || destroyed) return getState();
+            assertTarget(t);
+            if (operation) return getState();
+            return confirmActivation(t, locateMode, ifPresent, null, true);
+          }).catch(error => fail(error,t));
+        }
+      }
+    } catch (error) { return Promise.resolve(fail(error,t)); }
+    if (status === 'ready-absent') return ensureForTarget(t, { locateMode });
+    // A missing/moved root still uses the original synchronous capture so a
+    // silent whole-root deletion can be recreated on this same explicit click.
+    const intentCapture = captureCreateIntent(t);
+    if (intentCapture.clickError) {
+      fail(intentCapture.clickError, t);
+      return Promise.resolve(getState());
+    }
+    if (!intentCapture.snapshot?.plan) return ensureForTarget(t, { locateMode, intentCapture });
+    return confirmActivation(t, locateMode, ifPresent, intentCapture.snapshot, typeof deferPresentCheck === 'function');
   }
   function ensureToday({locateMode='main',resume=false} = {}) {
     if (destroyed) return Promise.resolve(getState());

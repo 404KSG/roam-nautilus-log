@@ -8,7 +8,31 @@ async function loadExtension(label) {
   return import(`data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#${label}-${Date.now()}`);
 }
 
-test('shared Plan watcher publishes moved daily wrappers immediately without duplicate subscribers', async () => {
+test('a watch burst reads only the latest plan once after leaving the input turn', async () => {
+  const extension = await loadExtension('watch-burst');
+  let callback, pulls = 0, text = 'old';
+  const notifications = [];
+  const bridge = extension.createPlanWatchBridge({ roam: { data: {
+    pull: () => { pulls++; return { ':block/string': text, ':block/children': [] }; },
+    addPullWatch: (_pattern, _lookup, fn) => { callback = fn; },
+    removePullWatch: () => {},
+  } } });
+  const stop = bridge.subscribe('plan', value => notifications.push(value));
+  pulls = 0;
+  for (let i = 0; i < 10; i++) { text = `edit-${i}`; callback(); }
+  assert.equal(pulls, 0, 'input handlers must not materialize a full Plan Pull');
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(pulls, 1);
+  assert.equal(notifications.length, 2);
+  assert.equal(notifications.at(-1)['block/string'], 'edit-9');
+  callback();
+  stop();
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(pulls, 1, 'unsubscribing cancels a pending read');
+  bridge.destroy();
+});
+
+test('shared Plan watcher publishes moved daily wrappers without duplicate subscribers', async () => {
   const extension = await loadExtension('plan-watch');
   const calls = { add: [], remove: [], pull: 0 };
   let watchedCallback = null;
@@ -59,12 +83,14 @@ test('shared Plan watcher publishes moved daily wrappers immediately without dup
     ],
   };
   watchedCallback(null, current);
+  await new Promise(resolve => setTimeout(resolve, 10));
 
   assert.equal(first.at(-1)['block/children'][0]['block/string'], '{{[[TODO]]}} ((source-task))');
   assert.equal(second.at(-1)['block/children'][0]['block/uid'], 'daily-wrapper');
 
+  const removedBeforeUnsubscribe = calls.remove.length;
   stopFirst();
-  assert.equal(calls.remove.length, 0);
+  assert.equal(calls.remove.length, removedBeforeUnsubscribe);
   stopSecond();
   await Promise.resolve();
   await Promise.resolve();
@@ -113,6 +139,7 @@ test('direct child edits invalidate the shared plan even when the parent members
     }],
   };
   childWatch(null, { ':block/string': '{{[[TODO]]}} ((source-task)) 25m' });
+  await new Promise(resolve => setTimeout(resolve, 10));
 
   assert.equal(
     snapshots.at(-1)['block/children'][0]['block/string'],
@@ -234,6 +261,7 @@ test('shared Plan watcher tracks every exact source in a nested reference status
 
   strings.set('deep-source', '{{[[DONE]]}} Reusable report 20m');
   deepWatch(null, { ':block/string': strings.get('deep-source') });
+  await new Promise(resolve => setTimeout(resolve, 10));
   const child = snapshots.at(-1)['block/children'][0];
   const task = extension.resolveRendererTaskInstance({
     uid: child['block/uid'],

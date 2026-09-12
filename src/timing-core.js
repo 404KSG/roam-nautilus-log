@@ -804,10 +804,10 @@ function isStandalonePomodoroOverdue(state, now = Date.now(), thresholdMinutes =
 
 function executionStructureKey(snapshot = {}, view = 'timing') {
   const normalizedView = ['timing', 'plan', 'review'].includes(view) ? view : 'timing';
-  if (Number.isInteger(snapshot.revision)) {
+  if (Number.isInteger(snapshot.structureRevision)) {
     return JSON.stringify([
       normalizedView,
-      snapshot.revision,
+      snapshot.structureRevision,
       snapshot.status || '',
       snapshot.notice || '',
     ]);
@@ -823,6 +823,10 @@ function executionStructureKey(snapshot = {}, view = 'timing') {
     Boolean(value.running),
     Number(value.minutes) || 0,
     Number(value.plannedMinutes) || 0,
+    Number(value.remainingMinutes) || 0,
+    value.statusOrigin || '',
+    value.state || '',
+    value.state === 'live' ? null : Number(value.actualMinutes) || 0,
   ] : null;
   const plan = snapshot.planSnapshot || {};
   const active = snapshot.activeWork || {};
@@ -831,7 +835,9 @@ function executionStructureKey(snapshot = {}, view = 'timing') {
     snapshot.status || '',
     snapshot.notice || '',
     plan.plan?.uid || '',
+    plan.pageTitle || '',
     (plan.tasks || []).map(entry),
+    (snapshot.dailyReview?.rows || []).map(entry),
     entry(active.focused),
     (active.recent || []).map(entry),
     (snapshot.entries || []).map(entry),

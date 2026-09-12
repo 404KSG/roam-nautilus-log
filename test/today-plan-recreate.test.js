@@ -212,6 +212,93 @@ function dailyQueryCount(graph) {
   )).length;
 }
 
+test('ready-present keep reuses same-turn discovery instead of reading the Daily Note twice', async (t) => {
+  const { graph, session } = await mount(t);
+  await session.ensureToday({ locateMode: 'none' });
+  await flush(40);
+  const reads = dailyQueryCount(graph);
+  const writes = writeCount(graph);
+
+  const result = await session.activateToday({ locateMode: 'none', ifPresent: 'keep' });
+
+  assert.equal(result.activation, 'keep');
+  assert.equal(result.planUid, ROOT);
+  assert.equal(dailyQueryCount(graph) - reads, 1);
+  assert.equal(writeCount(graph), writes);
+});
+
+test('present validation waits for the shell and never recreates a root lost during that wait', async (t) => {
+  const { graph, session } = await mount(t);
+  await session.ensureToday({ locateMode: 'none' });
+  await flush(40);
+  const reads = dailyQueryCount(graph), writes = writeCount(graph);
+  let release;
+  const paint = new Promise(resolve => { release = resolve; });
+  const pending = session.activateToday({ ifPresent: 'keep', deferPresentCheck: () => paint });
+  assert.equal(dailyQueryCount(graph), reads, 'known-root hint must not materialize the Daily Note');
+  deleteSubtree(graph, ROOT);
+  release(true);
+  const result = await pending;
+  assert.equal(result.status, 'ready-absent');
+  assert.equal(result.activation, undefined);
+  assert.equal(writeCount(graph), writes);
+  assert.equal(graph.blocks.has(ROOT), false);
+});
+
+for (const change of ['cancel', 'date', 'graph']) {
+  test(`deferred present validation respects ${change} before reading or writing`, async (t) => {
+    const { graph, session, setNow } = await mount(t);
+    await session.ensureToday({ locateMode: 'none' });
+    await flush(40);
+    const reads = dailyQueryCount(graph), writes = writeCount(graph);
+    let release;
+    const paint = new Promise(resolve => { release = resolve; });
+    const pending = session.activateToday({ ifPresent: 'keep', deferPresentCheck: () => paint });
+    if (change === 'date') setNow(new Date(2026, 8, 10, 0, 0, 1));
+    if (change === 'graph') window.roamAlphaAPI = { ...graph.roam, graph: { name: 'other-graph' } };
+    release(change !== 'cancel');
+    const result = await pending;
+    assert.equal(result.activation, undefined);
+    assert.equal(dailyQueryCount(graph), reads);
+    assert.equal(writeCount(graph), writes);
+    if (change !== 'cancel') assert.equal(result.error, change === 'date' ? 'dateChanged' : 'graphChanged');
+  });
+}
+
+test('deferred keep discovers an earlier Primary instead of trusting the still-present old root', async (t) => {
+  const { graph, session, runtime } = await mount(t);
+  await session.ensureToday({ locateMode: 'none' });
+  let release;
+  const paint = new Promise(resolve => { release = resolve; });
+  const pending = session.activateToday({ ifPresent: 'keep', deferPresentCheck: () => paint });
+  graph.children('day').forEach(block => { block.order += 1; });
+  graph.add({ uid: 'new-primary', string: COMPONENT, parentUid: 'day', order: 0 });
+  const writes = writeCount(graph);
+  release(true);
+  const result = await pending;
+  assert.equal(result.activation, 'keep');
+  assert.equal(result.planUid, 'new-primary');
+  assert.equal(runtime.getSnapshot().planSnapshot.plan.uid, 'new-primary');
+  assert.equal(writeCount(graph), writes);
+});
+
+test('same-turn discovery is not reused after an asynchronous receipt read', async (t) => {
+  const { graph, session } = await mount(t);
+  await session.ensureToday({ locateMode: 'none' });
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  graph.hooks.get = (key, values) => key.includes('today-plan-operation')
+    ? gate.then(() => values.get(key)) : values.get(key);
+  const writes = writeCount(graph);
+  const pending = session.activateToday({ ifPresent: 'keep' });
+  deleteSubtree(graph, ROOT);
+  release();
+  const result = await pending;
+  assert.equal(result.status, 'ready-absent');
+  assert.equal(result.activation, undefined);
+  assert.equal(writeCount(graph), writes);
+});
+
 test('children-only deletion and all-DONE remain an existing plan and do not refill', async (t) => {
   const { graph, session } = await mount(t);
   assert.equal((await session.ensureToday({ locateMode: 'none' })).status, 'ready-present');
@@ -302,15 +389,21 @@ test('an older queued valid projection cannot resurrect a deleted root', async (
   window.clearTimeout = (id) => {
     if (id > 0 && id <= queued.length) queued[id - 1] = null;
   };
-  const child = graph.children(ROOT)[0];
-  child.string = '09:00-09:30 Stand-up edited';
-  assert.ok(graph.fireUid(child.uid) >= 1);
-  assert.ok(queued.some(Boolean), 'child edit must queue a cheap projection');
-  deleteSubtree(graph, ROOT);
-  assert.ok(graph.fireUid(ROOT) >= 1);
-  const pending = queued.filter(Boolean);
-  window.setTimeout = nativeSetTimeout;
-  window.clearTimeout = nativeClearTimeout;
+  let pending;
+  try {
+    const child = graph.children(ROOT)[0];
+    child.string = '09:00-09:30 Stand-up edited';
+    assert.ok(graph.fireUid(child.uid) >= 1);
+    await flush(10); // The bridge coalesces before it reads/publishes.
+    assert.ok(queued.some(Boolean), 'child edit must queue a cheap projection');
+    deleteSubtree(graph, ROOT);
+    assert.ok(graph.fireUid(ROOT) >= 1);
+    await flush(10);
+    pending = queued.filter(Boolean);
+  } finally {
+    window.setTimeout = nativeSetTimeout;
+    window.clearTimeout = nativeClearTimeout;
+  }
   for (const fn of pending) fn();
   await flush(40);
   assert.equal(session.getState().status, 'ready-absent');

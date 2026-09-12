@@ -83,6 +83,7 @@ async function mount(opts={}, reload=false) {
   return session.getState();
 }
 window.realPlan={mount,reload:()=>mount(options,true),cleanup,state:()=>session.getState(),
+  refresh:()=>runtime?.requestRefresh({immediate:true}),
   tree:()=>readBlockTree(ROOT),blocks:()=>[...graph.blocks.values()],trace:()=>graph.trace,
   recover:()=>{release?.();release=null;delete graph.hooks.beforeCreate;delete graph.hooks.navigate;delete graph.hooks.query;},
   command:()=>[...palette.values()][0].callback(),

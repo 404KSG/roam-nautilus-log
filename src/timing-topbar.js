@@ -5,6 +5,11 @@ const TOPBAR_ID = 'nautilus-log-timing-topbar';
 const POPOVER_ID = 'nautilus-log-timing-popover';
 const SHORTCUT_TOOLTIP_ID = 'nautilus-log-timing-shortcut-tooltip';
 const ENERGY_CONFIRM_MS = 320;
+// Paint-first yield budget: a healthy rAF plus a 0ms macrotask usually
+// finishes within one or two frames. 50ms is ~3 frames at 60Hz, long
+// enough that the frame path should win, short enough to cap a starved
+// animation frame. This is a scheduler budget, not a busy-loop SLA.
+const POPOVER_PAINT_BUDGET_MS = 50;
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -63,6 +68,9 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   let pomoCloseButton = null;
   let shortcutTooltip = null;
   let popover = null;
+  let popoverPending = false;
+  let pendingPresentChecks = 0;
+  let deferredPaintWait = null;
   let observers = [];
   let unsubscribe = null;
   let unsubscribePlan = null;
@@ -73,8 +81,6 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   let lastPopoverKey = null;
   let lastPopoverExecution = null;
   let pendingPopoverFocus = null;
-  let deferredRefreshFrame = null;
-  let deferredRefreshTimer = null;
   let triggerMode = null;
   let deleteConfirmation = null;
   let unscheduledExpanded = false;
@@ -109,22 +115,40 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     return undefined;
   };
   const invalidateActivation = () => { activationGeneration += 1; };
-  const recoverPresentPlan = (locateMode, onPresent) => {
+  const recoverPresentPlan = (locateMode, onPresent, { deferPresentCheck } = {}) => {
     if (!todayPlan?.activateToday) return false;
     const roam = typeof window !== 'undefined' ? window.roamAlphaAPI : null;
     const generation = ++activationGeneration;
+    const panelCheck = typeof deferPresentCheck === 'function';
+    if (panelCheck) pendingPresentChecks += 1;
     void runAction(async () => {
-      const result = await todayPlan.activateToday({ locateMode, ifPresent: 'keep' });
+      let result;
+      try {
+        result = await todayPlan.activateToday({ locateMode, ifPresent: 'keep', deferPresentCheck });
+      } catch (error) {
+        if (!destroyed && generation === activationGeneration && popoverPending) closePopover();
+        throw error;
+      }
       if (destroyed || generation !== activationGeneration) return;
-      if (typeof window !== 'undefined' && window.roamAlphaAPI !== roam) return;
+      if (typeof window !== 'undefined' && window.roamAlphaAPI !== roam) {
+        if (popoverPending) closePopover();
+        return;
+      }
       const status = result?.status || todayPlanState()?.status;
       if (['read-failed', 'ready-blocked', 'partial'].includes(status)) {
         closePopover();
         diagnostics.show();
         return;
       }
-      if (result?.activation !== 'keep') return;
+      if (result?.activation !== 'keep') {
+        if (popoverPending) closePopover();
+        return;
+      }
       if (status === 'ready-present' || status === 'nav-failed') await onPresent?.();
+    }).finally(() => {
+      if (!panelCheck) return;
+      pendingPresentChecks -= 1;
+      if (!destroyed) renderTrigger();
     });
     return true;
   };
@@ -409,16 +433,60 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   };
 
   const cancelDeferredRefresh = () => {
-    if (deferredRefreshFrame !== null) window.cancelAnimationFrame?.(deferredRefreshFrame);
-    if (deferredRefreshTimer !== null) window.clearTimeout(deferredRefreshTimer);
-    deferredRefreshFrame = null;
-    deferredRefreshTimer = null;
+    const wait = deferredPaintWait;
+    deferredPaintWait = null;
+    if (!wait) return;
+    if (wait.frame !== null) window.cancelAnimationFrame?.(wait.frame);
+    if (wait.yieldTimer !== null) window.clearTimeout(wait.yieldTimer);
+    if (wait.fallbackTimer !== null) window.clearTimeout(wait.fallbackTimer);
+    wait.frame = wait.yieldTimer = wait.fallbackTimer = null;
+    const settle = wait.resolve;
+    wait.resolve = null;
+    settle?.(false);
   };
 
+  const afterPopoverPaint = () => new Promise((resolve) => {
+    cancelDeferredRefresh();
+    const wait = {
+      frame: null,
+      yieldTimer: null,
+      fallbackTimer: null,
+      resolve,
+    };
+    deferredPaintWait = wait;
+    const belongs = () => deferredPaintWait === wait;
+    const finish = () => {
+      if (!belongs()) return;
+      if (wait.frame !== null) window.cancelAnimationFrame?.(wait.frame);
+      if (wait.yieldTimer !== null) window.clearTimeout(wait.yieldTimer);
+      if (wait.fallbackTimer !== null) window.clearTimeout(wait.fallbackTimer);
+      wait.frame = wait.yieldTimer = wait.fallbackTimer = null;
+      wait.resolve = null;
+      deferredPaintWait = null;
+      resolve(!destroyed && Boolean(popover));
+    };
+    wait.fallbackTimer = window.setTimeout(finish, POPOVER_PAINT_BUDGET_MS);
+    if (typeof window.requestAnimationFrame === 'function') {
+      wait.frame = window.requestAnimationFrame(() => {
+        if (!belongs()) return;
+        wait.frame = null;
+        const yielded = window.setTimeout(finish, 0);
+        if (!belongs()) {
+          window.clearTimeout(yielded);
+          return;
+        }
+        wait.yieldTimer = yielded;
+      });
+    } else {
+      wait.yieldTimer = window.setTimeout(finish, 0);
+    }
+  });
+
   const closePopover = ({ restoreFocus = false } = {}) => {
-    if (!popover) return;
     invalidateActivation();
     cancelDeferredRefresh();
+    popoverPending = false;
+    if (!popover) return;
     clearDeleteConfirmation();
     popover.remove();
     popover = null;
@@ -781,6 +849,16 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   const renderPopover = ({ force = false } = {}) => {
     if (!popover) return;
     const text = ui();
+    if (popoverPending) {
+      const checking = todayPlanState()?.labels?.checking || text.createToday.checking;
+      if (lastPopoverKey !== `checking:${checking}`) {
+        const status = element('div', 'nautilus-log-timing__empty', checking);
+        status.setAttribute('role', 'status');
+        popover.replaceChildren(status);
+        lastPopoverKey = `checking:${checking}`;
+      }
+      return;
+    }
     const execution = currentTriggerExecution();
     if (!force && state.status === 'working' && lastPopoverKey !== null) {
       // A queued graph mutation changes only button availability. Rebuilding
@@ -800,6 +878,9 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       ] : null,
     ]);
     if (!force && structureKey === lastPopoverKey) {
+      syncActionAvailability();
+      restorePopoverFocus(pendingPopoverFocus);
+      pendingPopoverFocus = null;
       updateLiveElapsed();
       updatePopoverProjection(execution);
       return;
@@ -970,33 +1051,24 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     if (fontFamily) popover.style.setProperty('--nl-exec-font-family', fontFamily);
   };
 
-  const openPopover = async ({ focusPanel = false } = {}) => {
+  const openPopover = async ({ focusPanel = false, pending = false } = {}) => {
     if (popover) return closePopover({ restoreFocus: true });
+    popoverPending = pending;
     popover = element('div', 'nautilus-log-timing__popover');
     popover.id = POPOVER_ID;
     popover.setAttribute('role', 'dialog');
     popover.setAttribute('aria-label', ui().identity.panel);
+    popover.setAttribute('aria-busy', String(pending));
+    popover.tabIndex = -1;
     document.body.append(popover);
     syncPopoverTypography();
     trigger.setAttribute('aria-expanded', 'true');
     renderPopover({ force: true });
     positionPopover();
-    if (focusPanel) popover.querySelector('[role="tab"][aria-selected="true"]')?.focus({ preventScroll: true });
-    const refreshAfterPaint = () => {
-      deferredRefreshFrame = null;
-      deferredRefreshTimer = window.setTimeout(() => {
-        deferredRefreshTimer = null;
-        if (popover) void runtime.requestRefresh();
-      }, 0);
-    };
-    if (typeof window.requestAnimationFrame === 'function') {
-      deferredRefreshFrame = window.requestAnimationFrame(refreshAfterPaint);
-    } else {
-      deferredRefreshTimer = window.setTimeout(() => {
-        deferredRefreshTimer = null;
-        if (popover) void runtime.requestRefresh();
-      }, 0);
-    }
+    if (focusPanel) (pending ? popover : popover.querySelector('[role="tab"][aria-selected="true"]'))?.focus({ preventScroll: true });
+    if (!pending) void runAction(async () => {
+      if (await afterPopoverPaint()) await runtime.requestRefresh();
+    });
     outsideHandler = (event) => {
       if (!popover?.contains(event.target) && !container?.contains(event.target)) closePopover();
     };
@@ -1009,6 +1081,17 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     };
     document.addEventListener('mousedown', outsideHandler, true);
     document.addEventListener('keydown', keyHandler, true);
+  };
+
+  const confirmPopoverOpen = () => {
+    if (!popover) return;
+    const restorePanelFocus = document.activeElement === popover;
+    popoverPending = false;
+    popover.setAttribute('aria-busy', 'false');
+    renderPopover({ force: true });
+    if (restorePanelFocus) popover.querySelector('[role="tab"][aria-selected="true"]')?.focus({ preventScroll: true });
+    // The session already refreshed the runtime before confirming this open.
+    // Do not schedule another identical read/rebuild immediately afterward.
   };
 
   const renderTrigger = () => {
@@ -1069,7 +1152,8 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
         trigger.classList.toggle('is-checking', planStatus === 'checking');
         trigger.classList.toggle('is-blocked', planStatus === 'ready-blocked');
         trigger.classList.toggle('is-read-failed', planStatus === 'read-failed');
-        trigger.disabled = planStatus === 'creating' || planStatus === 'checking';
+        trigger.disabled = !popoverPending && (planStatus === 'creating'
+          || (planStatus === 'checking' && pendingPresentChecks === 0));
         trigger.setAttribute('aria-label', label);
         trigger.setAttribute('aria-description', planUi.message || label);
         if (pomoCloseButton) pomoCloseButton.hidden = true;
@@ -1168,16 +1252,21 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
           else runAction(() => runtime.locate());
           return;
         }
+        // Closing is always local UI work, even while a read is pending or
+        // the underlying plan has changed. Never run creation on a close click.
+        if (popover) {
+          closePopover({ restoreFocus: true });
+          return;
+        }
         if (!liveTimer && shouldUseTodayPlanEntry()) {
+          invalidateActivation();
           activateTodayPlanEntry('main');
           return;
         }
-        const openPlanPanel = () => {
-          if (event.target.closest?.('.nautilus-log-timing__capacity-token')) view = 'plan';
-          return openPopover({ focusPanel: event.detail === 0 });
-        };
-        if (!liveTimer && recoverPresentPlan('main', openPlanPanel)) return;
-        openPlanPanel();
+        if (event.target.closest?.('.nautilus-log-timing__capacity-token')) view = 'plan';
+        const pending = !liveTimer && typeof todayPlan?.activateToday === 'function';
+        openPopover({ focusPanel: event.detail === 0, pending });
+        if (pending) recoverPresentPlan('main', confirmPopoverOpen, { deferPresentCheck: afterPopoverPaint });
       });
       pomoCloseButton = element('button', 'nautilus-log-timing__pomodoro-close');
       pomoCloseButton.type = 'button';
@@ -1246,6 +1335,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     if (typeof ResizeObserver === 'function') {
       const resizeObserver = new ResizeObserver(syncResponsiveDensity);
       resizeObserver.observe(topbar);
+      if (container) resizeObserver.observe(container);
       if (search) resizeObserver.observe(search);
       observers.push(resizeObserver);
     }
@@ -1263,7 +1353,8 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     window.addEventListener('nautilus-log:settings-changed', settingsListener);
     unsubscribe = runtime.subscribe((next) => {
       state = next;
-      ensureMounted();
+      if (!container?.isConnected) ensureMounted();
+      else renderTrigger();
       if (popover) renderPopover();
     });
     unsubscribePlan = todayPlan?.subscribe?.(() => {

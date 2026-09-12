@@ -92,8 +92,10 @@ export function createTimingRuntime({
   let refreshAgain = false;
   let refreshRunning = false;
   let forcePlanRescan = false;
+  let lastStructureKey = '';
   let snapshot = {
     revision: 0,
+    structureRevision: 0,
     status: 'loading',
     notice: '',
     planSnapshot: null,
@@ -105,6 +107,15 @@ export function createTimingRuntime({
     now: now(),
   };
   const listeners = new Set();
+
+  const updateStructure = () => {
+    // Compute semantic identity on data changes, not on every elapsed tick.
+    const key = timingCore.executionStructureKey({ ...snapshot, structureRevision: null, status: '', notice: '' }, 'plan');
+    if (key !== lastStructureKey) {
+      lastStructureKey = key;
+      snapshot = { ...snapshot, structureRevision: snapshot.structureRevision + 1 };
+    }
+  };
 
   const publish = () => {
     for (const listener of listeners) {
@@ -312,6 +323,7 @@ export function createTimingRuntime({
       projectionStatus = 'ready';
       snapshot = {
         revision: snapshot.revision + 1,
+        structureRevision: snapshot.structureRevision,
         status: mutationInFlight ? 'working' : projectionStatus,
         notice,
         planSnapshot,
@@ -322,6 +334,7 @@ export function createTimingRuntime({
         standalonePomodoro,
         now: currentNow,
       };
+      updateStructure();
       syncPlanWatch();
     } catch (error) {
       projectionStatus = 'error';
@@ -756,12 +769,23 @@ export function createTimingRuntime({
       lastGraphRefresh = wallNow();
       void requestRefresh().then((next) => reconcileDoneClocks(next, label));
     };
+    const publishTime = () => {
+      const currentNow = now();
+      // Only the bounded active set can expire here; do not walk the full
+      // history or query the graph just to remove an expired Recent item.
+      const activeWork = timingCore.buildActiveWork(snapshot.activeWork.items, currentNow, snapshot.activeWork.windowMinutes);
+      const changed = activeWork.recent.length !== snapshot.activeWork.recent.length
+        || activeWork.focused?.clockUid !== snapshot.activeWork.focused?.clockUid;
+      snapshot = { ...snapshot, now: currentNow,
+        ...(changed ? { activeWork, revision: snapshot.revision + 1 } : {}) };
+      if (changed) updateStructure();
+      publish();
+    };
     ticker = window.setInterval(() => {
-      if (destroyed) return;
-      snapshot = { ...snapshot, now: now() };
+      if (destroyed || (typeof document !== 'undefined' && document.visibilityState === 'hidden')) return;
       // The one-second lane is pure UI time. Publish first and never make a
       // graph query part of a visible elapsed-time tick.
-      publish();
+      publishTime();
       if (wallNow() - lastGraphRefresh >= RECOVERY_REFRESH_INTERVAL_MS) {
         scheduleRecoveryRefresh('DONE clock');
       }
@@ -770,7 +794,10 @@ export function createTimingRuntime({
       let wasHidden = document.visibilityState === 'hidden';
       const onVisibilityChange = () => {
         const hidden = document.visibilityState === 'hidden';
-        if (wasHidden && !hidden) scheduleRecoveryRefresh('visibility');
+        if (wasHidden && !hidden) {
+          publishTime();
+          scheduleRecoveryRefresh('visibility');
+        }
         wasHidden = hidden;
       };
       document.addEventListener('visibilitychange', onVisibilityChange);

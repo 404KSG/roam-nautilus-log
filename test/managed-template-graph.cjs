@@ -46,6 +46,8 @@ function createManagedGraph({ day = true, namespaced = true } = {}) {
     }
     if (pattern.includes(':block/children')) {
       result[namespaced ? ':block/children' : 'children'] = children(b.uid).map(child => pull(child,pattern));
+    }
+    if (pattern.includes(':block/page')) {
       result[namespaced ? ':block/page' : 'page'] = {':node/title':[...pages].find(([,uid])=>uid===pageOf(b))?.[0]};
     }
     return result;

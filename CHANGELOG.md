@@ -36,6 +36,20 @@
 
 ### Fixed
 
+- Recent entries expire without graph reads. Hidden tabs skip elapsed UI work.
+  Plan watch bursts coalesce before graph reads, and unchanged refreshes preserve
+  execution action nodes, focus and scroll. Stable time ticks do not measure
+  topbar geometry.
+- Opening the idle execution popover now shows a cancellable checking shell
+  before the full Daily Note read. A scoped root hint allows that read to wait
+  for a paint opportunity (`requestAnimationFrame` plus a 0ms macrotask), with a
+  50ms (~3 frames at 60Hz) scheduler budget as a bounded fallback if the frame
+  path does not finish. This budget does not promise that an actual paint always
+  happens first. The hint never certifies Primary selection or a creation
+  receipt. Same-turn discovery is reused instead of reading the Daily Note
+  twice. Closing performs no graph reads, and Escape/outside clicks cannot
+  reopen a dismissed panel when validation finishes. Whole-root recreation and
+  partial-tree guards remain intact.
 - The actual execution shortcut tooltip and lightweight tooltip now share a
   border-box, viewport-clamped, wrapping theme; long explanations no longer escape
   a 320px bubble. Absent/unconfirmed plans show no fake 100% capacity. Unsupported,

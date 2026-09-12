@@ -211,6 +211,21 @@ function pageTitleFor(date = new Date()) {
   return `${month} ${day}${ordinal}, ${date.getFullYear()}`;
 }
 
+/** A cheap hint for deferring present-plan validation, never creation authority. */
+export function readPlanIdentity(uid) {
+  const roam = api();
+  const pull = roam?.data?.pull || roam?.pull;
+  if (!uid || typeof pull !== 'function') return null;
+  const owner = pull === roam?.data?.pull ? roam.data : roam;
+  const entity = pull.call(owner, '[:block/string {:block/page [:node/title]}]', [':block/uid', uid]);
+  if (!entity) return null;
+  const page = entity[':block/page'] ?? entity['block/page'] ?? entity.page;
+  return {
+    string: entity[':block/string'] ?? entity['block/string'] ?? entity.string,
+    pageTitle: page?.[':node/title'] ?? page?.['node/title'] ?? page?.title,
+  };
+}
+
 export function readPrimaryPlan(date = new Date(), fallbackMinutes = 15) {
   const pageTitle = pageTitleFor(date);
   const rows = query(DAILY_PAGE_TREE_QUERY, pageTitle);
