@@ -318,6 +318,10 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                                 visible:Boolean(dialog),
                                 busy:dialog?dialog.getAttribute('aria-busy'):null,
                                 buttons:dialog?dialog.querySelectorAll('button').length:0,
+                                header:Boolean(dialog?.querySelector('.nautilus-log-timing__popover-header')),
+                                labels:dialog?[...dialog.querySelectorAll('.nautilus-log-timing__tab')].map(el=>el.textContent):[],
+                                checkingText:Boolean(dialog?.textContent.includes("Checking today's plan")),
+                                rows:dialog?dialog.querySelectorAll('[data-task-uid]').length:0,
                                 reads:reads()-before,
                             };
                             document.querySelector('.nautilus-log-timing__trigger').click();
@@ -326,6 +330,10 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                         assert snap['visible']
                         assert snap['busy']=='true'
                         assert snap['buttons']==0, 'unverified data must expose no actions'
+                        assert snap['header'], 'pending must retain the panel chrome, not a standalone checking message'
+                        assert snap['labels']==['Timing','Plan','Review'], snap
+                        assert not snap['checkingText'], 'ready-plan clicks must not flash Checking text'
+                        assert snap['rows']==0, 'pending must not present cached task rows as validated'
                         assert snap['reads']==0
                         assert snap['closed']
                         assert snap['readsAfterClose']==0
@@ -655,6 +663,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                         page.locator(TRIGGER).click();state('checking')
                         assert page.locator('.nautilus-log-timing__popover').get_attribute('aria-busy')=='true'
                         assert page.locator('.nautilus-log-timing__popover button').count()==0
+                        assert "Checking today's plan" not in page.locator(TRIGGER).inner_text(), 'validation must not replace the existing topbar display'
                         assert not page.locator(TRIGGER).is_disabled()
                         if action=='escape':
                             page.keyboard.press('Escape')

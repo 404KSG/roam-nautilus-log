@@ -1734,6 +1734,34 @@
   z-index: 10050;
 }
 
+/* Static loading chrome: no flashing message, animation, or unverified actions. */
+.nautilus-log-timing__loading .nautilus-log-timing__popover-header {
+  pointer-events: none;
+}
+
+.nautilus-log-timing__loading .nautilus-log-timing__tab {
+  align-items: center;
+  border-radius: 4px;
+  display: inline-flex;
+}
+
+.nautilus-log-timing__loading-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 12px;
+}
+
+.nautilus-log-timing__loading-line {
+  background: rgba(117, 126, 140, 0.14);
+  border-radius: 4px;
+  height: 10px;
+  width: 72%;
+}
+
+.nautilus-log-timing__loading-line:nth-child(2) { width: 90%; }
+.nautilus-log-timing__loading-line:nth-child(3) { width: 55%; }
+
 .nautilus-log-timing__popover-header {
   align-items: center;
   border-bottom: 1px solid rgba(117, 126, 140, 0.16);

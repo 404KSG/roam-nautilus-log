@@ -4,6 +4,11 @@
 
 ### Changed
 
+- Opening the execution panel keeps its header and a static loading skeleton
+  instead of flashing “Checking today's plan.” The topbar stays visually stable
+  during that check. Loading remains accessible through the dialog's busy state
+  and status label; no task rows or actions appear until validation completes.
+  Plan validation, cancellation, and the bounded paint yield are unchanged.
 - Calendar mapping writes keep a `google-calendar-sync-pending` WAL, fail closed
   on unreadable/foreign/old-scope journals, park uncertain creates as conflicts,
   and preserve local edits. The settings default for that key is an empty string

@@ -851,11 +851,37 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     const text = ui();
     if (popoverPending) {
       const checking = todayPlanState()?.labels?.checking || text.createToday.checking;
-      if (lastPopoverKey !== `checking:${checking}`) {
-        const status = element('div', 'nautilus-log-timing__empty', checking);
+      const loadingKey = `loading:${checking}:${view}`;
+      if (lastPopoverKey !== loadingKey) {
+        // Keep the panel chrome visible while validating, without exposing
+        // stale task data or actions. These are decorative spans, not tabs.
+        const loading = element('div', 'nautilus-log-timing__loading');
+        const header = element('div', 'nautilus-log-timing__popover-header');
+        header.setAttribute('aria-hidden', 'true');
+        const headerMain = element('div', 'nautilus-log-timing__popover-header-main');
+        const identity = element('span', 'nautilus-log-timing__identity');
+        const hint = icon('chevron-right');
+        hint.classList.add('nautilus-log-timing__identity-hint');
+        identity.append(icon('unresolve'), element('span', 'nautilus-log-timing__identity-name', 'Nautilus'), hint);
+        const tabs = element('div', 'nautilus-log-timing__tabs');
+        ['timing', 'plan', 'review'].forEach((name) => {
+          tabs.append(element('span', `nautilus-log-timing__tab${view === name ? ' is-active' : ''}`, text.tabs[name]));
+        });
+        headerMain.append(identity, element('span', 'nautilus-log-timing__identity-divider'), tabs);
+        const timer = element('span', 'nautilus-log-timing__icon-button');
+        timer.append(icon('stopwatch'));
+        header.append(headerMain, timer);
+        const status = element('div', 'nautilus-log-timing__loading-body');
         status.setAttribute('role', 'status');
-        popover.replaceChildren(status);
-        lastPopoverKey = `checking:${checking}`;
+        status.setAttribute('aria-label', checking);
+        for (let i = 0; i < 3; i += 1) {
+          const line = element('span', 'nautilus-log-timing__loading-line');
+          line.setAttribute('aria-hidden', 'true');
+          status.append(line);
+        }
+        loading.append(header, status);
+        popover.replaceChildren(loading);
+        lastPopoverKey = loadingKey;
       }
       return;
     }
@@ -1136,6 +1162,12 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     if (!focused) {
       const planUi = todayPlanState();
       const planStatus = planUi?.status;
+      if (popoverPending && planStatus === 'checking') {
+        // The open dialog owns validation feedback. Keep the existing trigger
+        // stable and available for closing, rather than flashing its label too.
+        trigger.disabled = false;
+        return;
+      }
       if (['ready-absent', 'creating', 'checking', 'ready-blocked', 'read-failed', 'partial', 'nav-failed'].includes(planStatus)) {
         const label = planEntryLabel(planUi);
         const mode = `plan-${planStatus}`;
