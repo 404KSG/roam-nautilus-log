@@ -100,6 +100,7 @@ export function createTimingRuntime({
     notice: '',
     planSnapshot: null,
     entries: [],
+    entryTaskUids: [],
     dailyReview: timingCore.buildDailyReview(),
     activeWork: { focused: null, recent: [], items: [], count: 0, windowMinutes: 45 },
     pomodoro: null,
@@ -328,6 +329,10 @@ export function createTimingRuntime({
         notice,
         planSnapshot,
         entries,
+        // Only a scoped graph read certifies complete history for an owner.
+        // Supplied mutation projections may contain just a subset of history.
+        entryTaskUids: suppliedEntries === undefined ? [...new Set(relevantTaskUids)]
+          : suppliedEntries === snapshot.entries ? snapshot.entryTaskUids : [],
         dailyReview,
         activeWork,
         pomodoro,

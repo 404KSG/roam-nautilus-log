@@ -163,8 +163,18 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested L
   assert.match(component, /:actualDuration actual-duration/);
   assert.match(component, /:lastClockEnd last-clock-end/);
   assert.match(entry, /getClockRenderContext/);
+  assert.match(entry, /createRendererClockReader/);
+  assert.match(entry, /changedClockOwners/);
+  assert.match(entry, /rendererClockCache\.invalidate/);
+  assert.match(entry, /createRendererPlanSession/);
+  assert.match(entry, /watchGeneration: generation/);
+  assert.match(entry, /nautilus-log:clock-changed/);
+  assert.match(component, /nautilus-log:clock-changed/);
+  assert.match(timingRuntime, /entryTaskUids/);
+  assert.match(timingRuntime, /Only a scoped graph read certifies complete history/);
   assert.match(component, /log-core-call "truncateTextToWidth"/);
   assert.match(component, /log-core-call "placeExternalLabels"/);
+  assert.match(component, /log-core-call "translateLabelRects"/);
   assert.match(component, /log-core-call "resolveRendererSettings"/);
   assert.match(component, /log-core-call "hourlyGridSegments"/);
   assert.match(component, /log-core-call "pastTimelineSegments"/);
@@ -186,6 +196,26 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested L
   assert.doesNotMatch(component, /\(abs \(- done-at duration\)\)/);
 });
 
+test('SVG label layout source wiring skips unused fallback and translates bounds rects; this is not SCI execution', () => {
+  const getLegendStart = component.indexOf('(defn get-legend-rect');
+  const getLegendEnd = component.indexOf(';; --------------- Log core bridge');
+  assert.ok(getLegendStart >= 0 && getLegendEnd > getLegendStart);
+  const getLegend = component.slice(getLegendStart, getLegendEnd);
+  assert.match(getLegend, /fallback-rect \(when \(and \(nil\? external-rect\) rects\)/);
+  assert.match(getLegend, /:core-placement\? \(boolean external-rect\)/);
+  assert.match(getLegend, /iterate-rect-place/);
+
+  const showEventsStart = component.indexOf('(defn show-events');
+  const showEvents = component.slice(showEventsStart, component.indexOf('(defn apply-plan-session-state!', showEventsStart));
+  assert.match(showEvents, /log-core-call "translateLabelRects"/);
+  assert.match(showEvents, /prepared-rects/);
+  assert.match(showEvents, /every\? :core-placement\? bounds-rects/);
+
+  assert.match(logCore, /function translateLabelRects/);
+  assert.match(logCore, /translateLabelRects,/);
+  assert.match(entry, /window\.nautilusLogCore = logCore/);
+});
+
 test('the chart resolves daily task instances through the shared reference-precedence core', () => {
   assert.match(entry, /import \* as timingCore from "\.\/timing-core"/);
   assert.match(entry, /window\.nautilusLogTaskCore = timingCore/);
@@ -203,11 +233,52 @@ test('the chart resolves daily task instances through the shared reference-prece
   assert.doesNotMatch(mapping, /str-with-resolved-block-refs/);
 });
 
-test('mounted charts share the extension Plan Pull Watch and release it on cleanup', () => {
-  assert.match(component, /\.\-watchPlan/);
+test('mounted charts bind the production renderer plan session and release it on cleanup', () => {
+  assert.match(component, /\.\-createRendererPlanSession/);
   assert.match(component, /watch-plan-children!/);
-  assert.match(component, /stop-plan-watch/);
+  assert.match(component, /\.sync session/);
+  assert.match(component, /\.destroy session/);
+  assert.match(component, /writesAllowed/);
+  assert.match(component, /data-nautilus-plan-status/);
   assert.doesNotMatch(component, /roam\.datascript\.reactive/);
+});
+
+test('charts create a plan session later if the factory is missing at mount', () => {
+  const mainStart = component.indexOf('(defn main');
+  const main = component.slice(mainStart);
+  const withLet = main.slice(main.indexOf('(r/with-let'), main.indexOf('(finally'));
+  const finallyBlock = main.slice(main.indexOf('(finally'));
+  const syncStart = component.indexOf('(defn sync-plan-session!');
+  const syncEnd = component.indexOf('(defn reset-now-time-atom');
+  assert.ok(syncStart >= 0 && syncStart < mainStart, 'sync-plan-session! must be bound before main');
+  const syncDefn = component.slice(syncStart, syncEnd);
+  assert.match(syncDefn, /when @alive\?/);
+  assert.match(syncDefn, /when-not @plan-session/);
+  assert.match(syncDefn, /watch-plan-children!/);
+  const watchedBind = withLet.indexOf('watched-children-state (r/atom [])');
+  const interval = withLet.indexOf('js/setInterval');
+  assert.ok(
+    watchedBind >= 0 && interval >= 0 && watchedBind < interval,
+    'watched-children-state must bind before the poll interval',
+  );
+  assert.match(withLet, /plan-session-alive\? \(atom true\)/);
+  assert.match(withLet, /sync-plan-session! plan-session plan-session-alive\?/);
+  const aliveFalse = finallyBlock.indexOf('plan-session-alive? false');
+  const destroyCall = finallyBlock.indexOf('.destroy session');
+  assert.ok(aliveFalse >= 0 && destroyCall >= 0 && aliveFalse < destroyCall,
+    'cleanup must close the factory retry before destroy');
+});
+
+test('chart write gates require a ready plan and do not block CLOCK stop', () => {
+  const writes = component.slice(
+    component.indexOf('(defn plan-writes-allowed?'),
+    component.indexOf('(defn tidy-button'),
+  );
+  assert.match(writes, /:writesAllowed/);
+  assert.match(writes, /"ready"/);
+  assert.match(timingTopbar, /runtime\.stopTask\(\)/);
+  assert.doesNotMatch(timingTopbar, /writesAllowed|plan-writes-allowed/);
+  assert.doesNotMatch(timingRuntime, /writesAllowed/);
 });
 
 test('the spiral exposes responsive slice and available-slot hover details above an inert grid', () => {
@@ -320,7 +391,8 @@ test('global and overnight windows use continuous minutes and a start-relative s
   assert.match(component, /windowStartMinutes \(:workday-start settings\)/);
   assert.match(component, /:windowStartMinutes \(:workday-start settings\)/);
   assert.match(component, /:nowMinutes timeline-minute/);
-  assert.match(component, /clock-render-context page-title-val \(mapv :uid mapped\) \(:workday-end settings\)/);
+  assert.match(component, /clock-render-context page-title-val completed-task-uids \(:workday-end settings\)/);
+  assert.match(component, /\(if \(seq completed-task-uids\)/);
   assert.match(guide, /00:00–23:00/);
   assert.match(guide, /21:00–02:00/);
   assert.match(guideZh, /00:00–23:00/);

@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+### Changed
+
+- Calendar mapping writes keep a `google-calendar-sync-pending` WAL, fail closed
+  on unreadable/foreign/old-scope journals, park uncertain creates as conflicts,
+  and preserve local edits. The settings default for that key is an empty string
+  that the journal parser treats as absent; filling defaults does not overwrite an
+  existing WAL. Same-UID graph reads may be reused only until JavaScript yields.
+  Google list reads use connection-scoped metadata TTL, a small concurrency cap,
+  and a per-paginate budget; incomplete reads do not call reconcile. These are
+  local synthetic-adapter bounds, not a live Google latency claim, and malformed
+  journals are not bulk-migrated.
+- CLOCK renderer history overlays per-owner entries (15s TTL, 256 LRU) and does
+  not cache a failed read as empty. Chart plan sessions bind provider generation;
+  a replaced watch cannot revive writes, and unavailable reads stay stale rather
+  than looking like a confirmed empty tree.
+- Plan Tidy uses the outline lock (separate from Calendar mapping), keeps a
+  still-safe Undo token on no-op, expires a token after partial Undo, and confirms
+  collapsed rows actually expanded before reporting Undo success. Toast failures
+  after finished writes do not rewrite the result as `changed: false`. Unknown
+  (`changed: null`) means a mutation was attempted but not confirmed.
+- External chart labels may reuse a local `placeExternalLabels` pass via
+  translate; that is an operation-count saving in Node, not a Roam UI jank fix.
+- OAuth worker route handlers now `await` and return sanitized JSON on thrown
+  errors in source/tests only. This is not a deployed worker change.
+- LOGBOOK 256-character variants remain; urgent-keyword and live Google connection
+  behavior are unchanged.
+
 ### Added
 
 - A 30px topbar control and **Nautilus Log: Create or open today’s plan** can

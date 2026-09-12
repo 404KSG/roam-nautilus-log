@@ -1,6 +1,6 @@
 # Nautilus Log Google Calendar privacy
 
-Last updated: August 30, 2026
+Last updated: September 12, 2026
 
 Google Calendar integration is optional, disabled by default, read-only, and
 activated by the user. Nautilus Log requests only permission to read calendar
@@ -24,7 +24,10 @@ lists, calendar events, Google Task lists, and Google Tasks.
 - The extension stores the opaque connection ID and secret in Roam extension
   settings. Access tokens remain in memory.
 - Imported event or Task blocks and the managed sync mapping remain in the
-  user's Roam graph under the user's control.
+  user's Roam graph under the user's control. A graph-local pending sync or
+  conflict record also retains destination UIDs and before/after managed block
+  text to verify interrupted writes. These records contain no access tokens or
+  connection secrets and do not pass through the authorization service.
 - When Google exposes the authorized Primary calendar identifier, an imported
   event's `Open` URL may include it as an encoded Google account hint. The
   original Google event link remains authoritative and is used unchanged when

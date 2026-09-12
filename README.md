@@ -77,6 +77,14 @@ Google sessions.
 
 See [Google Calendar sync](./docs/google-calendar-sync.md) for the block shape,
 authorization, scopes, merge rules, and [privacy contract](./PRIVACY.md).
+Interrupted writes use a graph-local `google-calendar-sync-pending` journal:
+fail closed on unreadable or foreign records, keep local edits and parked
+conflicts, and never treat a missing/blank journal as a wipe of an existing WAL.
+Google reads stay inside a per-paginate budget; incomplete network results do
+not become a successful partial sync. Same-UID graph reads may be reused only
+inside a no-yield interval. These are local correctness bounds, not a claim of
+faster live Google or Roam latency, and old malformed journals are not
+auto-migrated.
 
 ## Optional Execution Layer
 
@@ -111,7 +119,17 @@ planning. The compact topbar panel provides:
 
 Switching tasks closes the previous CLOCK before starting the next. Graph-scoped
 Web Locks coordinate CLOCK writes across tabs in the same browser storage partition;
-see the guide for synchronization limits. CLOCK takes priority over POMO and can
+see the guide for synchronization limits. CLOCK history reads overlay per-owner
+entries with a short TTL and LRU cap; a failed read is not cached as empty history.
+Chart subscriptions bind a provider generation so a replaced watch does not keep
+writing, and a temporary unavailable read stays stale instead of looking like a
+confirmed empty tree. Plan Tidy serializes outline writes, reports partial/unknown
+change flags instead of a fake success, and Undo only reports success after the
+collapsed rows actually expand (the running task stays an exception). Chart label
+placement may skip a redundant local layout pass; that is an operation-count saving,
+not a measured UI-jank fix. LOGBOOK 256-character variants remain compatible.
+Local OAuth worker `await` and error-shape tests are source-only and not a deployed
+service change. CLOCK takes priority over POMO and can
 keep the active task at the top of Roam's right sidebar. An additional default-off
 **Show capacity as an energy bar** setting can replace the ordinary topbar token
 with a two-level time-capacity gauge: one layered track above a left-aligned

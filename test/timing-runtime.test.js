@@ -441,6 +441,74 @@ test('authoritative recovery reuses the Primary Plan Pull and reads CLOCK only f
   assert.equal(trace.includes('pull:task-b'), true);
 });
 
+test('only a scoped CLOCK read certifies owners; mutation projections do not', async (t) => {
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const extension = await import(`data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#entry-task-uids-${Date.now()}`);
+  const { roam, blocks } = graphMock();
+  blocks.set('drawer-a', { uid: 'drawer-a', string: 'LOGBOOK::', parentUid: 'task-a', order: 0 });
+  blocks.set('clock-a', {
+    uid: 'clock-a',
+    string: 'CLOCK: [2026-08-22 Sat 09:00]--[2026-08-22 Sat 09:20] => 0:20',
+    parentUid: 'drawer-a',
+    order: 0,
+  });
+  const settings = new Map([
+    ['todo-duration', 15],
+    ['workday-start', 5],
+    ['workday-end', 21],
+    ['timing-line-sidebar', false],
+    ['recent-retention-minutes', 45],
+  ]);
+  global.window = {
+    roamAlphaAPI: roam,
+    setInterval: () => 99,
+    clearInterval: () => {},
+    setTimeout,
+    clearTimeout,
+  };
+  installTestHostLocks(global.window);
+  const runtime = extension.createTimingRuntime({
+    extensionAPI: {
+      settings: {
+        get: (key) => settings.get(key),
+        set: async (key, value) => settings.set(key, value),
+      },
+    },
+    now: () => new Date(2026, 7, 22, 10, 0),
+    readPlan: () => ({
+      'block/uid': 'plan',
+      'block/string': blocks.get('plan').string,
+      'block/children': ['task-a', 'task-b', 'event'].map((uid) => ({
+        'block/uid': uid,
+        'block/string': blocks.get(uid).string,
+        'block/order': blocks.get(uid).order,
+        'block/refs': [],
+      })),
+    }),
+  });
+  await runtime.initialize();
+  t.after(() => {
+    runtime.destroy();
+    delete global.window;
+  });
+
+  assert.deepEqual(runtime.getSnapshot().entryTaskUids, [],
+    'initialize supplies a full-graph projection and must not mark owners covered');
+  await runtime.requestRefresh({ immediate: true });
+  const ready = runtime.getSnapshot();
+  assert.ok(ready.entryTaskUids.includes('task-a'));
+  assert.ok(ready.entryTaskUids.includes('task-b'));
+  const certified = [...ready.entryTaskUids];
+
+  runtime.refresh({ planSnapshot: ready.planSnapshot, entries: ready.entries });
+  assert.deepEqual(runtime.getSnapshot().entryTaskUids, certified);
+
+  runtime.refresh({ planSnapshot: ready.planSnapshot, entries: [...ready.entries] });
+  assert.deepEqual(runtime.getSnapshot().entryTaskUids, [],
+    'a new mutation entries array cannot certify complete owner history');
+  assert.equal(runtime.getSnapshot().entries.length, ready.entries.length);
+});
+
 test('one-second Timing ticks stay graph-free and recovery waits for a real idle period', async (t) => {
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#tick-lanes-${Date.now()}`;

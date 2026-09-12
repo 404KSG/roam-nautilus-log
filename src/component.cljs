@@ -286,7 +286,7 @@
                                                   :sortKey order-key
                                                   :width w
                                                   :height h}]}))
-        fallback-rect (when rects
+        fallback-rect (when (and (nil? external-rect) rects)
                         (assoc
                          (iterate-rect-place {:w w :h h}
                                              rects
@@ -296,7 +296,9 @@
                                              center)
                          :text text))
         new-text-rect (assoc (or external-rect fallback-rect {}) :text text)]
-    (assoc new-text-rect :real-rect-radians (real-rect-radians new-text-rect center))))
+    (assoc new-text-rect
+           :core-placement? (boolean external-rect)
+           :real-rect-radians (real-rect-radians new-text-rect center))))
 
 ;; --------------- Log core bridge ----------------------
 
@@ -1090,6 +1092,8 @@
   ([events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy]
    (events->slices events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy []))
   ([events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy init-rects]
+   (events->slices events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy init-rects {}))
+  ([events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy init-rects prepared-rects]
    (let [events (vec (filter #(not= true (:freetime %)) events))
          track-map (label-track-map events)
          conflict-uids (set (or (log-core-call "overlappingFixedEventUids" {:events events}) []))]
@@ -1107,7 +1111,8 @@
             text (:description event)
             radius (+ (nth snail-blueprint-outer-radiuses (spiral-profile-index (:start event) settings))
                       (* 18 (or (get track-map (:uid event)) 0)))
-            new-rect (get-legend-rect rects text mid-radians radius center settings (:start event) anchor-y)]
+            new-rect (or (get prepared-rects (:uid event))
+                         (get-legend-rect rects text mid-radians radius center settings (:start event) anchor-y))]
         (println?debug "RADIUS INSIDE EVENTS-SLICES: " radius)              
         (recur (inc i) (rest events) (conj rects new-rect)
                (conj all-slice-components
@@ -1161,12 +1166,14 @@
               text (:description event)
               radius (+ (nth snail-blueprint-outer-radiuses (spiral-profile-index (:start event) settings))
                         (* 18 (or (get track-map (:uid event)) 0)))
-              new-rect (get-legend-rect rects text mid-radians radius center settings (:start event) anchor-y)]
+              new-rect (assoc (get-legend-rect rects text mid-radians radius center settings (:start event) anchor-y)
+                              :event-uid (:uid event))]
           (recur (inc i) (rest events) (conj rects new-rect) (min left-min (:x new-rect)) (max right-max (+ (:x new-rect) (:w new-rect))) (min top-min (:y new-rect)) (max bottom-max (+ (:y new-rect) (:h new-rect)))))
         [(+ reserve (- center-x left-min))
          (+ reserve (- right-max left-min))
          (+ reserve (- center-y top-min))
-         (+ (* 3 reserve) (- bottom-max top-min) (when (< (:workday-start settings) 420) reserve))])))) ;; when the workday starts before 7:00, the snail has to get more space below
+         (+ (* 3 reserve) (- bottom-max top-min) (when (< (:workday-start settings) 420) reserve))
+         rects])))) ;; when the workday starts before 7:00, the snail has to get more space below
 
 (defn split-and-trim [page-title n]
   (map #(subs % 0 (min n (count %))) (str/split page-title #"," 2)))
@@ -1264,18 +1271,28 @@
         all-events-for-dim (vec (if @show-done-atom? (concat events done-todos) events))
         past-occupied-events (vec (concat events done-todos))
         unplanned-pattern-id (str "nautilus-log-unplanned-" block-uid)
-        [center-x suggested-width center-y suggested-height]
+        [center-x suggested-width center-y suggested-height bounds-rects]
         (if compact?
           [(/ old-width 2) old-width (/ old-height 2) old-height]
           (events->new-dimensions all-events-for-dim {:center-x (/ old-width 2) :center-y (/ old-height 2)} settings))
         center {:center-x center-x :center-y center-y}
+        prepared-rects (if (and (seq bounds-rects)
+                                (every? :core-placement? bounds-rects)
+                                (every? #(seq (:event-uid %)) bounds-rects)
+                                (= (count bounds-rects) (count (set (map :event-uid bounds-rects)))))
+                         (into {} (map (juxt :event-uid identity)
+                                       (or (log-core-call "translateLabelRects"
+                                             {:rects bounds-rects
+                                              :dx (- center-x (/ old-width 2))
+                                              :dy (- center-y (/ old-height 2))}) [])))
+                         {})
         hover-enabled? true
         elapsed-page? (:showElapsed timeline-state)
         interactive? (:interactive timeline-state)
         timeline-minute (:elapsedThroughMinutes timeline-state)
-        [all-slice-components rects] (events->slices events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy)
+        [all-slice-components rects] (events->slices events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy [] prepared-rects)
         done-slices-and-rects (when @show-done-atom?
-                                (events->slices done-todos elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy rects))
+                                (events->slices done-todos elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy rects prepared-rects))
         done-slice-components (first done-slices-and-rects)
         rects (or (second done-slices-and-rects) rects)
         now-visible? (:showNow timeline-state)
@@ -1351,17 +1368,38 @@
                             event)]
         (recur (rest events) new-start (conj result updated-event))))))
 
-(defn watch-plan-children! [block-uid children-state]
-  "Uses the extension's shared Roam Pull Watch so a moved or edited direct
-   child enters the chart immediately without one reactive watch per render."
+(defn apply-plan-session-state! [children-state status-state js-state]
+  (let [state (js->clj js-state :keywordize-keys true)]
+    (reset! children-state (or (:children state) []))
+    (reset! status-state state)))
+
+(defn watch-plan-children! [block-uid children-state status-state]
+  "Uses the production renderer plan session so a replaced watch bridge rebinds
+   without remounting, and unavailable pulls keep last-good children."
   (try
-    (if-let [watcher (some-> js/window .-nautilusLogExtensionData .-watchPlan)]
-      (.call watcher nil block-uid
-             (fn [snapshot]
-               (let [normalized (js->clj snapshot :keywordize-keys true)]
-                 (reset! children-state (:block/children normalized)))))
-      (fn [] nil))
-    (catch :default _e (fn [] nil))))
+    (if-let [create (some-> js/window .-nautilusLogExtensionData .-createRendererPlanSession)]
+      (let [session (.call create nil (clj->js {:planUid block-uid}))
+            apply! (fn [state]
+                     (apply-plan-session-state! children-state status-state state))]
+        (when (.-subscribe session)
+          (.subscribe session apply!))
+        (when (.-sync session)
+          (.sync session))
+        session)
+      nil)
+    (catch :default _e nil)))
+
+(defn sync-plan-session! [plan-session alive? block-uid children-state status-state]
+  "Creates the production session once the factory exists after mount.
+   Cleanup must not recreate a destroyed session."
+  (when @alive?
+    (when-not @plan-session
+      (when-let [session (watch-plan-children! block-uid children-state status-state)]
+        (reset! plan-session session)))
+    (when-let [session @plan-session]
+      (try
+        (.sync session)
+        (catch :default _e nil)))))
 
 (defn reset-now-time-atom [now-time-atom]
   (reset! now-time-atom
@@ -1384,10 +1422,15 @@
         [:path {:d "M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"}]
         [:line {:x1 "1" :y1 "1" :x2 "23" :y2 "23"}]])]))
 
-(defn tidy-button [block-uid settled-uids tidy-state settings copy]
+(defn plan-writes-allowed? [plan-status-state]
+  (let [status @plan-status-state]
+    (boolean (and (:writesAllowed status)
+                  (= (:status status) "ready")))))
+
+(defn tidy-button [block-uid settled-uids tidy-state settings copy plan-status-state]
   [:button
    {:on-click (fn []
-                (when-not @tidy-state
+                (when (and (plan-writes-allowed? plan-status-state) (not @tidy-state))
                   (when-let [tidy (some-> js/window .-nautilusLogExtensionData .-tidyPlan)]
                     (reset! tidy-state true)
                     (-> (js/Promise.resolve
@@ -1402,7 +1445,7 @@
     :data-nautilus-tooltip (:tidy copy)
     :aria-label (:tidy copy)
     :aria-busy (if @tidy-state "true" "false")
-    :disabled @tidy-state}
+    :disabled (or @tidy-state (not (plan-writes-allowed? plan-status-state)))}
    ;; Keep one 18px control canvas while optically reducing this dense glyph to
    ;; 16.5px. The supplied Lucide paths remain unchanged and centered.
    [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none"
@@ -1450,13 +1493,14 @@
    [:div {:class "nautilus-log-calendar-popover__line nautilus-log-calendar-popover__line--hint"}
     (:calendarTryAgain copy)]])
 
-(defn calendar-button [block-uid page-title-val calendar-state settings copy]
+(defn calendar-button [block-uid page-title-val calendar-state settings copy plan-status-state]
   (when (and (:google-calendar-enabled settings)
              (:google-calendar-configured settings))
     (let [busy? (:busy @calendar-state)
           popover-open? (:open @calendar-state)
           result (:result @calendar-state)
           error (:error @calendar-state)
+          writes-allowed? (plan-writes-allowed? plan-status-state)
           default-tooltip (str (:calendar copy) "\n" (:calendarForce copy))
           tooltip (when-not popover-open?
                     (if busy? (:calendarSyncing copy) default-tooltip))]
@@ -1466,7 +1510,7 @@
         :on-mouse-leave #(swap! calendar-state assoc :hovered false :open false)}
        [:button
         {:on-click (fn [event]
-                     (when (not busy?)
+                     (when (and writes-allowed? (not busy?))
                        (when-let [sync-calendar (some-> js/window .-nautilusLogExtensionData .-syncCalendarPlan)]
                          (swap! calendar-state assoc
                                 :busy true :result nil :error nil :open false)
@@ -1496,7 +1540,7 @@
          :aria-label (if busy? (:calendarSyncing copy) default-tooltip)
          :aria-busy (if busy? "true" "false")
          :aria-expanded (if popover-open? "true" "false")
-         :disabled busy?}
+         :disabled (or busy? (not writes-allowed?))}
         [:span {:class (str "bp3-icon "
                             (if busy?
                               "bp3-icon-refresh nautilus-log-calendar-spinner"
@@ -1785,11 +1829,11 @@
            [:span (:description event)]
            [:span {:class "nautilus-log-warning-message"} (localized-warning (:warning event) copy)]])]])))
 
-(defn log-controls [show-done-state settings collapsed-state block-uid page-title-val render-context settled-uids tidy-state calendar-state copy show-debug-button?]
+(defn log-controls [show-done-state settings collapsed-state block-uid page-title-val render-context settled-uids tidy-state calendar-state copy show-debug-button? plan-status-state]
   [:div {:class "nautilus-log-controls-top"}
    [switch-done-visibility-button show-done-state (:controls copy)]
-   [tidy-button block-uid settled-uids tidy-state settings (:controls copy)]
-   [calendar-button block-uid page-title-val calendar-state settings (:controls copy)]
+   [tidy-button block-uid settled-uids tidy-state settings (:controls copy) plan-status-state]
+   [calendar-button block-uid page-title-val calendar-state settings (:controls copy) plan-status-state]
    [collapse-button collapsed-state block-uid render-context (:controls copy)]
    (when show-debug-button? [switch-debug-button])])
 
@@ -1844,7 +1888,11 @@
           (reset! resize-observer-state observer))))))
 
 (defn main [{:keys [:block-uid]} & args]
-  (r/with-let [is-running? #(try
+  (r/with-let [plan-session (atom nil)
+               plan-status-state (r/atom {:status "unbound" :writesAllowed false})
+               plan-session-alive? (atom true)
+               watched-children-state (r/atom [])
+               is-running? #(try
                               (boolean (.-running js/window.nautilusLogExtensionData))
                               (catch :default _e false))
                *running? (r/atom (or (is-running?) nil))
@@ -1852,13 +1900,18 @@
                                (fn []
                                  (let [next-running-state (is-running?)]
                                    (when (not= @*running? next-running-state)
-                                     (reset! *running? next-running-state))))
+                                     (reset! *running? next-running-state)))
+                                 (sync-plan-session! plan-session plan-session-alive? block-uid watched-children-state plan-status-state))
                                5000)
                settings-state (r/atom (resolve-render-settings args))
                settings-listener (fn [_event]
-                                   (reset! settings-state (resolve-render-settings args)))
+                                   (reset! settings-state (resolve-render-settings args))
+                                   (sync-plan-session! plan-session plan-session-alive? block-uid watched-children-state plan-status-state))
                _settings-listener (.addEventListener js/window settings-event-name settings-listener)
                now-time-atom (r/atom (now-minutes))
+               clock-version-state (r/atom 0)
+               clock-listener (fn [_event] (swap! clock-version-state inc))
+               _clock-listener (.addEventListener js/window "nautilus-log:clock-changed" clock-listener)
                collapsed-state (r/atom false)
                render-context-state (r/atom :pending)
                compact-list-open-state (r/atom nil)
@@ -1877,18 +1930,25 @@
                                      (reset! daily-page-atom? next-daily-page-state))))
                                60000)
                page-title-val (page-title block-uid)
-               watched-children-state (r/atom [])
-               stop-plan-watch (watch-plan-children! block-uid watched-children-state)
+               _plan-session (sync-plan-session! plan-session plan-session-alive? block-uid watched-children-state plan-status-state)
                *text-events (r/track
                              (fn []
                                (let [settings @settings-state
+                                     clock-version @clock-version-state
+                                     clock-minute @now-time-atom
                                      children-list (->> @watched-children-state
                                                         (filter #(not= "" (:block/string %)))
                                                         (sort-by :block/order))
                                      mapped (->> children-list
                                                  (mapv #(task-instance-row % settings))
                                                  (filterv #(not= "structure" (:kind %))))
-                                     clock-context (clock-render-context page-title-val (mapv :uid mapped) (:workday-end settings))
+                                     completed-task-uids (->> mapped
+                                                              (filter #(and (= "task" (:kind %))
+                                                                            (= "DONE" (get-in % [:task-instance :status]))))
+                                                              (mapv :uid))
+                                     clock-context (if (seq completed-task-uids)
+                                                     (clock-render-context page-title-val completed-task-uids (:workday-end settings))
+                                                     {:entries []})
                                      parsed (mapv #(parse-row-params % settings clock-context) mapped)
                                      filtered (filterv #(not= "" (:description %)) parsed)]
                                  (let [dones (filterv #(or (:done-at %) (and (:meeting %) (:done %))) filtered)
@@ -1943,6 +2003,7 @@
                                     :showAvailableSlots true
                                     :showNow @daily-page-atom?})
                 plan-from-time (:scheduleFromMinutes timeline-state)
+                plan-status @plan-status-state
                 [text-events done-events completed-uids] @*text-events
                 expired-fixed-uids (->> text-events
                                         (filter :meeting)
@@ -1976,16 +2037,17 @@
                 events-state [(fill-day text-events (:workday-start settings) (:workday-end settings) plan-from-time) done-events]]
             [:div {:class (str "nautilus-log-container" (when @collapsed-state " nautilus-log-collapsed"))
                    :ref container-ref
-                   :data-nautilus-log-block block-uid}
+                   :data-nautilus-log-block block-uid
+                   :data-nautilus-plan-status (or (:status plan-status) "unbound")}
              (if @collapsed-state
-               [log-controls show-done-state settings collapsed-state block-uid page-title-val @render-context-state settled-uids tidy-state calendar-state copy show-debug-button?]
+               [log-controls show-done-state settings collapsed-state block-uid page-title-val @render-context-state settled-uids tidy-state calendar-state copy show-debug-button? plan-status-state]
                [:div {:class "nautilus-log-shell"}
                 [:header {:class (str "nautilus-log-header"
                                      (when @compact-state " nautilus-log-header--compact"))}
                  [:div {:class "nautilus-log-header-copy"}
                   [capacity-metrics-component capacity settings]]
                  [:div {:class "nautilus-log-header-actions"}
-                  [log-controls show-done-state settings collapsed-state block-uid page-title-val @render-context-state settled-uids tidy-state calendar-state copy show-debug-button?]
+                  [log-controls show-done-state settings collapsed-state block-uid page-title-val @render-context-state settled-uids tidy-state calendar-state copy show-debug-button? plan-status-state]
                   [html-legend-component copy]]]
                 (when @compact-state
                   [compact-overview-component capacity settings copy compact-overview-open-state])
@@ -1994,12 +2056,14 @@
                  [overflow-panel capacity copy]
                  [schedule-warning-panel text-events copy]]])]))))
     (finally
+      (reset! plan-session-alive? false)
       (js/clearInterval check-interval)
       (js/clearInterval clock-interval)
       (.removeEventListener js/window settings-event-name settings-listener)
-      (when stop-plan-watch
+      (.removeEventListener js/window "nautilus-log:clock-changed" clock-listener)
+      (when-let [session @plan-session]
         (try
-          (.call stop-plan-watch nil)
+          (.destroy session)
           (catch :default _e nil)))
       (when-let [resize-observer @resize-observer-state]
         (.disconnect resize-observer)))))

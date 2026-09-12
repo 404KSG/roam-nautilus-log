@@ -19,11 +19,12 @@ import {
   openTaskInRightSidebar,
   readAllEntries,
   readBlockString,
-  readEntriesForTaskUids,
 } from "./timing-roam";
 import { createTimingRuntime } from "./timing-runtime";
+import { changedClockOwners, createRendererClockReader } from "./clock-reader";
 import { createTimingTopbar } from "./timing-topbar";
 import { createPlanWatchBridge } from "./plan-watch";
+import { createRendererPlanSession } from "./renderer-plan-session";
 import { createPlanTidy } from "./tidy-plan";
 import { createTidyCommands, settledUidsForTidy } from "./tidy-commands";
 import {
@@ -79,6 +80,7 @@ const calendarDefaults = {
   "google-calendar-connection": "",
   "google-calendar-ids": "primary",
   "google-calendar-sync-state": "",
+  "google-calendar-sync-pending": "",
 };
 
 let lifecycleGeneration = 0;
@@ -96,35 +98,11 @@ let planTidy = null;
 let tidyCommands = null;
 let calendarRuntime = null;
 let calendarPanelState = { action: "", error: "" };
-const rendererClockCacheMs = 15_000;
-const rendererClockCache = new Map();
-
-function rendererClockCacheKey(taskUids = []) {
-  return [...new Set((Array.isArray(taskUids) ? taskUids : []).filter(Boolean))].sort().join('\u0000');
-}
-
-function cacheRendererClockEntries(entries, key = '') {
-  const previous = rendererClockCache.get(key);
-  if (!Array.isArray(entries)) return previous?.entries || [];
-  rendererClockCache.set(key, { entries, readAt: Date.now() });
-  return entries;
-}
-
-function rendererClockEntries(taskUids = []) {
-  const runtimeEntries = timingRuntime?.getSnapshot?.()?.entries;
-  if (Array.isArray(runtimeEntries)) return runtimeEntries;
-  const key = rendererClockCacheKey(taskUids);
-  const cached = rendererClockCache.get(key);
-  if (cached && Date.now() - cached.readAt < rendererClockCacheMs) {
-    return cached.entries;
-  }
-  try {
-    return cacheRendererClockEntries(readEntriesForTaskUids(taskUids), key);
-  } catch (error) {
-    console.debug("[Nautilus Log] CLOCK render snapshot unavailable", error);
-    return cached?.entries || [];
-  }
-}
+let unsubscribeClockRender = null;
+const rendererClockCache = createRendererClockReader({
+  getSnapshot: () => timingRuntime?.getSnapshot?.(),
+});
+const rendererClockEntries = (taskUids) => rendererClockCache.read(taskUids);
 
 function dailyPageBounds(pageTitle, logicalEndMinutes = 1440) {
   try {
@@ -325,6 +303,16 @@ async function startTiming(extensionAPI) {
       commands.initialize();
       assertStartup();
       timingRuntime = runtime;
+      let previousClockSnapshot = null;
+      unsubscribeClockRender = runtime.subscribe((snapshot) => {
+        const owners = changedClockOwners(previousClockSnapshot, snapshot);
+        previousClockSnapshot = snapshot;
+        if (!owners.length) return;
+        rendererClockCache.invalidate(owners);
+        if (typeof window.dispatchEvent === 'function' && typeof window.CustomEvent === 'function') {
+          window.dispatchEvent(new window.CustomEvent('nautilus-log:clock-changed'));
+        }
+      });
       timingTopbar = topbar;
       timingCommands = commands;
       todayPlanSession?.initialize?.();
@@ -349,6 +337,8 @@ async function stopTiming({ closeActive = false } = {}) {
   if (!timingRuntime) return true;
   if (closeActive) await timingRuntime.disable();
   else timingRuntime.destroy();
+  unsubscribeClockRender?.();
+  unsubscribeClockRender = null;
   rendererClockCache.clear();
   timingCommands?.destroy();
   timingTopbar?.destroy();
@@ -802,12 +792,13 @@ async function onload({ extensionAPI }) {
   trackingRequest += 1;
   trackingQueue = Promise.resolve();
   const currentLoad = () => generation === lifecycleGeneration;
+  rendererClockCache.clear();
   activeCodeBlockUID = codeBlockUID;
   activeRenderStringCore = renderStringCore;
   calendarPanelState = { action: "", error: "" };
   planWatchBridge?.destroy();
   planWatchBridge = createPlanWatchBridge({ readString: readBlockString });
-  planTidy?.clear();
+  planTidy?.destroy();
   planTidy = createPlanTidy({
     runningTaskUid: () => timingRuntime?.getSnapshot?.()?.entries
       ?.find((entry) => entry?.running === true)?.taskUid || null,
@@ -821,10 +812,12 @@ async function onload({ extensionAPI }) {
   window.nautilusLogTaskCore = timingCore;
   window.nautilusLogExtensionData = {
     running: true,
+    watchGeneration: generation,
     shouldSuppressRenderContext,
     isRightSidebarRenderContext,
     getClockRenderContext,
     resolveTaskInstance: resolveRendererTaskInstance,
+    createRendererPlanSession,
     readPlan: planWatchBridge.read,
     watchPlan: planWatchBridge.subscribe,
     tidyPlan: planTidy.run,
@@ -936,13 +929,14 @@ function onunload() {
   stopTiming({ closeActive: false });
   planWatchBridge?.destroy();
   planWatchBridge = null;
-  planTidy?.clear();
+  planTidy?.destroy();
   planTidy = null;
   tidyCommands?.destroy();
   tidyCommands = null;
   calendarRuntime?.destroy();
   calendarRuntime = null;
   calendarPanelState = { action: "", error: "" };
+  rendererClockCache.clear();
   if (typeof window !== "undefined") {
     if (window.nautilusLogExtensionData) {
       window.nautilusLogExtensionData.running = false;
@@ -966,6 +960,9 @@ function onunload() {
 
 export {
   createTimingRuntime,
+  createRendererClockReader,
+  changedClockOwners,
+  createRendererPlanSession,
   createTimingCommands,
   createTodayPlanSession,
   createTodayPlanLauncher,

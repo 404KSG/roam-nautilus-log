@@ -137,7 +137,7 @@ test('calendar runtime syncs only the explicitly clicked Nautilus date and plan'
       sync: async (options) => {
         reconcileCalls.push(options);
         return {
-          created: options.events.length,
+          created: options.events.filter(event=>!['cancelled','excluded'].includes(event.status)).length,
           updated: 0,
           removed: 0,
           localKept: 0,
@@ -162,7 +162,8 @@ test('calendar runtime syncs only the explicitly clicked Nautilus date and plan'
   assert.equal(reconcileCalls[0].planUid, 'tomorrow-plan');
   assert.equal(reconcileCalls[0].force, true);
   assert.equal(reconcileCalls[0].events[0].parentString, '01:00–01:30 Weekly meeting · Google Calendar');
-  assert.equal(reconcileCalls[0].events[1].parentString, '{{[[TODO]]}} Submit report · Google Calendar');
+  assert.equal(reconcileCalls[0].events[1].status, 'excluded');
+  assert.equal(reconcileCalls[0].events[2].parentString, '{{[[TODO]]}} Submit report · Google Calendar');
   assert.equal(result.created, 2);
   assert.equal(result.tasks, 1);
   assert.equal(result.calendarEvents, 1);
@@ -314,6 +315,20 @@ test('calendar runtime makes connection state authoritative for enable and disco
   assert.deepEqual(connectionChanges, [true, false]);
 });
 
+test('destroy during an awaited enable does not start a new authorization client', async () => {
+  const extension=await loadExtension('calendar-connect-destroy');
+  let release, clients=0;
+  const gate=new Promise(resolve=>{release=resolve;});
+  const runtime=extension.createCalendarRuntime({
+    extensionAPI:{settings:{get:()=>'',set:()=>gate}},
+    clientFactory:()=>{clients++;return {authorize:async()=>'',destroy(){}};},
+    reconcilerFactory:()=>({sync:async()=>({}),destroy(){}}),
+  });
+  const pending=runtime.connect();runtime.destroy();release();
+  await assert.rejects(pending,/cancelled|no longer/i);
+  assert.equal(clients,0);
+});
+
 test('calendar runtime rolls the legacy enable gate back when connection is cancelled', async () => {
   const extension = await loadExtension('calendar-connection-cancel');
   const settings = new Map([
@@ -337,4 +352,218 @@ test('calendar runtime rolls the legacy enable gate back when connection is canc
   await assert.rejects(runtime.connect(), /cancelled/i);
   assert.equal(settings.get('google-calendar-enabled'), false);
   assert.equal(runtime.hasConnection(), false);
+});
+
+function jsonResponse(payload, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+test('task read budgets fail closed with zero reconcile instead of tasksUnavailable success', async () => {
+  const extension = await loadExtension('calendar-runtime-task-budget');
+  const settings = new Map([
+    ['google-calendar-enabled', true],
+    ['google-calendar-connection', JSON.stringify({ version: 2, id: 'connection-id', secret: 'connection-secret' })],
+    ['google-calendar-ids', 'primary'],
+    ['google-calendar-sync-state', JSON.stringify({ version: 1, events: {} })],
+    ['workday-start', 5],
+    ['workday-end', 21],
+    ['todo-duration', 15],
+  ]);
+  let taskPages = 0;
+  const reconcileCalls = [];
+  const runtime = extension.createCalendarRuntime({
+    extensionAPI: {
+      settings: {
+        get: (key) => settings.get(key),
+        set: async (key, value) => settings.set(key, value),
+      },
+    },
+    pageTitleToDate: () => new Date(2026, 7, 30),
+    clientFactory: (options) => extension.createGoogleCalendarClient({
+      ...options,
+      authClient: { authorize: async () => 'access-token', invalidateAccessToken() {}, destroy() {} },
+      maxPages: 2,
+      sleepImpl: async () => {},
+      fetchImpl: async (url) => {
+        const href = String(url);
+        if (href.includes('/calendarList')) {
+          return jsonResponse({ items: [{ id: 'connected@example.com', primary: true, summary: 'Work' }] });
+        }
+        if (href.includes('/calendars/')) {
+          return jsonResponse({
+            items: [{
+              id: 'meeting-1',
+              status: 'confirmed',
+              summary: 'Weekly meeting',
+              start: { dateTime: '2026-08-30T09:00:00+08:00' },
+              end: { dateTime: '2026-08-30T09:30:00+08:00' },
+            }],
+          });
+        }
+        if (href.includes('/users/@me/lists')) {
+          return jsonResponse({ items: [{ id: 'work-list', title: 'Work Tasks' }] });
+        }
+        taskPages += 1;
+        if (taskPages > 40) return jsonResponse({ items: [] });
+        return jsonResponse({ items: [{ id: `task-${taskPages}` }], nextPageToken: 'loop-token' });
+      },
+    }),
+    reconcilerFactory: () => ({
+      sync: async (options) => {
+        reconcileCalls.push(options);
+        return { created: options.events.length, updated: 0, removed: 0, localKept: 0, skipped: 0 };
+      },
+    }),
+  });
+
+  await assert.rejects(
+    () => runtime.syncPlan({ planUid: 'today-plan', pageTitle: 'August 30th, 2026' }),
+    (error) => {
+      assert.match(String(error.message), /incomplete|cancelled|budget|page token/i);
+      assert.notEqual(error.tasksUnavailable, true);
+      return true;
+    },
+  );
+  assert.equal(reconcileCalls.length, 0);
+  assert.ok(taskPages <= 8);
+});
+
+test('ordinary Google Tasks failures still degrade without blocking calendar reconcile', async () => {
+  const extension = await loadExtension('calendar-runtime-task-permission');
+  const settings = new Map([
+    ['google-calendar-enabled', true],
+    ['google-calendar-connection', JSON.stringify({ version: 2, id: 'connection-id', secret: 'connection-secret' })],
+    ['google-calendar-ids', 'primary'],
+    ['workday-start', 5],
+    ['workday-end', 21],
+    ['todo-duration', 15],
+  ]);
+  const reconcileCalls = [];
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  try {
+    const runtime = extension.createCalendarRuntime({
+      extensionAPI: {
+        settings: {
+          get: (key) => settings.get(key),
+          set: async (key, value) => settings.set(key, value),
+        },
+      },
+      pageTitleToDate: () => new Date(2026, 7, 30),
+      clientFactory: () => ({
+        readRange: async () => [{
+          calendar: { id: 'primary', summary: 'Work' },
+          events: [{
+            id: 'meeting-1',
+            status: 'confirmed',
+            summary: 'Weekly meeting',
+            start: { dateTime: '2026-08-30T09:00:00+08:00' },
+            end: { dateTime: '2026-08-30T09:30:00+08:00' },
+          }],
+        }],
+        readTasks: async () => {
+          const error = new Error('Request had insufficient authentication scopes.');
+          error.status = 403;
+          throw error;
+        },
+        destroy: () => {},
+      }),
+      reconcilerFactory: () => ({
+        sync: async (options) => {
+          reconcileCalls.push(options);
+          return { created: options.events.length, updated: 0, removed: 0, localKept: 0, skipped: 0 };
+        },
+      }),
+    });
+    const result = await runtime.syncPlan({
+      planUid: 'today-plan',
+      pageTitle: 'August 30th, 2026',
+    });
+    assert.equal(reconcileCalls.length, 1);
+    assert.equal(result.tasksUnavailable, true);
+    assert.equal(result.calendarEvents, 1);
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
+test('runtime load failures do not claim written blocks were retained', async () => {
+  const extension = await loadExtension('calendar-runtime-load-prefix');
+  const settings = new Map([
+    ['google-calendar-enabled', true],
+    ['google-calendar-connection', JSON.stringify({ version: 2, id: 'connection-id', secret: 'secret' })],
+    ['google-calendar-ids', 'primary'],
+    ['google-calendar-sync-state', '{'],
+    ['google-calendar-sync-pending', ''],
+    ['workday-start', 9],
+    ['workday-end', 17],
+  ]);
+  const runtime = extension.createCalendarRuntime({
+    extensionAPI: {
+      settings: {
+        get: (key) => settings.get(key),
+        set: async (key, value) => settings.set(key, value),
+      },
+    },
+    pageTitleToDate: () => new Date(2026, 7, 30),
+    clientFactory: () => ({
+      readRange: async () => [{
+        calendar: { id: 'primary', summary: 'Work' },
+        events: [{
+          id: 'meeting-1',
+          status: 'confirmed',
+          summary: 'Weekly meeting',
+          start: { dateTime: '2026-08-30T09:30:00+08:00' },
+          end: { dateTime: '2026-08-30T10:00:00+08:00' },
+        }],
+      }],
+      destroy() {},
+    }),
+    reconcilerFactory: (options) => extension.createCalendarReconciler({
+      ...options,
+      runExclusive: (operation) => Promise.resolve().then(operation),
+    }),
+  });
+  await assert.rejects(
+    () => runtime.syncPlan({ planUid: 'plan-today', pageTitle: 'August 30th, 2026' }),
+    (error) => {
+      assert.match(String(error.message), /unreadable/i);
+      assert.match(String(error.message), /no graph changes/i);
+      assert.doesNotMatch(String(error.message), /any written blocks were retained/i);
+      assert.equal(error.applied, 0);
+      assert.equal(error.stage, 'load');
+      return true;
+    },
+  );
+  assert.equal(settings.get('google-calendar-sync-state'), '{');
+});
+
+test('calendarDefaults journal is an empty string and filling defaults does not wipe an existing WAL', async () => {
+  const extension = await loadExtension('calendar-journal-default');
+  assert.equal(extension.calendarDefaults['google-calendar-sync-pending'], '');
+  assert.equal(extension.calendarDefaults['google-calendar-sync-state'], '');
+  const src = fs.readFileSync(path.join(__dirname, '../src/index.js'), 'utf8');
+  assert.match(src, /"google-calendar-sync-pending": ""/);
+  assert.match(src, /const missing = current === undefined \|\| current === null;/);
+  const pending = JSON.stringify({
+    version: 1,
+    id: 'wal-keep',
+    scope: 'synthetic:plan-today',
+    graphScope: 'synthetic',
+    key: 'primary:meeting-1',
+    op: { kind: 'create', uid: 'keep-me', parentUid: 'plan-today', string: 'x' },
+    beforeEvent: { key: 'primary:meeting-1', planUid: 'plan-today', creating: true },
+    afterEvent: { key: 'primary:meeting-1', planUid: 'plan-today', parent: { uid: 'keep-me', lastSynced: 'x' } },
+  });
+  const settings = new Map([['google-calendar-sync-pending', pending]]);
+  for (const [key, fallback] of Object.entries(extension.calendarDefaults)) {
+    const current = settings.has(key) ? settings.get(key) : undefined;
+    const missing = current === undefined || current === null;
+    if (missing) settings.set(key, fallback);
+  }
+  assert.equal(settings.get('google-calendar-sync-pending'), pending);
+  assert.equal(settings.get('google-calendar-sync-state'), '');
 });

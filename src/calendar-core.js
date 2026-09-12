@@ -158,8 +158,26 @@ export function normalizeGoogleCalendarEvents({ calendar = {}, events = [] } = {
         ),
       }];
     }
+    const excludedReason = event?.start?.date && event?.end?.date
+      ? 'all-day'
+      : event?.transparency === 'transparent'
+        ? 'free'
+        : declinedBySelf(event)
+          ? 'declined'
+          : '';
+    if (excludedReason) {
+      return [{
+        key,
+        calendarId,
+        eventId: event.id,
+        resourceType: 'calendar-event',
+        status: 'excluded',
+        reason: excludedReason,
+        dateKey: localDateKey(event?.start?.dateTime || event?.start?.date),
+      }];
+    }
+    // Malformed/incomplete date data is not evidence of an explicit exclusion.
     if (event?.start?.date || event?.end?.date) return [];
-    if (event?.transparency === 'transparent' || declinedBySelf(event)) return [];
     const start = localTime(event?.start?.dateTime);
     const end = localTime(event?.end?.dateTime);
     if (!start || !end) return [];

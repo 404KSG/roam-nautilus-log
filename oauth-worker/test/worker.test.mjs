@@ -21,6 +21,76 @@ test('production uses the registered callback alias and Preview forwards it exac
   );
 });
 
+function throwingD1(message = 'NAUTILUS_AUTH_DB exploded') {
+  return {
+    prepare() {
+      return {
+        bind() { return this; },
+        async run() { throw new Error(message); },
+        async first() { throw new Error(message); },
+      };
+    },
+  };
+}
+
+async function assertSanitizedServiceError(response, { origin = '', path = '' } = {}) {
+  assert.equal(response.status, 500, path);
+  const payload = await response.json();
+  assert.equal(payload.code, 'service_error');
+  assert.equal(payload.message, 'Google Calendar connection failed.');
+  assert.doesNotMatch(
+    JSON.stringify(payload),
+    /NAUTILUS_AUTH_DB|not configured|synthetic-client|exploded|ECONNRESET|upstream/,
+  );
+  if (origin) assert.equal(response.headers.get('Access-Control-Allow-Origin'), origin);
+}
+
+test('async route failures return a sanitized service error, including CORS for client requests', async () => {
+  const origin = 'https://roamresearch.com';
+  const cases = [
+    { path: '/token', body: { connectionId: 'a'.repeat(24), connectionSecret: 'b'.repeat(32) } },
+    { path: '/desktop/session', body: { nonce: 'c'.repeat(32) } },
+    { path: `/authorize?origin=${encodeURIComponent(origin)}&nonce=${'d'.repeat(32)}` },
+  ];
+  for (const { path, body } of cases) {
+    const request = new Request(`https://auth.example.com${path}`, body ? {
+      method: 'POST',
+      headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    } : undefined);
+    const response = await handleRequest(request, { GOOGLE_CLIENT_ID: 'synthetic-client' });
+    await assertSanitizedServiceError(response, { origin: body ? origin : '', path });
+  }
+});
+
+test('async route failures from rejecting D1 and upstream stay sanitized 500/CORS', async () => {
+  const origin = 'https://roamresearch.com';
+  const d1Response = await handleRequest(roamRequest('/token', {
+    body: { connectionId: 'a'.repeat(24), connectionSecret: 'b'.repeat(32) },
+  }), {
+    ALLOWED_ORIGINS: origin,
+    GOOGLE_CLIENT_ID: 'synthetic-client',
+    NAUTILUS_AUTH_DB: throwingD1('D1 exploded NAUTILUS_AUTH_DB'),
+  });
+  await assertSanitizedServiceError(d1Response, { origin, path: '/token d1' });
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    throw new Error('upstream ECONNRESET from accounts.google.com');
+  };
+  try {
+    const upstream = await handleRequest(new Request(
+      `https://auth.example.com/authorize?origin=${encodeURIComponent(origin)}&nonce=${'e'.repeat(32)}`,
+    ), {
+      GOOGLE_CLIENT_ID: 'synthetic-client',
+      NAUTILUS_AUTH_DB: throwingD1('upstream handler rejected before Google'),
+    });
+    await assertSanitizedServiceError(upstream, { path: '/authorize upstream-reject' });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 class MemoryD1 {
   constructor() {
     this.rows = new Map();

@@ -1505,6 +1505,21 @@ function placeExternalLabels(options = {}) {
   });
 }
 
+/** Label layout is translation-invariant; reuse the bounds pass for painting. */
+function translateLabelRects({ rects = [], dx = 0, dy = 0 } = {}) {
+  const xOffset = asNumber(dx) || 0, yOffset = asNumber(dy) || 0;
+  return rects.map(rect => {
+    const moved = { ...rect };
+    for (const key of ['x', 'connectorKneeX', 'connectorRailX']) {
+      if (Number.isFinite(rect[key])) moved[key] = rect[key] + xOffset;
+    }
+    for (const key of ['y', 'anchorY']) {
+      if (Number.isFinite(rect[key])) moved[key] = rect[key] + yOffset;
+    }
+    return moved;
+  });
+}
+
 function isCompactChartWidth(width, threshold = 520) {
   const normalizedWidth = asNumber(width);
   const normalizedThreshold = asNumber(threshold);
@@ -1680,6 +1695,7 @@ module.exports = {
   truncateTextToWidth,
   placeLabelTracks,
   placeExternalLabels,
+  translateLabelRects,
   radialTooltipGeometry,
   placeFloatingTooltip,
   stableTidyOrder,

@@ -98,7 +98,7 @@ test('Calendar control keeps its Blueprint calendar glyph and spins only while s
   assert.match(calendarFunction, /bp3-icon-refresh nautilus-log-calendar-spinner/);
   assert.match(calendarFunction, /:aria-busy \(if busy\? "true" "false"\)/);
   assert.match(calendarFunction, /:aria-expanded \(if popover-open\? "true" "false"\)/);
-  assert.match(calendarFunction, /:disabled busy\?/);
+  assert.match(calendarFunction, /:disabled \(or busy\? \(not writes-allowed\?\)\)/);
   assert.match(calendarFunction, /:data-nautilus-tooltip tooltip/);
   assert.match(calendarFunction, /default-tooltip \(str \(:calendar copy\) "\\n" \(:calendarForce copy\)\)/);
   assert.match(calendarFunction, /calendar-result-popover result settings copy/);
