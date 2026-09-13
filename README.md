@@ -132,9 +132,12 @@ duplicate-work reductions on synthetic fixtures (a prior single-lane run saw 15-
 settings gets 204→90 and interleaved-n15 child reads 29→6); combined numbers need a
 fresh measurement and are not a claim that live Roam feels faster. Primary Plan
 reads may use a reverse `data.pull` of today's Daily tree and fall back to the
-existing Datalog query when that pull is missing or unreadable. Malformed present
+existing Datalog query when that pull is missing or unreadable. Direct child
+outline reads may use a synchronous `data.pull` of `:block/children` and fall
+back to the existing children query when that pull is missing or unreadable.
+Malformed present
 string/order/parent values fail closed instead of looking like a missing plan;
-that is a local compatibility path, not a measured live-popover speedup. The 50ms
+that is a local compatibility path, not a measured live-popover or Tidy speedup. The 50ms
 paint-budget fallback, Primary create/locate receipts, CLOCK-over-POMO, and the
 pending shell (no “Checking today's plan” flash) stay. Chart label
 placement may skip a redundant local layout pass; that is an operation-count saving,

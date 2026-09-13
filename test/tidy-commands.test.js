@@ -156,6 +156,23 @@ function commandPathHarness(extension, { rows, runningUid = null, useNativeLocks
             })),
           };
         }
+        if (typeof pattern === 'string'
+          && pattern.includes(':block/children')
+          && pattern.includes(':block/open')
+          && !pattern.includes(':block/_children')) {
+          traces.push(`pull:children:${lookupVal || ''}`);
+          const parent = blocks.get(lookupVal);
+          if (!parent) return null;
+          return {
+            ':block/uid': parent.uid,
+            ':block/children': childrenOf(parent.uid).map((child) => ({
+              ':block/uid': child.uid,
+              ':block/string': child.string,
+              ':block/order': child.order,
+              ':block/open': child.open === true,
+            })),
+          };
+        }
         const block = blocks.get(lookupVal);
         return block ? { ':block/string': block.string, ':block/uid': block.uid } : null;
       },
@@ -266,7 +283,9 @@ test('Tidy command palette callback uses default readPrimaryPlan and tidies sett
       'active-b',
     ]);
     assert.equal(harness.traces.filter((row) => row === 'query:plan').length, 0);
+    assert.equal(harness.traces.filter((row) => row.startsWith('query:children:')).length, 0);
     assert.ok(harness.traces.includes('pull:daily-tree'));
+    assert.ok(harness.traces.some((row) => row.startsWith('pull:children:')));
     assert.deepEqual(harness.settingsReads, ['todo-duration', 'language']);
     assert.equal(harness.traces.filter((row) => row.startsWith('move:')).length, 2);
     assert.equal(Boolean(result.token), true);
@@ -290,8 +309,10 @@ test('Tidy command path no-op does not read children once per settled row', asyn
     const result = await harness.command.callback();
     assert.equal(result.ok, true);
     assert.equal(result.changed, false);
-    const childReads = harness.traces.filter((row) => row.startsWith('query:children:')).length;
-    assert.ok(childReads <= 2, `command-path no-op child reads ${childReads}`);
+    const childQueries = harness.traces.filter((row) => row.startsWith('query:children:')).length;
+    const childPulls = harness.traces.filter((row) => row.startsWith('pull:children:')).length;
+    assert.equal(childQueries, 0, `command-path no-op child queries ${childQueries}`);
+    assert.ok(childPulls <= 2, `command-path no-op child pulls ${childPulls}`);
     assert.equal(harness.traces.filter((row) => row.startsWith('move:')).length, 0);
   } finally {
     harness.restore();
@@ -304,7 +325,8 @@ test('Tidy command path serializes a second shortcut and keeps the first Undo to
   try {
     const first = await harness.command.callback();
     assert.equal(first.changed, true);
-    const childReadsAfterFirst = harness.traces.filter((row) => row.startsWith('query:children:')).length;
+    const childQueriesAfterFirst = harness.traces.filter((row) => row.startsWith('query:children:')).length;
+    const childPullsAfterFirst = harness.traces.filter((row) => row.startsWith('pull:children:')).length;
     const second = await harness.command.callback();
     assert.equal(second.ok, true);
     assert.equal(second.changed, false);
@@ -321,7 +343,8 @@ test('Tidy command path serializes a second shortcut and keeps the first Undo to
       'past-event',
       'active-b',
     ]);
-    assert.ok(childReadsAfterFirst >= 1);
+    assert.equal(childQueriesAfterFirst, 0);
+    assert.ok(childPullsAfterFirst >= 1);
   } finally {
     harness.restore();
   }

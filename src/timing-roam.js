@@ -34,6 +34,18 @@ const PULL_STRING_KEYS = Object.freeze([':block/string', 'block/string']);
 const PULL_ORDER_KEYS = Object.freeze([':block/order', 'block/order']);
 const PULL_PAGE_REV_KEYS = Object.freeze([':block/_page', 'block/_page']);
 const PULL_CHILD_REV_KEYS = Object.freeze([':block/_children', 'block/_children']);
+const PULL_OPEN_KEYS = Object.freeze([':block/open', 'block/open']);
+const PULL_CHILDREN_KEYS = Object.freeze([':block/children', 'block/children']);
+const CHILDREN_PULL_PATTERN = '[:block/uid {:block/children [:block/uid :block/string :block/order :block/open]}]';
+const CHILDREN_QUERY = `[:find ?uid ?string ?order ?open
+    :in $ ?parent
+    :where
+    [?p :block/uid ?parent]
+    [?p :block/children ?c]
+    [?c :block/uid ?uid]
+    [?c :block/string ?string]
+    [?c :block/order ?order]
+    [(get-else $ ?c :block/open false) ?open]]`;
 
 const PAGE_UID_QUERY = `[:find ?uid :in $ ?page-title
   :where
@@ -551,17 +563,64 @@ export function getFocusedBlockUid() {
   }
 }
 
-export function readChildren(uid) {
-  if (!uid) return [];
-  return query(`[:find ?uid ?string ?order ?open
-    :in $ ?parent
-    :where
-    [?p :block/uid ?parent]
-    [?p :block/children ?c]
-    [?c :block/uid ?uid]
-    [?c :block/string ?string]
-    [?c :block/order ?order]
-    [(get-else $ ?c :block/open false) ?open]]`, uid)
+function projectChildrenPull(entity, parentUid) {
+  if (entity == null) return rejectPulledTree();
+  if (isThenable(entity)) {
+    settleThenable(entity);
+    return rejectPulledTree();
+  }
+  if (typeof entity !== 'object' || Array.isArray(entity)) return rejectPulledTree();
+  const entityUid = readNamedAttr(entity, PULL_UID_KEYS);
+  if (typeof entityUid !== 'string' || entityUid !== parentUid) return rejectPulledTree();
+  if (!hasNamedAttr(entity, PULL_CHILDREN_KEYS)) return rejectPulledTree();
+  const children = normalizeSequence(readNamedAttr(entity, PULL_CHILDREN_KEYS));
+  if (!children) return rejectPulledTree();
+  const rows = [];
+  for (const child of children) {
+    if (isThenable(child)) {
+      settleThenable(child);
+      return rejectPulledTree();
+    }
+    if (!child || typeof child !== 'object' || Array.isArray(child)) return rejectPulledTree();
+    // Datalog inner-joins uid/string/order by attribute presence only.
+    if (!hasNamedAttr(child, PULL_UID_KEYS)
+      || !hasNamedAttr(child, PULL_STRING_KEYS)
+      || !hasNamedAttr(child, PULL_ORDER_KEYS)) continue;
+    const uid = readNamedAttr(child, PULL_UID_KEYS);
+    const string = readNamedAttr(child, PULL_STRING_KEYS);
+    const order = readNamedAttr(child, PULL_ORDER_KEYS);
+    const open = hasNamedAttr(child, PULL_OPEN_KEYS)
+      ? readNamedAttr(child, PULL_OPEN_KEYS)
+      : false;
+    if (isThenable(uid) || isThenable(string) || isThenable(order) || isThenable(open)) {
+      if (isThenable(uid)) settleThenable(uid);
+      if (isThenable(string)) settleThenable(string);
+      if (isThenable(order)) settleThenable(order);
+      if (isThenable(open)) settleThenable(open);
+      return rejectPulledTree();
+    }
+    rows.push([uid, string, order, open]);
+  }
+  return { ok: true, rows };
+}
+
+function pullChildrenRows(parentUid) {
+  const roam = api();
+  const pull = roam?.data?.pull || roam?.pull;
+  if (typeof pull !== 'function') return rejectPulledTree();
+  const owner = pull === roam?.data?.pull ? roam.data : roam;
+  try {
+    return projectChildrenPull(
+      pull.call(owner, CHILDREN_PULL_PATTERN, [':block/uid', parentUid]),
+      parentUid,
+    );
+  } catch (_error) {
+    return rejectPulledTree();
+  }
+}
+
+function projectChildQueryRows(rows) {
+  return rows
     .map(([childUid, string, order, open]) => ({
       uid: childUid,
       string,
@@ -570,6 +629,13 @@ export function readChildren(uid) {
     }))
     .filter((child) => child.uid && typeof child.string === 'string')
     .sort((left, right) => left.order - right.order);
+}
+
+export function readChildren(uid) {
+  if (!uid) return [];
+  const pulled = pullChildrenRows(uid);
+  if (pulled.ok) return projectChildQueryRows(pulled.rows);
+  return projectChildQueryRows(query(CHILDREN_QUERY, uid));
 }
 
 export function blockUidExists(uid) {

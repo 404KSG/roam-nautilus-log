@@ -49,6 +49,14 @@
   and create/locate fail-closed behavior are unchanged. This is a compatibility
   fast path plus fallback, not a claim that the live execution popover is already
   faster.
+- Direct child outline reads (`readChildren`) prefer a synchronous `data.pull` of
+  `:block/children` (`uid` / `string` / `order` / `open`) and fall back to the
+  existing Datalog query when pull is missing, thenable, unreadable, the parent
+  uid does not match, or the children field is absent. Missing `:block/open` still
+  means false, matching `get-else`. Tidy, Calendar mapping, and LOGBOOK drawer
+  confirmation keep the same filter/sort contract. This is a compatibility fast
+  path plus fallback, not a claim that Tidy or Calendar is already faster in live
+  Roam.
 - External chart labels may reuse a local `placeExternalLabels` pass via
   translate; that is an operation-count saving in Node, not a Roam UI jank fix.
 - OAuth worker route handlers now `await` and return sanitized JSON on thrown
