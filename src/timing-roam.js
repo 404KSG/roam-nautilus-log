@@ -28,6 +28,13 @@ const DAILY_PAGE_TREE_QUERY = `[:find ?page-uid ?uid ?string ?order ?parent-uid
   [?parent :block/children ?block]
   [?parent :block/uid ?parent-uid]]`;
 
+const DAILY_PAGE_TREE_PULL_PATTERN = '[:block/uid {:block/_page [:block/uid :block/string :block/order {:block/_children [:block/uid]}]}]';
+const PULL_UID_KEYS = Object.freeze([':block/uid', 'block/uid']);
+const PULL_STRING_KEYS = Object.freeze([':block/string', 'block/string']);
+const PULL_ORDER_KEYS = Object.freeze([':block/order', 'block/order']);
+const PULL_PAGE_REV_KEYS = Object.freeze([':block/_page', 'block/_page']);
+const PULL_CHILD_REV_KEYS = Object.freeze([':block/_children', 'block/_children']);
+
 const PAGE_UID_QUERY = `[:find ?uid :in $ ?page-title
   :where
   [?e :node/title ?page-title]
@@ -169,6 +176,97 @@ function normalizeSequence(value) {
   return null;
 }
 
+function isThenable(value) {
+  return Boolean(value) && (typeof value === 'object' || typeof value === 'function') && typeof value.then === 'function';
+}
+
+function settleThenable(value) {
+  try { value.then(() => {}, () => {}); } catch (_error) { /* ignore non-callable then */ }
+}
+
+function hasNamedAttr(entity, names) {
+  if (!entity || typeof entity !== 'object') return false;
+  return names.some((name) => Object.prototype.hasOwnProperty.call(entity, name));
+}
+
+function readNamedAttr(entity, names) {
+  if (!entity || typeof entity !== 'object') return undefined;
+  for (const name of names) {
+    if (Object.prototype.hasOwnProperty.call(entity, name)) return entity[name];
+  }
+  return undefined;
+}
+
+function rejectPulledTree() {
+  return { ok: false, rows: null };
+}
+
+function projectDailyPageTreePull(entity) {
+  if (entity == null) return rejectPulledTree();
+  if (isThenable(entity)) {
+    settleThenable(entity);
+    return rejectPulledTree();
+  }
+  if (typeof entity !== 'object' || Array.isArray(entity)) return rejectPulledTree();
+  const pageUid = readNamedAttr(entity, PULL_UID_KEYS);
+  if (typeof pageUid !== 'string' || !pageUid) return rejectPulledTree();
+  if (!hasNamedAttr(entity, PULL_PAGE_REV_KEYS)) return rejectPulledTree();
+  const pageBlocks = normalizeSequence(readNamedAttr(entity, PULL_PAGE_REV_KEYS));
+  if (!pageBlocks) return rejectPulledTree();
+  const rows = [];
+  for (const block of pageBlocks) {
+    if (isThenable(block)) {
+      settleThenable(block);
+      return rejectPulledTree();
+    }
+    if (!block || typeof block !== 'object' || Array.isArray(block)) return rejectPulledTree();
+    const uid = readNamedAttr(block, PULL_UID_KEYS);
+    if (typeof uid !== 'string' || !uid) return rejectPulledTree();
+    if (!hasNamedAttr(block, PULL_CHILD_REV_KEYS)) return rejectPulledTree();
+    const parents = normalizeSequence(readNamedAttr(block, PULL_CHILD_REV_KEYS));
+    if (!parents) return rejectPulledTree();
+    // Datalog inner-joins :block/string and :block/order by attribute
+    // presence only. Omit nodes that lack those attributes; do not invent
+    // defaults. Present values keep their raw types so the shared validator
+    // can fail closed instead of dropping a Primary and authorizing
+    // plan-absent, or selecting a later alternative Primary.
+    if (!hasNamedAttr(block, PULL_STRING_KEYS) || !hasNamedAttr(block, PULL_ORDER_KEYS)) continue;
+    const string = readNamedAttr(block, PULL_STRING_KEYS);
+    const order = readNamedAttr(block, PULL_ORDER_KEYS);
+    if (parents.length === 0) continue;
+    for (const parent of parents) {
+      if (isThenable(parent)) {
+        settleThenable(parent);
+        return rejectPulledTree();
+      }
+      if (!parent || typeof parent !== 'object' || Array.isArray(parent)) return rejectPulledTree();
+      if (!hasNamedAttr(parent, PULL_UID_KEYS)) continue;
+      const parentUid = readNamedAttr(parent, PULL_UID_KEYS);
+      rows.push([pageUid, uid, string, order, parentUid]);
+    }
+  }
+  return { ok: true, rows };
+}
+
+function pullDailyPageTreeRows(pageTitle) {
+  if (typeof pageTitle !== 'string' || !pageTitle) return rejectPulledTree();
+  const roam = api();
+  const pull = roam?.data?.pull || roam?.pull;
+  if (typeof pull !== 'function') return rejectPulledTree();
+  const owner = pull === roam?.data?.pull ? roam.data : roam;
+  try {
+    return projectDailyPageTreePull(pull.call(owner, DAILY_PAGE_TREE_PULL_PATTERN, [':node/title', pageTitle]));
+  } catch (_error) {
+    return rejectPulledTree();
+  }
+}
+
+function readDailyPageTreeRows(pageTitle) {
+  const pulled = pullDailyPageTreeRows(pageTitle);
+  if (pulled.ok) return pulled.rows;
+  return query(DAILY_PAGE_TREE_QUERY, pageTitle);
+}
+
 function query(datalog, ...args) {
   const roam = api();
   const run = roam?.data?.fast?.q || roam?.q || roam?.data?.q;
@@ -228,7 +326,7 @@ export function readPlanIdentity(uid) {
 
 export function readPrimaryPlan(date = new Date(), fallbackMinutes = 15) {
   const pageTitle = pageTitleFor(date);
-  const rows = query(DAILY_PAGE_TREE_QUERY, pageTitle);
+  const rows = readDailyPageTreeRows(pageTitle);
   if (rows.length === 0) return {
     pageTitle,
     pageUid: null,

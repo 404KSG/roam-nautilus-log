@@ -76,14 +76,29 @@ function graphMock({
     q,
     data: {
       pull: (pattern, lookup) => {
-        trace.push(`pull:${lookup?.[1] || ''}`);
-        const block = blocks.get(lookup?.[1]);
+        const lookupKey = lookup?.[0];
+        const lookupVal = lookup?.[1];
+        trace.push(`pull:${lookupVal || ''}`);
+        if (typeof pattern === 'string' && (pattern.includes(':block/_page') || pattern.includes('block/_page'))) {
+          trace.push('pull:daily-tree');
+          if (lookupVal !== 'August 22nd, 2026') return null;
+          return {
+            ':block/uid': 'page',
+            ':block/_page': [...blocks.values()].map((block) => ({
+              ':block/uid': block.uid,
+              ':block/string': block.string,
+              ':block/order': block.order,
+              ':block/_children': block.parentUid ? [{ ':block/uid': block.parentUid }] : [],
+            })),
+          };
+        }
+        const block = blocks.get(lookupVal);
         if (!block) return null;
         const entity = { ':block/string': block.string };
-        if (pattern.includes(':block/page')) {
+        if (pattern.includes(':block/page') && !pattern.includes(':block/_page')) {
           entity[':block/page'] = { ':node/title': 'August 22nd, 2026' };
         }
-        if (pattern.includes(':block/children')) {
+        if (pattern.includes(':block/children') && !pattern.includes(':block/_children')) {
           entity[':block/children'] = children(block.uid).map((child) => ({
             ':block/uid': child.uid,
             ':block/string': child.string,

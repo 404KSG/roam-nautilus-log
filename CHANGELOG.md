@@ -27,6 +27,28 @@
   collapsed rows actually expanded before reporting Undo success. Toast failures
   after finished writes do not rewrite the result as `changed: false`. Unknown
   (`changed: null`) means a mutation was attempted but not confirmed.
+- Execution popover rendering snapshots settings once per synchronous render
+  instead of reading language and related keys once per task row. Plan Tidy no
+  longer re-reads the parent outline once per settled uid on no-op open checks,
+  and a collapse `setOpen` that resolves without sticking is visited at most once
+  per uid. These are duplicate-work reductions on local synthetic fixtures. A
+  previous single-lane run reported 15-row settings gets 204→90 and
+  interleaved-n15 child reads 29→6; this combined tree must be re-measured
+  before quoting new numbers. The 50ms paint-budget fallback, Primary Plan
+  create/locate and receipts, CLOCK-over-POMO, pending shell (no “Checking
+  today’s plan” flash), Undo/partial/unknown flags, and a fresh parent/order/open
+  read after every real awaited write are unchanged. This does not claim that live
+  Roam’s ~1s open or shortcut feel is fixed.
+- Primary Plan Daily-tree materialization prefers a synchronous reverse
+  `data.pull` (`:block/_page` plus `:block/_children`) and falls back to the
+  existing Datalog query when pull is missing, thenable, unreadable, or reverse
+  fields are absent. Present but malformed `:block/string` / `:block/order` /
+  parent uid values stay in the projected tuples so the original validator can
+  fail closed; they are not dropped as an empty Daily Note or replaced by a
+  later Primary. CLOCK queries, `readDailyPageUid`, receipt/freshness checks,
+  and create/locate fail-closed behavior are unchanged. This is a compatibility
+  fast path plus fallback, not a claim that the live execution popover is already
+  faster.
 - External chart labels may reuse a local `placeExternalLabels` pass via
   translate; that is an operation-count saving in Node, not a Roam UI jank fix.
 - OAuth worker route handlers now `await` and return sanitized JSON on thrown

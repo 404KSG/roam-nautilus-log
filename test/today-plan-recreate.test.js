@@ -212,18 +212,26 @@ function dailyQueryCount(graph) {
   )).length;
 }
 
+function dailyTitlePullCount(graph) {
+  return graph.trace.filter((entry) => (
+    entry[0] === 'pull' && (entry[1] === ':node/title' || entry[1] === 'node/title')
+  )).length;
+}
+
 test('ready-present keep reuses same-turn discovery instead of reading the Daily Note twice', async (t) => {
   const { graph, session } = await mount(t);
   await session.ensureToday({ locateMode: 'none' });
   await flush(40);
   const reads = dailyQueryCount(graph);
+  const pulls = dailyTitlePullCount(graph);
   const writes = writeCount(graph);
 
   const result = await session.activateToday({ locateMode: 'none', ifPresent: 'keep' });
 
   assert.equal(result.activation, 'keep');
   assert.equal(result.planUid, ROOT);
-  assert.equal(dailyQueryCount(graph) - reads, 1);
+  assert.equal(dailyQueryCount(graph) - reads, 0, 'fast reverse pull must not run Daily Datalog');
+  assert.equal(dailyTitlePullCount(graph) - pulls, 1);
   assert.equal(writeCount(graph), writes);
 });
 
@@ -231,11 +239,12 @@ test('present validation waits for the shell and never recreates a root lost dur
   const { graph, session } = await mount(t);
   await session.ensureToday({ locateMode: 'none' });
   await flush(40);
-  const reads = dailyQueryCount(graph), writes = writeCount(graph);
+  const reads = dailyQueryCount(graph), pulls = dailyTitlePullCount(graph), writes = writeCount(graph);
   let release;
   const paint = new Promise(resolve => { release = resolve; });
   const pending = session.activateToday({ ifPresent: 'keep', deferPresentCheck: () => paint });
   assert.equal(dailyQueryCount(graph), reads, 'known-root hint must not materialize the Daily Note');
+  assert.equal(dailyTitlePullCount(graph), pulls, 'known-root hint must not reverse-pull the Daily Note');
   deleteSubtree(graph, ROOT);
   release(true);
   const result = await pending;
@@ -250,7 +259,7 @@ for (const change of ['cancel', 'date', 'graph']) {
     const { graph, session, setNow } = await mount(t);
     await session.ensureToday({ locateMode: 'none' });
     await flush(40);
-    const reads = dailyQueryCount(graph), writes = writeCount(graph);
+    const reads = dailyQueryCount(graph), pulls = dailyTitlePullCount(graph), writes = writeCount(graph);
     let release;
     const paint = new Promise(resolve => { release = resolve; });
     const pending = session.activateToday({ ifPresent: 'keep', deferPresentCheck: () => paint });
@@ -260,6 +269,7 @@ for (const change of ['cancel', 'date', 'graph']) {
     const result = await pending;
     assert.equal(result.activation, undefined);
     assert.equal(dailyQueryCount(graph), reads);
+    assert.equal(dailyTitlePullCount(graph), pulls);
     assert.equal(writeCount(graph), writes);
     if (change !== 'cancel') assert.equal(result.error, change === 'date' ? 'dateChanged' : 'graphChanged');
   });
@@ -434,6 +444,7 @@ test('valid child edits do not scan the Daily Note again', async (t) => {
   assert.equal((await session.ensureToday({ locateMode: 'none' })).status, 'ready-present');
   await flush(40);
   const queriesBefore = dailyQueryCount(graph);
+  const pullsBefore = dailyTitlePullCount(graph);
   const child = graph.children(ROOT)[0];
   child.string = '09:00-09:30 Stand-up renamed';
   assert.ok(graph.fireUid(child.uid) >= 1);
@@ -442,6 +453,7 @@ test('valid child edits do not scan the Daily Note again', async (t) => {
   assert.equal(runtime.getSnapshot().planSnapshot?.plan?.uid, ROOT);
   assert.match(runtime.getSnapshot().planSnapshot.rows[0].string, /renamed/);
   assert.equal(dailyQueryCount(graph), queriesBefore);
+  assert.equal(dailyTitlePullCount(graph), pullsBefore);
 });
 
 test('clock advancement during activation preflight keeps the original date and writes nothing', async (t) => {
@@ -450,11 +462,16 @@ test('clock advancement during activation preflight keeps the original date and 
   deleteSubtree(graph, ROOT);
   assert.equal(graph.fireUid(ROOT, { suppress: true }), 0);
   let advanced = false;
+  const advance = () => {
+    if (advanced) return;
+    advanced = true;
+    setNow(new Date(2026, 8, 10, 0, 0, 1));
+  };
+  graph.hooks.pull = (pattern) => {
+    if (String(pattern).includes(':block/_page') || String(pattern).includes('block/_page')) advance();
+  };
   graph.hooks.query = (query) => {
-    if (!advanced && String(query).includes('?page-uid ?uid ?string ?order ?parent-uid')) {
-      advanced = true;
-      setNow(new Date(2026, 8, 10, 0, 0, 1));
-    }
+    if (String(query).includes('?page-uid ?uid ?string ?order ?parent-uid')) advance();
   };
   const writesBefore = writeCount(graph);
   const result = await session.activateToday({ locateMode: 'none' });
@@ -472,10 +489,14 @@ test('graph change during activation continuation writes nothing', async (t) => 
   assert.equal(graph.fireUid(ROOT, { suppress: true }), 0);
   const writesBefore = writeCount(graph);
   const originalRoam = window.roamAlphaAPI;
+  const switchGraph = () => {
+    window.roamAlphaAPI = { ...originalRoam, graph: { name: 'other-graph' } };
+  };
+  graph.hooks.pull = (pattern) => {
+    if (String(pattern).includes(':block/_page') || String(pattern).includes('block/_page')) switchGraph();
+  };
   graph.hooks.query = (query) => {
-    if (String(query).includes('?page-uid ?uid ?string ?order ?parent-uid')) {
-      window.roamAlphaAPI = { ...originalRoam, graph: { name: 'other-graph' } };
-    }
+    if (String(query).includes('?page-uid ?uid ?string ?order ?parent-uid')) switchGraph();
   };
   const result = await session.activateToday({ locateMode: 'none' });
   window.roamAlphaAPI = originalRoam;

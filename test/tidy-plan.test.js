@@ -6,6 +6,16 @@ const path = require('node:path');
 const ORIGINAL_ORDER = ['active-a', 'done-a', 'divider', 'past-event', 'active-b'];
 const TIDY_ORDER = ['done-a', 'past-event', 'active-a', 'divider', 'active-b'];
 
+// Bound this file's isolated test process. A prior for(;;) non-sticky setOpen
+// retry OOM'd: /tmp/nautilus-tidy-speed-97559862/attention-checkpoint/
+// test-process.sample.txt (pid 10119, peak 4.4G) and partial.patch.
+const TIDY_PLAN_TEST_WALL_MS = 120000;
+const tidyPlanWallTimer = setTimeout(() => {
+  console.error('[nautilus-log] tidy-plan tests exceeded 120s wall timeout');
+  process.exit(1);
+}, TIDY_PLAN_TEST_WALL_MS);
+tidyPlanWallTimer.unref();
+
 async function loadExtension(label) {
   const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
   return import(`data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}#${label}-${Date.now()}`);
@@ -36,7 +46,12 @@ function tidyHarness(extension, options = {}) {
   const hooks = {};
   const actions = [];
   const openWrites = [];
-  const read = () => rows.map((row, order) => ({ ...row, order }));
+  const readCounts = { n: 0 };
+  const read = () => {
+    readCounts.n += 1;
+    hooks.onRead?.(readCounts.n);
+    return rows.map((row, order) => ({ ...row, order }));
+  };
   const move = async ({ uid, order }) => {
     await hooks.beforeMove?.(uid);
     writes.push(uid);
@@ -75,6 +90,7 @@ function tidyHarness(extension, options = {}) {
     actions,
     openWrites,
     writes,
+    readCounts,
     hooks,
     setRunning(uid) {
       runningTaskUid = uid;
@@ -814,4 +830,213 @@ test('Plan Tidy notifyAction throw after completed writes does not report change
   assert.deepEqual(harness.read().map((row) => row.uid), TIDY_ORDER);
   assert.equal(harness.read().find((row) => row.uid === 'done-a').open, false);
   assert.notEqual(result.changed, false);
+});
+
+function mixedSettledRows() {
+  return [
+    { uid: 'done-a', string: '{{[[DONE]]}} Done A', order: 0, open: false },
+    { uid: 'done-b', string: '{{[[DONE]]}} Done B', order: 1, open: true },
+    { uid: 'done-c', string: '{{[[DONE]]}} Done C', order: 2, open: false },
+    { uid: 'active-a', string: '{{[[TODO]]}} A', order: 3, open: true },
+  ];
+}
+
+test('Plan Tidy no-op open checks stay on one snapshot and do not read once per settled row', async () => {
+  const extension = await loadExtension('tidy-noop-read-bound');
+  const harness = tidyHarness(extension);
+  await harness.move({ uid: 'done-a', order: 0 });
+  await harness.move({ uid: 'past-event', order: 1 });
+  harness.readCounts.n = 0;
+  const result = await harness.tidy.run({
+    planUid: 'plan',
+    settledUids: ['done-a', 'past-event'],
+    language: 'en',
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.changed, false);
+  assert.equal(harness.writes.length, 2);
+  assert.equal(harness.openWrites.length, 0);
+  assert.ok(harness.readCounts.n <= 2, `no-op reads ${harness.readCounts.n}`);
+});
+
+test('Plan Tidy move path re-reads after each write but not once per sibling for no-op opens', async () => {
+  const extension = await loadExtension('tidy-move-read-bound');
+  const harness = tidyHarness(extension);
+  harness.readCounts.n = 0;
+  const result = await harness.tidy.run({
+    planUid: 'plan',
+    settledUids: ['done-a', 'past-event'],
+    language: 'en',
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.changed, true);
+  assert.equal(harness.writes.length, 2);
+  assert.ok(harness.readCounts.n >= 1 + harness.writes.length, 'fresh parent after each move');
+  assert.ok(
+    harness.readCounts.n <= harness.writes.length + 3,
+    `move-path reads ${harness.readCounts.n} should be O(moves) not O(siblings)`,
+  );
+});
+
+test('Plan Tidy mixed no-op then open-write then no-op still collapses a user-expanded later row', async () => {
+  const extension = await loadExtension('tidy-mixed-open-expand');
+  const harness = tidyHarness(extension);
+  harness.mutate(() => mixedSettledRows());
+  harness.hooks.afterSetOpen = async (uid) => {
+    if (uid !== 'done-b') return;
+    harness.mutate((rows) => rows.map((row) => (
+      row.uid === 'done-c' ? { ...row, open: true } : row
+    )));
+  };
+  const result = await harness.tidy.run({
+    planUid: 'plan',
+    settledUids: ['done-a', 'done-b', 'done-c'],
+    language: 'en',
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.changed, true);
+  assert.deepEqual(harness.openWrites, [
+    { uid: 'done-b', open: false },
+    { uid: 'done-c', open: false },
+  ]);
+  assert.equal(harness.read().find((row) => row.uid === 'done-c').open, false);
+  assert.equal(Boolean(result.token), true);
+});
+
+test('Plan Tidy mixed open-write then user reorder does not mint Undo', async () => {
+  const extension = await loadExtension('tidy-mixed-open-reorder');
+  const harness = tidyHarness(extension);
+  harness.mutate(() => mixedSettledRows());
+  harness.hooks.afterSetOpen = async (uid) => {
+    if (uid !== 'done-b') return;
+    harness.mutate((rows) => {
+      const next = rows.slice();
+      const from = next.findIndex((row) => row.uid === 'active-a');
+      next.splice(0, 0, next.splice(from, 1)[0]);
+      return next;
+    });
+  };
+  const result = await harness.tidy.run({
+    planUid: 'plan',
+    settledUids: ['done-a', 'done-b', 'done-c'],
+    language: 'en',
+  });
+  assertNoUndo(result, harness, 'mixed-open-reorder');
+  assert.match(result.error?.message || '', /Plan changed during Tidy|could not confirm/i);
+});
+
+test('Plan Tidy mixed open-write then parent move-out does not mint Undo', async () => {
+  const extension = await loadExtension('tidy-mixed-open-move-out');
+  const harness = tidyHarness(extension);
+  harness.mutate(() => mixedSettledRows());
+  harness.hooks.afterSetOpen = async (uid) => {
+    if (uid !== 'done-b') return;
+    harness.mutate((rows) => rows.filter((row) => row.uid !== 'done-c'));
+  };
+  const result = await harness.tidy.run({
+    planUid: 'plan',
+    settledUids: ['done-a', 'done-b', 'done-c'],
+    language: 'en',
+  });
+  assertNoUndo(result, harness, 'mixed-open-move-out');
+});
+
+test('Plan Tidy mixed open-write then running-owner change skips the new running uid', async () => {
+  const extension = await loadExtension('tidy-mixed-open-running');
+  const harness = tidyHarness(extension);
+  harness.mutate(() => [
+    { uid: 'done-a', string: '{{[[DONE]]}} Done A', order: 0, open: false },
+    { uid: 'done-b', string: '{{[[DONE]]}} Done B', order: 1, open: true },
+    { uid: 'done-c', string: '{{[[DONE]]}} Done C', order: 2, open: true },
+    { uid: 'active-a', string: '{{[[TODO]]}} A', order: 3, open: true },
+  ]);
+  harness.hooks.afterSetOpen = async (uid) => {
+    if (uid !== 'done-b') return;
+    harness.setRunning('done-c');
+  };
+  const result = await harness.tidy.run({
+    planUid: 'plan',
+    settledUids: ['done-a', 'done-b', 'done-c'],
+    language: 'en',
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.changed, true);
+  assert.equal(harness.openWrites.some((row) => row.uid === 'done-c'), false);
+  assert.equal(harness.read().find((row) => row.uid === 'done-c').open, true);
+});
+
+test('Plan Tidy no-op open stretch does not yield to a sibling microtask', async () => {
+  const extension = await loadExtension('tidy-noop-no-yield');
+  const harness = tidyHarness(extension);
+  await harness.move({ uid: 'done-a', order: 0 });
+  await harness.move({ uid: 'past-event', order: 1 });
+  let mutatedDuring = false;
+  harness.hooks.onRead = (n) => {
+    if (n !== 1) return;
+    queueMicrotask(() => {
+      mutatedDuring = true;
+      harness.mutate((rows) => {
+        const next = rows.slice();
+        const from = next.findIndex((row) => row.uid === 'active-b');
+        if (from < 0) return rows;
+        next.splice(0, 0, next.splice(from, 1)[0]);
+        return next;
+      });
+    });
+  };
+  const result = await harness.tidy.run({
+    planUid: 'plan',
+    settledUids: ['done-a', 'past-event'],
+    language: 'en',
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.changed, false);
+  assert.equal(mutatedDuring, true);
+  assert.deepEqual(harness.read().map((row) => row.uid)[0], 'active-b');
+});
+
+test('Plan Tidy collapse write that resolves without sticking fails closed once per uid', { timeout: 8000 }, async () => {
+  const extension = await loadExtension('tidy-collapse-not-sticky');
+  const harness = tidyHarness(extension, { expandedUids: ['done-a'] });
+  harness.mutate((rows) => {
+    const byUid = Object.fromEntries(rows.map((row) => [row.uid, row]));
+    return [
+      byUid['done-a'],
+      byUid['past-event'],
+      byUid['active-a'],
+      byUid['divider'],
+      byUid['active-b'],
+    ];
+  });
+  const maxSetOpen = 2;
+  harness.hooks.beforeSetOpen = async () => {
+    if (harness.openWrites.length >= maxSetOpen) {
+      throw new Error(`setOpen safety cap exceeded: ${harness.openWrites.length} >= ${maxSetOpen}`);
+    }
+  };
+  harness.hooks.afterSetOpen = async (uid, open) => {
+    if (open !== false) return;
+    harness.mutate((rows) => rows.map((row) => (
+      row.uid === uid ? { ...row, open: true } : row
+    )));
+  };
+  let result;
+  try {
+    result = await harness.tidy.run({
+      planUid: 'plan',
+      settledUids: ['done-a', 'past-event'],
+      language: 'en',
+    });
+  } catch (error) {
+    assert.ok(
+      harness.openWrites.length <= maxSetOpen,
+      `setOpen calls ${harness.openWrites.length} exceeded cap ${maxSetOpen}`,
+    );
+    throw error;
+  }
+  assert.equal(harness.openWrites.length, 1);
+  assert.deepEqual(harness.openWrites, [{ uid: 'done-a', open: false }]);
+  assertNoUndo(result, harness, 'collapse-not-sticky');
+  assert.match(result.error?.message || '', /could not confirm/i);
+  assert.equal(harness.read().find((row) => row.uid === 'done-a').open, true);
 });

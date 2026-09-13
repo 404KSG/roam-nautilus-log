@@ -125,7 +125,18 @@ Chart subscriptions bind a provider generation so a replaced watch does not keep
 writing, and a temporary unavailable read stays stale instead of looking like a
 confirmed empty tree. Plan Tidy serializes outline writes, reports partial/unknown
 change flags instead of a fake success, and Undo only reports success after the
-collapsed rows actually expand (the running task stays an exception). Chart label
+collapsed rows actually expand (the running task stays an exception). Opening the
+execution popover reuses one settings snapshot per synchronous render, and Tidy's
+no-op open scan uses one parent snapshot with at most one write per uid. Those are
+duplicate-work reductions on synthetic fixtures (a prior single-lane run saw 15-row
+settings gets 204→90 and interleaved-n15 child reads 29→6); combined numbers need a
+fresh measurement and are not a claim that live Roam feels faster. Primary Plan
+reads may use a reverse `data.pull` of today's Daily tree and fall back to the
+existing Datalog query when that pull is missing or unreadable. Malformed present
+string/order/parent values fail closed instead of looking like a missing plan;
+that is a local compatibility path, not a measured live-popover speedup. The 50ms
+paint-budget fallback, Primary create/locate receipts, CLOCK-over-POMO, and the
+pending shell (no “Checking today's plan” flash) stay. Chart label
 placement may skip a redundant local layout pass; that is an operation-count saving,
 not a measured UI-jank fix. LOGBOOK 256-character variants remain compatible.
 Local OAuth worker `await` and error-shape tests are source-only and not a deployed

@@ -13,6 +13,7 @@ TRIGGER = '.nautilus-log-timing__trigger'
 TOKEN = '.nautilus-log-timing__capacity-token'
 ROOT_UID = 'nautilus-log-plan-2026-09-09'
 DAILY_READ = 'realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length'
+DAILY_PULL = 'realPlan.trace().filter(r=>r[0]==="pull"&&(r[1]===":node/title"||r[1]==="node/title")).length'
 HOLD_RAF_JS = '''() => {
     if (window.__nlHeldRaf) window.__nlHeldRaf.restore();
     const request=window.requestAnimationFrame, cancel=window.cancelAnimationFrame;
@@ -303,6 +304,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     mount(surface)
                     page.locator(TRIGGER).click();state('ready-present');full_tree()
                     reads=page.evaluate(DAILY_READ)
+                    pulls=page.evaluate(DAILY_PULL)
                     # Hold the scheduling boundary, not the app/session. The
                     # shell must be usable before graph validation can start.
                     # Snapshot open/close in one turn so a later bounded timer
@@ -311,7 +313,9 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     try:
                         snap=page.evaluate('''() => {
                             const reads=()=>realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length;
+                            const pulls=()=>realPlan.trace().filter(r=>r[0]==="pull"&&(r[1]===":node/title"||r[1]==="node/title")).length;
                             const before=reads();
+                            const beforePulls=pulls();
                             document.querySelector('.nautilus-log-timing__capacity-token').click();
                             const dialog=document.querySelector('.nautilus-log-timing__popover');
                             const opened={
@@ -323,9 +327,10 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                                 checkingText:Boolean(dialog?.textContent.includes("Checking today's plan")),
                                 rows:dialog?dialog.querySelectorAll('[data-task-uid]').length:0,
                                 reads:reads()-before,
+                                pulls:pulls()-beforePulls,
                             };
                             document.querySelector('.nautilus-log-timing__trigger').click();
-                            return Object.assign(opened,{closed:!realPlan.popoverOpen(),readsAfterClose:reads()-before});
+                            return Object.assign(opened,{closed:!realPlan.popoverOpen(),readsAfterClose:reads()-before,pullsAfterClose:pulls()-beforePulls});
                         }''')
                         assert snap['visible']
                         assert snap['busy']=='true'
@@ -335,17 +340,21 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                         assert not snap['checkingText'], 'ready-plan clicks must not flash Checking text'
                         assert snap['rows']==0, 'pending must not present cached task rows as validated'
                         assert snap['reads']==0
+                        assert snap['pulls']==0
                         assert snap['closed']
                         assert snap['readsAfterClose']==0
+                        assert snap['pullsAfterClose']==0
                     finally:
                         page.evaluate(RESTORE_RAF_JS)
                     page.wait_for_timeout(60)
                     assert page.evaluate('realPlan.popoverOpen()') is False
                     assert page.evaluate(DAILY_READ)==reads
+                    assert page.evaluate(DAILY_PULL)==pulls
                     page.locator(TOKEN).click()
                     page.wait_for_selector('.nautilus-log-timing__popover[aria-busy="false"]')
                     assert page.get_by_role('tab',name='Plan',exact=True).get_attribute('aria-selected')=='true'
-                    assert page.evaluate(DAILY_READ)==reads+1
+                    assert page.evaluate(DAILY_READ)==reads, 'fast AND-ready must not run Daily Datalog'
+                    assert page.evaluate(DAILY_PULL)==pulls+1
                     # Ordinary close must not perform even an indexed graph read.
                     close=page.evaluate('''() => {
                         const reads=()=>realPlan.trace().filter(r=>r[0]==='query'||r[0]==='pull').length;
@@ -361,11 +370,14 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     mount(surface)
                     page.locator(TRIGGER).click();state('ready-present');full_tree()
                     reads=page.evaluate(DAILY_READ)
+                    pulls=page.evaluate(DAILY_PULL)
                     page.evaluate(HOLD_RAF_JS)
                     try:
                         snap=page.evaluate('''() => {
                             const reads=()=>realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length;
+                            const pulls=()=>realPlan.trace().filter(r=>r[0]==="pull"&&(r[1]===":node/title"||r[1]==="node/title")).length;
                             const before=reads();
+                            const beforePulls=pulls();
                             document.querySelector('.nautilus-log-timing__capacity-token').click();
                             const dialog=document.querySelector('.nautilus-log-timing__popover');
                             window.__nlHeldRaf.mark('open');
@@ -374,6 +386,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                                 busy:dialog?dialog.getAttribute('aria-busy'):null,
                                 buttons:dialog?dialog.querySelectorAll('button').length:0,
                                 reads:reads()-before,
+                                pulls:pulls()-beforePulls,
                                 pendingFrames:window.__nlHeldRaf.size(),
                                 pendingZeros:window.__nlHeldRaf.pendingZeros(),
                             };
@@ -381,6 +394,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                         assert snap['visible'] and snap['busy']=='true', snap
                         assert snap['buttons']==0
                         assert snap['reads']==0
+                        assert snap['pulls']==0
                         assert snap['pendingFrames']>=1, snap
                         assert snap['pendingZeros']==0, snap
                         page.wait_for_selector('.nautilus-log-timing__popover[aria-busy="false"]', timeout=800)
@@ -388,13 +402,16 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                         assert dialog.locator('[data-task-uid]').count()>=1
                         assert dialog.locator('.nautilus-log-timing__row-actions button').count()>=1
                         ready_reads=page.evaluate(DAILY_READ)
-                        assert ready_reads==reads+1
+                        ready_pulls=page.evaluate(DAILY_PULL)
+                        assert ready_reads==reads, 'fast AND-ready must not run Daily Datalog'
+                        assert ready_pulls==pulls+1
                         st=page.evaluate('window.__nlHeldRaf.stats()')
                         assert st['pendingFrames']==0, st
                         assert st['framesCancelled']>=1, st
                         forced=page.evaluate('window.__nlHeldRaf.forceMark("open")')
                         assert forced>=1, 'must force the cancelled rAF, not an empty run'
                         assert page.evaluate(DAILY_READ)==ready_reads, 'late cancelled rAF must not reread'
+                        assert page.evaluate(DAILY_PULL)==ready_pulls, 'late cancelled rAF must not reverse-pull again'
                         assert page.evaluate('realPlan.popoverCount()')==1
                     finally:
                         page.evaluate(RESTORE_RAF_JS)
@@ -405,11 +422,14 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     mount(surface)
                     page.locator(TRIGGER).click();state('ready-present');full_tree()
                     reads=page.evaluate(DAILY_READ)
+                    pulls=page.evaluate(DAILY_PULL)
                     page.evaluate(HOLD_RAF_JS)
                     try:
                         snap=page.evaluate('''() => {
                             const reads=()=>realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length;
+                            const pulls=()=>realPlan.trace().filter(r=>r[0]==="pull"&&(r[1]===":node/title"||r[1]==="node/title")).length;
                             const before=reads();
+                            const beforePulls=pulls();
                             document.querySelector('.nautilus-log-timing__capacity-token').click();
                             const dialog=document.querySelector('.nautilus-log-timing__popover');
                             window.__nlHeldRaf.mark('first');
@@ -419,6 +439,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                                 busy:dialog?dialog.getAttribute('aria-busy'):null,
                                 buttons:dialog?dialog.querySelectorAll('button').length:0,
                                 reads:reads()-before,
+                                pulls:pulls()-beforePulls,
                                 fired,
                                 pendingFrames:window.__nlHeldRaf.size(),
                                 pendingZeros:window.__nlHeldRaf.pendingZeros(),
@@ -427,12 +448,15 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                         assert snap['visible'] and snap['busy']=='true', snap
                         assert snap['buttons']==0
                         assert snap['reads']==0
+                        assert snap['pulls']==0
                         assert snap['fired']>=1, snap
                         assert snap['pendingZeros']>=1, 'rAF arrival must leave a held 0ms yield'
                         assert snap['pendingFrames']==0, snap
                         page.wait_for_selector('.nautilus-log-timing__popover[aria-busy="false"]', timeout=800)
                         ready_reads=page.evaluate(DAILY_READ)
-                        assert ready_reads==reads+1
+                        ready_pulls=page.evaluate(DAILY_PULL)
+                        assert ready_reads==reads, 'fast AND-ready must not run Daily Datalog'
+                        assert ready_pulls==pulls+1
                         rows=page.evaluate('[...document.querySelectorAll("[data-task-uid]")].map(row=>row.dataset.taskUid)')
                         assert rows
                         st=page.evaluate('window.__nlHeldRaf.stats()')
@@ -442,6 +466,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                         forced=page.evaluate('window.__nlHeldRaf.forceCancelledZeros()')
                         assert forced>=1, 'must force the cancelled 0ms, not an empty run'
                         assert page.evaluate(DAILY_READ)==ready_reads, 'late 0ms must not reread after fallback won'
+                        assert page.evaluate(DAILY_PULL)==ready_pulls, 'late 0ms must not reverse-pull after fallback won'
                         assert page.evaluate('realPlan.popoverCount()')==1
                         assert page.evaluate('[...document.querySelectorAll("[data-task-uid]")].map(row=>row.dataset.taskUid)')==rows
                     finally:
@@ -453,11 +478,14 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     mount(surface)
                     page.locator(TRIGGER).click();state('ready-present');full_tree()
                     reads=page.evaluate(DAILY_READ)
+                    pulls=page.evaluate(DAILY_PULL)
                     page.evaluate(HOLD_RAF_JS)
                     try:
                         first=page.evaluate('''() => {
                             const reads=()=>realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length;
+                            const pulls=()=>realPlan.trace().filter(r=>r[0]==="pull"&&(r[1]===":node/title"||r[1]==="node/title")).length;
                             const before=reads();
+                            const beforePulls=pulls();
                             document.querySelector('.nautilus-log-timing__capacity-token').click();
                             window.__nlHeldRaf.mark('first');
                             const fired=window.__nlHeldRaf.fireMark('first');
@@ -465,17 +493,20 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                             const pendingZeros=window.__nlHeldRaf.pendingZeros();
                             document.querySelector('.nautilus-log-timing__trigger').click();
                             const st=window.__nlHeldRaf.stats();
-                            return {opened, closed:!realPlan.popoverOpen(), fired, pendingZeros, reads:reads()-before, zerosCancelled:st.zerosCancelled, nativeCancelled:st.nativeCancelled};
+                            return {opened, closed:!realPlan.popoverOpen(), fired, pendingZeros, reads:reads()-before, pulls:pulls()-beforePulls, zerosCancelled:st.zerosCancelled, nativeCancelled:st.nativeCancelled};
                         }''')
                         assert first['opened'] and first['closed'], first
                         assert first['fired']>=1, first
                         assert first['pendingZeros']>=1, first
                         assert first['reads']==0, first
+                        assert first['pulls']==0, first
                         assert first['zerosCancelled']>=1, first
                         assert first['nativeCancelled']>=1, first
                         second=page.evaluate('''() => {
                             const reads=()=>realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length;
+                            const pulls=()=>realPlan.trace().filter(r=>r[0]==="pull"&&(r[1]===":node/title"||r[1]==="node/title")).length;
                             const before=reads();
+                            const beforePulls=pulls();
                             document.querySelector('.nautilus-log-timing__capacity-token').click();
                             const dialog=document.querySelector('.nautilus-log-timing__popover');
                             const handles=window.__nlHeldRaf.snapshotHandles();
@@ -487,6 +518,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                                 busy:dialog?dialog.getAttribute('aria-busy'):null,
                                 buttons:dialog?dialog.querySelectorAll('button').length:0,
                                 reads:reads()-before,
+                                pulls:pulls()-beforePulls,
                                 held:handles.length,
                                 after:after.length,
                                 same:JSON.stringify(handles)===JSON.stringify(after),
@@ -497,6 +529,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                         assert second['visible'] and second['busy']=='true', second
                         assert second['buttons']==0
                         assert second['reads']==0
+                        assert second['pulls']==0
                         assert second['held']>=1, second
                         assert second['same'], second
                         assert second['forcedFrames']>=1, second
@@ -504,16 +537,19 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                         page.wait_for_selector('.nautilus-log-timing__popover[aria-busy="false"]', timeout=800)
                         assert page.locator('.nautilus-log-timing__popover [data-task-uid]').count()>=1
                         assert page.evaluate('realPlan.popoverCount()')==1
-                        assert page.evaluate(DAILY_READ)==reads+1, 'cancelled first wait must not read; reopen reads once'
+                        assert page.evaluate(DAILY_READ)==reads, 'cancelled first wait must not run Daily Datalog; reopen uses reverse pull'
+                        assert page.evaluate(DAILY_PULL)==pulls+1, 'cancelled first wait must not read; reopen reverse-pulls once'
                         closed=page.evaluate('''() => {
                             const reads=()=>realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length;
+                            const pulls=()=>realPlan.trace().filter(r=>r[0]==="pull"&&(r[1]===":node/title"||r[1]==="node/title")).length;
                             const before=reads();
+                            const beforePulls=pulls();
                             document.querySelector('.nautilus-log-timing__trigger').click();
                             window.__nlHeldRaf.forceMark('first');
                             window.__nlHeldRaf.forceCancelledZeros();
-                            return {closed:!realPlan.popoverOpen(), count:realPlan.popoverCount(), reads:reads()-before};
+                            return {closed:!realPlan.popoverOpen(), count:realPlan.popoverCount(), reads:reads()-before, pulls:pulls()-beforePulls};
                         }''')
-                        assert closed=={'closed':True,'count':0,'reads':0}, closed
+                        assert closed=={'closed':True,'count':0,'reads':0,'pulls':0}, closed
                     finally:
                         page.evaluate(RESTORE_RAF_JS)
                 check(surface+'-held-raf-close-reopen-stale',held_raf_close_reopen_stale)
@@ -524,11 +560,14 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                         mount(surface)
                         page.locator(TRIGGER).click();state('ready-present');full_tree()
                         reads=page.evaluate(DAILY_READ)
+                        pulls=page.evaluate(DAILY_PULL)
                         page.evaluate(HOLD_RAF_JS)
                         try:
                             snap=page.evaluate('''(action)=>{
                                 const reads=()=>realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length;
+                                const pulls=()=>realPlan.trace().filter(r=>r[0]==="pull"&&(r[1]===":node/title"||r[1]==="node/title")).length;
                                 const before=reads();
+                                const beforePulls=pulls();
                                 document.querySelector('.nautilus-log-timing__capacity-token').click();
                                 const dialog=document.querySelector('.nautilus-log-timing__popover');
                                 const openedFrames=window.__nlHeldRaf.size();
@@ -547,6 +586,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                                     openedFrames,
                                     closed:!realPlan.popoverOpen(),
                                     reads:reads()-before,
+                                    pulls:pulls()-beforePulls,
                                     framesCancelled:st.framesCancelled,
                                     nativeCancelled:st.nativeCancelled,
                                     pendingFrames:window.__nlHeldRaf.size(),
@@ -559,6 +599,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                             assert snap['openedFrames']>=1, (action, snap)
                             assert snap['closed'], (action, snap)
                             assert snap['reads']==0, (action, snap)
+                            assert snap['pulls']==0, (action, snap)
                             assert snap['framesCancelled']>=1, (action, snap)
                             assert snap['nativeCancelled']>=1, (action, snap)
                             assert snap['pendingFrames']==0, (action, snap)
@@ -581,6 +622,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                             assert after['count']==0, (action, after)
                             assert after['reads']==0, (action, after)
                             assert page.evaluate(DAILY_READ)==reads, action
+                            assert page.evaluate(DAILY_PULL)==pulls, action
                         finally:
                             page.evaluate(RESTORE_RAF_JS)
                 check(surface+'-held-raf-cancel',held_raf_cancel)
@@ -613,10 +655,12 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     page.locator(TRIGGER).click();state('ready-present');full_tree()
                     snap=page.evaluate('''() => {
                         const reads=()=>realPlan.trace().filter(r=>r[0]==="query"&&r[1].includes("?page-uid ?uid ?string ?order ?parent-uid")).length;
+                        const pulls=()=>realPlan.trace().filter(r=>r[0]==="pull"&&(r[1]===":node/title"||r[1]==="node/title")).length;
                         const orig=window.requestAnimationFrame;
                         let registered=0;
                         window.requestAnimationFrame=fn=>{registered+=1;return orig.call(window, fn);};
                         const before=reads();
+                        const beforePulls=pulls();
                         document.querySelector('.nautilus-log-timing__capacity-token').click();
                         const dialog=document.querySelector('.nautilus-log-timing__popover');
                         const sync={
@@ -624,6 +668,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                             busy:dialog?dialog.getAttribute('aria-busy'):null,
                             buttons:dialog?dialog.querySelectorAll('button').length:0,
                             reads:reads()-before,
+                            pulls:pulls()-beforePulls,
                         };
                         window.requestAnimationFrame=orig;
                         return sync;
@@ -632,6 +677,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     assert snap['busy']=='true'
                     assert snap['buttons']==0
                     assert snap['reads']==0, 'click must not read the Daily Note before a paint yield'
+                    assert snap['pulls']==0, 'click must not reverse-pull the Daily Note before a paint yield'
                     page.wait_for_selector('.nautilus-log-timing__popover[aria-busy="false"]')
                     assert page.locator('.nautilus-log-timing__popover [data-task-uid]').count()>=1
                 check(surface+'-paint-yield-before-read',paint_yield_before_read)

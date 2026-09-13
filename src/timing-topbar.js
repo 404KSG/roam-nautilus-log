@@ -94,9 +94,34 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   let liveExecutionCache = null;
   let energyConfirmTimer = null;
   let activationGeneration = 0;
+  let renderConfig = null;
 
-  const ui = () => timingCore.executionCopy(extensionAPI.settings.get('language') || 'en');
-  const energyBarEnabled = () => extensionAPI.settings.get('energy-bar-enabled') === true;
+  const readRenderConfig = () => {
+    const language = extensionAPI.settings.get('language') || 'en';
+    return {
+      language,
+      text: timingCore.executionCopy(language),
+      forgottenMinutes: extensionAPI.settings.get('forgotten-timer-minutes') ?? 120,
+      todoDuration: Number(extensionAPI.settings.get('todo-duration')) || 15,
+      energyBar: extensionAPI.settings.get('energy-bar-enabled') === true,
+      workdayStart: extensionAPI.settings.get('workday-start') ?? 5,
+      workdayEnd: extensionAPI.settings.get('workday-end') ?? 21,
+      pomodoroMinutes: Number(extensionAPI.settings.get('pomodoro-minutes')) || 45,
+    };
+  };
+  const withRenderConfig = (fn) => {
+    const owned = renderConfig == null;
+    if (owned) renderConfig = readRenderConfig();
+    try {
+      return fn(renderConfig);
+    } finally {
+      if (owned) renderConfig = null;
+    }
+  };
+  const ui = () => renderConfig?.text || timingCore.executionCopy(extensionAPI.settings.get('language') || 'en');
+  const energyBarEnabled = () => (renderConfig
+    ? renderConfig.energyBar
+    : extensionAPI.settings.get('energy-bar-enabled') === true);
   const todayPlanState = () => todayPlan?.getState?.() || null;
   const diagnostics = createPlanDiagnostics(todayPlan, () => trigger);
   const shouldUseTodayPlanEntry = () => {
@@ -160,8 +185,8 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       || (planUi.planUid && planUi.planUid !== snapshot.plan.uid)))) return null;
     const execution = snapshot?.execution;
     if (!energyBarEnabled() || !snapshot?.plan) return execution || null;
-    const workdayStart = extensionAPI.settings.get('workday-start') ?? 5;
-    const workdayEnd = extensionAPI.settings.get('workday-end') ?? 21;
+    const workdayStart = renderConfig?.workdayStart ?? extensionAPI.settings.get('workday-start') ?? 5;
+    const workdayEnd = renderConfig?.workdayEnd ?? extensionAPI.settings.get('workday-end') ?? 21;
     const minute = Math.floor(state.now.getTime() / 60000);
     if (
       liveExecutionCache?.snapshot !== snapshot
@@ -186,7 +211,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   const currentCapacitySummary = () => {
     const execution = currentTriggerExecution();
     if (!execution) return null;
-    const language = extensionAPI.settings.get('language') || 'en';
+    const language = renderConfig?.language || extensionAPI.settings.get('language') || 'en';
     if (execution !== cachedCapacityExecution || language !== cachedCapacityLanguage) {
       cachedCapacityExecution = execution;
       cachedCapacityLanguage = language;
@@ -515,7 +540,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   };
 
   const scheduledTaskMeta = (task, start, end) => {
-    const language = extensionAPI.settings.get('language') || 'en';
+    const language = renderConfig.language;
     const today = Number(start) < 1440 ? `${ui().plan.today} ` : '';
     return `${today}${timingCore.formatPlanClock(start, language)}–${timingCore.formatPlanClock(end, language)} · ${plannedTaskDuration(task)}`;
   };
@@ -533,7 +558,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     if (planState) row.classList.add(`is-${planState}`);
     const focused = state.activeWork?.focused?.taskUid === task.uid;
     if (focused) row.classList.add('is-focused');
-    const forgottenMinutes = extensionAPI.settings.get('forgotten-timer-minutes') ?? 120;
+    const forgottenMinutes = renderConfig.forgottenMinutes;
     const forgotten = focused && timingCore.isForgottenClock(entry || state.activeWork?.focused, state.now, forgottenMinutes);
     if (forgotten) row.classList.add('is-forgotten');
 
@@ -552,7 +577,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       plannedMinutes: task.plannedMinutes,
       entries: state.entries,
       now: state.now,
-      language: extensionAPI.settings.get('language') || 'en',
+      language: renderConfig.language,
     });
     const recentRemaining = recent && entry?.end
       ? Math.max(0, Math.ceil((Number(state.activeWork?.windowMinutes || 0) * 60000 - (state.now - entry.end)) / 60000))
@@ -624,7 +649,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     const text = ui().capacity;
     const summary = timingCore.capacitySummary(
       execution,
-      extensionAPI.settings.get('language') || 'en',
+      renderConfig.language,
     );
     // Use a neutral div instead of section so Roam themes cannot accidentally
     // apply editorial/serif section typography to this compact UI strip.
@@ -668,7 +693,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   const activeTask = (entry) => ({
     uid: entry.taskUid,
     title: entry.title,
-    plannedMinutes: timingCore.plannedMinutes(entry.taskString, Number(extensionAPI.settings.get('todo-duration')) || 15),
+    plannedMinutes: timingCore.plannedMinutes(entry.taskString, renderConfig.todoDuration),
   });
 
   const signedMinutes = (minutes) => {
@@ -762,7 +787,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
         plannedMinutes: task.plannedMinutes,
         entries: state.entries,
         now: state.now,
-        language: extensionAPI.settings.get('language') || 'en',
+        language: renderConfig.language,
       });
       actual.textContent = `${ui().review.actual} ${timingCore.compactMinutes(duration.actualMinutes)}`;
       return;
@@ -777,9 +802,9 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       plannedMinutes: task.plannedMinutes,
       entries: state.entries,
       now: state.now,
-      language: extensionAPI.settings.get('language') || 'en',
+      language: renderConfig.language,
     });
-    const forgottenMinutes = extensionAPI.settings.get('forgotten-timer-minutes') ?? 120;
+    const forgottenMinutes = renderConfig.forgottenMinutes;
     const forgotten = timingCore.isForgottenClock(focused, state.now, forgottenMinutes);
     row.classList.toggle('is-forgotten', forgotten);
     meta.classList.toggle('is-warning', forgotten);
@@ -846,7 +871,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     }
   };
 
-  const renderPopover = ({ force = false } = {}) => {
+  const renderPopover = ({ force = false } = {}) => withRenderConfig(() => {
     if (!popover) return;
     const text = ui();
     if (popoverPending) {
@@ -1057,7 +1082,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     popover.append(list);
     restorePopoverFocus(focus);
     list.scrollTop = scrollTop;
-  };
+  });
 
   const positionPopover = () => {
     if (!popover || !trigger) return;
@@ -1120,7 +1145,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     // Do not schedule another identical read/rebuild immediately afterward.
   };
 
-  const renderTrigger = () => {
+  const renderTrigger = () => withRenderConfig(() => {
     if (!trigger) return;
     const text = ui();
     trigger.setAttribute('aria-description', text.actions.openPanelHint);
@@ -1129,7 +1154,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     const standalone = !focused && state.standalonePomodoro;
     if (standalone) {
       const elapsed = timingCore.formatElapsed(state.now.getTime() - Number(standalone.startedAt));
-      const pomodoroMinutes = Number(extensionAPI.settings.get('pomodoro-minutes')) || 45;
+      const pomodoroMinutes = renderConfig.pomodoroMinutes;
       if (triggerMode !== 'pomodoro') {
         trigger.replaceChildren(
           ...triggerNodes(
@@ -1205,9 +1230,9 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       trigger.classList.remove('is-create-today', 'is-creating', 'is-checking', 'is-blocked', 'is-read-failed');
       const elapsed = timingCore.formatElapsed(state.now - focused.start);
       const count = state.activeWork.count;
-      const pomodoroMinutes = Number(extensionAPI.settings.get('pomodoro-minutes')) || 45;
+      const pomodoroMinutes = renderConfig.pomodoroMinutes;
       const pomodoroElapsed = state.pomodoro ? state.now.getTime() - Number(state.pomodoro.startedAt) : 0;
-      const forgottenMinutes = extensionAPI.settings.get('forgotten-timer-minutes') ?? 120;
+      const forgottenMinutes = renderConfig.forgottenMinutes;
       const forgotten = timingCore.isForgottenClock(focused, state.now, forgottenMinutes);
       if (triggerMode !== 'active') {
         const forgottenSignal = element('span', 'nautilus-log-timing__forgotten-signal');
@@ -1233,7 +1258,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       });
       if (pomoCloseButton) pomoCloseButton.hidden = true;
     }
-  };
+  });
 
   const syncResponsiveDensity = () => {
     if (!container?.isConnected) return;

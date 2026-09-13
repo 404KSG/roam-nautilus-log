@@ -554,6 +554,28 @@ test('standalone POMO has an independent topbar start/stop contract', () => {
   assert.doesNotMatch(timingTopbar.slice(triggerStart, triggerEnd), /renderPopover/);
 });
 
+test('a single popover render does not re-read extension settings per task row', () => {
+  const plannedStart = timingTopbar.indexOf('const plannedTaskDuration =');
+  const scheduledStart = timingTopbar.indexOf('const scheduledTaskMeta =');
+  const taskRowStart = timingTopbar.indexOf('const taskRow =');
+  const capacityStart = timingTopbar.indexOf('const capacityStrip =');
+  const activeStart = timingTopbar.indexOf('const activeTask =');
+  const signedStart = timingTopbar.indexOf('const signedMinutes =');
+  assert.ok(plannedStart > 0 && scheduledStart > plannedStart && taskRowStart > scheduledStart);
+  assert.ok(capacityStart > taskRowStart && activeStart > capacityStart && signedStart > activeStart);
+  assert.doesNotMatch(timingTopbar.slice(plannedStart, scheduledStart), /settings\.get\(/);
+  assert.doesNotMatch(timingTopbar.slice(scheduledStart, taskRowStart), /settings\.get\(/);
+  assert.doesNotMatch(timingTopbar.slice(taskRowStart, capacityStart), /settings\.get\(/);
+  assert.doesNotMatch(timingTopbar.slice(activeStart, signedStart), /settings\.get\(/);
+  assert.match(timingTopbar, /const withRenderConfig =/);
+  assert.match(timingTopbar, /renderPopover =[\s\S]{0,120}withRenderConfig/);
+  assert.match(timingTopbar, /renderTrigger =[\s\S]{0,80}withRenderConfig/);
+  assert.doesNotMatch(
+    timingTopbar.slice(timingTopbar.indexOf('const clearDeleteConfirmation'), timingTopbar.indexOf('const cancelDeferredRefresh')),
+    /withRenderConfig/,
+  );
+});
+
 test('the global capacity token yields topbar space to Roam search', () => {
   assert.match(timingCore, /function topbarDensity/);
   assert.match(timingTopbar, /timingCore\.topbarDensity/);

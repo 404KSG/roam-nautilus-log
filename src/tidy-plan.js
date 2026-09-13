@@ -152,103 +152,127 @@ export function createPlanTidy({
     }
   };
 
-  const readExpected = (planUid, expectedOrder) => {
-    const rows = read(planUid);
-    if (!equalOrder(uidOrder(rows), expectedOrder)) {
-      throw new Error(PLAN_CHANGED);
+  const findNextOpenWrite = (live, uids, desiredOpenFor, expectedOrder, runningUid) => {
+    const targets = Array.isArray(uids) ? uids : [];
+    for (const uid of targets) {
+      if (!uid || uid === runningUid) continue;
+      const desired = desiredOpenFor(uid);
+      if (typeof desired !== 'boolean') continue;
+      if (!expectedOrder.includes(uid)) continue;
+      if (!equalOrder(uidOrder(live), expectedOrder)) {
+        throw new Error(PLAN_CHANGED);
+      }
+      const row = live.find((child) => child.uid === uid);
+      if (!row) throw new Error(PLAN_CHANGED_SHORT);
+      if (row.open === desired) continue;
+      return { uid, open: desired };
     }
-    return rows;
+    return null;
   };
 
-  const writeOpenIfNeeded = async (planUid, uid, open, expectedOrder) => {
-    if (!expectedOrder.includes(uid)) return false;
-    const rows = readExpected(planUid, expectedOrder);
-    const row = rows.find((child) => child.uid === uid);
-    if (!row) throw new Error(PLAN_CHANGED_SHORT);
-    if (row.open === open) return false;
-    await write(() => setOpen(uid, open));
-    return true;
+  const confirmOpenState = (live, expectedOrder, uids, runningUid, shouldBeOpen) => {
+    if (!equalOrder(uidOrder(live), expectedOrder)) {
+      throw new Error(CONFIRM_ORDER);
+    }
+    const byUid = new Map(live.map((row) => [row.uid, row]));
+    for (const uid of uids) {
+      const row = byUid.get(uid);
+      if (!row) throw new Error(CONFIRM_OPEN);
+      if (uid !== runningUid && row.open !== shouldBeOpen) throw new Error(CONFIRM_OPEN);
+    }
   };
 
-  const applyTarget = async (planUid, currentUids, targetUids) => {
-    const outlineState = new Map(read(planUid)
+  const applyTarget = async (planUid, currentUids, targetUids, initialRows) => {
+    const liveStart = initialRows || read(planUid);
+    const outlineState = new Map(liveStart
       .filter((child) => child?.uid && typeof child?.open === 'boolean')
       .map((child) => [child.uid, child.open]));
-    const moves = logCore.childOrderMoves({ currentUids, targetUids });
+    const operations = logCore.childOrderMoves({ currentUids, targetUids });
     const expected = currentUids.slice();
-    for (const operation of moves) {
-      if (!equalOrder(uidOrder(read(planUid)), expected)) {
+    let live = liveStart;
+    const moves = [];
+    for (const operation of operations) {
+      if (!equalOrder(uidOrder(live), expected)) {
         throw new Error(PLAN_CHANGED);
       }
       await write(() => move({ uid: operation.uid, parentUid: planUid, order: operation.order }));
       expected.splice(operation.order, 0, expected.splice(expected.indexOf(operation.uid), 1)[0]);
+      live = read(planUid);
+      moves.push(operation);
     }
-    const confirmedChildren = read(planUid);
-    if (!equalOrder(uidOrder(confirmedChildren), targetUids)) {
-      throw new Error(CONFIRM_ORDER);
-    }
-    for (const uid of targetUids) {
-      const previousOpen = outlineState.get(uid);
-      if (typeof previousOpen !== 'boolean') continue;
-      await writeOpenIfNeeded(planUid, uid, previousOpen, targetUids);
-    }
-    return moves;
-  };
-
-  const applyOpenTarget = async (planUid, targetUids, open, expectedOrder) => {
-    const targets = Array.isArray(targetUids) ? targetUids.filter(Boolean) : [];
-    if (targets.length === 0) return [];
-    const changedUids = [];
-    const runningUid = runningTaskUid();
-    for (const uid of targets) {
-      if (uid === runningUid) continue;
-      if (await writeOpenIfNeeded(planUid, uid, open, expectedOrder)) {
-        changedUids.push(uid);
-      }
-    }
-    return changedUids;
-  };
-
-  const confirmTidy = (planUid, targetUids, collapsedUids, runningUid) => {
-    const live = read(planUid);
     if (!equalOrder(uidOrder(live), targetUids)) {
       throw new Error(CONFIRM_ORDER);
     }
-    const byUid = new Map(live.map((row) => [row.uid, row]));
-    for (const uid of collapsedUids) {
-      const row = byUid.get(uid);
-      if (!row) throw new Error(CONFIRM_OPEN);
-      if (uid !== runningUid && row.open !== false) throw new Error(CONFIRM_OPEN);
-    }
+    const restored = await applyOpenTarget(
+      planUid,
+      targetUids,
+      (uid) => outlineState.get(uid),
+      targetUids,
+      live,
+      false,
+    );
+    return { moves, live: restored.live };
   };
 
-  const confirmUndoOpen = (planUid, originalUids, collapsedUids, runningUid) => {
-    const live = read(planUid);
-    if (!equalOrder(uidOrder(live), originalUids)) {
-      throw new Error(CONFIRM_ORDER);
+  const applyOpenTarget = async (planUid, targetUids, open, expectedOrder, liveRows, skipRunning = true) => {
+    const targets = Array.isArray(targetUids) ? targetUids.filter(Boolean) : [];
+    const changedUids = [];
+    let live = liveRows || read(planUid);
+    let runningUid = skipRunning ? runningTaskUid() : null;
+    const desiredOpenFor = typeof open === 'function' ? open : () => open;
+    for (const uid of targets) {
+      if (!uid || uid === runningUid) continue;
+      const desired = desiredOpenFor(uid);
+      if (typeof desired !== 'boolean') continue;
+      if (!expectedOrder.includes(uid)) continue;
+      if (!equalOrder(uidOrder(live), expectedOrder)) {
+        throw new Error(PLAN_CHANGED);
+      }
+      const row = live.find((child) => child.uid === uid);
+      if (!row) throw new Error(PLAN_CHANGED_SHORT);
+      if (row.open === desired) continue;
+      await write(() => setOpen(uid, desired));
+      changedUids.push(uid);
+      live = read(planUid);
+      if (skipRunning) runningUid = runningTaskUid();
     }
-    const byUid = new Map(live.map((row) => [row.uid, row]));
-    for (const uid of collapsedUids) {
-      const row = byUid.get(uid);
-      if (!row) throw new Error(CONFIRM_OPEN);
-      if (uid !== runningUid && row.open !== true) throw new Error(CONFIRM_OPEN);
-    }
+    return { changedUids, live };
   };
 
   const undoUnlocked = async ({ planUid, token, language = 'en' } = {}) => {
     const copy = copyFor(language);
     const state = undoStates.get(planUid);
     if (!state || state.token !== token) return { ok: false, reason: 'expired' };
-    const currentUids = uidOrder(read(planUid));
+    const currentRows = read(planUid);
+    const currentUids = uidOrder(currentRows);
     if (!equalOrder(currentUids, state.targetUids)) {
       undoStates.delete(planUid);
       notify(copy.changed, 'warning');
       return { ok: false, reason: 'changed' };
     }
     try {
-      await applyTarget(planUid, currentUids, state.originalUids);
-      await applyOpenTarget(planUid, state.collapsedUids, true, state.originalUids);
-      confirmUndoOpen(planUid, state.originalUids, state.collapsedUids, runningTaskUid());
+      let live = currentRows;
+      if (!equalOrder(currentUids, state.originalUids)) {
+        await applyTarget(planUid, currentUids, state.originalUids, live);
+        live = read(planUid);
+        if (!equalOrder(uidOrder(live), state.originalUids)) {
+          throw new Error(CONFIRM_ORDER);
+        }
+      }
+      let runningUid = runningTaskUid();
+      const expandNeeded = findNextOpenWrite(
+        live,
+        state.collapsedUids,
+        () => true,
+        state.originalUids,
+        runningUid,
+      );
+      if (expandNeeded) {
+        await applyOpenTarget(planUid, state.collapsedUids, true, state.originalUids, live, true);
+        live = read(planUid);
+        runningUid = runningTaskUid();
+      }
+      confirmOpenState(live, state.originalUids, state.collapsedUids, runningUid, true);
       undoStates.delete(planUid);
       notify(copy.undone, 'success');
       return { ok: true };
@@ -269,7 +293,7 @@ export function createPlanTidy({
 
   const tidyUnlocked = async ({ planUid, settledUids = [] } = {}) => {
     if (!planUid) throw new Error('A Nautilus Log Plan UID is required.');
-    const runningUid = runningTaskUid();
+    let runningUid = runningTaskUid();
     const safeSettled = (Array.isArray(settledUids) ? settledUids : [])
       .filter((uid) => uid && uid !== runningUid);
     const children = read(planUid);
@@ -278,23 +302,50 @@ export function createPlanTidy({
       items: originalUids.map((uid) => ({ uid })),
       settledUids: safeSettled,
     }).map((item) => item.uid);
-    const moves = equalOrder(originalUids, targetUids)
-      ? []
-      : await applyTarget(planUid, originalUids, targetUids);
-    const collapsedUids = await applyOpenTarget(planUid, safeSettled, false, targetUids);
+    let live = children;
+    let moves = [];
+    if (!equalOrder(originalUids, targetUids)) {
+      const applied = await applyTarget(planUid, originalUids, targetUids, children);
+      moves = applied.moves;
+      live = read(planUid);
+      if (!equalOrder(uidOrder(live), targetUids)) {
+        throw new Error(CONFIRM_ORDER);
+      }
+    }
+    runningUid = runningTaskUid();
+    let collapsedUids = [];
+    const collapseNeeded = findNextOpenWrite(
+      live,
+      safeSettled,
+      () => false,
+      targetUids,
+      runningUid,
+    );
+    if (collapseNeeded) {
+      const appliedOpen = await applyOpenTarget(
+        planUid,
+        safeSettled,
+        false,
+        targetUids,
+        live,
+        true,
+      );
+      collapsedUids = appliedOpen.changedUids;
+      live = read(planUid);
+      runningUid = runningTaskUid();
+    }
     const changedUids = new Set([
       ...moves.map((operation) => operation.uid),
       ...collapsedUids,
     ]);
     if (changedUids.size === 0) {
       const existing = undoStates.get(planUid);
-      const live = read(planUid);
       if (!existing || !undoTokenStillSafe(existing, live, runningUid)) {
         undoStates.delete(planUid);
       }
       return { ok: true, changed: false, count: 0 };
     }
-    confirmTidy(planUid, targetUids, collapsedUids, runningUid);
+    confirmOpenState(live, targetUids, collapsedUids, runningUid, false);
     const token = tokenFor(planUid);
     undoStates.set(planUid, {
       token,

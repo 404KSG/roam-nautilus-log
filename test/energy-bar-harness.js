@@ -152,9 +152,15 @@ function createSettings(options = {}) {
     'forgotten-timer-minutes': 120,
     'pomodoro-minutes': 45,
   };
+  const gets = [];
   return {
+    values,
+    gets,
     settings: {
-      get: (key) => values[key],
+      get: (key) => {
+        gets.push(String(key));
+        return values[key];
+      },
     },
   };
 }
@@ -204,6 +210,20 @@ function api() {
         now: new Date(snapshot.now.getTime() + minutes * 60000),
       };
       publish();
+    },
+    resetSettingsGets() {
+      extensionAPI.gets.length = 0;
+    },
+    settingsGets(key) {
+      if (!key) return extensionAPI.gets.slice();
+      return extensionAPI.gets.filter((item) => item === key);
+    },
+    settingsGetCount(key) {
+      return key ? extensionAPI.gets.filter((item) => item === key).length : extensionAPI.gets.length;
+    },
+    setLanguage(language) {
+      extensionAPI.values.language = language;
+      window.dispatchEvent(new Event('nautilus-log:settings-changed'));
     },
     destroy,
   };

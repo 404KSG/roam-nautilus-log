@@ -37,7 +37,10 @@ export function createTidyCommands({
 
   const run = async () => {
     try {
-      const target = await resolveTarget();
+      const resolved = resolveTarget();
+      const target = resolved && typeof resolved.then === 'function'
+        ? await resolved
+        : resolved;
       return await tidy(target || {});
     } catch (error) {
       console.error('[Nautilus Log] Tidy command failed', error);

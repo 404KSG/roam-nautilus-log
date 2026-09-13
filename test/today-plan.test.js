@@ -97,11 +97,27 @@ function createGraph({ title = 'September 9th, 2026' } = {}) {
       return [];
     },
     data: {
-      pull: (_pattern, lookup) => {
-        const uid = lookup?.[1];
-        trace.push(['pull', uid]);
-        if (blocks.has(uid)) return { ':block/uid': uid, ':block/string': blocks.get(uid).string };
-        if ([...pages.values()].includes(uid)) return { ':block/uid': uid };
+      pull: (pattern, lookup) => {
+        const lookupKey = lookup?.[0];
+        const lookupVal = lookup?.[1];
+        trace.push(['pull', lookupKey, lookupVal]);
+        if (typeof pattern === 'string' && (pattern.includes(':block/_page') || pattern.includes('block/_page'))) {
+          const pageUid = pages.get(lookupVal);
+          if (!pageUid) return null;
+          return {
+            ':block/uid': pageUid,
+            ':block/_page': [...blocks.values()]
+              .filter((block) => pageUidOf(block) === pageUid)
+              .map((block) => ({
+                ':block/uid': block.uid,
+                ':block/string': block.string,
+                ':block/order': block.order,
+                ':block/_children': block.parentUid ? [{ ':block/uid': block.parentUid }] : [],
+              })),
+          };
+        }
+        if (blocks.has(lookupVal)) return { ':block/uid': lookupVal, ':block/string': blocks.get(lookupVal).string };
+        if ([...pages.values()].includes(lookupVal)) return { ':block/uid': lookupVal };
         return null;
       },
       page: {

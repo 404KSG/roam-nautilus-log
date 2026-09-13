@@ -319,6 +319,52 @@ def run() -> int:
         assert_true(no_slot_after["valueColor"] == "rgb(201, 108, 0)", "no-slot-after: warning color changed", failures)
         screenshot(page, "09-no-slot-after-complete.png")
 
+        def count_language_gets(task_count):
+            page.evaluate(
+                """(count) => {
+                  const tasks = Array.from({ length: count }, (_, i) => ({
+                    uid: `syn-${i}`,
+                    title: `Syn ${String(i + 1).padStart(3, '0')}`,
+                    plannedMinutes: 1,
+                    remainingMinutes: 1,
+                    status: 'TODO',
+                  }));
+                  energyBarHarness.mount({ tasks });
+                }""",
+                task_count,
+            )
+            page.wait_for_selector(".nautilus-log-timing__capacity-token")
+            page.evaluate("() => energyBarHarness.api.resetSettingsGets()")
+            open_plan(page)
+            page.wait_for_selector(".nautilus-log-timing__row")
+            return page.evaluate(
+                """() => ({
+                  language: energyBarHarness.api.settingsGetCount('language'),
+                  total: energyBarHarness.api.settingsGetCount(),
+                  rows: document.querySelectorAll('[data-task-uid]').length,
+                  tabs: document.querySelector('.nautilus-log-timing__tab.is-active')?.textContent || '',
+                })"""
+            )
+
+        two = count_language_gets(2)
+        twelve = count_language_gets(12)
+        assert_true(two["rows"] == 2, f"render-config 2-row count {two}", failures)
+        assert_true(twelve["rows"] == 12, f"render-config 12-row count {twelve}", failures)
+        assert_true(
+            twelve["language"] <= two["language"] + 1,
+            f"language gets scaled with rows: 2={two['language']} 12={twelve['language']}",
+            failures,
+        )
+        assert_true(
+            twelve["language"] < 12,
+            f"language gets still per-row: {twelve['language']}",
+            failures,
+        )
+        page.evaluate("() => energyBarHarness.api.setLanguage('zh')")
+        zh_tab = page.evaluate("() => document.querySelector('.nautilus-log-timing__tab.is-active')?.textContent || ''")
+        assert_true(zh_tab == "计划", f"settings change did not re-render copy: {zh_tab!r}", failures)
+        page.evaluate("() => energyBarHarness.destroy()")
+
         for index, theme in enumerate(("bp3-dark", "roam-app rm-dark-theme"), start=10):
             page.evaluate("theme => document.body.className = theme", theme)
             page.evaluate("() => energyBarHarness.mount()")

@@ -19,6 +19,7 @@ import {
   openTaskInRightSidebar,
   readAllEntries,
   readBlockString,
+  readPrimaryPlan,
 } from "./timing-roam";
 import { createTimingRuntime } from "./timing-runtime";
 import { changedClockOwners, createRendererClockReader } from "./clock-reader";
@@ -974,6 +975,7 @@ export {
   createPlanTidy,
   createTidyCommands,
   settledUidsForTidy,
+  readPrimaryPlan,
   resolveRendererTaskInstance,
   generateTemplateString,
   generateUpdatedRenderString,

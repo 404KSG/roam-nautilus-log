@@ -47,10 +47,28 @@ function createManagedGraph({ day = true, namespaced = true } = {}) {
     if (pattern.includes(':block/children')) {
       result[namespaced ? ':block/children' : 'children'] = children(b.uid).map(child => pull(child,pattern));
     }
-    if (pattern.includes(':block/page')) {
+    if (pattern.includes(':block/page') && !pattern.includes(':block/_page')) {
       result[namespaced ? ':block/page' : 'page'] = {':node/title':[...pages].find(([,uid])=>uid===pageOf(b))?.[0]};
     }
     return result;
+  }
+  function reverseDailyPull(pageUid, pattern) {
+    const uidKey = namespaced ? ':block/uid' : 'block/uid';
+    const stringKey = namespaced ? ':block/string' : 'block/string';
+    const orderKey = namespaced ? ':block/order' : 'block/order';
+    const pageRevKey = namespaced ? ':block/_page' : 'block/_page';
+    const childRevKey = namespaced ? ':block/_children' : 'block/_children';
+    const entity = { [uidKey]: pageUid };
+    if (typeof pattern === 'string' && (pattern.includes(':block/_page') || pattern.includes('block/_page'))) {
+      entity[pageRevKey] = [...blocks.values()].filter(b => pageOf(b) === pageUid).map(b => {
+        const node = { [uidKey]: b.uid, [stringKey]: b.string, [orderKey]: b.order };
+        if (pattern.includes(':block/_children') || pattern.includes('block/_children')) {
+          node[childRevKey] = b.parentUid ? [{ [uidKey]: b.parentUid }] : [];
+        }
+        return node;
+      });
+    }
+    return entity;
   }
   const mutate = async ({location, block}) => {
     trace.push(['request', block.uid]);
@@ -93,8 +111,18 @@ function createManagedGraph({ day = true, namespaced = true } = {}) {
       return [];
     },
     data: { pull(pattern, lookup) {
-      trace.push(['pull',lookup[1]]);
-      return pull(blocks.get(lookup[1]) || ([...pages.values()].includes(lookup[1]) ? {uid: lookup[1]} : null), pattern);
+      const lookupKey = lookup?.[0];
+      const lookupVal = lookup?.[1];
+      trace.push(['pull', lookupKey, lookupVal]);
+      const override = hooks.pull?.(pattern, lookup);
+      if (override !== undefined) return override;
+      const wantsReversePage = typeof pattern === 'string' && (pattern.includes(':block/_page') || pattern.includes('block/_page'));
+      if (lookupKey === ':node/title' || lookupKey === 'node/title') {
+        const pageUid = pages.get(lookupVal);
+        if (!pageUid) return null;
+        return wantsReversePage ? reverseDailyPull(pageUid, pattern) : pull({uid: pageUid}, pattern);
+      }
+      return pull(blocks.get(lookupVal) || ([...pages.values()].includes(lookupVal) ? {uid: lookupVal} : null), pattern);
     }, block: {create: mutate}, page: {async create({page}) {
       trace.push(['page-request',page.uid]);
       await hooks.beforePage?.(page);

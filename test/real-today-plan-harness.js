@@ -85,7 +85,7 @@ async function mount(opts={}, reload=false) {
 window.realPlan={mount,reload:()=>mount(options,true),cleanup,state:()=>session.getState(),
   refresh:()=>runtime?.requestRefresh({immediate:true}),
   tree:()=>readBlockTree(ROOT),blocks:()=>[...graph.blocks.values()],trace:()=>graph.trace,
-  recover:()=>{release?.();release=null;delete graph.hooks.beforeCreate;delete graph.hooks.navigate;delete graph.hooks.query;},
+  recover:()=>{release?.();release=null;delete graph.hooks.beforeCreate;delete graph.hooks.navigate;delete graph.hooks.query;delete graph.hooks.pull;},
   command:()=>[...palette.values()][0].callback(),
   retry:()=>session.discover({authoritative:true}),setDate:async()=>{date=new Date(2026,8,10,0,0,1);await runtime?.requestRefresh({immediate:true});await session.discover({authoritative:true});},
   noProvider:async()=>{view.destroy();view=createTimingTopbar({runtime,extensionAPI:{settings:graph.settings}});view.initialize();},
@@ -95,7 +95,10 @@ window.realPlan={mount,reload:()=>mount(options,true),cleanup,state:()=>session.
   deleteRoot:()=>deleteSubtree(ROOT),
   deleteChildren:()=>{for (const child of [...graph.children(ROOT)]) deleteSubtree(child.uid);},
   fireRoot:(suppress=false)=>fireUid(ROOT,Boolean(suppress)),
-  failDailyRead:()=>{graph.hooks.query=q=>{if(String(q).includes('?page-uid ?uid ?string ?order ?parent-uid'))throw Error('Daily Note tree is unreadable.');};},
+  failDailyRead:()=>{
+    graph.hooks.pull=(pattern)=>{if(String(pattern).includes(':block/_page')||String(pattern).includes('block/_page'))throw Error('Daily Note tree is unreadable.');};
+    graph.hooks.query=q=>{if(String(q).includes('?page-uid ?uid ?string ?order ?parent-uid'))throw Error('Daily Note tree is unreadable.');};
+  },
   addManualPlan:()=>{graph.add({uid:'manual-other-plan',string:COMPONENT,parentUid:'day',order:graph.children('day').length});},
   moveRootOffDay:()=>{graph.blocks.get(ROOT).parentUid='notes-page';},
   runtimePlanUid:()=>runtime?.getSnapshot()?.planSnapshot?.plan?.uid||null,
