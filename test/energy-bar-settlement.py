@@ -21,11 +21,15 @@ def readings_js() -> str:
       const label = document.querySelector('.nautilus-log-timing__energy-planned-label');
       const planned = document.querySelector('.nautilus-log-timing__energy-planned');
       const capacity = document.querySelector('.nautilus-log-timing__capacity-token');
+      const track = document.querySelector('.nautilus-log-timing__energy-track');
+      const bottom = document.querySelector('.nautilus-log-timing__energy-bottom');
       const reserve = document.querySelector('.nautilus-log-timing__energy-reserve');
       const committed = document.querySelector('.nautilus-log-timing__energy-committed');
       const cs = (el) => el ? getComputedStyle(el) : null;
       const valueCs = cs(value);
       const labelCs = cs(label);
+      const capacityRect = capacity?.getBoundingClientRect();
+      const trackRect = track?.getBoundingClientRect();
       return {
         valueText: value ? value.textContent : '',
         labelText: label ? label.textContent : '',
@@ -38,6 +42,13 @@ def readings_js() -> str:
         confirming: Boolean(value && value.classList.contains('is-confirming')),
         warning: Boolean(planned && planned.classList.contains('is-warning')),
         statusCue: Boolean(capacity && capacity.classList.contains('is-status-cue')),
+        trackWidth: cs(track) && cs(track).width,
+        trackHeight: cs(track) && cs(track).height,
+        tokenHeight: cs(capacity) && cs(capacity).height,
+        bottomWidth: cs(bottom) && cs(bottom).width,
+        trackCenterOffset: capacityRect && trackRect
+          ? (trackRect.top + trackRect.height / 2) - (capacityRect.top + capacityRect.height / 2)
+          : null,
         damage: Boolean(document.querySelector('.nautilus-log-timing__energy-damage')),
         settling: Boolean(capacity && capacity.classList.contains('is-settling')),
         reserveDelay: cs(reserve) && cs(reserve).transitionDelay,
@@ -63,7 +74,17 @@ def assert_true(condition, message, failures):
         failures.append(message)
 
 
+def assert_geometry(info, failures, prefix):
+    height = float((info["trackHeight"] or "0px").removesuffix("px"))
+    assert_true(info["trackWidth"] == "136px", f"{prefix}: track width {info['trackWidth']}", failures)
+    assert_true(info["bottomWidth"] == "136px", f"{prefix}: bottom width {info['bottomWidth']}", failures)
+    assert_true(abs(height - 4) <= 0.5, f"{prefix}: track height {info['trackHeight']}", failures)
+    assert_true(info["tokenHeight"] == "28px", f"{prefix}: token height {info['tokenHeight']}", failures)
+    assert_true(abs(info["trackCenterOffset"] + 7) <= 1, f"{prefix}: track center offset {info['trackCenterOffset']}", failures)
+
+
 def assert_readable(info, failures, prefix):
+    assert_geometry(info, failures, prefix)
     assert_true(info["damage"] is False, f"{prefix}: damage node present", failures)
     assert_true(info["settling"] is False, f"{prefix}: is-settling present", failures)
     assert_true(info["valueText"] != "", f"{prefix}: planned-value empty", failures)

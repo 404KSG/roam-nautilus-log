@@ -59,8 +59,11 @@ projection.
 ## Interface
 
 Full density becomes one compact two-level instrument. The upper-left row is a
-continuous 136×6px fully rounded depth-gauge capsule. The lower row becomes one
-quiet, left-aligned sentence, such as `70% left · 3h20m planned`, whose left edge
+continuous 136×4px fully rounded depth-gauge capsule. The 4px height follows the
+slimmer visual weight measured from the OpenUsage reference while preserving the
+existing 136px horizontal scale. Version 1.1.0 shipped the original 6px
+capsule; 4px is the current contract. The lower row becomes one quiet,
+left-aligned sentence, such as `70% left · 3h20m planned`, whose left edge
 matches the track. CLOCK or POMO elapsed time occupies a separate right cell
 that spans both rows and centers on the Roam topbar axis, so the track never
 shrinks or changes scale when timing starts. The previous percentage to the

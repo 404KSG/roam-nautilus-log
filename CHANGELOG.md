@@ -4,6 +4,10 @@
 
 ### Changed
 
+- The optional capacity bar keeps its 136px horizontal scale but reduces the
+  capsule from 6px to 4px high, matching the slimmer visual weight of OpenUsage.
+  The two 14px rows, center-axis alignment, colors, warning text, width motion,
+  completion confirmation, reduced-motion behavior, and icon fallback are unchanged.
 - Opening the execution panel keeps its header and a static loading skeleton
   instead of flashing “Checking today's plan.” The topbar stays visually stable
   during that check. Loading remains accessible through the dialog's busy state
@@ -77,7 +81,7 @@
   template is changed, nothing auto-creates at midnight, and no historical note
   is rewritten. Execution Layer off still has this launcher, but not CLOCK
   writes, a 1s ticker, or the execution popover. After a confirmed create, the
-  existing capacity text / 136×6 energy bar returns and the plan opens in the
+  existing capacity text / 136×4 energy bar returns and the plan opens in the
   main window. Running CLOCK/POMO remains visible when no plan exists, with a
   create action in the Plan empty-state.
 - Creation is guarded by graph-scoped Web Locks, a reserved date-specific root

@@ -134,7 +134,7 @@ check, not by scanning on every keystroke.
 
 When Execution Layer is enabled, the first Nautilus Log on today's Daily Note becomes
 the **Primary Plan** used by the topbar panel. After a successful create, the existing
-capacity text or 136×6 energy bar returns and the plan is opened in the main window.
+capacity text or 136×4 energy bar returns and the plan is opened in the main window.
 If CLOCK/POMO is already running without a plan, its timer and applicable stop
 controls stay visible; use the create button in the panel's **Plan** empty-state.
 
@@ -166,8 +166,9 @@ Plan times after midnight include an explicit **next day** label.
 ### Optional capacity energy bar
 
 Enable **Show capacity as an energy bar** to replace the ordinary one-line
-topbar token with a borderless two-level depth gauge. Its fixed 136×6px capsule
-has fully rounded ends and no border, shadow, or decorative end structure. The
+topbar token with a borderless two-level depth gauge. Its fixed 136×4px capsule
+uses an OpenUsage-like slim profile, with fully rounded ends and no border, shadow,
+or decorative end structure. The
 track sits above the topbar centerline, while the lower row is one left-aligned
 phrase such as `42% left · 3h20m planned`. The two rows fold symmetrically around the
 centerline. While CLOCK or POMO runs, its timer and stop control remain centered

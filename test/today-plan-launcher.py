@@ -148,7 +148,7 @@ def run() -> int:
         after = energy_info(page)
         screenshot(page, "02-after-create-energy.png")
         assert_true(after["trackWidth"] == "136px", f"after: width {after['trackWidth']}", failures)
-        assert_true(after["trackHeight"] == "6px", f"after: height {after['trackHeight']}", failures)
+        assert_true(abs(float(after["trackHeight"].removesuffix("px")) - 4) <= 0.5, f"after: height {after['trackHeight']}", failures)
         assert_true(after["radius"] == "999px", f"after: radius {after['radius']}", failures)
         assert_true(after["reserveBg"] == "rgb(92, 112, 128)", f"after: reserve {after['reserveBg']}", failures)
         assert_true(after["committedBg"] == "rgb(168, 207, 186)", f"after: committed {after['committedBg']}", failures)

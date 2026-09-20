@@ -644,7 +644,7 @@ test('the optional energy bar layers live reserve over committed capacity withou
   assert.match(css, /\.nautilus-log-timing__trigger\.has-energy \.nautilus-log-timing__brand-icon\s*\{[^}]*display:\s*none;/s);
   assert.match(css, /\.nautilus-log-timing__trigger\.is-energy-unavailable \.nautilus-log-timing__brand-icon\s*\{[^}]*display:\s*inline-flex;/s);
   assert.match(css, /\.nautilus-log-timing__capacity-token\.is-energy\s*\{[^}]*grid-template-columns:\s*136px max-content;[^}]*grid-template-rows:\s*14px 14px;[^}]*height:\s*28px;[^}]*row-gap:\s*0;/s);
-  assert.match(css, /\.nautilus-log-timing__energy-track\s*\{[^}]*border:\s*0;[^}]*border-radius:\s*999px;[^}]*box-shadow:\s*none;[^}]*box-sizing:\s*border-box;[^}]*height:\s*6px;[^}]*width:\s*136px;/s);
+  assert.match(css, /\.nautilus-log-timing__energy-track\s*\{[^}]*border:\s*0;[^}]*border-radius:\s*999px;[^}]*box-shadow:\s*none;[^}]*box-sizing:\s*border-box;[^}]*height:\s*4px;[^}]*width:\s*136px;/s);
   assert.doesNotMatch(css, /\.nautilus-log-timing__capacity-token\.is-energy::(?:before|after)/);
   assert.match(css, /\.nautilus-log-timing__energy-timer\s*\{[^}]*align-self:\s*center;[^}]*font-size:\s*13px;[^}]*grid-row:\s*1 \/ 3;[^}]*line-height:\s*14px;/s);
   assert.doesNotMatch(css, /--nautilus-log-energy-reserve/);
