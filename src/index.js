@@ -17,10 +17,12 @@ import { createTimingCommands } from "./timing-commands";
 import {
   locateTaskInCurrentSurface,
   openTaskInRightSidebar,
+  openPrimaryPlan,
   readAllEntries,
   readBlockString,
   readChildren,
   readPrimaryPlan,
+  showToast,
 } from "./timing-roam";
 import { createTimingRuntime } from "./timing-runtime";
 import { changedClockOwners, createRendererClockReader } from "./clock-reader";
@@ -28,6 +30,7 @@ import { createTimingTopbar } from "./timing-topbar";
 import { createPlanWatchBridge } from "./plan-watch";
 import { createRendererPlanSession } from "./renderer-plan-session";
 import { createDeskView } from "./desk-view";
+import { createDeskActions } from "./desk-actions";
 import { createPlanTidy } from "./tidy-plan";
 import { createTidyCommands, settledUidsForTidy } from "./tidy-commands";
 import {
@@ -98,6 +101,7 @@ let todayPlanLauncher = null;
 let todayPlanCommands = null;
 let planWatchBridge = null;
 let deskView = null;
+let deskActions = null;
 let planTidy = null;
 let tidyCommands = null;
 let calendarRuntime = null;
@@ -801,9 +805,14 @@ async function onload({ extensionAPI }) {
   activeRenderStringCore = renderStringCore;
   calendarPanelState = { action: "", error: "" };
   deskView?.destroy();
+  deskActions?.destroy();
   planWatchBridge?.destroy();
   planWatchBridge = createPlanWatchBridge({ readString: readBlockString });
+  deskActions = createDeskActions();
   deskView = createDeskView({
+    actions: deskActions,
+    notify: (message) => showToast(message, 'warning'),
+    openTask: (uid, sidebar) => sidebar ? openTaskInRightSidebar(uid) : openPrimaryPlan(uid),
     readPlan: planWatchBridge.read,
     watchPlan: planWatchBridge.subscribe,
     readString: readBlockString,
@@ -833,6 +842,7 @@ async function onload({ extensionAPI }) {
     readPlan: planWatchBridge.read,
     watchPlan: planWatchBridge.subscribe,
     openDesk: (options) => deskView?.open(options),
+    registerDeskHost: (options) => deskView?.registerHost(options),
     closeDeskHost: (container) => deskView?.closeForHost(container),
     tidyPlan: planTidy.run,
     locatePlanTask: (taskUid, origin, sidebar = false) => (
@@ -889,6 +899,7 @@ async function onload({ extensionAPI }) {
     templateString,
   );
   if (!currentLoad()) return;
+  deskView?.restoreMountedHosts();
   todayPlanSession?.destroy?.();
   todayPlanSession = createTodayPlanSession({
     extensionAPI,
@@ -943,6 +954,8 @@ function onunload() {
   stopTiming({ closeActive: false });
   deskView?.destroy();
   deskView = null;
+  deskActions?.destroy();
+  deskActions = null;
   planWatchBridge?.destroy();
   planWatchBridge = null;
   planTidy?.destroy();
@@ -976,6 +989,7 @@ function onunload() {
 
 export {
   createDeskView,
+  createDeskActions,
   createTimingRuntime,
   createRendererClockReader,
   changedClockOwners,

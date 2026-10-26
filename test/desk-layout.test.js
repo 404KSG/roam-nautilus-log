@@ -1,45 +1,31 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { masonryLayout, orderDeskTasks, moveDeskTask } = require('../src/desk-core');
-const tasks = (...uids) => uids.map((uid) => ({ uid }));
+const fs = require('node:fs');
+const path = require('node:path');
+const { nativeRowSpan, readDeskPreview } = require('../src/desk-core');
 
-test('masonry fills the shortest column with natural heights, not equal-height rows', () => {
-  const layout = masonryLayout([160, 80, 120, 60], 660);
-  assert.equal(layout.columns, 2);
-  assert.deepEqual(layout.items.map(({ x, y }) => [x, y]), [[0, 0], [338, 0], [338, 96], [0, 176]]);
-  assert.equal(layout.height, 236);
-  assert.equal(layout.cardWidth, 322);
+test('native masonry uses a four-pixel row span plus the host column gap', () => {
+  assert.equal(nativeRowSpan(80,12),23);
+  assert.equal(nativeRowSpan(81,12),24);
+  assert.equal(nativeRowSpan(0,0),1);
+  assert.equal(nativeRowSpan(199.5,12),53);
 });
 
-test('masonry follows container width, supports narrow sidebars, and has no overlapping cards', () => {
-  const heights = [80, 280, 92, 170, 160, 68, 260, 130];
-  for (const width of [220, 390, 600, 760, 1040, 1600]) {
-    const layout = masonryLayout(heights, width);
-    assert.ok(layout.columns >= 1 && layout.columns <= 3);
-    for (const [i, item] of layout.items.entries()) {
-      assert.ok(item.x >= 0 && item.x + layout.cardWidth <= width + 0.01);
-      for (let j = i + 1; j < heights.length; j += 1) {
-        const other = layout.items[j];
-        if (item.x === other.x) assert.ok(item.y + heights[i] <= other.y);
-      }
-    }
-    if (width < 576) assert.equal(layout.columns, 1);
-  }
-  assert.deepEqual(masonryLayout([], 660).items, []);
-  assert.equal(masonryLayout([], 660).height, 0);
-  assert.equal(masonryLayout([100], 0).height, 0);
+test('Desk styling adds no custom typography or fixed column cap', () => {
+  const css=fs.readFileSync(path.join(__dirname,'../extension.css'),'utf8').split('/* Desk deliberately uses Roam')[1];
+  assert.ok(css);
+  assert.doesNotMatch(css,/font(?:-size|-family|-weight)?\s*:/);
+  assert.doesNotMatch(css,/grid-template-columns/);
+  const layout=fs.readFileSync(path.join(__dirname,'../src/desk-masonry.js'),'utf8');
+  assert.doesNotMatch(layout,/maxColumns|\.style\.left|\.style\.top/);
+  assert.match(layout,/gridRowEnd/);
 });
 
-test('drag ordering is a view projection; new tasks append and source outline is unchanged', () => {
-  const original = tasks('a', 'b', 'c');
-  const order = moveDeskTask(original, 'a', 'c', true);
-  assert.deepEqual(order, ['b', 'c', 'a']);
-  assert.deepEqual(orderDeskTasks(original, order).map(({ uid }) => uid), order);
-  assert.deepEqual(original, tasks('a', 'b', 'c'));
-  assert.deepEqual(orderDeskTasks(tasks('a', 'b', 'c', 'new'), ['c', 'gone', 'c', 'a']).map(({ uid }) => uid), ['c', 'a', 'b', 'new']);
-  assert.deepEqual(orderDeskTasks(original, null), original);
-  assert.deepEqual(moveDeskTask(original, 'c', 'a', false), ['c', 'a', 'b']);
-  assert.deepEqual(moveDeskTask(original, 'a', null, true), ['b', 'c', 'a']);
-  assert.deepEqual(moveDeskTask(original, 'missing', 'a', true), ['a', 'b', 'c']);
-  assert.deepEqual(moveDeskTask(original, 'a', 'a', false), ['a', 'b', 'c']);
+test('preview references are resolved read-only and recursive references are bounded', () => {
+  let reads=0;
+  const result=readDeskPreview('root',uid=>uid==='root'?[{uid:'line',string:'((source-a))',order:0,open:false}]:[],11,
+    uid=>{reads++;return uid==='source-a'?'{{[[DONE]]}} Source ((source-b))':'((source-a))';});
+  assert.equal(result.rows[0].status,'DONE');
+  assert.match(result.rows[0].text,/Source/);
+  assert.equal(reads,2);
 });

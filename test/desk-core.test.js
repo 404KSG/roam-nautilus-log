@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { projectDeskTasks, deskPreview, reconcileDeskSelection, stepDeskSelection, deskShortcut } = require('../src/desk-core');
+const { projectDeskTasks, nativeDeskText, readDeskPreview, reconcileDeskSelection, stepDeskSelection, deskShortcut } = require('../src/desk-core');
 
 const child = (uid, string, order, refs = []) => ({
   'block/uid': uid, 'block/string': string, 'block/order': order, 'block/refs': refs,
@@ -60,18 +60,19 @@ test('invalid or unavailable snapshots are not successful empty desks', () => {
   assert.deepEqual(projectDeskTasks(snapshot([]), 'plan-desk'), []);
 });
 
-test('preview is bounded plain text, excludes CLOCK infrastructure, and retains completed child logs', () => {
-  const result = deskPreview([
-    { string: 'LOGBOOK::', order: 0 },
-    { string: '{{[[DONE]]}} Earlier prompt [[Context]]', order: 2 },
-    { string: '{{[[TODO]]}} New request', order: 3 },
-    { string: 'Hidden third line', order: 4 },
-    { string: '', order: 1 },
-    { string: 'CLOCK: [2026-10-26 Mon 10:00]', order: 5 },
-  ]);
-  assert.deepEqual(result, ['☑ Earlier prompt Context', '☐ New request']);
-  assert.equal(deskPreview([{ string: 'x'.repeat(300), order: 0 }])[0].length, 160);
-  assert.deepEqual(deskPreview([{ string: '<img onerror=alert(1)>', order: 0 }]), ['<img onerror=alert(1)>']);
+test('native preview keeps completed children, follows open rows to depth two, and bounds its work', () => {
+  const tree = {root: Array.from({length:20},(_,i)=>({uid:`note-${i}`,string:i===0?'{{[[DONE]]}} Earlier [[Context]]':`Prompt ${i}`,order:i,open:i!==1})),
+    'note-0':[{uid:'nested',string:'Nested log',order:0,open:true}],
+    nested:[{uid:'deep',string:'Not part of the preview',order:0}],
+    'note-1':[{uid:'closed',string:'Collapsed child',order:0}]};
+  const reads=[];
+  const result=readDeskPreview('root',uid=>{reads.push(uid);return tree[uid]||[];});
+  assert.equal(result.rows.length,11); assert.equal(result.more,true);
+  assert.deepEqual(result.rows[0],{status:'DONE',text:'Earlier Context',depth:1});
+  assert.deepEqual(result.rows[1],{status:null,text:'Nested log',depth:2});
+  assert.equal(reads.includes('nested'),false); assert.equal(reads.includes('note-1'),false);
+  assert.match(result.searchText,/Prompt 19/, 'search can match direct children beyond the preview budget');
+  assert.deepEqual(nativeDeskText('<img onerror=alert(1)>'),{status:null,text:'<img onerror=alert(1)>'});
 });
 
 test('selection is UID-based: keep edited/reordered card, then successor, predecessor, or overview', () => {
@@ -83,10 +84,11 @@ test('selection is UID-based: keep edited/reordered card, then successor, predec
   assert.equal(reconcileDeskSelection([], tasks('a'), null), null, 'opening Desk must not auto-focus the first task');
 });
 
-test('previous/next wrap within this Desk and never synthesize a task', () => {
-  assert.equal(stepDeskSelection(tasks('a', 'b', 'c'), 'a', -1), 'c');
-  assert.equal(stepDeskSelection(tasks('a', 'b', 'c'), 'c', 1), 'a');
-  assert.equal(stepDeskSelection(tasks('a'), 'a', 1), 'a');
+test('native previous/next stop at the ends; the UI owns the separate new-note slot', () => {
+  assert.equal(stepDeskSelection(tasks('a', 'b', 'c'), 'a', -1), null);
+  assert.equal(stepDeskSelection(tasks('a', 'b', 'c'), 'c', 1), null);
+  assert.equal(stepDeskSelection(tasks('a', 'b', 'c'), 'a', 1), 'b');
+  assert.equal(stepDeskSelection(tasks('a'), 'a', 1), null);
   assert.equal(stepDeskSelection([], 'a', 1), null);
   assert.equal(stepDeskSelection(tasks('a'), null, 1), null);
 });

@@ -20,10 +20,11 @@ time that remains, and overload never disappears from view.
   when the plan belongs to a late or overnight schedule.
 - **Low-friction execution.** Work from estimates alone, run a standalone POMO,
   or optionally track tasks with compatible `LOGBOOK::` / `CLOCK:` records.
-- **One task at a time.** Desk expands below the chart with natural-height,
-  draggable task cards. Click a card to edit its full prompt log with Roam's
-  native editor and switch tasks by keyboard. Card layout does not change outline
-  priority, copy blocks, or alter Roam's built-in Desk.
+- **One task at a time.** Desk uses Roam's native card styles below the chart,
+  hides the duplicate outline, and remembers view mode. Dragging and Move to top
+  reorder original tasks and scheduling priority; plus adds content under this
+  plan. Edit full logs in Roam's native editor without copying tasks or changing
+  Roam's own Desk collection.
 - **A useful daily review.** Compare Planned and Actual time without leaving your
   ordinary Roam blocks.
 

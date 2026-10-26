@@ -87,57 +87,78 @@ visual noise.
 
 ## Desk task view
 
-Click the chart's **Desk** button to expand cards directly below the sea chart;
-click again to collapse them. The chart and original page remain visible. Opening
-Desk does not open the first task's editor. Each chart instance has its own toggle.
-Desk uses the clicked Nautilus component, including historical or secondary plans.
-It does not scan the graph or require the Execution Layer.
+Click the chart's **Desk** button to expand cards below it; click again to hide
+Desk. The view uses Roam's `rm-desk-*` and Blueprint styles rather than a separate
+font, size, or card theme. In the main window it can use the available article
+wrapper width instead of being confined to the centered Daily Note. Sidebars and
+embeds stay within their own bounds. Native auto-fill determines the column count;
+there is no fixed two-column layout or three-column cap.
 
-- Each unfinished direct task becomes one card, initially in outline order. Cards
-  use Roam-style light borders, child-block previews, and a source date. Natural
-  content heights fill the shortest column; narrow containers use a single column.
-  Completed tasks, fixed events, and dividers are excluded; unscheduled tasks remain.
-  The existing implicit-task and referenced-state rules still apply.
-- On desktop, drag cards to rearrange them, or focus a card and use
-  **Alt + Shift + Left/Right**. **Restore outline order** resets the layout.
-  Reordering changes only the Desk display and navigation order, not the original
-  blocks, task priorities, or schedule. Layout order stays in the current plugin
-  session; it is not written to the graph or persistent browser storage.
-- Click a card to mount Roam's native `renderBlock` editor for the original UID and
-  its children. Completed prompt entries inside an active task stay visible; they
-  are neither filtered out nor turned into separate cards.
-- **Option/Alt + comma** selects the next task; **Option/Alt + period** selects the
-  previous task. Navigation wraps at the ends. **Esc** or the close button returns
-  to the inline cards. Esc within the cards or their Desk toggle, or **Hide Desk**,
-  collapses the card area. The overview does not trap page keyboard focus. These
-  bindings only apply to the current Desk; IME composition and shortcuts consumed
-  by the native editor take precedence.
-- The overview and each task retain their scroll position for the current Desk
-  session. Text updates do not remount the active editor. Completing, deleting, or
-  moving a task out of the plan removes its card and advances focus. Completing the
-  last task returns to the empty overview.
-- There are no New Note or New Task controls and no separate task state. Browsing
-  and switching cards do not copy or move blocks, control CLOCK, or change Roam's
-  built-in Desk. Native edits still change the original blocks.
+- **Unfinished tasks only.** Each direct task becomes a card, including unscheduled
+  work. Events, DONE blocks, and dividers are excluded. Implicit tasks and referenced
+  state follow the existing rules; completed child logs remain inside active tasks.
+- **Hide the duplicate outline.** While Desk is open, only the original child-block
+  area below this Nautilus renderer is hidden, including events and completed logs.
+  Nothing is deleted or collapsed in the graph. Other plans and the native editor's
+  children remain visible. Hiding Desk or unloading restores the original area.
+- **Drag moves the real block.** Drop a card before another card to change the
+  actual outline order and therefore planning priority. The footer's hover action,
+  **Move to top**, moves that same UID to index zero, ahead of any hidden events or
+  completed blocks. Dropping before the first active card also means actual index
+  zero. Text, descendants, and referenced source blocks are not moved or rewritten.
+  The previous view-only ordering cache and reset-layout control are gone.
+- **Plus adds content under this plan.** **New note** in the overview and **+** in
+  the focus header open a native-style draft. The first committed, nonblank input
+  creates one direct child at the start of the current Nautilus block, then hands
+  editing to Roam. Closing an untouched draft creates no empty block; IME text is
+  not written before composition ends. No TODO marker is forced. Content classified
+  as an event or DONE is saved but excluded from active cards.
+- **Native focus editing.** Click a card to edit its original UID, path, and children
+  with `renderBlock`; Shift-click opens it in the sidebar. **Option/Alt + comma** is
+  Next and **Option/Alt + period** is Previous. Navigation stops at the last card;
+  Previous from the first card opens the new-note slot, as native Desk does. Esc or
+  Close returns to the cards. Holding Alt reveals number hints; **Alt + 1–9** opens
+  the corresponding card. Horizontal trackpad gestures switch notes without
+  intercepting vertical scrolling or nested horizontal scrollers. Motion respects
+  reduced-motion preferences. The ordinary page and IME input are not intercepted
+  by global shortcuts.
+- **Remember the view.** Desk mode is saved by graph and plan UID. Returning to a
+  page, refreshing, or reloading the extension restores the view without opening
+  an editor or creating content. Explicitly hiding Desk saves the off state. The
+  preference is a localStorage flag, not task text, and does not sync across devices.
+  A manual open that cannot save its preference reports the limitation.
 
-Cards read one level of child blocks as they approach the viewport and display at
-most two plain-text preview lines, omitting LOGBOOK/CLOCK infrastructure. Only the
-focused card mounts an editor. Returning to the overview refreshes previews for
-edited tasks; use **Refresh** for other external child-block edits. Task membership
-uses the shared Plan Pull Watch. Closing, navigating away, removing a chart, or
-unloading removes listeners and unmounts its editor. Multiple views of the same
-plan share watches; closing one does not close the others.
+Previews follow native Desk's page budget: up to eleven child rows, at most two
+levels, respecting collapsed rows. Search Desk covers titles and direct child
+content. Only the focused card mounts a full editor. Plan membership shares the
+existing Pull Watch; text updates do not remount the editor. Completing or removing
+an active task advances focus. Browsing does not control CLOCK or alter Roam's
+built-in starred/Desk collection.
 
-Read failures preserve visibly stale cards and leave focus mode, with card opening
-paused until a successful read. They are not reported as an empty plan. Missing
-native editor APIs and mount failures show explicit errors, never a copied-text
-editor as a fallback.
+Moves and creation share Tidy's graph-scoped `outline` Web Lock. Parent and task
+state are checked before writing; UID, text, and order are read back afterward.
+A host API response alone is not confirmation. An uncertain create is checked
+using its reserved UID, never blindly repeated with a new UID. Locks do not cover
+other devices or manual writers; concurrent changes fail conservatively. Read
+failures retain visibly stale cards and pause writes. Hide Desk to inspect the
+original outline.
 
-Run `PYTHONDONTWRITEBYTECODE=1 npm run test:desk` for production-view, projection,
-watch, and graph-read regressions. Screenshots and results are in
-`/tmp/nautilus-desk-verify`. The native editor is simulated; these tests do not
-connect to a real graph. Native editing, autocomplete, IME behavior, themes, and
-shortcut conflicts still need acceptance testing in the installed Roam client.
+### Validation boundary
+
+`PYTHONDONTWRITEBYTECODE=1 npm run test:desk` covers production adapters, projection,
+layout, restoration, and editor lifecycle. Artifacts are in
+`/tmp/nautilus-desk-verify`. Automated graph/editor fixtures do not write to a live
+graph. Set `ROAM_NATIVE_CSS` and `ROAM_BLUEPRINT_CSS` to current host stylesheet
+snapshots to rerun the tests against actual Roam CSS. `ROAM_ICONS_CSS` and
+`ROAM_FONT_CSS` can supply native icon/font styles with locally resolved assets.
+
+On 2026-10-26, a read-only check in real Roam verified the native DOM and computed
+styles, five-column embedded layout, native editor mounting, outline hiding and
+restoration, and visible editor children. No live notes were created or reordered;
+write behavior is validated in isolated fixtures. The native reference is Roam's
+current [site.css](https://roamresearch.com/assets/css/less-compiled/site.css) and
+[route-app.js](https://roamresearch.com/js/compiled/route-app.js). The extension does
+not call private minified functions or bundle the Roam client source.
 
 ## Execution Layer
 

@@ -1,0 +1,129 @@
+import { createGraphWriteGuard } from './graph-write-guard';
+import { isNautilusComponent, resolveTaskInstance } from './timing-core';
+import { readChildren, readBlockString, blockUidExists, moveGraphBlock, createGraphBlock, updateGraphBlock } from './timing-roam';
+
+/** All Desk writes share Tidy's outline lock. A successful host call is not confirmation. */
+export function createDeskActions({
+  read = readChildren, readString = readBlockString, exists = blockUidExists,
+  move = moveGraphBlock, create = createGraphBlock, update = updateGraphBlock,
+  generateUid = () => window.roamAlphaAPI.util.generateUID(), runExclusive,
+} = {}) {
+  const guard = runExclusive ? null : createGraphWriteGuard('outline');
+  const drafts = new Map();
+  let queue = Promise.resolve();
+  let destroyed = false;
+  const assertActive = () => {
+    if (destroyed) throw new Error('Desk write was cancelled.');
+    guard?.assertActive();
+  };
+  const outline = (planUid) => {
+    assertActive();
+    if (!isNautilusComponent(readString(planUid))) throw new Error('The Nautilus plan is no longer available.');
+    const rows = read(planUid);
+    if (!Array.isArray(rows) || rows.some((r) => !r?.uid || typeof r.string !== 'string'
+      || !Number.isInteger(r.order) || r.order < 0)
+      || new Set(rows.map((r) => r.uid)).size !== rows.length
+      || new Set(rows.map((r) => r.order)).size !== rows.length) throw new Error('The plan outline is unreadable.');
+    return [...rows].sort((a, b) => a.order - b.order);
+  };
+  const exclusive = (action) => {
+    const next = queue.then(() => {
+      assertActive();
+      return runExclusive ? runExclusive(action) : guard.run(action);
+    });
+    queue = next.catch(() => {});
+    return next;
+  };
+  const sameOrder = (rows, expected) => rows.map((r) => r.uid).join('\0') === expected.join('\0');
+  const task = (row) => resolveTaskInstance({ uid: row.uid, localString: row.string, readString });
+
+  const moveTask = ({ planUid, uid, targetUid = null, position = 'before' }) => exclusive(async () => {
+    const rows = outline(planUid);
+    const isActiveTask = (row) => {
+      const item = task(row);
+      return item.kind === 'task' && item.status === 'TODO' && item.title && item.title !== '(untitled)';
+    };
+    const source = rows.find((row) => row.uid === uid);
+    if (!source || !isActiveTask(source)) throw new Error('The task is no longer unfinished in this plan.');
+    const active = rows.filter(isActiveTask);
+    const target = rows.find((row) => row.uid === targetUid);
+    if (position !== 'top' && (!target || !active.some((row) => row.uid === targetUid))) throw new Error('The target card changed. Refresh and try again.');
+    if (uid === targetUid && position !== 'top') return { changed: false, uid };
+    const expected = rows.map((row) => row.uid).filter((id) => id !== uid);
+    // Dropping before the first visible task means first in the actual outline,
+    // even when hidden events or completed blocks previously preceded it.
+    const toTop = position === 'top' || (position === 'before' && targetUid === active[0]?.uid);
+    const order = toTop ? 0 : expected.indexOf(targetUid) + (position === 'after' ? 1 : 0);
+    expected.splice(order, 0, uid);
+    if (sameOrder(rows, expected)) return { changed: false, uid };
+    assertActive();
+    await move({ uid, parentUid: planUid, order });
+    assertActive();
+    const confirmed = outline(planUid);
+    if (!sameOrder(confirmed, expected)) throw new Error('Roam could not confirm the new block order. Check the original outline before retrying.');
+    if (confirmed.some((row) => rows.find((before) => before.uid === row.uid)?.string !== row.string)) {
+      throw new Error('The outline changed while moving the task. Check the original outline.');
+    }
+    return { changed: true, uid, order };
+  });
+
+  const beginDraft = (planUid) => {
+    assertActive();
+    const uid = generateUid();
+    if (typeof uid !== 'string' || !uid || drafts.has(uid)) throw new Error('Could not reserve a new block UID.');
+    const draft = { uid, planUid, attempted: false, last: null, pending: null, pendingUpdate: null };
+    drafts.set(uid, draft);
+    return { uid, planUid };
+  };
+  const saveDraft = ({ uid, planUid, string }) => exclusive(async () => {
+    const draft = drafts.get(uid);
+    if (!draft || draft.planUid !== planUid || typeof string !== 'string' || (draft.last === null && !string.trim())) throw new Error('This draft is not available.');
+    let rows = outline(planUid);
+    let row = rows.find((candidate) => candidate.uid === uid);
+    if (draft.last === null && draft.attempted) {
+      // An ambiguous create is verification-only. Never mint another UID or
+      // blindly repeat a create that might still complete in Roam.
+      if (!row || row.string !== draft.pending) throw new Error('Could not confirm the new note. Check the original outline; no duplicate was created.');
+      draft.last = row.string;
+    }
+    if (draft.pendingUpdate !== null) {
+      if (!row || row.string !== draft.pendingUpdate) throw new Error('Could not confirm the draft update. Check the original note before retrying.');
+      draft.last = draft.pendingUpdate;
+      draft.pendingUpdate = null;
+    }
+    if (draft.last !== null && (!row || row.string !== draft.last)) throw new Error('The new note was changed elsewhere. Desk will not overwrite it.');
+    if (draft.last === null) {
+      const expected = [uid, ...rows.map((candidate) => candidate.uid)];
+      if (row || exists(uid)) throw new Error('The reserved block UID is already in use.');
+      draft.pending = string;
+      draft.attempted = true;
+      assertActive();
+      let failure;
+      try { await create({ uid, parentUid: planUid, order: 0, string, open: true }); }
+      catch (error) { failure = error; }
+      assertActive();
+      rows = outline(planUid);
+      row = rows.find((candidate) => candidate.uid === uid);
+      if (!row || row.string !== string || !sameOrder(rows, expected)) throw failure || new Error('Roam could not confirm the new note and its position.');
+      draft.last = string;
+    } else if (string !== draft.last) {
+      if (!row || row.string !== draft.last) throw new Error('The new note was changed elsewhere. Desk will not overwrite it.');
+      assertActive();
+      draft.pendingUpdate = string;
+      let failure;
+      try { await update(uid, string); } catch (error) { failure = error; }
+      assertActive();
+      rows = outline(planUid);
+      row = rows.find((candidate) => candidate.uid === uid);
+      if (!row || row.string !== string) throw failure || new Error('Roam could not confirm the draft text.');
+      draft.last = string;
+      draft.pendingUpdate = null;
+    }
+    return { uid, string: draft.last };
+  });
+  return {
+    moveTask, beginDraft, saveDraft,
+    releaseDraft: (uid) => drafts.delete(uid),
+    destroy: () => { destroyed = true; guard?.destroy(); drafts.clear(); },
+  };
+}

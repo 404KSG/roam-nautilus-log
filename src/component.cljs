@@ -1946,13 +1946,23 @@
                resize-observer-state (atom nil)
                container-ref (fn [node]
                                (observe-compact-width! node compact-state hover-info-state resize-observer-state))
+               page-title-val (page-title block-uid)
                desk-host-node (atom nil)
                desk-host-ref (fn [node]
                                (when-let [previous @desk-host-node]
                                  (when-not (identical? previous node)
                                    (when-let [close-host (some-> js/window .-nautilusLogExtensionData .-closeDeskHost)]
                                      (.call close-host nil previous))))
-                               (reset! desk-host-node node))
+                               (reset! desk-host-node node)
+                               (when node
+                                 (when-let [register-host (some-> js/window .-nautilusLogExtensionData .-registerDeskHost)]
+                                   (.call register-host nil
+                                          (clj->js {:planUid block-uid
+                                                    :pageTitle page-title-val
+                                                    :container node
+                                                    :origin (some-> node
+                                                                    (.closest ".nautilus-log-container")
+                                                                    (.querySelector ".nautilus-log-desk-btn"))})))))
                daily-page-atom? (r/atom (daily-page? block-uid))
                clock-interval (js/setInterval
                                (fn []
@@ -1961,7 +1971,6 @@
                                    (when (not= @daily-page-atom? next-daily-page-state)
                                      (reset! daily-page-atom? next-daily-page-state))))
                                60000)
-               page-title-val (page-title block-uid)
                _plan-session (sync-plan-session! plan-session plan-session-alive? block-uid watched-children-state plan-status-state)
                *text-events (r/track
                              (fn []
@@ -2087,7 +2096,10 @@
                  [show-events events-state show-done-state now-time-atom page-title-val dimensions settings @compact-state copy compact-list-open-state hover-info-state block-uid timeline-state]
                  [overflow-panel capacity copy]
                  [schedule-warning-panel text-events copy]]])
-             [:div {:class "nautilus-log-desk-host" :ref desk-host-ref}]]))))
+             [:div {:class "nautilus-log-desk-host"
+                    :data-nautilus-desk-plan block-uid
+                    :data-nautilus-desk-page page-title-val
+                    :ref desk-host-ref}]]))))
     (finally
       (reset! plan-session-alive? false)
       (js/clearInterval check-interval)

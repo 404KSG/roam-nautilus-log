@@ -2,7 +2,6 @@
 export function createDeskDrag({ grid, canDrag, move, nudge, now = () => Date.now() }) {
   let source = null;
   let target = null;
-  let after = false;
   let suppressUntil = 0;
   const cardFor = (node) => {
     const card = node?.closest?.('.nautilus-desk__card');
@@ -36,9 +35,7 @@ export function createDeskDrag({ grid, canDrag, move, nudge, now = () => Date.no
     clearTarget();
     if (!card || card === source) return;
     target = card;
-    const rect = card.getBoundingClientRect();
-    after = event.clientY > rect.top + rect.height / 2;
-    card.classList.add(after ? 'is-drop-after' : 'is-drop-before');
+    card.classList.add('is-drop-before');
   };
   const drop = (event) => {
     if (!source) return;
@@ -46,8 +43,7 @@ export function createDeskDrag({ grid, canDrag, move, nudge, now = () => Date.no
     event.stopPropagation();
     if (canDrag()) {
       const card = cardFor(event.target);
-      const rect = card?.getBoundingClientRect();
-      move(source.dataset.taskUid, card?.dataset.taskUid || null, rect ? event.clientY > rect.top + rect.height / 2 : true);
+      if (card) move(source.dataset.taskUid, card.dataset.taskUid, false);
     }
     suppressUntil = now() + 300;
     cancel();
@@ -59,7 +55,7 @@ export function createDeskDrag({ grid, canDrag, move, nudge, now = () => Date.no
     cancel();
   };
   const click = (event) => {
-    if (event.detail === 0 || now() >= suppressUntil || !cardFor(event.target)) return;
+    if (event.detail === 0 || event.target.closest('button') || now() >= suppressUntil || !cardFor(event.target)) return;
     event.preventDefault();
     event.stopPropagation();
   };
@@ -78,7 +74,10 @@ export function createDeskDrag({ grid, canDrag, move, nudge, now = () => Date.no
     event.stopPropagation();
     nudge(card.dataset.taskUid, event.key === 'ArrowLeft' ? -1 : 1);
   };
-  const events = [['dragstart', start], ['dragover', over], ['drop', drop], ['dragend', end], ['keydown', key]];
+  // Suppress only the trailing click of the drag gesture, not a new deliberate
+  // click (which starts with a fresh pointerdown) on any card or its actions.
+  const pointerDown = () => { if (!source) suppressUntil = 0; };
+  const events = [['dragstart', start], ['dragover', over], ['drop', drop], ['dragend', end], ['keydown', key], ['pointerdown', pointerDown]];
   for (const [name, listener] of events) grid.addEventListener(name, listener);
   grid.addEventListener('click', click, true);
   return {

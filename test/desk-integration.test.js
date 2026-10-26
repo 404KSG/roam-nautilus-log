@@ -37,7 +37,8 @@ test('renderer Desk button passes the clicked component and origin, without an e
   assert.match(button, /:origin \(\.-currentTarget event\)/);
   assert.match(button, /\.-openDesk/);
   assert.match(button, /:container[\s\S]*:scope > \.nautilus-log-desk-host/);
-  assert.match(source, /:class "nautilus-log-desk-host" :ref desk-host-ref/);
+  assert.match(source, /:class "nautilus-log-desk-host"[\s\S]*?:data-nautilus-desk-plan block-uid[\s\S]*?:ref desk-host-ref/);
+  assert.match(source, /\.-registerDeskHost/);
   assert.match(source, /desk-host-ref[\s\S]*\.-closeDeskHost/);
   assert.doesNotMatch(button, /actual-time-tracking|createBlock|updateBlock|clock/i);
   const controls = source.slice(source.indexOf('(defn log-controls'), source.indexOf('(defn render-context-probe'));
@@ -46,7 +47,10 @@ test('renderer Desk button passes the clicked component and origin, without an e
 
 test('extension binds Desk to shared reads and destroys it before destroying the watch bridge', () => {
   const source = fs.readFileSync(path.join(root, 'src/index.js'), 'utf8');
-  assert.match(source, /deskView = createDeskView\(\{\s*readPlan: planWatchBridge\.read,\s*watchPlan: planWatchBridge\.subscribe,/);
+  const binding = source.match(/deskView = createDeskView\(\{([\s\S]*?)\n  \}\);/)?.[1] || '';
+  assert.match(binding, /actions: deskActions/);
+  assert.match(binding, /readPlan: planWatchBridge\.read,\s*watchPlan: planWatchBridge\.subscribe,/);
+  assert.match(source, /deskView\?\.restoreMountedHosts\(\)/);
   assert.match(source, /openDesk: \(options\) => deskView\?\.open\(options\)/);
   assert.match(source, /closeDeskHost: \(container\) => deskView\?\.closeForHost\(container\)/);
   for (const section of [source.slice(source.indexOf('async function onload'), source.indexOf('function onunload')),

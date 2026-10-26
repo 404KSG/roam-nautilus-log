@@ -4,22 +4,23 @@
 
 ### Added
 
-- Nautilus Desk: an inline card area below the clicked chart, with Roam-style
-  borders, child previews, source dates, and natural-height masonry. Click a card
-  to edit the original block and its children in Roam's native editor.
-  Option/Alt-comma and Option/Alt-period cycle tasks; Escape returns to the cards.
-  Completed tasks and events are excluded, while unscheduled tasks and completed
-  child logs remain in scope.
-- Drag cards on desktop, or use Alt+Shift+Left/Right, to rearrange the Desk view.
-  A reset action restores outline order. Layout order is session-only and never
-  moves graph blocks or changes scheduling priority. Chart instances toggle
-  independently and share underlying Plan watches; removing a renderer cleans up
-  its own Desk and native editor.
-- Desk works without the Execution Layer, mounts only the focused editor, and
-  shares Plan watches. It does not copy tasks, manage Roam's built-in Desk, start
-  CLOCK, or add note/task creation controls. Stale reads pause editing; native
-  mount failures are explicit. Local UI tests simulate the native editor and do
-  not replace acceptance testing in a real Roam client.
+- Nautilus Desk reuses Roam's native Desk/Blueprint styles, native grid-span
+  masonry, and available main-content width below the chart. It hides only the
+  original plan's child outline while active and restores it on close or unload.
+  Graph/plan-scoped view flags survive page navigation and reload in localStorage.
+- Drag sorting and the footer's Move to top now move the original outer block,
+  changing actual outline priority and scheduling. Writes share the outline lock,
+  revalidate the target, and verify the result. View-only ordering has been removed.
+- Plus controls open a native-style draft under the current Nautilus block. First
+  committed text creates one direct child; untouched drafts create nothing. Buffered
+  input and uncertain responses are handled using a reserved UID, without blind
+  duplicate creation. Native editing then uses the original block and its children.
+- Native Next/Previous boundaries, the new-note slot, search, and Alt+1–9 selection
+  are supported. Completed tasks and events remain excluded as cards; completed
+  child logs remain visible. Browsing does not control CLOCK or Roam's own Desk
+  collection. A real-Roam read-only probe verified styles, five-column layout,
+  native editor mounting, and outline hiding/restoration. Graph writes are tested
+  with isolated adapters, not by modifying live notes.
 
 ### Changed
 
