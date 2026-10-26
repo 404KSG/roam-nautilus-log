@@ -66,6 +66,7 @@ Past gaps are factual schedule data, not a judgment that time was wasted.
 
 ## Chart controls
 
+- **Desk (four-square icon):** open this plan's unfinished-task card overview, then click a card to focus and edit it.
 - **Eye:** show or hide completed items.
 - **Calendar:** after Google Calendar reports Connected in Settings, import
   timed busy events and dated Google Tasks for this chart's Daily Note.
@@ -83,6 +84,49 @@ collapsed target is not rendered, Nautilus Log falls back to Roam's official blo
 navigation. Future blank slots show the same preview on wide charts. Compact sidebar
 charts omit hover tooltips and keep the Schedule section folded to avoid clipping and
 visual noise.
+
+## Desk task view
+
+Click the chart's **Desk** button to open a full-screen card overview, not the first
+task's editor. Desk uses the clicked Nautilus component, including historical or
+secondary plans. It does not scan the graph or require the Execution Layer.
+
+- Each unfinished direct task becomes one card, in outline order. Completed tasks,
+  fixed events, and dividers are excluded; unscheduled tasks remain. The existing
+  implicit-task and referenced-state rules still apply.
+- Click a card to mount Roam's native `renderBlock` editor for the original UID and
+  its children. Completed prompt entries inside an active task stay visible; they
+  are neither filtered out nor turned into separate cards.
+- **Option/Alt + comma** selects the next task; **Option/Alt + period** selects the
+  previous task. Navigation wraps at the ends. **Esc** or the close button returns
+  to the cards. From the overview, Esc or **Back to plan** exits Desk. These bindings
+  only apply inside Desk; IME composition and shortcuts consumed by the native
+  editor take precedence.
+- The overview and each task retain their scroll position for the current Desk
+  session. Text updates do not remount the active editor. Completing, deleting, or
+  moving a task out of the plan removes its card and advances focus. Completing the
+  last task returns to the empty overview.
+- There are no New Note or New Task controls and no separate task state. Browsing
+  and switching cards do not copy or move blocks, control CLOCK, or change Roam's
+  built-in Desk. Native edits still change the original blocks.
+
+Cards read one level of child blocks as they approach the viewport and display at
+most two plain-text preview lines, omitting LOGBOOK/CLOCK infrastructure. Only the
+focused card mounts an editor. Returning to the overview refreshes previews for
+edited tasks; use **Refresh** for other external child-block edits. Task membership
+uses the shared Plan Pull Watch. Closing, navigating away, or unloading removes
+listeners and unmounts the editor.
+
+Read failures preserve visibly stale cards and leave focus mode, with card opening
+paused until a successful read. They are not reported as an empty plan. Missing
+native editor APIs and mount failures show explicit errors, never a copied-text
+editor as a fallback.
+
+Run `PYTHONDONTWRITEBYTECODE=1 npm run test:desk` for production-view, projection,
+watch, and graph-read regressions. Screenshots and results are in
+`/tmp/nautilus-desk-verify`. The native editor is simulated; these tests do not
+connect to a real graph. Native editing, autocomplete, IME behavior, themes, and
+shortcut conflicts still need acceptance testing in the installed Roam client.
 
 ## Execution Layer
 

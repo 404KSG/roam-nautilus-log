@@ -27,6 +27,7 @@ import { changedClockOwners, createRendererClockReader } from "./clock-reader";
 import { createTimingTopbar } from "./timing-topbar";
 import { createPlanWatchBridge } from "./plan-watch";
 import { createRendererPlanSession } from "./renderer-plan-session";
+import { createDeskView } from "./desk-view";
 import { createPlanTidy } from "./tidy-plan";
 import { createTidyCommands, settledUidsForTidy } from "./tidy-commands";
 import {
@@ -96,6 +97,7 @@ let todayPlanSession = null;
 let todayPlanLauncher = null;
 let todayPlanCommands = null;
 let planWatchBridge = null;
+let deskView = null;
 let planTidy = null;
 let tidyCommands = null;
 let calendarRuntime = null;
@@ -798,8 +800,16 @@ async function onload({ extensionAPI }) {
   activeCodeBlockUID = codeBlockUID;
   activeRenderStringCore = renderStringCore;
   calendarPanelState = { action: "", error: "" };
+  deskView?.destroy();
   planWatchBridge?.destroy();
   planWatchBridge = createPlanWatchBridge({ readString: readBlockString });
+  deskView = createDeskView({
+    readPlan: planWatchBridge.read,
+    watchPlan: planWatchBridge.subscribe,
+    readString: readBlockString,
+    readChildren,
+    getSettings: () => window.nautilusLogExtensionData?.settings || {},
+  });
   planTidy?.destroy();
   planTidy = createPlanTidy({
     runningTaskUid: () => timingRuntime?.getSnapshot?.()?.entries
@@ -822,6 +832,7 @@ async function onload({ extensionAPI }) {
     createRendererPlanSession,
     readPlan: planWatchBridge.read,
     watchPlan: planWatchBridge.subscribe,
+    openDesk: (options) => deskView?.open(options),
     tidyPlan: planTidy.run,
     locatePlanTask: (taskUid, origin, sidebar = false) => (
       sidebar
@@ -929,6 +940,8 @@ function onunload() {
   todayPlanSession?.destroy();
   todayPlanSession = null;
   stopTiming({ closeActive: false });
+  deskView?.destroy();
+  deskView = null;
   planWatchBridge?.destroy();
   planWatchBridge = null;
   planTidy?.destroy();
@@ -961,6 +974,7 @@ function onunload() {
 }
 
 export {
+  createDeskView,
   createTimingRuntime,
   createRendererClockReader,
   changedClockOwners,

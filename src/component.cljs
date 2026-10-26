@@ -1427,6 +1427,25 @@
     (boolean (and (:writesAllowed status)
                   (= (:status status) "ready")))))
 
+(defn desk-button [block-uid page-title-val copy]
+  [:button
+   {:type "button"
+    :class "nautilus-log-toggle-btn nautilus-log-desk-btn"
+    :data-nautilus-tooltip (:desk copy)
+    :aria-label (:desk copy)
+    :on-click (fn [event]
+                (when-let [open-desk (some-> js/window .-nautilusLogExtensionData .-openDesk)]
+                  (.call open-desk nil
+                         (clj->js {:planUid block-uid
+                                   :pageTitle page-title-val
+                                   :origin (.-currentTarget event)}))))}
+   [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none"
+          :stroke "currentColor" :stroke-width "1.7" :aria-hidden "true"}
+    [:rect {:x "3" :y "3" :width "7" :height "7" :rx "1.5"}]
+    [:rect {:x "14" :y "3" :width "7" :height "7" :rx "1.5"}]
+    [:rect {:x "3" :y "14" :width "7" :height "7" :rx "1.5"}]
+    [:rect {:x "14" :y "14" :width "7" :height "7" :rx "1.5"}]]])
+
 (defn tidy-button [block-uid settled-uids tidy-state settings copy plan-status-state]
   [:button
    {:on-click (fn []
@@ -1661,6 +1680,7 @@
        :allocation {:planned "planned" :free "free" :over "over" :noSlot "no slot" :left "left"}
        :legend {:urgent "Urgent" :event "Event" :task "Task"}
        :controls {:hideDone "Hide completed items" :showDone "Show completed items"
+                  :desk "Open Desk"
                   :calendar "Sync Google Calendar" :calendarForce "⌥ Click to restore Google-managed items"
                   :calendarSetup "Connect Google Calendar and sync this date"
                   :calendarSyncing "Syncing Google Calendar…" :calendarSynced "Synced"
@@ -1831,6 +1851,7 @@
 
 (defn log-controls [show-done-state settings collapsed-state block-uid page-title-val render-context settled-uids tidy-state calendar-state copy show-debug-button? plan-status-state]
   [:div {:class "nautilus-log-controls-top"}
+   [desk-button block-uid page-title-val (:controls copy)]
    [switch-done-visibility-button show-done-state (:controls copy)]
    [tidy-button block-uid settled-uids tidy-state settings (:controls copy) plan-status-state]
    [calendar-button block-uid page-title-val calendar-state settings (:controls copy) plan-status-state]

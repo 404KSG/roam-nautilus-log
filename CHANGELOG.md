@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Added
+
+- Nautilus Desk: a full-screen card overview for the clicked plan's unfinished
+  direct tasks. Click a card to edit the original block and its children in Roam's
+  native editor. Option/Alt-comma and Option/Alt-period cycle tasks; Escape returns
+  to the cards, preserving scroll positions. Completed tasks and events are
+  excluded, while unscheduled tasks and completed child logs remain in scope.
+- Desk works without the Execution Layer, mounts only the focused editor, and
+  shares Plan watches. It does not copy tasks, manage Roam's built-in Desk, start
+  CLOCK, or add note/task creation controls. Stale reads pause editing; native
+  mount failures are explicit. Local UI tests simulate the native editor and do
+  not replace acceptance testing in a real Roam client.
+
 ### Changed
 
 - The optional capacity bar keeps its 136px horizontal scale but reduces the

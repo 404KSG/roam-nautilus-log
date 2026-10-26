@@ -921,28 +921,29 @@ test('Tidy is a stable, reversible direct-child action that does not rewrite sch
   assert.doesNotMatch(tidyPlan, /deleteGraphBlock|createGraphBlock/);
 });
 
-test('Log keeps four quiet action controls with reliable hover help and no playback mode', () => {
+test('Log keeps five quiet action controls including Desk, with hover help and no playback mode', () => {
   assert.doesNotMatch(component, /\(defn playback-button/);
   assert.doesNotMatch(component, /playback-state-atom|playback-frame-atom|requestAnimationFrame/);
   assert.doesNotMatch(logCore, /playback\s*=/);
   assert.doesNotMatch(css, /nautilus-log-playback-active|nautilus-log-slice-pop-in/);
-  assert.equal((component.match(/:data-nautilus-tooltip/g) || []).length, 4);
+  assert.equal((component.match(/:data-nautilus-tooltip/g) || []).length, 5);
   assert.match(css, /\.nautilus-log-toggle-btn\s*\{[\s\S]*?width:\s*32px !important;[\s\S]*?height:\s*32px !important;[\s\S]*?padding:\s*7px !important;/);
   assert.match(css, /\.nautilus-log-toggle-btn\[data-nautilus-tooltip\]::after/);
   assert.match(css, /\.nautilus-log-toggle-btn\[data-nautilus-tooltip\]:hover::after/);
   assert.match(css, /\.nautilus-log-toggle-btn\[data-nautilus-tooltip\]:focus-visible::after/);
 });
 
-test('Log orders visibility, Tidy, Calendar, then collapse without changing control behavior', () => {
+test('Log puts Desk before visibility, Tidy, Calendar, and collapse', () => {
   const controls = component.slice(
     component.indexOf('(defn log-controls'),
     component.indexOf('(defn render-context-probe'),
   );
+  const desk = controls.indexOf('[desk-button');
   const visibility = controls.indexOf('[switch-done-visibility-button');
   const tidy = controls.indexOf('[tidy-button');
   const calendar = controls.indexOf('[calendar-button');
   const collapse = controls.indexOf('[collapse-button');
-  assert.ok(visibility >= 0);
+  assert.ok(desk >= 0 && desk < visibility);
   assert.ok(visibility < tidy);
   assert.ok(tidy < calendar);
   assert.ok(calendar < collapse);

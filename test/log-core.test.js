@@ -613,6 +613,7 @@ test('English UI settings localize all extension-owned status labels', () => {
     calendarAllDaySkipped: 'all-day skipped',
     calendarTasksPending: 'reconnect for Tasks',
     calendarTasksUnavailable: 'Tasks unavailable',
+    desk: 'Open Desk',
     tidy: 'Tidy completed and elapsed items',
     collapse: 'Collapse Nautilus Log',
     expand: 'Expand Nautilus Log',
