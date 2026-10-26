@@ -1,33 +1,38 @@
 import { graphName } from './graph-context';
 import { compactMinutes } from './timing-core';
+import { createDeskMasonry } from './desk-masonry';
+import { createDeskDrag } from './desk-drag';
 import {
   projectDeskTasks, plainDeskText, deskPreview, reconcileDeskSelection, stepDeskSelection, deskShortcut,
+  orderDeskTasks, moveDeskTask,
 } from './desk-core';
 
 const COPY = {
   en: {
-    back: 'Back to plan', refresh: 'Refresh', title: 'Nautilus Desk', focus: 'Task focus',
+    back: 'Hide Desk', refresh: 'Refresh', title: 'Nautilus Desk', focus: 'Task focus',
+    reset: 'Restore outline order', drag: 'Drag to reorder cards · Alt+Shift+←/→',
+    moved: 'Card layout updated. Outline order and scheduling are unchanged.',
     cards: 'Back to cards', previous: 'Previous task', next: 'Next task', loading: 'Opening task…',
     count: (n) => `${n} unfinished ${n === 1 ? 'task' : 'tasks'}`,
     empty: 'No unfinished tasks. Completed tasks and events stay in your outline.',
     unavailable: 'Could not read this plan. Refresh to try again.',
     stale: 'This view is out of date. Editing is paused until the plan can be read again.',
     missing: 'This Nautilus plan is no longer available. Return to your outline.',
-    noPreview: 'Open to view and edit this task.',
     previewError: 'Preview unavailable. Open the task to view its notes.',
     editorError: 'The native Roam editor could not open this task.',
     editorMissing: 'This Roam version does not expose the native block editor. Return to your outline to edit.',
     retry: 'Try again', nextHint: 'Next', previousHint: 'Previous', backHint: 'Back to cards',
   },
   zh: {
-    back: '返回计划', refresh: '刷新', title: 'Nautilus Desk', focus: '任务聚焦',
+    back: '收起 Desk', refresh: '刷新', title: 'Nautilus Desk', focus: '任务聚焦',
+    reset: '恢复大纲顺序', drag: '拖动调整卡片位置 · Alt+Shift+←/→',
+    moved: '已调整卡片布局，原大纲顺序和排程不变。',
     cards: '返回卡片', previous: '上一项任务', next: '下一项任务', loading: '正在打开任务…',
     count: (n) => `${n} 项未完成任务`,
     empty: '没有未完成任务。已完成任务和事件仍保留在原大纲中。',
     unavailable: '暂时无法读取计划，请刷新重试。',
     stale: '当前是上次读取的内容，恢复读取前暂停编辑。',
     missing: '这个 Nautilus 计划已不可用，请返回原大纲。',
-    noPreview: '打开卡片，查看和编辑任务内容。',
     previewError: '预览暂不可用，可打开任务查看笔记。',
     editorError: '无法打开 Roam 原生块编辑器。',
     editorMissing: '当前 Roam 版本未提供原生块编辑接口，请返回原大纲编辑。',
@@ -45,7 +50,9 @@ export function createDeskView({
   readChildren,
   getSettings = () => ({}),
 } = {}) {
-  let active = null;
+  const sessions = new Map();
+  const viewOrders = new Map(); // Session-only UID order; never persisted to the graph or localStorage.
+  let focusOwner = null;
   let destroyed = false;
   let nativeLane = Promise.resolve();
   // Serialize native mounts/unmounts, including slow mounts from an already closed Desk.
@@ -56,22 +63,25 @@ export function createDeskView({
   };
 
   const open = (options = {}) => {
-    if (destroyed || !document?.body || !options.planUid) return;
-    active?.close(false);
+    if (destroyed || !document?.body || !options.planUid || !options.container?.isConnected) return;
+    const existing = sessions.get(options.container);
+    if (existing) { existing.close(); return; }
     const session = createSession(options);
-    active = session;
+    sessions.set(options.container, session);
     session.start();
   };
 
-  function createSession({ planUid, pageTitle = '', origin = document.activeElement }) {
+  function createSession({ planUid, container, pageTitle = '', origin = document.activeElement }) {
     const roam = host.roamAlphaAPI;
     const graph = graphName(host);
+    const orderKey = `${graph}\u0000${planUid}`;
     const copy = COPY[getSettings().language === 'zh' ? 'zh' : 'en'];
     const cards = new Map();
     const previews = new Map();
     const previewQueue = new Set();
     const scrollPositions = new Map();
     let tasks = [];
+    let outlineTasks = [];
     let status = 'loading';
     let selectedUid = null;
     let mount = null;
@@ -99,33 +109,53 @@ export function createDeskView({
       return node;
     };
     const root = element('section', 'nautilus-desk');
-    root.setAttribute('role', 'dialog');
-    root.setAttribute('aria-modal', 'true');
+    root.setAttribute('role', 'region');
     root.setAttribute('aria-label', copy.title);
     root.tabIndex = -1;
     root.dataset.planUid = planUid;
     const board = element('div', 'nautilus-desk__board');
     const header = element('header', 'nautilus-desk__header');
-    const back = button(copy.back, () => close(), `← ${copy.back}`);
+    const back = button(copy.back, () => close(), '×');
     const identity = element('div', 'nautilus-desk__identity');
-    const title = element('h2', '', copy.title);
-    const subtitle = element('div', 'nautilus-desk__subtitle', pageTitle);
-    identity.append(title, subtitle);
-    const refreshButton = button(copy.refresh, () => refresh(true));
-    header.append(back, identity, refreshButton);
-    const summary = element('div', 'nautilus-desk__summary');
+    const title = element('h3', '', copy.title);
+    const summary = element('span', 'nautilus-desk__summary');
     summary.setAttribute('role', 'status');
+    identity.append(title, summary);
+    const refreshButton = button(copy.refresh, () => refresh(true), '↻');
+    const resetOrder = button(copy.reset, () => {
+      viewOrders.delete(orderKey);
+      tasks = outlineTasks;
+      renderCards();
+    }, '↺');
+    resetOrder.hidden = true;
+    header.append(identity, resetOrder, refreshButton, back);
+    const movement = element('span', 'nautilus-desk__sr-only');
+    movement.setAttribute('role', 'status');
     const notice = element('div', 'nautilus-desk__notice');
     notice.setAttribute('role', 'status');
     notice.hidden = true;
-    const scroller = element('div', 'nautilus-desk__scroller');
+    const content = element('div', 'nautilus-desk__content');
     const grid = element('div', 'nautilus-desk__grid');
     const empty = element('p', 'nautilus-desk__empty');
     empty.hidden = true;
-    scroller.append(grid, empty);
-    board.append(header, summary, notice, scroller);
+    content.append(grid, empty);
+    board.append(header, movement, notice, content);
+    const masonry = createDeskMasonry({ grid, host });
+    const drag = createDeskDrag({
+      grid,
+      canDrag: () => inScope() && status === 'ready' && !selectedUid && !composing,
+      move: (uid, target, after) => applyViewOrder(uid, target, after),
+      nudge: (uid, direction) => {
+        const index = tasks.findIndex((task) => task.uid === uid);
+        const target = tasks[index + direction];
+        if (target) applyViewOrder(uid, target.uid, direction > 0);
+      },
+    });
 
     const layer = element('div', 'nautilus-desk__focus-layer');
+    layer.setAttribute('role', 'dialog');
+    layer.setAttribute('aria-modal', 'true');
+    layer.setAttribute('aria-label', copy.focus);
     layer.hidden = true;
     const focus = element('section', 'nautilus-desk__focus');
     focus.setAttribute('role', 'region');
@@ -155,9 +185,9 @@ export function createDeskView({
     footer.textContent = `${alt}+, ${copy.nextHint}    ${alt}+. ${copy.previousHint}    Esc ${copy.backHint}`;
     focus.append(focusHeader, focusBody, footer);
     layer.append(focus);
-    root.append(board, layer);
+    root.append(board);
 
-    const inScope = () => !closed && host.roamAlphaAPI === roam && graphName(host) === graph;
+    const inScope = () => !closed && container.isConnected && host.roamAlphaAPI === roam && graphName(host) === graph;
     const checkScope = () => {
       if (inScope()) return true;
       close(false);
@@ -195,6 +225,9 @@ export function createDeskView({
       selectedUid = null;
       dropEditor();
       layer.hidden = true;
+      layer.remove();
+      if (focusOwner === session) focusOwner = null;
+      if (!document.querySelector('.nautilus-desk__focus-layer')) document.body.classList.remove('nautilus-desk-focus-open');
       board.inert = false;
       board.removeAttribute('aria-hidden');
       root.classList.remove('is-focused');
@@ -205,8 +238,13 @@ export function createDeskView({
     function showTask(uid, force = false) {
       if (!uid || !checkScope() || status !== 'ready' || !tasks.some((task) => task.uid === uid)) return;
       if (uid === selectedUid && !force) return;
+      if (focusOwner && focusOwner !== session) focusOwner.showOverview(false);
+      focusOwner = session;
+      drag.cancel();
       dropEditor();
       selectedUid = uid;
+      document.body.append(layer);
+      document.body.classList.add('nautilus-desk-focus-open');
       layer.hidden = false;
       root.classList.add('is-focused');
       focus.focus({ preventScroll: true });
@@ -271,15 +309,38 @@ export function createDeskView({
         if (!lines.length && sourceUid && sourceUid !== uid) lines = deskPreview(await readChildren(sourceUid));
         if (!checkScope() || epoch !== previewEpoch || cards.get(uid) !== card) return;
         previews.set(uid, lines);
-        card.preview.textContent = lines.join('\n') || copy.noPreview;
+        card.preview.replaceChildren(...lines.map((line) => {
+          const row = element('span', 'nautilus-desk__preview-line', line);
+          if (/^[☑☐]/.test(line)) row.classList.add('is-task');
+          return row;
+        }));
+        card.preview.hidden = !lines.length;
+        // Preview promises settle between animation and paint: place the newly
+        // taller card now so it never paints on top of the following card.
+        masonry.layoutNow();
       } catch (_error) {
-        if (inScope() && epoch === previewEpoch && cards.get(uid) === card) card.preview.textContent = copy.previewError;
+        if (inScope() && epoch === previewEpoch && cards.get(uid) === card) {
+          card.preview.textContent = copy.previewError;
+          card.preview.hidden = false;
+          masonry.layoutNow();
+        }
       }
     }
 
+    function applyViewOrder(uid, target, after) {
+      if (!checkScope() || status !== 'ready' || selectedUid) return;
+      viewOrders.set(orderKey, moveDeskTask(tasks, uid, target, after));
+      if (viewOrders.size > 64) viewOrders.delete(viewOrders.keys().next().value);
+      tasks = orderDeskTasks(outlineTasks, viewOrders.get(orderKey));
+      renderCards();
+      cards.get(uid)?.button.focus({ preventScroll: true });
+      movement.textContent = copy.moved;
+    }
+
     function renderCards() {
-      const oldScroll = scroller.scrollTop;
-      const focusedCard = document.activeElement?.closest?.('.nautilus-desk__card')?.dataset.taskUid;
+      const focusedCard = root.contains(document.activeElement)
+        ? document.activeElement?.closest?.('.nautilus-desk__card')?.dataset.taskUid
+        : null;
       const live = new Set(tasks.map(({ uid }) => uid));
       for (const [uid, card] of cards) {
         if (live.has(uid)) continue;
@@ -295,33 +356,44 @@ export function createDeskView({
           const item = button(plainDeskText(task.title), () => showTask(task.uid));
           item.className = 'nautilus-desk__card';
           item.dataset.taskUid = task.uid;
+          item.draggable = true;
           const heading = element('span', 'nautilus-desk__card-title');
-          const preview = element('span', 'nautilus-desk__preview', copy.noPreview);
-          const duration = element('span', 'nautilus-desk__duration');
-          item.replaceChildren(heading, preview, duration);
-          card = { button: item, heading, preview, duration };
+          const statusIcon = element('span', 'nautilus-desk__task-box');
+          statusIcon.setAttribute('aria-hidden', 'true');
+          const headingText = element('span');
+          heading.append(statusIcon, headingText);
+          const preview = element('span', 'nautilus-desk__preview');
+          preview.hidden = true;
+          const date = element('span', 'nautilus-desk__date', pageTitle);
+          date.hidden = !pageTitle;
+          const grip = element('span', 'nautilus-desk__grip', '⠿');
+          grip.setAttribute('aria-hidden', 'true');
+          item.replaceChildren(grip, heading, preview, date);
+          card = { button: item, heading: headingText, preview };
           cards.set(task.uid, card);
         }
         const label = plainDeskText(task.title);
-        card.heading.textContent = label;
+        card.heading.textContent = `${label} ${compactMinutes(task.plannedMinutes)}`;
         card.button.setAttribute('aria-label', label);
-        card.button.title = label;
+        card.button.title = `${label}\n${copy.drag}`;
         card.button.disabled = status !== 'ready';
-        card.duration.textContent = compactMinutes(task.plannedMinutes);
+        card.button.draggable = status === 'ready';
         if (grid.children[index] !== card.button) grid.insertBefore(card.button, grid.children[index] || null);
         if (!previews.has(task.uid)) {
           if (observer) observer.observe(card.button);
           else previewQueue.add(task.uid);
         }
       });
-      scroller.scrollTop = oldScroll;
+      masonry.setItems(tasks.map((task) => cards.get(task.uid).button));
       if (focusedCard && !selectedUid) {
         const target = status === 'ready'
           ? cards.get(focusedCard)?.button || cards.values().next().value?.button || back
           : back;
         target.focus({ preventScroll: true });
       }
-      summary.textContent = status === 'ready' ? copy.count(tasks.length) : '';
+      summary.textContent = status === 'ready' ? `(${tasks.length})` : '';
+      summary.setAttribute('aria-label', status === 'ready' ? copy.count(tasks.length) : '');
+      resetOrder.hidden = !viewOrders.has(orderKey);
       empty.hidden = tasks.length > 0;
       empty.textContent = status === 'missing' ? copy.missing : status === 'ready' ? copy.empty : copy.unavailable;
       notice.hidden = status === 'ready' || status === 'loading' || !tasks.length;
@@ -340,15 +412,17 @@ export function createDeskView({
       const previousTasks = tasks;
       if (snapshot?.missing) {
         status = 'missing';
-        tasks = [];
+        outlineTasks = tasks = [];
       } else {
         try {
-          tasks = projectDeskTasks(snapshot, planUid, { fallbackMinutes: getSettings()['todo-duration'] ?? 15, readString });
+          outlineTasks = projectDeskTasks(snapshot, planUid, { fallbackMinutes: getSettings()['todo-duration'] ?? 15, readString });
+          tasks = orderDeskTasks(outlineTasks, viewOrders.get(orderKey));
           status = 'ready';
         } catch (_error) {
           status = 'unavailable'; // Keep last-good cards visibly stale, never a false empty success.
         }
       }
+      if (status !== 'ready' || tasks.map((task) => task.uid).join() !== previousTasks.map((task) => task.uid).join()) drag.cancel();
       const nextUid = reconcileDeskSelection(previousTasks, tasks, selectedUid);
       if (status !== 'ready' || !nextUid) {
         if (selectedUid) showOverview();
@@ -367,7 +441,7 @@ export function createDeskView({
     }
 
     const onKey = (event) => {
-      if (!root.contains(event.target) || !checkScope() || composing) return;
+      if ((!root.contains(event.target) && !layer.contains(event.target) && event.target !== origin) || !checkScope() || composing) return;
       const action = deskShortcut(event);
       if (action && (action === 'back' || selectedUid)) {
         event.preventDefault();
@@ -377,8 +451,8 @@ export function createDeskView({
         return;
       }
       // Do not intercept native editor Tab indentation or its portal/menu shortcuts.
-      if (event.key !== 'Tab' || event.defaultPrevented || event.target.closest('textarea,input,[contenteditable="true"]')) return;
-      const surface = selectedUid ? focus : board;
+      if (!selectedUid || event.key !== 'Tab' || event.defaultPrevented || event.target.closest('textarea,input,[contenteditable="true"]')) return;
+      const surface = focus;
       const stops = [...surface.querySelectorAll('button:not(:disabled),[tabindex="0"]')]
         .filter((node) => !node.closest('[hidden],[inert]'));
       const first = stops[0];
@@ -412,6 +486,8 @@ export function createDeskView({
       stopWatch?.();
       stopWatch = null;
       observer?.disconnect();
+      masonry.destroy();
+      drag.destroy();
       if (previewFrame !== null) host.cancelAnimationFrame(previewFrame);
       if (compositionFrame !== null) host.cancelAnimationFrame(compositionFrame);
       previewQueue.clear();
@@ -421,8 +497,11 @@ export function createDeskView({
       host.removeEventListener('focus', onVisible);
       host.removeEventListener('nautilus-log:settings-changed', onVisible);
       root.remove();
-      if (!document.querySelector('.nautilus-desk')) document.body.classList.remove('nautilus-desk-open');
-      if (active?.root === root) active = null;
+      layer.remove();
+      if (focusOwner === session) focusOwner = null;
+      if (!document.querySelector('.nautilus-desk__focus-layer')) document.body.classList.remove('nautilus-desk-focus-open');
+      if (sessions.get(container) === session) sessions.delete(container);
+      origin?.setAttribute?.('aria-expanded', 'false');
       if (restoreFocus && origin?.isConnected && inOriginalGraph()) origin.focus?.({ preventScroll: true });
     }
     const inOriginalGraph = () => host.roamAlphaAPI === roam && graphName(host) === graph;
@@ -430,17 +509,19 @@ export function createDeskView({
     function start() {
       if (origin?.closest?.('.bp3-dark,.rm-dark-theme,.dark') || document.querySelector('.roam-app.rm-dark-theme')) {
         root.classList.add('nautilus-desk--dark', 'bp3-dark');
+        layer.classList.add('nautilus-desk--dark', 'bp3-dark');
       }
-      document.body.classList.add('nautilus-desk-open');
-      document.body.append(root);
-      back.focus({ preventScroll: true });
+      container.append(root);
+      origin?.setAttribute?.('aria-expanded', 'true');
+      // Inline content follows the page's normal scroll and keyboard navigation.
+      // Leave focus on the toggle instead of scrolling the user away from the chart.
       document.addEventListener('keydown', onKey);
       document.addEventListener('visibilitychange', onVisible);
       host.addEventListener('hashchange', onNavigation);
       host.addEventListener('focus', onVisible);
       host.addEventListener('nautilus-log:settings-changed', onVisible);
-      root.addEventListener('compositionstart', onCompositionStart);
-      root.addEventListener('compositionend', onCompositionEnd);
+      layer.addEventListener('compositionstart', onCompositionStart);
+      layer.addEventListener('compositionend', onCompositionEnd);
       if (typeof host.IntersectionObserver === 'function') {
         observer = new host.IntersectionObserver((entries) => {
           for (const entry of entries) {
@@ -449,7 +530,7 @@ export function createDeskView({
             previewQueue.add(entry.target.dataset.taskUid);
           }
           schedulePreviews();
-        }, { root: scroller, rootMargin: '100px' });
+        }, { root: null, rootMargin: '150px' });
       }
       if (!graph) { status = 'unavailable'; renderCards(); return; }
       try {
@@ -460,12 +541,15 @@ export function createDeskView({
         renderCards();
       }
     }
-    return { root, start, close };
+    const session = { root, start, close, showOverview };
+    return session;
   }
 
+  const closeAll = () => { for (const session of [...sessions.values()]) session.close(false); };
   return {
     open,
-    close: () => active?.close(),
-    destroy: () => { destroyed = true; active?.close(false); },
+    close: closeAll,
+    closeForHost: (container) => sessions.get(container)?.close(false),
+    destroy: () => { destroyed = true; closeAll(); viewOrders.clear(); },
   };
 }

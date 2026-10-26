@@ -21,6 +21,8 @@ test('compiled Desk is idle before opening and cannot reopen after destroy', asy
   assert.equal(domCreates, 0);
   view.open();
   assert.equal(domCreates, 0, 'missing plan UID is not an implicit today-plan lookup');
+  view.open({ planUid: 'any-plan' });
+  assert.equal(domCreates, 0, 'missing inline host never falls back to a full-page overlay');
   view.destroy();
   view.open({ planUid: 'any-plan' });
   assert.equal(domCreates, 0);
@@ -34,6 +36,9 @@ test('renderer Desk button passes the clicked component and origin, without an e
   assert.match(button, /:pageTitle page-title-val/);
   assert.match(button, /:origin \(\.-currentTarget event\)/);
   assert.match(button, /\.-openDesk/);
+  assert.match(button, /:container[\s\S]*:scope > \.nautilus-log-desk-host/);
+  assert.match(source, /:class "nautilus-log-desk-host" :ref desk-host-ref/);
+  assert.match(source, /desk-host-ref[\s\S]*\.-closeDeskHost/);
   assert.doesNotMatch(button, /actual-time-tracking|createBlock|updateBlock|clock/i);
   const controls = source.slice(source.indexOf('(defn log-controls'), source.indexOf('(defn render-context-probe'));
   assert.match(controls, /\[desk-button block-uid page-title-val \(:controls copy\)\]/);
@@ -43,6 +48,7 @@ test('extension binds Desk to shared reads and destroys it before destroying the
   const source = fs.readFileSync(path.join(root, 'src/index.js'), 'utf8');
   assert.match(source, /deskView = createDeskView\(\{\s*readPlan: planWatchBridge\.read,\s*watchPlan: planWatchBridge\.subscribe,/);
   assert.match(source, /openDesk: \(options\) => deskView\?\.open\(options\)/);
+  assert.match(source, /closeDeskHost: \(container\) => deskView\?\.closeForHost\(container\)/);
   for (const section of [source.slice(source.indexOf('async function onload'), source.indexOf('function onunload')),
     source.slice(source.indexOf('function onunload'), source.indexOf('\nexport {'))]) {
     assert.ok(section.indexOf('deskView?.destroy()') >= 0);

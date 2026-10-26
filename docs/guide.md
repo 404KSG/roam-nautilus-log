@@ -66,7 +66,7 @@ Past gaps are factual schedule data, not a judgment that time was wasted.
 
 ## Chart controls
 
-- **Desk (four-square icon):** open this plan's unfinished-task card overview, then click a card to focus and edit it.
+- **Desk (four-square icon):** expand or collapse unfinished-task cards below the chart, then click a card to focus and edit it.
 - **Eye:** show or hide completed items.
 - **Calendar:** after Google Calendar reports Connected in Settings, import
   timed busy events and dated Google Tasks for this chart's Daily Note.
@@ -87,21 +87,31 @@ visual noise.
 
 ## Desk task view
 
-Click the chart's **Desk** button to open a full-screen card overview, not the first
-task's editor. Desk uses the clicked Nautilus component, including historical or
-secondary plans. It does not scan the graph or require the Execution Layer.
+Click the chart's **Desk** button to expand cards directly below the sea chart;
+click again to collapse them. The chart and original page remain visible. Opening
+Desk does not open the first task's editor. Each chart instance has its own toggle.
+Desk uses the clicked Nautilus component, including historical or secondary plans.
+It does not scan the graph or require the Execution Layer.
 
-- Each unfinished direct task becomes one card, in outline order. Completed tasks,
-  fixed events, and dividers are excluded; unscheduled tasks remain. The existing
-  implicit-task and referenced-state rules still apply.
+- Each unfinished direct task becomes one card, initially in outline order. Cards
+  use Roam-style light borders, child-block previews, and a source date. Natural
+  content heights fill the shortest column; narrow containers use a single column.
+  Completed tasks, fixed events, and dividers are excluded; unscheduled tasks remain.
+  The existing implicit-task and referenced-state rules still apply.
+- On desktop, drag cards to rearrange them, or focus a card and use
+  **Alt + Shift + Left/Right**. **Restore outline order** resets the layout.
+  Reordering changes only the Desk display and navigation order, not the original
+  blocks, task priorities, or schedule. Layout order stays in the current plugin
+  session; it is not written to the graph or persistent browser storage.
 - Click a card to mount Roam's native `renderBlock` editor for the original UID and
   its children. Completed prompt entries inside an active task stay visible; they
   are neither filtered out nor turned into separate cards.
 - **Option/Alt + comma** selects the next task; **Option/Alt + period** selects the
   previous task. Navigation wraps at the ends. **Esc** or the close button returns
-  to the cards. From the overview, Esc or **Back to plan** exits Desk. These bindings
-  only apply inside Desk; IME composition and shortcuts consumed by the native
-  editor take precedence.
+  to the inline cards. Esc within the cards or their Desk toggle, or **Hide Desk**,
+  collapses the card area. The overview does not trap page keyboard focus. These
+  bindings only apply to the current Desk; IME composition and shortcuts consumed
+  by the native editor take precedence.
 - The overview and each task retain their scroll position for the current Desk
   session. Text updates do not remount the active editor. Completing, deleting, or
   moving a task out of the plan removes its card and advances focus. Completing the
@@ -114,8 +124,9 @@ Cards read one level of child blocks as they approach the viewport and display a
 most two plain-text preview lines, omitting LOGBOOK/CLOCK infrastructure. Only the
 focused card mounts an editor. Returning to the overview refreshes previews for
 edited tasks; use **Refresh** for other external child-block edits. Task membership
-uses the shared Plan Pull Watch. Closing, navigating away, or unloading removes
-listeners and unmounts the editor.
+uses the shared Plan Pull Watch. Closing, navigating away, removing a chart, or
+unloading removes listeners and unmounts its editor. Multiple views of the same
+plan share watches; closing one does not close the others.
 
 Read failures preserve visibly stale cards and leave focus mode, with card opening
 paused until a successful read. They are not reported as an empty plan. Missing

@@ -4,11 +4,17 @@
 
 ### Added
 
-- Nautilus Desk: a full-screen card overview for the clicked plan's unfinished
-  direct tasks. Click a card to edit the original block and its children in Roam's
-  native editor. Option/Alt-comma and Option/Alt-period cycle tasks; Escape returns
-  to the cards, preserving scroll positions. Completed tasks and events are
-  excluded, while unscheduled tasks and completed child logs remain in scope.
+- Nautilus Desk: an inline card area below the clicked chart, with Roam-style
+  borders, child previews, source dates, and natural-height masonry. Click a card
+  to edit the original block and its children in Roam's native editor.
+  Option/Alt-comma and Option/Alt-period cycle tasks; Escape returns to the cards.
+  Completed tasks and events are excluded, while unscheduled tasks and completed
+  child logs remain in scope.
+- Drag cards on desktop, or use Alt+Shift+Left/Right, to rearrange the Desk view.
+  A reset action restores outline order. Layout order is session-only and never
+  moves graph blocks or changes scheduling priority. Chart instances toggle
+  independently and share underlying Plan watches; removing a renderer cleans up
+  its own Desk and native editor.
 - Desk works without the Execution Layer, mounts only the focused editor, and
   shares Plan watches. It does not copy tasks, manage Roam's built-in Desk, start
   CLOCK, or add note/task creation controls. Stale reads pause editing; native

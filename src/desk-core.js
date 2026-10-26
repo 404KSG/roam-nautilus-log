@@ -75,6 +75,43 @@ function deskShortcut(event) {
   return null;
 }
 
+// Keep view ordering separate from the original outline and its scheduling priority.
+function orderDeskTasks(tasks, order) {
+  if (!Array.isArray(order)) return tasks;
+  const remaining = new Map(tasks.map((task) => [task.uid, task]));
+  const ordered = [];
+  for (const uid of order) {
+    if (!remaining.has(uid)) continue;
+    ordered.push(remaining.get(uid));
+    remaining.delete(uid);
+  }
+  return [...ordered, ...remaining.values()];
+}
+
+function moveDeskTask(tasks, uid, targetUid, after = false) {
+  const uids = tasks.map((task) => task.uid);
+  if (!uids.includes(uid) || uid === targetUid || (targetUid && !uids.includes(targetUid))) return uids;
+  const result = uids.filter((id) => id !== uid);
+  const index = targetUid ? result.indexOf(targetUid) + (after ? 1 : 0) : result.length;
+  result.splice(index, 0, uid);
+  return result;
+}
+
+function masonryLayout(heights, width, { gap = 16, minWidth = 280, maxColumns = 3 } = {}) {
+  if (!(width > 0)) return { columns: 1, cardWidth: 0, height: 0, items: [] };
+  const columns = Math.max(1, Math.min(maxColumns, Math.floor((width + gap) / (minWidth + gap))));
+  const cardWidth = (width - gap * (columns - 1)) / columns;
+  const bottoms = Array(columns).fill(0);
+  const items = heights.map((height) => {
+    const column = bottoms.indexOf(Math.min(...bottoms));
+    const item = { x: column * (cardWidth + gap), y: bottoms[column] };
+    bottoms[column] += Math.max(0, Number(height) || 0) + gap;
+    return item;
+  });
+  return { columns, cardWidth, height: heights.length ? Math.max(...bottoms) - gap : 0, items };
+}
+
 module.exports = {
   projectDeskTasks, plainDeskText, deskPreview, reconcileDeskSelection, stepDeskSelection, deskShortcut,
+  masonryLayout, orderDeskTasks, moveDeskTask,
 };

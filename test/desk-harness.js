@@ -30,8 +30,9 @@ function mount({ count = 8, language = 'en', dark = false, editor = true, empty 
     for (let i = 0; i < count; i += 1) {
       const uid = `task-${i}`;
       add(uid, `{{[[TODO]]}} ${labels[i % labels.length]} ${i > 4 ? i + 1 : ''} ${i === 2 ? '9999m' : '45m'}`, planUid, i);
-      for (let n = 0; n < (i === 0 ? 24 : 2); n += 1) {
-        add(`${uid}-note-${n}`, language === 'zh'
+      const noteCount = i === 0 ? 24 : i % 4 === 1 ? 0 : i % 4 === 2 ? 1 : 2;
+      for (let n = 0; n < noteCount; n += 1) {
+        add(`${uid}-note-${n}`, i % 4 === 3 && n === 0 ? (language === 'zh' ? '先确认任务范围。' : 'Confirm the scope first.') : language === 'zh'
           ? `${n === 0 ? '{{[[DONE]]}} ' : ''}第 ${n + 1} 轮提示词：保留原始任务结构，每次只聚焦一个任务。记录要求、补充说明与执行反馈。`
           : `${n === 0 ? '{{[[DONE]]}} ' : ''}Prompt ${n + 1}: Keep the original task structure. Focus on one task at a time and record the requirements, revisions, and results.`, uid, n);
       }
@@ -142,13 +143,48 @@ function mount({ count = 8, language = 'en', dark = false, editor = true, empty 
     readPlan: bridge.read, watchPlan: bridge.subscribe, readString: readBlockString, readChildren,
     getSettings: () => ({ language, 'todo-duration': 15 }),
   });
-  for (const uid of [planUid, 'other-plan']) {
+  const hosts = new Map();
+  const addHost = (uid, label, key = uid) => {
+    const chart = document.createElement('section');
+    chart.className = 'nautilus-log-container fixture-chart';
+    chart.dataset.fixtureHost = key;
+    const shell = document.createElement('div');
+    shell.className = 'nautilus-log-shell fixture-shell';
+    const top = document.createElement('div');
+    top.className = 'fixture-chart-toolbar';
+    const name = document.createElement('strong');
+    name.textContent = 'Nautilus Log';
     const launch = document.createElement('button');
     launch.className = 'fixture-launch';
-    launch.textContent = uid === planUid ? 'Open Desk' : 'Open other Desk';
-    launch.addEventListener('click', () => desk.open({ planUid: uid, pageTitle: uid === planUid ? 'October 26th, 2026' : 'October 25th, 2026', origin: launch }));
-    document.querySelector('#launchers').append(launch);
-  }
+    launch.textContent = '▦ Desk';
+    launch.setAttribute('aria-label', label);
+    top.append(name, launch);
+    const sea = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    sea.setAttribute('viewBox', '0 0 300 200');
+    sea.setAttribute('aria-label', 'Sea chart placeholder — test fixture');
+    let d = '';
+    for (let i = 0; i <= 360; i += 1) {
+      const angle = i / 360 * Math.PI * 5;
+      const radius = 12 + i / 360 * 74;
+      d += `${i ? 'L' : 'M'}${150 + Math.cos(angle) * radius},${100 + Math.sin(angle) * radius} `;
+    }
+    const spiral = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    spiral.setAttribute('d', d);
+    spiral.setAttribute('fill', 'none');
+    spiral.setAttribute('stroke', '#a7cbd9');
+    spiral.setAttribute('stroke-width', '13');
+    sea.append(spiral);
+    shell.append(top, sea);
+    const slot = document.createElement('div');
+    slot.className = 'nautilus-log-desk-host';
+    chart.append(shell, slot);
+    launch.addEventListener('click', () => desk.open({ planUid: uid, pageTitle: uid === planUid ? 'October 26th, 2026' : 'October 25th, 2026', origin: launch, container: slot }));
+    document.querySelector('#launchers').append(chart);
+    hosts.set(key, { slot, chart, launch });
+    return hosts.get(key);
+  };
+  addHost(planUid, 'Open Desk');
+  addHost('other-plan', 'Open other Desk');
   cleanup = () => { desk.destroy(); bridge.destroy(); };
   window.deskHarness.api = {
     stats, setString, children, text: (uid) => nodes.get(uid)?.string,
@@ -158,6 +194,15 @@ function mount({ count = 8, language = 'en', dark = false, editor = true, empty 
     holdNextRender: () => { holdRender = true; },
     release: () => { releaseRender?.(); releaseRender = null; },
     pendingRender: () => Boolean(releaseRender),
+    openCopy: () => {
+      const { slot, launch } = addHost(planUid, 'Open copy Desk', 'copy');
+      desk.open({ planUid, container: slot, origin: launch, pageTitle: 'October 26th, 2026' });
+    },
+    removeHost: (key) => {
+      const { slot, chart } = hosts.get(key);
+      desk.closeForHost(slot);
+      chart.remove();
+    },
     remove: (uid) => { const parent = nodes.get(uid)?.parentUid; nodes.delete(uid); notify(uid, parent); },
     move: (uid, order) => { nodes.get(uid).order = order; notify(uid, nodes.get(uid).parentUid); },
     destroy: cleanup,

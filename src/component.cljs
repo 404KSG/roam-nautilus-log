@@ -1433,12 +1433,16 @@
     :class "nautilus-log-toggle-btn nautilus-log-desk-btn"
     :data-nautilus-tooltip (:desk copy)
     :aria-label (:desk copy)
+    :aria-expanded "false"
     :on-click (fn [event]
                 (when-let [open-desk (some-> js/window .-nautilusLogExtensionData .-openDesk)]
                   (.call open-desk nil
                          (clj->js {:planUid block-uid
                                    :pageTitle page-title-val
-                                   :origin (.-currentTarget event)}))))}
+                                   :origin (.-currentTarget event)
+                                   :container (some-> (.-currentTarget event)
+                                                      (.closest ".nautilus-log-container")
+                                                      (.querySelector ":scope > .nautilus-log-desk-host"))}))))}
    [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none"
           :stroke "currentColor" :stroke-width "1.7" :aria-hidden "true"}
     [:rect {:x "3" :y "3" :width "7" :height "7" :rx "1.5"}]
@@ -1942,6 +1946,13 @@
                resize-observer-state (atom nil)
                container-ref (fn [node]
                                (observe-compact-width! node compact-state hover-info-state resize-observer-state))
+               desk-host-node (atom nil)
+               desk-host-ref (fn [node]
+                               (when-let [previous @desk-host-node]
+                                 (when-not (identical? previous node)
+                                   (when-let [close-host (some-> js/window .-nautilusLogExtensionData .-closeDeskHost)]
+                                     (.call close-host nil previous))))
+                               (reset! desk-host-node node))
                daily-page-atom? (r/atom (daily-page? block-uid))
                clock-interval (js/setInterval
                                (fn []
@@ -2075,13 +2086,17 @@
                 [:div {:class "nautilus-log-content"}
                  [show-events events-state show-done-state now-time-atom page-title-val dimensions settings @compact-state copy compact-list-open-state hover-info-state block-uid timeline-state]
                  [overflow-panel capacity copy]
-                 [schedule-warning-panel text-events copy]]])]))))
+                 [schedule-warning-panel text-events copy]]])
+             [:div {:class "nautilus-log-desk-host" :ref desk-host-ref}]]))))
     (finally
       (reset! plan-session-alive? false)
       (js/clearInterval check-interval)
       (js/clearInterval clock-interval)
       (.removeEventListener js/window settings-event-name settings-listener)
       (.removeEventListener js/window "nautilus-log:clock-changed" clock-listener)
+      (when-let [node @desk-host-node]
+        (when-let [close-host (some-> js/window .-nautilusLogExtensionData .-closeDeskHost)]
+          (.call close-host nil node)))
       (when-let [session @plan-session]
         (try
           (.destroy session)

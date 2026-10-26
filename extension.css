@@ -2375,24 +2375,24 @@ button.nautilus-log-timing__plan-heading:focus-visible {
   .nautilus-log-timing__energy-planned-value.is-confirming { animation: none; }
 }
 
-/* Desk is a full card view. Only opening a card mounts a native Roam editor. */
-.nautilus-desk {
+/* Inline Desk follows Roam's page surface. Only task focus is an overlay. */
+.nautilus-log-desk-host { width: 100%; min-width: 0; }
+.nautilus-desk,
+.nautilus-desk__focus-layer {
   --desk-bg: #f5f8fa;
   --desk-surface: #fff;
-  --desk-text: #263b4b;
-  --desk-muted: #607584;
-  --desk-line: #dce4eb;
-  --desk-accent: #4e8491;
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  overflow: hidden;
+  --desk-text: #202b33;
+  --desk-muted: #5c7080;
+  --desk-date: #8a9ba8;
+  --desk-line: #dfe6ec;
+  --desk-accent: #106ba3;
   color: var(--desk-text);
-  background: var(--desk-bg);
   font-family: inherit;
   font-size: 14px;
   line-height: 1.5;
 }
+.nautilus-desk { position: relative; width: 100%; margin: 18px 0 8px; background: transparent; }
+.nautilus-log-desk-btn[aria-expanded="true"] { background: var(--nautilus-log-hover) !important; }
 .nautilus-desk--dark,
 .bp3-dark .nautilus-desk {
   --desk-bg: #202b33;
@@ -2401,28 +2401,16 @@ button.nautilus-log-timing__plan-heading:focus-visible {
   --desk-muted: #a6b8c5;
   --desk-line: #455763;
   --desk-accent: #8abac4;
+  --desk-date: #a6b8c5;
 }
-.nautilus-desk [hidden] { display: none !important; }
-.nautilus-desk__board {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-.nautilus-desk__header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: center;
-  gap: 16px;
-  min-height: 84px;
-  padding: 16px 32px;
-  border-bottom: 1px solid var(--desk-line);
-  background: var(--desk-surface);
-}
-.nautilus-desk__header > :first-child { justify-self: start; }
-.nautilus-desk__header > :last-child { justify-self: end; }
-.nautilus-desk__identity { text-align: center; min-width: 0; }
-.nautilus-desk__identity h2 { margin: 0; color: inherit; font-size: 20px; font-weight: 600; line-height: 1.4; }
-.nautilus-desk__subtitle { color: var(--desk-muted); font-size: 12px; overflow-wrap: anywhere; }
+.nautilus-desk [hidden],
+.nautilus-desk__focus-layer[hidden],
+.nautilus-desk__focus-layer [hidden] { display: none !important; }
+.nautilus-desk__header { display: flex; align-items: center; gap: 4px; margin-bottom: 14px; }
+.nautilus-desk__identity { display: flex; align-items: baseline; gap: 6px; flex: 1; min-width: 0; }
+.nautilus-desk__identity h3 { margin: 0; color: inherit; font-size: 18px; font-weight: 600; line-height: 1.5; }
+.nautilus-desk__summary { font-size: 18px; font-weight: 400; }
+.nautilus-desk__sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 .nautilus-desk__button {
   flex-shrink: 0;
   border: 1px solid transparent;
@@ -2437,76 +2425,50 @@ button.nautilus-log-timing__plan-heading:focus-visible {
 .nautilus-desk__button:disabled { opacity: .45; cursor: default; }
 .nautilus-desk__button:focus-visible,
 .nautilus-desk__card:focus-visible { outline: 2px solid var(--desk-accent); outline-offset: 3px; }
-.nautilus-desk__summary,
-.nautilus-desk__notice {
-  box-sizing: border-box;
-  width: min(100%, 1328px);
-  margin: 0 auto;
-  padding: 20px 32px 0;
-  color: var(--desk-muted);
-  font-size: 13px;
-}
-.nautilus-desk__notice { color: var(--desk-text); }
-.nautilus-desk__scroller {
-  min-height: 0;
-  flex: 1;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-}
-.nautilus-desk__grid {
-  box-sizing: border-box;
-  max-width: 1328px;
-  margin: 0 auto;
-  padding: 24px 32px 48px;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
-  align-items: stretch;
-  gap: 20px;
-}
+.nautilus-desk__notice { margin: 0 0 12px; color: var(--desk-muted); font-size: 13px; }
+.nautilus-desk__content { overflow: visible; }
+.nautilus-desk__grid { position: relative; width: 100%; }
 .nautilus-desk__card {
+  position: absolute;
+  top: 0;
+  left: 0;
   box-sizing: border-box;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 16px;
+  display: block;
+  width: 100%;
   min-width: 0;
-  height: 252px;
-  padding: 22px;
+  padding: 14px 16px;
   border: 1px solid var(--desk-line);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--desk-surface);
   color: var(--desk-text);
   text-align: left;
   font: inherit;
   cursor: pointer;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  user-select: none;
+  transition: border-color 120ms ease;
 }
-.nautilus-desk__card:hover:not(:disabled) {
-  border-color: var(--desk-accent);
-  box-shadow: 0 3px 12px rgba(38, 59, 75, .07);
-}
+.nautilus-desk__card:hover:not(:disabled) { border-color: #b8c8d5; }
 .nautilus-desk__card:disabled { opacity: .6; cursor: default; }
+.nautilus-desk__card.is-dragging { opacity: .4; cursor: grabbing; }
+.nautilus-desk__card.is-drop-before { box-shadow: inset 0 3px var(--desk-accent); }
+.nautilus-desk__card.is-drop-after { box-shadow: inset 0 -3px var(--desk-accent); }
+.nautilus-desk__grip { position: absolute; right: 5px; top: 5px; color: var(--desk-date); opacity: 0; cursor: grab; }
+.nautilus-desk__card:hover .nautilus-desk__grip,
+.nautilus-desk__card:focus-visible .nautilus-desk__grip { opacity: 1; }
 .nautilus-desk__card-title,
-.nautilus-desk__preview {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-}
-.nautilus-desk__card-title { -webkit-line-clamp: 3; font-size: 16px; font-weight: 600; }
-.nautilus-desk__preview {
-  min-height: 0;
-  max-height: 100%;
-  -webkit-line-clamp: 4;
-  white-space: pre-line;
-  font-size: 13px;
-  color: var(--desk-muted);
-}
-.nautilus-desk__duration { margin-top: auto; padding-top: 8px; color: var(--desk-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.nautilus-desk__empty { max-width: 520px; padding: 40px 24px; margin: 0 auto; color: var(--desk-muted); text-align: center; }
+.nautilus-desk__preview-line { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.nautilus-desk__card-title { -webkit-line-clamp: 3; font-size: 14px; font-weight: 600; padding-right: 6px; }
+.nautilus-desk__task-box { display: inline-block; width: 10px; height: 10px; border: 1px solid var(--desk-date); border-radius: 2px; margin-right: 5px; }
+.nautilus-desk__preview { display: block; margin-top: 6px; color: var(--desk-muted); }
+.nautilus-desk__preview-line { position: relative; -webkit-line-clamp: 3; padding-left: 12px; }
+.nautilus-desk__preview-line::before { content: '•'; position: absolute; left: 0; color: var(--desk-date); }
+.nautilus-desk__preview-line.is-task { padding-left: 0; }
+.nautilus-desk__preview-line.is-task::before { content: none; }
+.nautilus-desk__date { display: block; margin-top: 16px; color: var(--desk-date); font-size: 12px; }
+.nautilus-desk__empty { padding: 20px 0; margin: 0; color: var(--desk-muted); }
 .nautilus-desk__focus-layer {
-  position: absolute;
+  position: fixed;
+  z-index: 1000;
   inset: 0;
   display: flex;
   align-items: center;
@@ -2516,15 +2478,15 @@ button.nautilus-log-timing__plan-heading:focus-visible {
 }
 .nautilus-desk__focus {
   box-sizing: border-box;
-  width: min(860px, 100%);
-  height: min(900px, 100%);
+  width: min(760px, 100%);
+  height: min(860px, 100%);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--desk-line);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--desk-surface);
-  box-shadow: 0 12px 48px rgba(22, 34, 42, .2);
+  box-shadow: 0 2px 10px rgba(22, 34, 42, .22);
   outline: none;
 }
 .nautilus-desk__focus-header {
@@ -2532,8 +2494,9 @@ button.nautilus-log-timing__plan-heading:focus-visible {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--desk-line);
+  background: var(--desk-bg);
   color: var(--desk-muted);
 }
 .nautilus-desk__focus-header > :last-child { justify-self: end; font-size: 22px; line-height: 1; }
@@ -2547,16 +2510,13 @@ button.nautilus-log-timing__plan-heading:focus-visible {
 .nautilus-desk__focus-footer { padding: 8px 12px; text-align: center; white-space: pre-wrap; color: var(--desk-muted); font-size: 11px; }
 /* Native Roam popovers are portaled outside the editor. Keep them above Desk,
    without changing their position or visibility when Desk is closed. */
-body.nautilus-desk-open > .bp3-portal,
-body.nautilus-desk-open .bp3-overlay,
-body.nautilus-desk-open .bp3-popover { z-index: 1001; }
+body.nautilus-desk-focus-open > .bp3-portal,
+body.nautilus-desk-focus-open .bp3-overlay,
+body.nautilus-desk-focus-open .bp3-popover { z-index: 1001; }
 @media (max-width: 600px) {
-  .nautilus-desk__header { padding: 12px; gap: 6px; min-height: 72px; }
-  .nautilus-desk__identity h2 { font-size: 17px; }
-  .nautilus-desk__header .nautilus-desk__button { padding: 6px; font-size: 12px; }
-  .nautilus-desk__summary, .nautilus-desk__notice { padding: 16px 16px 0; }
-  .nautilus-desk__grid { padding: 16px; gap: 12px; }
-  .nautilus-desk__card { height: 228px; }
+  .nautilus-desk__header { gap: 2px; }
+  .nautilus-desk__identity h3, .nautilus-desk__summary { font-size: 17px; }
+  .nautilus-desk__header .nautilus-desk__button { padding: 6px; }
   .nautilus-desk__focus-layer { padding: 8px; }
   .nautilus-desk__focus-body { padding: 18px 14px; }
   .nautilus-desk__focus-header { padding: 6px; gap: 2px; }

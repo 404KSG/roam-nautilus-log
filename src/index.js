@@ -833,6 +833,7 @@ async function onload({ extensionAPI }) {
     readPlan: planWatchBridge.read,
     watchPlan: planWatchBridge.subscribe,
     openDesk: (options) => deskView?.open(options),
+    closeDeskHost: (container) => deskView?.closeForHost(container),
     tidyPlan: planTidy.run,
     locatePlanTask: (taskUid, origin, sidebar = false) => (
       sidebar
