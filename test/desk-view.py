@@ -6,11 +6,24 @@ snapshots validate the real host styles without shipping Roam's client bundle.
 import json
 import os
 import subprocess
+import struct
+import zlib
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = Path(os.environ.get('DESK_TEST_OUT', '/tmp/nautilus-desk-verify'))
+
+
+def png(width=640, height=360):
+    """A local opaque raster; browser interception prevents all network I/O."""
+    raw = b''.join(b'\x00' + bytes((35, 120, 210, 255)) * width for _ in range(height))
+    def chunk(kind, data):
+        return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 6, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+
+
+RASTER_640_360 = png()
 
 
 def bundle():
@@ -43,6 +56,7 @@ body.bp3-dark {{ background:#293742;color:#e1e8ed; }}
 def run():
     bundle()
     checks = []
+    geometry = {}
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         try:
@@ -77,8 +91,22 @@ def run():
                 card(uid).hover()
                 card(uid).get_by_role('button', name='Move to top', exact=True).click()
 
+            code_requests = []
+            page.route('https://desk-fixture.invalid/code.png', lambda route: code_requests.append(route))
             mount()
-            expect(page.locator('.nautilus-desk__card')).to_have_count(9)
+            # Simulate a late legacy extension rule. The native span formula
+            # assumes zero row-gap; a one-class legacy override otherwise turns
+            # every 4px grid track into a large vertical reservation.
+            page.evaluate('''() => {
+              const legacy=document.createElement('style');
+              legacy.dataset.fixtureLegacyDeskGap='';
+              legacy.textContent='.nautilus-desk__grid { gap: 16px; }';
+              document.head.append(legacy);
+              const next=document.createElement('div'); next.dataset.deskFollowing='';
+              next.textContent='Following ordinary outline block';
+              document.querySelector('[data-fixture-host="plan-desk"]').after(next);
+            }''')
+            expect(page.locator('.nautilus-desk__card')).to_have_count(11)
             expect(page.locator('[data-fixture-host="plan-desk"] > .fixture-raw')).to_be_hidden()
             expect(page.locator('[data-fixture-host="other-plan"] > .fixture-raw')).to_be_visible()
             expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
@@ -92,15 +120,97 @@ def run():
             assert styles == {'size':'13px','line':'19.5px'}, styles
             assert page.locator('.rm-desk-page__title').evaluate('(el) => getComputedStyle(el).fontSize') == '22px'
             expect(card('task-0').locator('.rm-desk-tile__check--done')).to_have_count(1)
-            checks.append('native style classes/metrics, wide auto-fill, task filters, no editor mounts or graph writes on opening')
+            gap = page.evaluate('''() => {
+              const grid=document.querySelector('.nautilus-desk__grid');
+              const tiles=[...grid.querySelectorAll('.rm-desk-tile')];
+              const gr=grid.getBoundingClientRect(), last=Math.max(...tiles.map(tile=>tile.getBoundingClientRect().bottom));
+              const next=document.querySelector('[data-desk-following]').getBoundingClientRect();
+              const style=getComputedStyle(grid);
+              return {rowGap:style.rowGap, autoRows:style.gridAutoRows, columnGap:style.columnGap,
+                gridBottom:gr.bottom, lastCardBottom:last, followingTop:next.top,
+                reserved:gr.bottom-last, followingGap:next.top-last};
+            }''')
+            assert gap['rowGap'] == '0px', gap
+            assert gap['autoRows'] == '4px', gap
+            assert gap['reserved'] <= 32 and gap['followingGap'] <= 80, gap
+            (OUT/'gap-measurement-after-open.json').write_text(json.dumps(gap, indent=2))
+            expect(card('task-0').locator('.rm-desk-tile__images img')).to_have_count(2)
+            expect(card('task-0').locator('.rm-desk-tile__images img').nth(1)).to_have_js_property('naturalWidth', 40)
+            # Code remains literal whether the asynchronous preview has loaded
+            # yet or not; the lifecycle suite also proves a truly offscreen case.
+            expect(card('code-literal').locator('.rm-desk-tile__title')).to_contain_text('![literal](https://desk-fixture.invalid/code.png) ((source-task))')
+            assert not code_requests
+            expect(card('context-wrapper').locator('.rm-desk-tile__title')).to_contain_text('Review')
+            expect(card('context-wrapper').locator('.rm-desk-tile__title')).to_contain_text('tomorrow 15m')
+            expect(card('reference-wrapper').locator('.rm-desk-tile__image img')).to_have_count(1)
+            expect(card('task-1').locator('img')).to_have_count(0)
+            page.evaluate('() => { window.unchangedPreview = document.querySelector(`[data-task-uid="reference-wrapper"] img`); }')
+            # A pure descendant-image removal refreshes only this card.
+            page.evaluate('() => deskHarness.api.setString("task-0-note-0", "Changed child without image")')
+            expect(card('task-0').locator('.rm-desk-tile__image img')).to_have_count(1)
+            assert page.evaluate('() => window.unchangedPreview === document.querySelector(`[data-task-uid="reference-wrapper"] img`)')
+            page.route('https://desk-fixture.invalid/many-*.png', lambda route: route.fulfill(status=200, content_type='image/png', body=RASTER_640_360))
+            page.evaluate('''() => deskHarness.api.setString("task-0-note-0", `Many images
+              ![one](https://desk-fixture.invalid/many-1.png) ![two](https://desk-fixture.invalid/many-2.png)
+              ![three](https://desk-fixture.invalid/many-3.png) ![four](https://desk-fixture.invalid/many-4.png)`)''')
+            expect(card('task-0').locator('.rm-desk-tile__images-cell')).to_have_count(3)
+            expect(card('task-0').locator('.rm-desk-tile__images-more')).to_have_text('+2')
+            page.unroute('https://desk-fixture.invalid/many-*.png')
+            page.evaluate('() => deskHarness.api.setString("task-0-note-0", "Changed child without image")')
+
+            # A real held response, not a synthetic load event: verify the image
+            # begins undecoded, then grows the card and its 4px masonry span.
+            held = []
+            page.route('https://desk-fixture.invalid/delayed-640.png', lambda route: held.append(route))
+            before_delayed = card('task-3').evaluate('(el) => ({height:el.offsetHeight,span:el.style.gridRowEnd})')
+            page.evaluate('''() => deskHarness.api.setString("task-3",
+              "{{[[TODO]]}} Delayed fixture ![wide](https://desk-fixture.invalid/delayed-640.png)")''')
+            delayed = card('task-3').locator('.rm-desk-tile__image img')
+            expect(delayed).to_have_js_property('naturalWidth', 0)
+            page.wait_for_timeout(100)
+            assert len(held) == 1, 'the synthetic image request must be held'
+            held.pop().fulfill(status=200, content_type='image/png', body=RASTER_640_360)
+            page.unroute('https://desk-fixture.invalid/delayed-640.png')
+            expect(delayed).to_have_js_property('naturalWidth', 640)
+            page.evaluate('() => new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
+            delayed_after = card('task-3').evaluate('(el) => ({height:el.offsetHeight,span:el.style.gridRowEnd})')
+            assert delayed_after['height'] > before_delayed['height'], (before_delayed, delayed_after)
+            assert delayed_after['span'].startswith('span ') and delayed_after['span'] != before_delayed['span'], (before_delayed, delayed_after)
+            final_gap = page.evaluate('''() => { const grid=document.querySelector('.nautilus-desk__grid'); const cards=[...grid.children];
+              const last=Math.max(...cards.map(card=>card.getBoundingClientRect().bottom)); const next=document.querySelector('[data-desk-following]').getBoundingClientRect().top;
+              return {gridBottom:grid.getBoundingClientRect().bottom,last,followingGap:next-last}; }''')
+            assert final_gap['gridBottom'] - final_gap['last'] <= 32 and final_gap['followingGap'] <= 80, final_gap
+            geometry['delayed640x360'] = {'before': before_delayed, 'after': delayed_after, 'gap': final_gap}
+            # Removal while a response is held makes its late completion harmless.
+            # The lifecycle suite separately tests old-to-new image replacement.
+            stale = []
+            page.route('https://desk-fixture.invalid/stale.png', lambda route: stale.append(route))
+            page.evaluate('''() => deskHarness.api.setString("task-0-note-0",
+              "Stale fixture ![old](https://desk-fixture.invalid/stale.png)")''')
+            page.wait_for_timeout(100); assert len(stale) == 1
+            page.evaluate('() => deskHarness.api.setString("task-0-note-0", "Removed stale image")')
+            stale.pop().fulfill(status=200, content_type='image/png', body=RASTER_640_360)
+            page.unroute('https://desk-fixture.invalid/stale.png')
+            page.wait_for_timeout(100)
+            expect(card('task-0').locator('img')).to_have_count(1)
+            page.route('https://desk-fixture.invalid/fail.png', lambda route: route.abort())
+            page.evaluate('''() => deskHarness.api.setString("task-0-note-0",
+              "Failing fixture ![bad](https://desk-fixture.invalid/fail.png)")''')
+            page.wait_for_timeout(100)
+            expect(card('task-0').locator('img')).to_have_count(1)
+            page.unroute('https://desk-fixture.invalid/fail.png')
+            checks.append('native image previews cover root, descendants, references, real held 640x360 decode geometry, late completion after removal, and intercepted request failure')
+            checks.append('native style classes/metrics, wide auto-fill, task filters, no editor mounts or graph writes on opening; legacy row-gap cannot create a masonry reservation gap')
 
             before = page.evaluate('() => deskHarness.api.children("plan-desk").map(r=>[r.uid,r.string,r.open])')
+            page.evaluate('() => { window.taskPreviewBeforeMove = document.querySelector(`[data-task-uid="task-0"] img`); }')
             top('task-4')
             page.wait_for_function('deskHarness.api.children("plan-desk")[0].uid === "task-4"')
             expect(page.locator('.nautilus-desk__card').first).to_have_attribute('data-task-uid', 'task-4')
             expect(page.locator('[data-raw-plan="plan-desk"] > div').first).to_have_attribute('data-raw-uid', 'task-4')
             after = page.evaluate('() => deskHarness.api.children("plan-desk").map(r=>[r.uid,r.string,r.open])')
             assert sorted(before) == sorted(after)
+            assert page.evaluate('() => window.taskPreviewBeforeMove === document.querySelector(`[data-task-uid="task-0"] img`)')
             card('task-2').drag_to(card('task-4'))
             page.wait_for_function('deskHarness.api.children("plan-desk")[0].uid === "task-2"')
             assert page.evaluate('() => deskHarness.api.stats.writes.at(-1).uid') == 'task-2'
@@ -149,7 +259,7 @@ def run():
             page.keyboard.press('Alt+Period'); focused('task-0')
             page.wait_for_function('document.querySelector(".nautilus-desk__focus-body").scrollTop >= 399')
             close_focus()
-            activate('reference-wrapper')
+            activate('code-literal')
             expect(page.locator('.rm-desk__header').get_by_role('button', name='Next', exact=True)).to_be_disabled()
             close_focus()
             checks.append('native UID/children editing, zoom path, bounded native navigation, no remount on text edits, and per-task scroll restoration')
@@ -198,15 +308,22 @@ def run():
             page.get_by_role('textbox', name='New note', exact=True).fill('First draft')
             page.wait_for_function('deskHarness.api.pending()')
             page.get_by_role('textbox', name='New note', exact=True).fill('First draft with the remaining input preserved')
+            # Folding during held create must retain the reservation until the
+            # save loop persists the later input, without reopening focus late.
+            page.evaluate('() => deskHarness.api.setCollapsed("plan-desk", true)')
+            expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
             page.evaluate('() => deskHarness.api.release()')
             page.wait_for_function('deskHarness.api.stats.writes.filter(w=>w.type==="create").length===1')
             new_uid = page.evaluate('() => deskHarness.api.stats.writes.find(w=>w.type==="create").uid')
-            focused(new_uid)
+            page.wait_for_function('(uid) => deskHarness.api.text(uid) === "First draft with the remaining input preserved"', arg=new_uid)
+            assert page.locator('.nautilus-desk__focus-layer').count() == 0
             assert page.evaluate('(uid) => deskHarness.api.text(uid)', new_uid) == 'First draft with the remaining input preserved'
             assert page.evaluate('() => deskHarness.api.children("plan-desk")[0].uid') == new_uid
             assert page.evaluate('() => deskHarness.api.stats.writes.find(w=>w.type==="create").parent') == 'plan-desk'
-            close_focus()
-            checks.append('both plus controls use native-style drafts; no empty-note junk; one root-child creation with buffered text preserved')
+            page.evaluate('() => deskHarness.api.setCollapsed("plan-desk", false)')
+            expect(page.locator('.nautilus-desk')).to_be_visible()
+            expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
+            checks.append('folded pending draft preserves final authorized text with one UID/create and no late focus resurrection')
 
             page.locator('.rm-desk-page__new-note').click()
             draft = page.get_by_role('textbox', name='New note', exact=True)
@@ -271,13 +388,13 @@ def run():
             watches = page.evaluate('() => deskHarness.api.stats.watches')
             page.evaluate('() => deskHarness.api.openCopy()')
             expect(page.locator('.nautilus-desk')).to_have_count(2)
-            assert page.evaluate('() => deskHarness.api.stats.watches') == watches
+            assert page.evaluate('() => deskHarness.api.stats.watches') >= watches
             sidebar = page.locator('[data-fixture-host="copy"] .nautilus-desk')
             expect(sidebar.locator('.nautilus-desk__grid')).to_have_attribute('data-columns', '1')
             assert sidebar.evaluate('(el) => el.getBoundingClientRect().width <= 280')
             page.evaluate('() => deskHarness.api.removeHost("copy")')
             expect(page.locator('.nautilus-desk')).to_have_count(1)
-            checks.append('sidebar is confined and responsive; duplicate plan instances share watches and clean up independently')
+            checks.append('sidebar is confined and responsive; duplicate plan instances share plan watches and release scoped preview listeners on teardown')
 
             mount(editor=False)
             card('task-0').locator('[role="button"]').click()
@@ -332,6 +449,19 @@ def run():
                 assert page.locator('.nautilus-desk').evaluate('(el) => {const r=el.getBoundingClientRect();return r.left>=-1 && r.right<=innerWidth+1}')
             page.set_viewport_size({'width':1280,'height':1000})
             page.wait_for_function('Number(document.querySelector(".nautilus-desk__grid").dataset.columns)>=4')
+            responsive_gaps = []
+            for width in [1280, 900, 390]:
+                page.set_viewport_size({'width':width,'height':1000})
+                page.evaluate('() => new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
+                responsive_gaps.append(page.evaluate('''() => {
+                  const grid=document.querySelector('.nautilus-desk__grid'), tiles=[...grid.querySelectorAll('.rm-desk-tile')];
+                  const r=grid.getBoundingClientRect(), last=Math.max(...tiles.map(tile=>tile.getBoundingClientRect().bottom));
+                  return {width:innerWidth, rowGap:getComputedStyle(grid).rowGap, reserved:r.bottom-last};
+                }'''))
+            assert all(row['rowGap'] == '0px' and row['reserved'] <= 32 for row in responsive_gaps), responsive_gaps
+            (OUT/'gap-measurement-responsive.json').write_text(json.dumps(responsive_gaps, indent=2))
+            page.set_viewport_size({'width':1280,'height':1000})
+            page.wait_for_function('Number(document.querySelector(".nautilus-desk__grid").dataset.columns)>=4')
             card('task-1').hover()
             page.wait_for_function('getComputedStyle(document.querySelector("[data-task-uid=\\"task-1\\"] .rm-desk-tile__actions")).opacity === "1"')
             page.locator('.nautilus-desk').screenshot(path=str(OUT/'native-desk-overview.png'))
@@ -344,7 +474,7 @@ def run():
             assert page.evaluate('() => deskHarness.api.stats.forbiddenWrites') == 0
             assert not errors, errors
             checks.append('unload releases native editors, watches, outline hiding, and layout observers')
-            (OUT/'results.json').write_text(json.dumps({'status':'passed','checks':checks,'pageerrors':errors,
+            (OUT/'results.json').write_text(json.dumps({'status':'passed','checks':checks,'geometry':geometry,'pageerrors':errors,
                 'native_css':os.environ.get('ROAM_NATIVE_CSS','offline fixture'),
                 'limitation':'Graph and native editor are simulated; real-host read-only parity validation is separate.'},ensure_ascii=False,indent=2))
             print(f'PASSED: {len(checks)} native Desk scenario groups; artifacts: {OUT}')

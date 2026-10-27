@@ -2096,6 +2096,8 @@
                  [show-events events-state show-done-state now-time-atom page-title-val dimensions settings @compact-state copy compact-list-open-state hover-info-state block-uid timeline-state]
                  [overflow-panel capacity copy]
                  [schedule-warning-panel text-events copy]]])
+             ;; Keep the host mounted while folded so its scoped outline claim
+             ;; survives; Desk itself watches the collapsed class and hides/pause.
              [:div {:class "nautilus-log-desk-host"
                     :data-nautilus-desk-plan block-uid
                     :data-nautilus-desk-page page-title-val

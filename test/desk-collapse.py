@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Collapse regression with the production Desk/CSS and renderer-shaped DOM.
 The graph/editor are synthetic; no real Roam content is read or changed.
+A folded chart hides the complete Desk UI but retains its narrow raw-outline claim;
+its saved preference restores cards only after the chart expands again.
 """
 import importlib.util
 import json
@@ -20,13 +22,14 @@ MEASURE = '''() => {
  const widget=owner.querySelector('.nautilus-log-container');
  const desk=owner.querySelector('.nautilus-desk');
  const next=document.querySelector('[data-collapse-neighbor]');
- const r=desk.getBoundingClientRect(), n=next.getBoundingClientRect();
+ const r=desk?.getBoundingClientRect(), n=next.getBoundingClientRect();
  const prefix=owner.querySelector('.fixture-plan-title').getBoundingClientRect();
- const visible=desk.getClientRects().length>0 && getComputedStyle(desk).visibility!=='hidden';
+ const visible=Boolean(desk && desk.getClientRects().length>0 && getComputedStyle(desk).visibility!=='hidden');
  return {collapsed:widget.classList.contains('nautilus-log-collapsed'), widgetHeight:widget.getBoundingClientRect().height,
-   deskVisible:visible, deskTop:r.top, deskBottom:r.bottom, followingTop:n.top, overlap:visible && n.top<r.bottom,
+   deskVisible:visible, deskTop:r?.top ?? null, deskBottom:r?.bottom ?? null, followingTop:n.top, overlap:visible && n.top<r.bottom,
    prefixBottom:prefix.bottom, overlapsPrefix:visible && r.top<prefix.bottom,
-   deskCount:document.querySelectorAll('.nautilus-desk').length, contained:widget.contains(desk)};
+   deskCount:document.querySelectorAll('.nautilus-desk').length, deskHidden:Boolean(desk?.hidden), focusLayers:document.querySelectorAll('.nautilus-desk__focus-layer').length,
+   contained:Boolean(desk && widget.contains(desk))};
 }'''
 
 
@@ -61,7 +64,7 @@ def run():
                   next.textContent='[[Following outline block]]'; owner.after(next);
                 }''')
 
-            def assert_layout():
+            def assert_layout(expect_desk=True):
                 settle()
                 result=page.evaluate(MEASURE)
                 (OUT/'collapse-measurements.json').write_text(json.dumps(result,indent=2))
@@ -69,8 +72,12 @@ def run():
                 print(json.dumps(result))
                 assert not result['overlap'], 'Collapsed Desk content escaped its zero-height widget and overlaps the following outline block.'
                 assert not result['overlapsPrefix'], 'Collapsed Desk must remain below its own block title.'
-                assert result['deskVisible'] and result['contained'], 'Collapse hides the spiral, not the active task view.'
-                assert result['widgetHeight'] > 0
+                if expect_desk:
+                    assert not result['deskVisible'] and result['contained'] and result['deskHidden'], 'Collapse must hide the entire Desk while retaining its scoped outline claim.'
+                    assert result['deskCount'] == 1 and result['focusLayers'] == 0, 'Collapse must also remove any native-focus dialog layer.'
+                else:
+                    assert result['deskCount'] == 0 and result['focusLayers'] == 0, 'Desk-off cleanup must not leave hidden UI behind.'
+                assert result['widgetHeight'] == 0, 'Collapsed geometry must remain compact with no reserved Desk space.'
                 results.append(result)
 
             for count in [0,3]:
@@ -79,16 +86,26 @@ def run():
                 expect(page.locator('.nautilus-desk')).to_have_attribute('data-status','ready')
                 add_neighbor()
                 owner=page.locator('[data-fixture-host="plan-desk"]')
+                if not count:
+                    expect(owner.locator('.nautilus-desk__card')).to_have_count(0)
                 page.evaluate('window.originalDesk=document.querySelector(".nautilus-desk")')
                 initial=page.evaluate('() => deskHarness.api.children("plan-desk")')
                 for _ in range(3):
                     owner.get_by_role('button',name='Collapse Nautilus Log',exact=True).click()
                     expect(owner.get_by_role('button',name='Expand Nautilus Log',exact=True)).to_be_visible()
                     assert_layout()
-                    assert page.evaluate('() => originalDesk===document.querySelector(".nautilus-desk")')
                     expect(owner.locator('.fixture-raw')).to_be_hidden()
                     owner.get_by_role('button',name='Expand Nautilus Log',exact=True).click()
                     expect(owner.locator('.fixture-shell')).to_be_visible()
+                    expect(owner.locator('.nautilus-desk')).to_be_visible()
+                    assert page.evaluate('() => originalDesk===document.querySelector(".nautilus-desk")')
+                if count:
+                    owner.locator('.nautilus-desk__card').first.locator('[role="button"]').click()
+                    expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(1)
+                    page.evaluate('() => deskHarness.api.setCollapsed("plan-desk", true)')
+                    assert_layout()
+                    expect(owner.locator('.fixture-raw')).to_be_hidden()
+                    owner.get_by_role('button',name='Expand Nautilus Log',exact=True).click()
                     expect(owner.locator('.nautilus-desk')).to_be_visible()
                 assert page.evaluate('() => deskHarness.api.children("plan-desk")') == initial
                 assert page.evaluate('() => deskHarness.api.stats.writes.length') == 0
@@ -97,30 +114,37 @@ def run():
                 owner.get_by_role('button',name='Collapse Nautilus Log',exact=True).click()
                 page.evaluate('() => deskHarness.api.reloadView()')
                 assert_layout()
-                owner.get_by_role('button',name='Hide Desk',exact=True).click()
-                expect(owner.locator('.fixture-raw')).to_be_visible()
-                expect(owner.get_by_role('button',name='Expand Nautilus Log',exact=True)).to_be_focused()
-                assert owner.locator('.nautilus-log-container').evaluate('(el) => el.getBoundingClientRect().height') == 0
-                assert owner.locator('.nautilus-log-container').get_attribute('data-nautilus-desk-active') is None
+                expect(owner.locator('.fixture-raw')).to_be_hidden()
                 owner.get_by_role('button',name='Expand Nautilus Log',exact=True).click()
-                page.get_by_role('button',name='Open Desk',exact=True).click()
+                expect(owner.locator('.nautilus-desk')).to_be_visible()
+                page.get_by_role('button',name='Hide Desk',exact=True).click()
+                expect(owner.locator('.fixture-raw')).to_be_visible()
+                owner.get_by_role('button',name='Collapse Nautilus Log',exact=True).click()
+                assert_layout(expect_desk=False)
+                expect(owner.locator('.fixture-raw')).to_be_visible()
+                owner.get_by_role('button',name='Expand Nautilus Log',exact=True).click()
+                owner.get_by_role('button',name='Open Desk',exact=True).click()
                 owner.get_by_role('button',name='Collapse Nautilus Log',exact=True).click()
                 assert_layout()
 
-            # A fresh, already-collapsed renderer must restore Desk without
-            # overflowing. Its sidebar replica has an independent collapse state.
+            # A fresh, already-collapsed renderer keeps the preference dormant
+            # until expand. Its sidebar replica has an independent collapse state.
             page.evaluate('() => deskHarness.mount({count:3,collapsed:true,preservePreferences:true})')
             add_neighbor()
             assert_layout()
+            expect(page.locator('[data-fixture-host="plan-desk"] .fixture-raw')).to_be_hidden()
+            page.locator('[data-fixture-host="plan-desk"]').get_by_role('button',name='Expand Nautilus Log',exact=True).click()
+            expect(page.locator('[data-fixture-host="plan-desk"] .nautilus-desk')).to_be_visible()
             page.evaluate('() => deskHarness.api.openCopy()')
             sidebar=page.locator('[data-fixture-host="copy"]')
             expect(sidebar.locator('.nautilus-desk')).to_be_visible()
-            assert sidebar.locator('.nautilus-log-container').evaluate('(el) => el.getBoundingClientRect().height') > 0
-            sidebar.get_by_role('button',name='Expand Nautilus Log',exact=True).click()
-            assert page.locator('[data-fixture-host="plan-desk"] .nautilus-log-container').evaluate('(el) => el.classList.contains("nautilus-log-collapsed")')
             sidebar.get_by_role('button',name='Collapse Nautilus Log',exact=True).click()
+            assert sidebar.locator('.nautilus-desk').count() == 1
+            expect(sidebar.locator('.nautilus-desk')).to_be_hidden()
+            assert sidebar.locator('.nautilus-log-container').evaluate('(el) => el.getBoundingClientRect().height') == 0
+            assert not page.locator('[data-fixture-host="plan-desk"] .nautilus-log-container').evaluate('(el) => el.classList.contains("nautilus-log-collapsed")')
+            sidebar.get_by_role('button',name='Expand Nautilus Log',exact=True).click()
             expect(sidebar.locator('.nautilus-desk')).to_be_visible()
-            assert sidebar.locator('.nautilus-log-container').evaluate('(el) => el.getBoundingClientRect().height') > 0
             page.evaluate('() => deskHarness.destroy()')
             expect(page.locator('[data-nautilus-desk-active]')).to_have_count(0)
             assert not errors,errors

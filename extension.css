@@ -969,12 +969,6 @@
   overflow: visible;
 }
 
-/* Folding the spiral must not collapse the space occupied by an active Desk.
-   The DOM flag survives React replacing the renderer's collapsed class string. */
-.nautilus-log-collapsed[data-nautilus-desk-active="true"] {
-  height: auto;
-}
-
 .nautilus-log-collapsed .nautilus-log-controls-top {
   position: absolute;
   top: -26px;
@@ -2385,6 +2379,10 @@ button.nautilus-log-timing__plan-heading:focus-visible {
    scoped outline hiding, narrow-container safety, and write state belong here. */
 .nautilus-log-desk-host { width: 100%; min-width: 0; }
 .nautilus-desk { position: relative; width: 100%; margin: 12px 0; }
+/* Native row spans use the 4px tracks directly. A late legacy `gap` rule
+   changes row-gap as well as the native 12px column gap and inflates every
+   span into blank space, so keep the masonry axis explicit. */
+.nautilus-desk .nautilus-desk__grid { row-gap: 0; }
 .nautilus-desk .rm-desk-page__toolbar { flex-wrap: wrap; }
 .nautilus-desk .rm-desk-page__tools { min-width: 0; max-width: 100%; flex-wrap: wrap; }
 .nautilus-desk .rm-desk-page__tools .bp3-input-group { max-width: 100%; }

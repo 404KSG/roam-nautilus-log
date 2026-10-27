@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { projectDeskTasks, nativeDeskText, readDeskPreview, reconcileDeskSelection, stepDeskSelection, deskShortcut } = require('../src/desk-core');
+const { projectDeskTasks, nativeDeskText, deskImages, readDeskPreview, reconcileDeskSelection, stepDeskSelection, deskShortcut } = require('../src/desk-core');
 
 const child = (uid, string, order, refs = []) => ({
   'block/uid': uid, 'block/string': string, 'block/order': order, 'block/refs': refs,
@@ -73,6 +73,39 @@ test('native preview keeps completed children, follows open rows to depth two, a
   assert.equal(reads.includes('nested'),false); assert.equal(reads.includes('note-1'),false);
   assert.match(result.searchText,/Prompt 19/, 'search can match direct children beyond the preview budget');
   assert.deepEqual(nativeDeskText('<img onerror=alert(1)>'),{status:null,text:'<img onerror=alert(1)>'});
+});
+
+test('preview images require Markdown, preserve code text, and resolve root references before children', () => {
+  const png = 'data:image/png;base64,AAAA';
+  const preview = readDeskPreview('root', (uid) => uid === 'root'
+    ? [{ uid: 'child', string: `Child ![child](${png})`, order: 0, open: true }] : [], 11,
+  (uid) => uid === 'source' ? '![referenced](https://example.test/referenced.png)' : '',
+  '((source))');
+  assert.deepEqual(preview.images.map(({ src }) => src), ['https://example.test/referenced.png', png]);
+  assert.equal(preview.root.text, 'referenced');
+  const code = readDeskPreview('root', () => [], 11, () => '![expanded](https://example.test/nope.png)',
+    '`keep this code text ((source)) ![literal](https://example.test/nope.png)`');
+  assert.equal(code.root.text, '`keep this code text ((source)) ![literal](https://example.test/nope.png)`');
+  assert.deepEqual(code.images, []);
+  assert.deepEqual(deskImages('``![not](https://example.test/a.png)``\n```\n![also-not](https://example.test/b.png)\n'), []);
+  assert.deepEqual(deskImages('ordinary https://example.invalid/linked-not-embedded.png ![ok](blob:https://host/id)'), [{ src: 'blob:https://host/id', alt: 'ok' }]);
+  assert.deepEqual(deskImages('![bad](javascript:alert(1)) ![html](data:text/html;base64,AAAA) ![ok](blob:https://host/id)'), [{ src: 'blob:https://host/id', alt: 'ok' }]);
+});
+
+test('preview fallback metadata includes prose references only and distinguishes root/descendant fields', () => {
+  const reads = [];
+  const readString = (uid) => { reads.push(uid); return 'Visible source'; };
+  const code = readDeskPreview('root', () => [], 11, readString, '`((hidden-source))`');
+  assert.deepEqual(code.referenceUids, []);
+  assert.deepEqual(reads, []);
+  const model = readDeskPreview('root', (uid) => uid === 'root'
+    ? [{ uid: 'child', string: 'Child', order: 0, open: true }] : [], 11,
+  readString, '`((hidden-source))` ((visible-source))');
+  assert.deepEqual(model.referenceUids, ['visible-source']);
+  assert.deepEqual(reads, ['visible-source']);
+  assert.equal(model.root.text, '`((hidden-source))` Visible source');
+  assert.deepEqual(model.watchTargets.find(({ uid }) => uid === 'root').fields, ['string', 'open', 'children']);
+  assert.deepEqual(model.watchTargets.find(({ uid }) => uid === 'child').fields, ['string', 'order', 'open', 'children']);
 });
 
 test('selection is UID-based: keep edited/reordered card, then successor, predecessor, or overview', () => {

@@ -75,10 +75,11 @@ Past gaps are factual schedule data, not a judgment that time was wasted.
   preserving the exact relative order of active work. Tidy moves direct-child
   wrappers by UID, never changes task text, times, references, or descendants,
   and offers one Undo unless the Plan is edited again first.
-- **Collapse:** hide this chart instance while keeping its plan blocks visible.
-  When Desk is active, its cards keep their layout space without overlapping the
-  following outline. The expand control restores the spiral. Closing Desk restores
-  the original compact collapsed-chart layout.
+- **Collapse:** folds the entire rendered Nautilus UI, including any Desk cards,
+  toolbar, and focus dialog. The compact state leaves only the existing expand
+  control. The original plan outline stays hidden while Desk is selected, and the
+  saved Desk preference is unchanged. Expand restores the spiral and, when Desk
+  was selected, its cards.
 
 Hover or keyboard-focus a task/event slice to see its exact range and duration. Click
 a flexible task slice or its compact Schedule row to scroll to that block without
@@ -126,14 +127,20 @@ there is no fixed two-column layout or three-column cap.
   reduced-motion preferences. The ordinary page and IME input are not intercepted
   by global shortcuts.
 - **Remember the view.** Desk mode is saved by graph and plan UID. Returning to a
-  page, refreshing, or reloading the extension restores the view without opening
-  an editor or creating content. Explicitly hiding Desk saves the off state. The
-  preference is a localStorage flag, not task text, and does not sync across devices.
-  A manual open that cannot save its preference reports the limitation.
+  page, refreshing, reloading the extension, or expanding an already-folded chart
+  restores the view without opening an editor or creating content. Folding does not
+  change the preference; explicitly hiding Desk saves the off state. The preference
+  is a localStorage flag, not task text, and does not sync across devices. A manual
+  open that cannot save its preference reports the limitation.
 
 Previews follow native Desk's page budget: up to eleven child rows, at most two
-levels, respecting collapsed rows. Search Desk covers titles and direct child
-content. Only the focused card mounts a full editor. Plan membership shares the
+levels, respecting collapsed rows. Markdown images outside inline/fenced code in
+the card root, preview subtree, and resolved references use Roam's native `rm-desk-tile__image` /
+`__images` layouts (one bounded image or up to three cells). Only `http`, `https`,
+`blob`, and base64 raster-image URLs are inserted as image elements; arbitrary graph
+HTML and unsafe schemes are not rendered. Encrypted or proprietary attachment
+rendering is not specially adapted beyond URLs that the host image element resolves.
+Search Desk covers titles and direct child content. Only the focused card mounts a full editor. Plan membership shares the
 existing Pull Watch; text updates do not remount the editor. Completing or removing
 an active task advances focus. Browsing does not control CLOCK or alter Roam's
 built-in starred/Desk collection.
@@ -149,11 +156,18 @@ original outline.
 ### Validation boundary
 
 `PYTHONDONTWRITEBYTECODE=1 npm run test:desk` covers production adapters, projection,
-layout, restoration, and editor lifecycle. Artifacts are in
-`/tmp/nautilus-desk-verify`. Automated graph/editor fixtures do not write to a live
-graph. Set `ROAM_NATIVE_CSS` and `ROAM_BLUEPRINT_CSS` to current host stylesheet
-snapshots to rerun the tests against actual Roam CSS. `ROAM_ICONS_CSS` and
-`ROAM_FONT_CSS` can supply native icon/font styles with locally resolved assets.
+layout, restoration, editor lifecycle, and preview races. The preview lifecycle
+suite holds real raster responses across replacement, folding, and teardown. It
+also checks exact watch cleanup, individual descendant field changes, deferred
+code previews, and draft recovery without writing to a live graph.
+
+Artifacts use `/tmp/nautilus-desk-verify`, `/tmp/nautilus-desk-collapse`, and
+`/tmp/nautilus-desk-preview-lifecycle`. Override them with `DESK_TEST_OUT`,
+`DESK_COLLAPSE_TEST_OUT`, and `DESK_PREVIEW_TEST_OUT` for separate runs. Set
+`ROAM_NATIVE_CSS` and `ROAM_BLUEPRINT_CSS` to host stylesheet snapshots to test
+against actual Roam CSS. `ROAM_ICONS_CSS` and `ROAM_FONT_CSS` can supply native
+icon/font styles with locally resolved assets. These fixtures do not establish
+fresh live-host Pull Watch behavior.
 
 On 2026-10-26, a read-only check in real Roam verified the native DOM and computed
 styles, five-column embedded layout, native editor mounting, outline hiding and

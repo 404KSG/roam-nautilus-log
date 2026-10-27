@@ -1,6 +1,6 @@
 import { graphName } from './graph-context';
 import { projectDeskTasks, reconcileDeskSelection, stepDeskSelection, deskShortcut } from './desk-core';
-import { nativeElements, nativeText, readNativePreview } from './desk-native';
+import { nativeElements, nativeText, nativePreviewText, readNativePreview } from './desk-native';
 import { createDeskMasonry } from './desk-masonry';
 import { createDeskWidth } from './desk-width';
 import { createDeskNavigation } from './desk-navigation';
@@ -21,6 +21,48 @@ export function createDeskView({
   let focusOwner = null;
   let destroyed = false;
   let nativeLane = Promise.resolve();
+  // Preview rows are intentionally watched separately from the Plan projection:
+  // the projection observes direct task strings/orders only, while a loaded card
+  // needs child image/text changes without invalidating every other card.
+  const previewWatchers = new Map();
+  const previewLookup = (uid) => `[:block/uid "${String(uid || '').replace(/["\\]/g, '')}"]`;
+  const previewPattern = (fields) => `[${fields.map((field) => `:block/${field}`).join(' ')}]`;
+  const subscribePreviewWatch = (target, listener) => {
+    const api = host?.roamAlphaAPI?.data;
+    const uid = target?.uid, pattern = previewPattern(target?.fields || []);
+    if (!uid || !target?.fields?.length || typeof listener !== 'function' || typeof api?.addPullWatch !== 'function') return () => {};
+    const key = `${pattern}\u0000${uid}`;
+    let entry = previewWatchers.get(key);
+    if (!entry) {
+      entry = { uid, pattern, api, listeners: new Set(), callback: null, registered: null, removing: null };
+      entry.callback = () => { for (const callback of [...entry.listeners]) callback(); };
+      previewWatchers.set(key, entry);
+      try {
+        // Removal must wait for a delayed registration. This mirrors the Plan
+        // bridge lifetime contract and prevents post-fold leaked listeners.
+        entry.registered = Promise.resolve(api.addPullWatch(pattern, previewLookup(uid), entry.callback)).catch((error) => {
+          if (previewWatchers.get(key) === entry) previewWatchers.delete(key);
+          console.debug('[Nautilus Log] Desk preview watch unavailable', error);
+        });
+      } catch (error) {
+        previewWatchers.delete(key);
+        entry.registered = Promise.resolve();
+        console.debug('[Nautilus Log] Desk preview watch unavailable', error);
+      }
+    }
+    entry.listeners.add(listener);
+    return () => {
+      entry.listeners.delete(listener);
+      if (entry.listeners.size || entry.removing) return;
+      if (previewWatchers.get(key) === entry) previewWatchers.delete(key);
+      entry.removing = Promise.resolve(entry.registered).then(() => {
+        // Registration has no meaningful return value (including host nil/null).
+        // Even a rejected/ambiguous add may have installed this exact callback.
+        if (typeof entry.api.removePullWatch !== 'function') return;
+        return entry.api.removePullWatch(entry.pattern, previewLookup(entry.uid), entry.callback);
+      }).catch(() => {});
+    };
+  };
   const enqueueNative = (work) => {
     nativeLane = nativeLane.then(work, work).catch((error) => console.error('[Nautilus Log] Desk native editor cleanup failed', error));
     return nativeLane;
@@ -65,6 +107,7 @@ export function createDeskView({
     const cards = new Map();
     const previews = new Map();
     const previewQueue = new Set();
+    const previewWatchStops = new Map();
     const scrollPositions = new Map();
     const outlineVisibility = createDeskOutlineVisibility(container, host);
     let tasks = [];
@@ -79,13 +122,16 @@ export function createDeskView({
     let stopWatch = null;
     let previewFrame = null;
     let previewEpoch = 0;
+    const previewVersions = new Map();
     let composing = false;
     let deferredSnapshot = null;
     let compositionFrame = null;
     let selectionFrame = null;
     let editingHoldUid = null;
     let observer = null;
+    let foldObserver = null;
     let widthBinding = null;
+    let folded = false;
     let search = '';
 
     const root = el('section', 'rm-desk-page nautilus-desk');
@@ -287,6 +333,42 @@ export function createDeskView({
       updateControls();
       schedulePreviews();
     }
+    function setFolded(next) {
+      if (closed || folded === next) return;
+      folded = next;
+      if (folded) {
+        if (mode === 'draft') {
+          // Keep a nonempty or in-flight reservation alive. Input can change
+          // while create is awaiting confirmation; releasing it here makes the
+          // guarded save loop lose its only UID.
+          captureDraft();
+          if (draft && !draft.handedOff && !draft.saving && !draft.text.trim()) {
+            actions?.releaseDraft(draft.uid); draft.handedOff = true;
+          }
+        }
+        mode = 'overview';
+        selectedUid = null;
+        composing = false;
+        deferredSnapshot = null;
+        drag.cancel();
+        menu.hidden = true;
+        dropEditor();
+        layer.remove();
+        if (focusOwner === session) focusOwner = null;
+        if (previewFrame !== null) { host.cancelAnimationFrame(previewFrame); previewFrame = null; }
+        clearPreviewWatches();
+        resetPreviews();
+        root.inert = true;
+        root.hidden = true;
+        root.setAttribute('aria-hidden', 'true');
+        return;
+      }
+      root.hidden = false;
+      root.inert = false;
+      root.removeAttribute('aria-hidden');
+      renderCards();
+      host.requestAnimationFrame(() => { if (!closed && !folded) masonry.layoutNow(); });
+    }
     async function focusNativeInput(record, caret) {
       const candidates = [...record.el.querySelectorAll('.roam-block[id],textarea')];
       const target = candidates.find((node) => node.dataset.blockUid === record.uid || node.id?.endsWith(`-${record.uid}`));
@@ -355,15 +437,18 @@ export function createDeskView({
     function showDraft() {
       if (!checkScope() || busy || status !== 'ready' || !actions) return;
       if (mode === 'draft') { draftInput.focus(); return; }
-      let reserved;
-      try { reserved = actions.beginDraft(planUid); }
-      catch (error) { noticeError(error); return; }
+      let reserved = draft && !draft.handedOff ? draft : null;
+      if (!reserved) {
+        try { reserved = actions.beginDraft(planUid); }
+        catch (error) { noticeError(error); return; }
+      }
       returnUid = selectedUid || returnUid;
       dropEditor();
       mode = 'draft';
       selectedUid = null;
-      draft = { ...reserved, text: '', saved: null, caret: 0, saving: null, handedOff: false };
-      draftInput.value = '';
+      draft = reserved.saving ? reserved : { ...reserved, text: reserved.text || '', saved: reserved.saved ?? null,
+        caret: reserved.caret || 0, saving: null, handedOff: false };
+      draftInput.value = draft.text;
       draftInput.hidden = false;
       editor.hidden = true;
       editorStatus.hidden = true;
@@ -379,22 +464,22 @@ export function createDeskView({
     }
     function saveDraft() {
       const current = draft;
-      if (!current || composing || current.handedOff || current.saving || (!current.text.trim() && current.saved === null)) return current?.saving;
+      if (!current || composing || current.uncommitted || current.handedOff || current.saving || (!current.text.trim() && current.saved === null)) return current?.saving;
       current.saving = (async () => {
         try {
           while (current.text !== current.saved) {
-            if (composing) return;
+            if (composing || current.uncommitted) return;
             const text = current.text;
             await actions.saveDraft({ planUid, uid: current.uid, string: text });
             current.saved = text;
           }
           if (inScope()) refresh();
-          if (inScope() && mode === 'draft' && draft === current && current.text.trim() && !composing) {
+          if (inScope() && mode === 'draft' && draft === current && current.text.trim() && !composing && !current.uncommitted) {
             current.handedOff = true;
             if (tasks.some((task) => task.uid === current.uid)) showTask(current.uid, true, current.caret);
             else { showOverview(false); notice('Saved under this Nautilus plan. Events and completed blocks are not shown as cards.'); }
             actions.releaseDraft(current.uid);
-          } else if (!composing && current.text === current.saved && (closed || mode !== 'draft' || draft !== current)) {
+          } else if (!composing && !current.uncommitted && current.text === current.saved && (closed || mode !== 'draft' || draft !== current)) {
             current.handedOff = true;
             actions.releaseDraft(current.uid);
           }
@@ -404,11 +489,20 @@ export function createDeskView({
             editorMessage.textContent = error?.message || 'Could not save the new note.';
             retryEditor.hidden = false;
           } else noticeError(error);
-        } finally { current.saving = null; }
+        } finally {
+          current.saving = null;
+          if (closed && current.uncommitted && !current.handedOff) {
+            actions.releaseDraft(current.uid); current.handedOff = true;
+          }
+        }
       })();
       return current.saving;
     }
-    draftInput.addEventListener('input', (event) => { captureDraft(); if (!event.isComposing && !composing) void saveDraft(); });
+    draftInput.addEventListener('input', (event) => {
+      captureDraft();
+      if (mode === 'draft' && draft) draft.uncommitted = Boolean(event.isComposing || composing);
+      if (!event.isComposing && !composing) void saveDraft();
+    });
     function step(direction) {
       if (busy || composing) return;
       if (mode === 'draft') { if (direction > 0 && tasks[0]) showTask(tasks[0].uid, false, null, direction); return; }
@@ -432,10 +526,10 @@ export function createDeskView({
       }
     }
     function schedulePreviews() {
-      if (closed || mode !== 'overview' || previewFrame !== null || !previewQueue.size) return;
+      if (closed || folded || mode !== 'overview' || previewFrame !== null || !previewQueue.size) return;
       previewFrame = host.requestAnimationFrame(() => {
         previewFrame = null;
-        if (!checkScope() || mode !== 'overview') return;
+        if (!checkScope() || folded || mode !== 'overview') return;
         const uid = previewQueue.values().next().value;
         previewQueue.delete(uid);
         loadPreview(uid);
@@ -446,17 +540,34 @@ export function createDeskView({
       const card = cards.get(uid);
       if (!card || previews.has(uid) || status !== 'ready' || !checkScope()) return;
       const epoch = previewEpoch;
+      const version = previewVersions.get(uid) || 0;
       try {
-        let model = readNativePreview(uid, readChildren, 11, readString);
-        const sourceUid = tasks.find((task) => task.uid === uid)?.sourceUid;
-        if (!model.rows.length && sourceUid && sourceUid !== uid) model = readNativePreview(sourceUid, readChildren, 11, readString);
-        if (!checkScope() || epoch !== previewEpoch || cards.get(uid) !== card) return;
+        const task = tasks.find((entry) => entry.uid === uid);
+        let model = readNativePreview(uid, readChildren, 11, readString, task?.localString);
+        // The Plan projection also recognizes references inside code. Preview
+        // fallback must use only references actually resolved from prose.
+        const sourceUid = model.referenceUids?.[0];
+        if (!model.rows.length && sourceUid && sourceUid !== uid) {
+          const source = readString?.(sourceUid) || '';
+          const sourceModel = readNativePreview(sourceUid, readChildren, 11, readString, source);
+          const localImages = model.images || [];
+          const sourceImages = sourceModel.images || [];
+          model = { ...sourceModel, root: model.root,
+            images: [...localImages, ...sourceImages.filter((image) => !localImages.some((local) => local.src === image.src))],
+            watchTargets: [...(model.watchTargets || []), ...(sourceModel.watchTargets || [])] };
+        }
+        if (!checkScope() || folded || epoch !== previewEpoch || version !== (previewVersions.get(uid) || 0) || cards.get(uid) !== card) return;
         previews.set(uid, model);
-        preview(card.lines, model);
+        syncPreviewWatches(uid, model);
+        const previewLabel = model.root?.text || (model.images?.length ? 'Image note' : '');
+        if (previewLabel) { card.headingText.textContent = previewLabel; card.open.setAttribute('aria-label', previewLabel); }
+        preview(card.images, card.lines, model, () => {
+          if (!closed && !folded && previewEpoch === epoch && version === (previewVersions.get(uid) || 0) && cards.get(uid) === card && card.tile.isConnected) masonry.layoutNow();
+        });
         if (search) renderCards();
         else masonry.layoutNow();
       } catch (_error) {
-        if (inScope() && epoch === previewEpoch && cards.get(uid) === card) {
+        if (inScope() && !folded && epoch === previewEpoch && version === (previewVersions.get(uid) || 0) && cards.get(uid) === card) {
           previews.set(uid, { rows: [], more: false, searchText: '', error: true });
           card.lines.textContent = 'Preview unavailable.';
           if (search) renderCards(); else masonry.layoutNow();
@@ -474,6 +585,7 @@ export function createDeskView({
         cards.delete(uid);
         previews.delete(uid);
         scrollPositions.delete(uid);
+        clearPreviewWatches(uid);
       }
       for (const task of tasks) {
         let card = cards.get(task.uid);
@@ -483,11 +595,12 @@ export function createDeskView({
           const open = el('div', 'rm-desk-tile__preview');
           open.setAttribute('role', 'button');
           open.tabIndex = 0;
+          const images = el('div');
           const heading = el('div', 'rm-desk-tile__title');
           const headingText = el('span');
           const lines = el('div');
           heading.append(headingText);
-          open.append(heading, lines);
+          open.append(images, heading, lines);
           const footer = el('div', 'rm-desk-tile__footer');
           const source = el('span', 'rm-desk-tile__source', pageTitle);
           const tools = el('div', 'rm-desk-tile__actions');
@@ -504,13 +617,15 @@ export function createDeskView({
           open.addEventListener('keydown', (event) => {
             if (!event.defaultPrevented && !event.isComposing && ['Enter', ' '].includes(event.key)) { event.preventDefault(); activate(event); }
           });
-          card = { tile, open, heading, headingText, lines, top };
+          card = { tile, open, images, heading, headingText, lines, top };
           cards.set(task.uid, card);
         }
         const text = nativeText(task.localString);
-        // Keep original explicit duration text; resolving a block reference uses
-        // the existing task projection rather than rendering a second full editor.
-        const label = task.sourceUid ? task.title : text.text || task.title;
+        const safeText = nativePreviewText(task.localString);
+        const cached = previews.get(task.uid);
+        // A loaded root is authoritative for reference/image-only labels; do
+        // not overwrite it on unrelated Plan snapshots.
+        const label = cached?.root?.text || (cached?.images?.length ? 'Image note' : safeText.text || task.title);
         card.headingText.textContent = label;
         card.heading.querySelector('.rm-desk-tile__check')?.remove();
         if (text.status || task.statusOrigin === 'source') card.heading.prepend(check(task.status));
@@ -547,6 +662,45 @@ export function createDeskView({
       updateControls();
       schedulePreviews();
     }
+    function clearPreviewWatches(uid = null) {
+      const entries = uid ? [[uid, previewWatchStops.get(uid) || []]] : [...previewWatchStops.entries()];
+      for (const [key, stops] of entries) {
+        for (const stop of stops) stop();
+        previewWatchStops.delete(key);
+      }
+    }
+    function syncPreviewWatches(uid, model) {
+      clearPreviewWatches(uid);
+      const targets = [...new Map((model.watchTargets || []).filter((target) => target?.uid)
+        .map((target) => [`${target.uid}\u0000${(target.fields || []).join(',')}`, target])).values()];
+      previewWatchStops.set(uid, targets.map((target) => subscribePreviewWatch(target, () => invalidatePreview(uid))));
+    }
+    function invalidatePreview(uid) {
+      clearPreviewWatches(uid);
+      previewVersions.set(uid, (previewVersions.get(uid) || 0) + 1);
+      previews.delete(uid);
+      previewQueue.delete(uid);
+      const card = cards.get(uid);
+      if (!card) return;
+      card.images.replaceChildren(); card.lines.replaceChildren();
+      if (search || !observer) previewQueue.add(uid); else observer.observe(card.tile);
+      schedulePreviews();
+    }
+    function previewKey(task) {
+      return `${task.localString || ''}\u0000${task.sourceUid || ''}\u0000${task.title || ''}`;
+    }
+    function reconcilePreviews(previousTasks, nextTasks) {
+      const previous = new Map(previousTasks.map((task) => [task.uid, previewKey(task)]));
+      const next = new Map(nextTasks.map((task) => [task.uid, previewKey(task)]));
+      for (const uid of previous.keys()) if (!next.has(uid)) previewVersions.delete(uid);
+      for (const [uid, key] of next) if (previous.get(uid) !== undefined && previous.get(uid) !== key) invalidatePreview(uid);
+    }
+    function resetPreviews() {
+      previewEpoch += 1;
+      previews.clear();
+      previewQueue.clear();
+      for (const card of cards.values()) { card.images.replaceChildren(); card.lines.replaceChildren(); }
+    }
     function acceptSnapshot(snapshot) {
       if (!checkScope()) return;
       if (composing && !snapshot?.unavailable && !snapshot?.missing) { deferredSnapshot = snapshot; return; }
@@ -577,11 +731,12 @@ export function createDeskView({
       }
       const nextUid = reconcileDeskSelection(previousTasks, tasks, selectedUid);
       if (mode === 'task' && nextUid !== selectedUid) { if (nextUid && status === 'ready') showTask(nextUid); else showOverview(false); }
+      if (status === 'ready') reconcilePreviews(previousTasks, tasks);
       renderCards();
     }
     function refresh(clear = false) {
       if (!checkScope()) return;
-      if (clear) { previewEpoch += 1; previews.clear(); notice(''); }
+      if (clear) { resetPreviews(); notice(''); }
       try { acceptSnapshot(readPlan(planUid)); }
       catch (_error) { acceptSnapshot({ unavailable: true }); }
     }
@@ -611,9 +766,15 @@ export function createDeskView({
         event.preventDefault(); (event.shiftKey ? last : first).focus();
       }
     };
-    const onCompositionStart = () => { composing = true; };
-    const onCompositionEnd = () => {
+    const onCompositionStart = (event) => {
+      composing = true;
+      if (mode === 'draft' && event.target === draftInput && draft) draft.uncommitted = true;
+    };
+    const onCompositionEnd = (event) => {
       composing = false;
+      // Folding resets the UI-level IME flag, not the parked draft's commit
+      // state. A different native editor's composition must not commit it.
+      if (mode === 'draft' && event.target === draftInput && draft) draft.uncommitted = false;
       captureDraft(); void saveDraft();
       if (compositionFrame !== null) host.cancelAnimationFrame(compositionFrame);
       compositionFrame = host.requestAnimationFrame(() => {
@@ -627,20 +788,23 @@ export function createDeskView({
       selectionFrame = host.requestAnimationFrame(() => { selectionFrame = null; if (!closed) refresh(); });
     };
     const onNavigation = () => { if (checkScope() && mode !== 'overview') showOverview(false); };
-    const onVisible = () => { if (document.visibilityState !== 'hidden') refresh(); };
+    const onVisible = () => { if (!folded && document.visibilityState !== 'hidden') refresh(); };
     function close(restoreFocus = true) {
       if (closed) return;
-      if (mode === 'draft') {
-        captureDraft();
-        if (draft && draft.saved === null && !draft.saving && !draft.text.trim()) { actions.releaseDraft(draft.uid); draft.handedOff = true; }
-        else void saveDraft();
+      if (mode === 'draft') captureDraft();
+      if (draft && !draft.handedOff) {
+        if (!draft.saving && (draft.uncommitted || draft.saved === null && !draft.text.trim())) {
+          actions.releaseDraft(draft.uid); draft.handedOff = true;
+        } else if (!composing) void saveDraft();
       }
       closed = true;
       mode = 'overview';
       selectedUid = null;
       dropEditor();
       stopWatch?.();
+      clearPreviewWatches();
       observer?.disconnect();
+      foldObserver?.disconnect();
       masonry.destroy(); drag.destroy(); affordances.destroy(); outlineVisibility.destroy(); widthBinding?.destroy();
       if (previewFrame !== null) host.cancelAnimationFrame(previewFrame);
       if (compositionFrame !== null) host.cancelAnimationFrame(compositionFrame);
@@ -650,7 +814,6 @@ export function createDeskView({
       host.removeEventListener('hashchange', onNavigation);
       host.removeEventListener('focus', onVisible);
       root.remove(); layer.remove();
-      if (!chart?.querySelector(':scope > .nautilus-log-desk-host > .nautilus-desk')) chart?.removeAttribute('data-nautilus-desk-active');
       if (focusOwner === session) focusOwner = null;
       if (binding.session === session) binding.session = null;
       origin?.setAttribute?.('aria-expanded', 'false');
@@ -670,9 +833,6 @@ export function createDeskView({
         layer.style[property] = typography[property];
       }
       if (origin?.closest?.('.bp3-dark,.rm-dark-theme,.dark') || document.querySelector('.roam-app.rm-dark-theme')) layer.classList.add('bp3-dark');
-      // The legacy collapsed chart has zero height. An open Desk remains real
-      // content even when the spiral is folded, so its renderer must keep space.
-      chart?.setAttribute('data-nautilus-desk-active', 'true');
       container.append(root);
       widthBinding = createDeskWidth({ root, container, host, onResize: masonry.layoutNow });
       origin?.setAttribute?.('aria-expanded', 'true');
@@ -685,6 +845,11 @@ export function createDeskView({
       layer.addEventListener('compositionend', onCompositionEnd);
       layer.addEventListener('focusout', onEditorBlur);
       layer.addEventListener('pointerdown', (event) => { if (!menu.contains(event.target) && !more.contains(event.target)) menu.hidden = true; });
+      if (chart && typeof host.MutationObserver === 'function') {
+        foldObserver = new host.MutationObserver(() => setFolded(chart.classList.contains('nautilus-log-collapsed')));
+        foldObserver.observe(chart, { attributes: true, attributeFilter: ['class'] });
+      }
+      setFolded(Boolean(chart?.classList.contains('nautilus-log-collapsed')));
       if (host.IntersectionObserver) observer = new host.IntersectionObserver((entries) => {
         for (const entry of entries) if (entry.isIntersecting) { observer.unobserve(entry.target); previewQueue.add(entry.target.dataset.taskUid); }
         schedulePreviews();

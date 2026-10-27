@@ -1,10 +1,11 @@
-import { nativeDeskText, readDeskPreview } from './desk-core';
+import { nativeDeskText, nativeDeskPreviewText, readDeskPreview } from './desk-core';
 
 // Native contract inspected in Roam's current route-app.js and site.css:
 // rm-desk-page, rm-desk-tile, Blueprint buttons, 240px auto-fill columns,
 // 4px masonry rows, and eleven preview rows at depth <= 2. No native private
 // functions are called and no Roam client bundle or font definitions are shipped.
 export const nativeText = nativeDeskText;
+export const nativePreviewText = nativeDeskPreviewText;
 export const readNativePreview = readDeskPreview;
 
 export function nativeElements(document) {
@@ -42,8 +43,39 @@ export function nativeElements(document) {
     return node;
   };
   const check = (status) => el('span', `rm-desk-tile__check${status === 'DONE' ? ' rm-desk-tile__check--done' : ''}`);
-  const preview = (parent, model) => {
+  const preview = (imageParent, parent, model, onImageChange) => {
+    imageParent.replaceChildren();
     parent.replaceChildren();
+    const images = model.images || [];
+    const updateLayout = () => onImageChange?.();
+    const imageNode = (image, holder) => {
+      const node = document.createElement('img');
+      node.alt = image.alt;
+      node.loading = 'lazy';
+      node.addEventListener('load', updateLayout, { once: true });
+      node.addEventListener('error', () => {
+        const cell = node.closest('.rm-desk-tile__images-cell');
+        (cell || holder).remove();
+        if (!holder.querySelector('img')) holder.remove();
+        updateLayout();
+      }, { once: true });
+      node.src = image.src;
+      return node;
+    };
+    if (images.length === 1) {
+      const holder = el('div', 'rm-desk-tile__image');
+      holder.append(imageNode(images[0], holder));
+      imageParent.append(holder);
+    } else if (images.length > 1) {
+      const holder = el('div', 'rm-desk-tile__images');
+      images.slice(0, 3).forEach((image, index) => {
+        const cell = el('div', 'rm-desk-tile__images-cell');
+        cell.append(imageNode(image, holder));
+        if (index === 2 && images.length > 3) cell.append(el('span', 'rm-desk-tile__images-more', `+${images.length - 3}`));
+        holder.append(cell);
+      });
+      imageParent.append(holder);
+    }
     for (const row of model.rows) {
       const line = el('div', `rm-desk-tile__row${row.depth === 2 ? ' rm-desk-tile__row--nested' : ''}`);
       line.append(row.status ? check(row.status) : el('span', 'rm-desk-tile__bullet'), el('span', 'rm-desk-tile__text', row.text));

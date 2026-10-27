@@ -6,18 +6,23 @@ import { createPlanWatchBridge } from '../src/plan-watch';
 import { readBlockString, readChildren } from '../src/timing-roam';
 
 let cleanup = () => {};
-function mount({ count = 8, dark = false, editor = true, empty = false, preservePreferences = false, collapsed = false } = {}) {
+function mount({ count = 8, dark = false, editor = true, empty = false, preservePreferences = false, collapsed = false, watchResult = 'undefined' } = {}) {
   cleanup();
   if (!preservePreferences) for (const key of Object.keys(localStorage)) if (key.startsWith('nautilus-log:desk-view:v1:desk-fixture:')) localStorage.removeItem(key);
   document.body.classList.toggle('bp3-dark', dark);
   document.querySelector('#launchers').replaceChildren();
-  const nodes = new Map(), watches = new Set(), nativeEditors = new Set(), hosts = new Map();
-  const stats = { renders: [], unmounts: 0, forbiddenWrites: 0, nativeWrites: [], writes: [], reads: [], watches: 0, opened: [] };
-  let failPlan = false, failRender = false, holdRender = false, holdMove = false, holdCreate = false, failMove = false;
-  let releaseRender = null, releaseMove = null, releaseCreate = null;
+  const nodes = new Map(), watches = new Set(), watchRecords = new Map(), nativeEditors = new Set(), hosts = new Map();
+  const stats = { renders: [], unmounts: 0, forbiddenWrites: 0, nativeWrites: [], writes: [], reads: [], watches: 0, opened: [], watchEvents: [], notifications: [] };
+  let watchSequence = 0;
+  let failPlan = false, failRender = false, holdRender = false, holdMove = false, holdCreate = false, holdWatchRegistration = false, failMove = false;
+  let releaseRender = null, releaseMove = null, releaseCreate = null, releaseWatchRegistration = null;
   let sequence = 0;
   const planUid = 'plan-desk';
   const rendererString = '[[Nautilus Log]] {{[[roam/render]]:((roam-render-Nautilus-Log-cljs))}}';
+  // Synthetic fixture assets only: never load a user graph attachment.
+  const imageA = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL8WQAAAABJRU5ErkJggg==';
+  // 40x24 opaque PNG: a meaningful local raster for image-preview geometry.
+  const imageB = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAYCAYAAACIhL/AAAAAN0lEQVR4nO3OMREAIAAAIeMY0bB20RTeOzCwM+ba52ejDggK1gFBwTogKFgHBAXrgKBgHRB87QK2F03Ic52kygAAAABJRU5ErkJggg==';
   const add = (uid, string, parentUid = '', order = 0, open = true) => nodes.set(uid, { uid, string, parentUid, order, open });
   const children = (uid) => [...nodes.values()].filter((n) => n.parentUid === uid).sort((a, b) => a.order - b.order);
   add(planUid, rendererString); add('other-plan', rendererString);
@@ -27,20 +32,56 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
   const labels = ['优化 Nautilus Desk', '整理提示词日志', '验证原生块编辑', '检查任务顺序', '整理项目材料'];
   if (!empty) for (let i = 0; i < count; i++) {
     const uid = `task-${i}`;
-    add(uid, `{{[[TODO]]}} ${labels[i % labels.length]} ${i} ${i === 2 ? '9999m' : '45m'}`, planUid, i + 2);
+    const image = i === 0 ? ` ![Root fixture](${imageA})` : i === 1 ? ' ![Unsafe fixture](javascript:alert(1))' : '';
+    add(uid, `{{[[TODO]]}} ${labels[i % labels.length]} ${i} ${i === 2 ? '9999m' : '45m'}${image}`, planUid, i + 2);
     const n = i === 0 ? 20 : i % 3;
-    for (let j = 0; j < n; j++) add(`${uid}-note-${j}`, `${j === 0 ? '{{[[DONE]]}} ' : ''}第 ${j + 1} 轮提示词：保留原始任务结构，记录要求、补充说明与执行反馈。`, uid, j);
+    for (let j = 0; j < n; j++) add(`${uid}-note-${j}`, `${j === 0 ? '{{[[DONE]]}} ' : ''}第 ${j + 1} 轮提示词：保留原始任务结构，记录要求、补充说明与执行反馈。${i === 0 && j === 0 ? ` ![Child fixture](${imageB})` : ''}`, uid, j);
   }
-  if (!empty) { add('source-task', '{{[[TODO]]}} Referenced prompt 30m'); add('reference-wrapper', '((source-task))', planUid, count + 2); add('source-note', 'Source content.', 'source-task'); }
-  add('already-done', '{{[[DONE]]}} Reusable source'); add('done-reference', '((already-done))', planUid, count + 3);
-  add('divider', '---', planUid, count + 4);
+  if (!empty && count > 0) {
+    add('source-task', `{{[[TODO]]}} Referenced prompt 30m ![Source fixture](${imageA})`);
+    add('reference-wrapper', '((source-task))', planUid, count + 2);
+    add('context-wrapper', '{{[[TODO]]}} Review ((source-task)) tomorrow 15m', planUid, count + 3);
+    // The plain reference has a local row; the contextual wrapper has none and
+    // exercises source-child fallback without losing local root metadata.
+    add('reference-wrapper-note', 'Wrapper-local child.', 'reference-wrapper');
+    add('code-literal', '{{[[TODO]]}} `![literal](https://desk-fixture.invalid/code.png) ((source-task))`', planUid, count + 4);
+    add('source-note', 'Source content.', 'source-task');
+  }
+  add('already-done', '{{[[DONE]]}} Reusable source'); add('done-reference', '((already-done))', planUid, count + 5);
+  add('divider', '---', planUid, count + 6);
   const rawRender = () => {
     for (const { raw, uid } of hosts.values()) {
       raw.replaceChildren(...children(uid).map((row) => { const line = document.createElement('div'); line.dataset.rawUid = row.uid; line.textContent = row.string; return line; }));
     }
   };
-  const notify = (...uids) => { rawRender(); for (const watch of [...watches]) if (uids.includes(watch.uid)) watch.callback(); };
-  const setString = (uid, string) => { nodes.get(uid).string = string; notify(uid, nodes.get(uid).parentUid); };
+  // Pull watches receive only fields declared by their pattern. A child text
+  // edit is not a parent membership change in production Roam.
+  const notify = (...changes) => {
+    rawRender();
+    stats.notifications.push(...changes);
+    for (const watch of [...watches]) for (const change of changes) {
+      if (watch.uid !== change.uid) continue;
+      if (change.fields.some((field) => watch.pattern.includes(`:block/${field}`))) { watch.invoke(); break; }
+    }
+  };
+  const setString = (uid, string) => { nodes.get(uid).string = string; notify({ uid, fields: ['string'] }); };
+  const setOpen = (uid, open) => { nodes.get(uid).open = open; notify({ uid, fields: ['open'] }); };
+  // Fixture-only graph edits model independent Datomic field changes. Reordering
+  // a sibling set does NOT change the parent's :block/children membership.
+  const setOrder = (uid, order) => {
+    const ordered = children(nodes.get(uid).parentUid).filter(row => row.uid !== uid);
+    ordered.splice(order, 0, nodes.get(uid));
+    const changes = [];
+    ordered.forEach((row, index) => {
+      if (row.order !== index) { row.order = index; changes.push({ uid: row.uid, fields: ['order'] }); }
+    });
+    notify(...changes);
+  };
+  const addChild = (uid, parentUid, string, open = true) => {
+    if (nodes.has(uid) || !nodes.has(parentUid)) throw new Error('Invalid fixture child');
+    add(uid, string, parentUid, children(parentUid).length, open);
+    notify({ uid: parentUid, fields: ['children'] });
+  };
   const entity = (node) => ({
     'block/uid': node.uid, 'block/string': node.string, 'block/order': node.order, 'block/open': node.open,
     'block/refs': [...node.string.matchAll(/\(\(([\w-]+)\)\)/g)].map((m) => ({ 'block/uid': m[1], 'block/string': nodes.get(m[1])?.string || '' })),
@@ -58,7 +99,7 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
       const ordered = siblings.filter(row => row.uid !== node.uid);
       ordered.splice(location.order, 0, node);
       node.parentUid = location['parent-uid']; ordered.forEach((row, i) => row.order = i);
-      notify(node.uid, oldParent, node.parentUid);
+      notify({ uid: node.uid, fields: ['order'] }, { uid: oldParent, fields: ['children'] }, { uid: node.parentUid, fields: ['children'] });
     },
     async createBlock({ location, block }) {
       stats.writes.push({ type: 'create', uid: block.uid, parent: location['parent-uid'], order: location.order, string: block.string });
@@ -67,7 +108,7 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
       const ordered = children(location['parent-uid']);
       add(block.uid, block.string, location['parent-uid'], location.order, block.open);
       ordered.splice(location.order, 0, nodes.get(block.uid)); ordered.forEach((row, i) => row.order = i);
-      notify(block.uid, location['parent-uid']);
+      notify({ uid: block.uid, fields: ['string'] }, { uid: location['parent-uid'], fields: ['children'] });
     },
     async updateBlock({ block }) { stats.writes.push({ type: 'update', uid: block.uid, string: block.string }); setString(block.uid, block.string); },
     q: (_query, uid) => { if (failPlan) throw new Error('Graph unavailable'); return nodes.has(uid) ? [[nodes.get(uid).string]] : []; },
@@ -80,8 +121,40 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
         if (pattern.includes(':block/children')) result['block/children'] = children(uid).map(entity);
         return result;
       },
-      addPullWatch: (pattern, lookup, callback) => { watches.add({ pattern, lookup, uid: /"([^"]+)"/.exec(lookup)?.[1], callback }); stats.watches = watches.size; },
-      removePullWatch: (pattern, lookup, callback) => { for (const watch of watches) if (watch.pattern === pattern && watch.lookup === lookup && watch.callback === callback) watches.delete(watch); stats.watches = watches.size; },
+      addPullWatch: (pattern, lookup, callback) => {
+        const uid = /"([^"]+)"/.exec(lookup)?.[1];
+        const record = { id: ++watchSequence, pattern, lookup, uid, callback, state: 'requested', calls: 0,
+          invoke: () => { record.calls++; callback(); } };
+        watchRecords.set(record.id, record);
+        const event = action => stats.watchEvents.push({ id: record.id, action, uid, pattern });
+        const add = () => { record.state = 'active'; watches.add(record); stats.watches = watches.size; event('registered'); };
+        const result = watchResult === 'null' ? null : undefined;
+        // Plan watches do not include :block/open. Only a specifically targeted
+        // preview registration can be held, so cleanup tests cannot pass by
+        // accidentally exercising the already-safe Plan bridge instead.
+        const held = holdWatchRegistration && pattern.includes(':block/open')
+          && (holdWatchRegistration === true || holdWatchRegistration === uid);
+        if (!held) {
+          add();
+          return watchResult === 'reject' ? Promise.reject(new Error('Ambiguous fixture watch registration')) : result;
+        }
+        holdWatchRegistration = false;
+        record.state = 'held'; event('held');
+        return new Promise((resolve, reject) => {
+          releaseWatchRegistration = () => {
+            add();
+            if (watchResult === 'reject') reject(new Error('Ambiguous fixture watch registration'));
+            else resolve(result);
+          };
+        });
+      },
+      removePullWatch: (pattern, lookup, callback) => {
+        for (const record of watchRecords.values()) if (record.pattern === pattern && record.lookup === lookup && record.callback === callback) {
+          stats.watchEvents.push({ id: record.id, action: 'removed', uid: record.uid, pattern, wasActive: watches.has(record) });
+          watches.delete(record); record.state = 'removed';
+        }
+        stats.watches = watches.size;
+      },
     },
     ui: { desk: new Proxy({}, { get: () => forbidden }), components: {} },
   };
@@ -121,7 +194,7 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     openTask: (uid, sidebar) => stats.opened.push({ uid, sidebar }), getSettings: () => ({ language: 'en', 'todo-duration': 15 }),
   });
   let desk = newView();
-  const addHost = (uid, label, key = uid, sidebar = false) => {
+  const addHost = (uid, label, key = uid, sidebar = false, initiallyCollapsed = collapsed) => {
     const owner = document.createElement('section'); owner.className = 'roam-block-container fixture-owner'; owner.dataset.fixtureHost = key;
     if (sidebar) owner.classList.add('rm-sidebar-window');
     const main = document.createElement('div'); main.className = 'rm-block-main';
@@ -143,37 +216,41 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     const content = document.createElement('div');
     content.className = 'rm-block__input rm-block__input--view roam-block rm-block-text';
     content.append(prefix, chart); main.append(content);
-    // Mirror component.cljs: collapse changes the renderer class and replaces
-    // the chart shell with controls, while keeping the same Desk host mounted.
+    // Mirror component.cljs: folding keeps the host claim but Desk observes the
+    // collapsed class, hides its UI, and releases a native focus layer.
+    const options = { planUid: uid, container: slot, pageTitle: 'October 26th, 2026', origin: launch };
     const setCollapsed = value => {
+      if (value === chart.classList.contains('nautilus-log-collapsed')) return;
       chart.classList.toggle('nautilus-log-collapsed', value);
       if (value) { chart.insertBefore(controls, slot); shell.remove(); }
       else { shell.append(controls); chart.insertBefore(shell, slot); }
       collapse.setAttribute('aria-label', value ? 'Expand Nautilus Log' : 'Collapse Nautilus Log');
     };
     collapse.addEventListener('click', () => setCollapsed(!chart.classList.contains('nautilus-log-collapsed')));
-    if (collapsed) setCollapsed(true);
     const raw = document.createElement('div'); raw.className = 'rm-block-children fixture-raw'; raw.dataset.rawPlan = uid;
     owner.append(main, raw); document.querySelector('#launchers').append(owner);
-    const options = { planUid: uid, container: slot, pageTitle: 'October 26th, 2026', origin: launch };
     launch.addEventListener('click', () => desk.open(options));
-    hosts.set(key, { uid, slot, owner, raw, launch, setCollapsed }); rawRender(); desk.registerHost(options);
+    hosts.set(key, { uid, slot, owner, raw, launch, setCollapsed }); rawRender();
+    if (initiallyCollapsed) setCollapsed(true);
+    desk.registerHost(options);
     return hosts.get(key);
   };
   addHost(planUid, 'Open Desk'); addHost('other-plan', 'Open other Desk');
   cleanup = () => { desk.destroy(); actions.destroy(); bridge.destroy(); };
   window.deskHarness.api = {
-    stats, setString, children, text: uid => nodes.get(uid)?.string, activeEditors: () => nativeEditors.size,
-    failRead: value => { failPlan = value; notify(planUid); }, failNextRender: () => { failRender = true; }, failNextMove: () => { failMove = true; },
-    holdNextRender: () => { holdRender = true; }, holdNextMove: () => { holdMove = true; }, holdNextCreate: () => { holdCreate = true; },
-    release: () => { releaseRender?.(); releaseMove?.(); releaseCreate?.(); releaseRender = releaseMove = releaseCreate = null; },
-    pending: () => Boolean(releaseRender || releaseMove || releaseCreate),
+    stats, setString, setOpen, setOrder, addChild, children, text: uid => nodes.get(uid)?.string, activeEditors: () => nativeEditors.size,
+    watchSnapshot: () => [...watchRecords.values()].map(({ id, uid, pattern, state, calls }) => ({ id, uid, pattern, state, calls })),
+    fireWatch: id => { const record = watchRecords.get(id); if (!record) throw new Error('Unknown fixture watch'); record.invoke(); },
+    failRead: value => { failPlan = value; notify({ uid: planUid, fields: ['string'] }); }, failNextRender: () => { failRender = true; }, failNextMove: () => { failMove = true; },
+    holdNextRender: () => { holdRender = true; }, holdNextMove: () => { holdMove = true; }, holdNextCreate: () => { holdCreate = true; }, holdNextWatchRegistration: (uid = true) => { holdWatchRegistration = uid; },
+    release: () => { releaseRender?.(); releaseMove?.(); releaseCreate?.(); releaseWatchRegistration?.(); releaseRender = releaseMove = releaseCreate = releaseWatchRegistration = null; },
+    pending: () => Boolean(releaseRender || releaseMove || releaseCreate || releaseWatchRegistration),
     setCollapsed: (key, value) => hosts.get(key).setCollapsed(value),
-    openCopy: () => { const h = addHost(planUid, 'Open copy Desk', 'copy', true); h.owner.style.width = '280px'; },
+    openCopy: () => { const h = addHost(planUid, 'Open copy Desk', 'copy', true, false); h.owner.style.width = '280px'; },
     removeHost: key => { const h = hosts.get(key); desk.closeForHost(h.slot); h.owner.remove(); hosts.delete(key); },
     restoreHost: () => addHost(planUid, 'Open Desk'),
     reloadView: () => { desk.destroy(); actions.destroy(); actions = createDeskActions(); desk = newView(); desk.restoreMountedHosts(); },
-    remove: uid => { const parent = nodes.get(uid)?.parentUid; nodes.delete(uid); notify(uid, parent); },
+    remove: uid => { const parent = nodes.get(uid)?.parentUid; nodes.delete(uid); notify({ uid, fields: ['string'] }, { uid: parent, fields: ['children'] }); },
     move: (uid, order) => roam.moveBlock({ block: { uid }, location: { 'parent-uid': nodes.get(uid).parentUid, order } }),
     destroy: cleanup,
   };

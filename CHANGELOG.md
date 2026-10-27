@@ -24,12 +24,26 @@
 
 ### Fixed
 
-- Collapsing the spiral while Desk is open no longer compresses the renderer to
-  zero height and lets cards overlap following outline blocks. An active Desk
-  keeps its natural layout height; closing Desk restores the compact chart-only
-  collapse and returns keyboard focus to the visible expand control. Repeated
-  toggles, restored collapsed views, sidebar copies, and cleanup are covered by
-  a renderer-shaped browser regression.
+- A legacy later `gap` rule can no longer turn Desk's 4px masonry tracks into a
+  giant reserved blank area: the Desk grid explicitly keeps its native zero
+  row-gap while retaining the 12px column gap. Sparse/tall cards and responsive
+  widths are measured against the last card and following ordinary block.
+- Folding hides the entire widget, including Desk cards, toolbar, and native focus
+  layer, while keeping the original outline hidden when Desk is selected. The
+  expand control and saved Desk preference remain. Expanding restores the overview;
+  explicit Hide Desk or unload restores the ordinary outline. Buffered drafts
+  survive folding without duplicate creation or an unexpected focus dialog.
+  Unconfirmed IME input stays uncommitted across folding and pending creates;
+  closing the view does not flush that partial text into the graph.
+- Card overviews now render safe Markdown image links from the card root,
+  bounded preview subtree, and resolved references with the host's native single
+  and multi-image tile classes. Unsafe schemes and arbitrary graph HTML are not
+  inserted. Code examples remain literal, including references inside code.
+  Scoped preview watches refresh changed descendants without remounting unrelated
+  thumbnails. Registration cleanup waits for pending host calls, and search-mode
+  refreshes no longer depend on an intersection callback. Browser regressions
+  hold real raster responses across replacement, folding, and teardown; graph and
+  image content are synthetic, with offline and cached-native stylesheet profiles.
 
 ### Changed
 
