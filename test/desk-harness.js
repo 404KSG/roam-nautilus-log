@@ -6,7 +6,7 @@ import { createPlanWatchBridge } from '../src/plan-watch';
 import { readBlockString, readChildren } from '../src/timing-roam';
 
 let cleanup = () => {};
-function mount({ count = 8, dark = false, editor = true, empty = false, preservePreferences = false } = {}) {
+function mount({ count = 8, dark = false, editor = true, empty = false, preservePreferences = false, collapsed = false } = {}) {
   cleanup();
   if (!preservePreferences) for (const key of Object.keys(localStorage)) if (key.startsWith('nautilus-log:desk-view:v1:desk-fixture:')) localStorage.removeItem(key);
   document.body.classList.toggle('bp3-dark', dark);
@@ -128,14 +128,36 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     const chart = document.createElement('div'); chart.className = 'nautilus-log-container'; chart.dataset.nautilusLogBlock = uid;
     const shell = document.createElement('div'); shell.className = 'nautilus-log-shell fixture-shell'; shell.textContent = 'Nautilus Log · sea chart placeholder';
     const launch = document.createElement('button'); launch.className = 'fixture-launch nautilus-log-desk-btn'; launch.textContent = 'Desk'; launch.setAttribute('aria-label', label);
-    shell.append(launch);
+    const controls = document.createElement('div'); controls.className = 'nautilus-log-controls-top';
+    const collapse = document.createElement('button');
+    collapse.className = 'nautilus-log-toggle-btn nautilus-log-collapse-btn';
+    collapse.type = 'button'; collapse.textContent = '⌄';
+    collapse.setAttribute('aria-label', 'Collapse Nautilus Log');
+    controls.append(launch, collapse); shell.append(controls);
     const slot = document.createElement('div'); slot.className = 'nautilus-log-desk-host'; slot.dataset.nautilusDeskPlan = uid; slot.dataset.nautilusDeskPage = 'October 26th, 2026';
-    chart.append(shell, slot); main.append(chart);
+    chart.append(shell, slot);
+    const prefix = document.createElement('span'); prefix.textContent = '[[Nautilus Log]]';
+    prefix.className = 'fixture-plan-title';
+    // Roam's .rm-block-main is a flex row. Prefix and renderer share one text
+    // column in the real outline, rather than becoming two competing flex items.
+    const content = document.createElement('div');
+    content.className = 'rm-block__input rm-block__input--view roam-block rm-block-text';
+    content.append(prefix, chart); main.append(content);
+    // Mirror component.cljs: collapse changes the renderer class and replaces
+    // the chart shell with controls, while keeping the same Desk host mounted.
+    const setCollapsed = value => {
+      chart.classList.toggle('nautilus-log-collapsed', value);
+      if (value) { chart.insertBefore(controls, slot); shell.remove(); }
+      else { shell.append(controls); chart.insertBefore(shell, slot); }
+      collapse.setAttribute('aria-label', value ? 'Expand Nautilus Log' : 'Collapse Nautilus Log');
+    };
+    collapse.addEventListener('click', () => setCollapsed(!chart.classList.contains('nautilus-log-collapsed')));
+    if (collapsed) setCollapsed(true);
     const raw = document.createElement('div'); raw.className = 'rm-block-children fixture-raw'; raw.dataset.rawPlan = uid;
     owner.append(main, raw); document.querySelector('#launchers').append(owner);
     const options = { planUid: uid, container: slot, pageTitle: 'October 26th, 2026', origin: launch };
     launch.addEventListener('click', () => desk.open(options));
-    hosts.set(key, { uid, slot, owner, raw, launch }); rawRender(); desk.registerHost(options);
+    hosts.set(key, { uid, slot, owner, raw, launch, setCollapsed }); rawRender(); desk.registerHost(options);
     return hosts.get(key);
   };
   addHost(planUid, 'Open Desk'); addHost('other-plan', 'Open other Desk');
@@ -146,6 +168,7 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     holdNextRender: () => { holdRender = true; }, holdNextMove: () => { holdMove = true; }, holdNextCreate: () => { holdCreate = true; },
     release: () => { releaseRender?.(); releaseMove?.(); releaseCreate?.(); releaseRender = releaseMove = releaseCreate = null; },
     pending: () => Boolean(releaseRender || releaseMove || releaseCreate),
+    setCollapsed: (key, value) => hosts.get(key).setCollapsed(value),
     openCopy: () => { const h = addHost(planUid, 'Open copy Desk', 'copy', true); h.owner.style.width = '280px'; },
     removeHost: key => { const h = hosts.get(key); desk.closeForHost(h.slot); h.owner.remove(); hosts.delete(key); },
     restoreHost: () => addHost(planUid, 'Open Desk'),

@@ -76,6 +76,9 @@ Past gaps are factual schedule data, not a judgment that time was wasted.
   wrappers by UID, never changes task text, times, references, or descendants,
   and offers one Undo unless the Plan is edited again first.
 - **Collapse:** hide this chart instance while keeping its plan blocks visible.
+  When Desk is active, its cards keep their layout space without overlapping the
+  following outline. The expand control restores the spiral. Closing Desk restores
+  the original compact collapsed-chart layout.
 
 Hover or keyboard-focus a task/event slice to see its exact range and duration. Click
 a flexible task slice or its compact Schedule row to scroll to that block without

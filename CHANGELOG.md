@@ -22,6 +22,15 @@
   native editor mounting, and outline hiding/restoration. Graph writes are tested
   with isolated adapters, not by modifying live notes.
 
+### Fixed
+
+- Collapsing the spiral while Desk is open no longer compresses the renderer to
+  zero height and lets cards overlap following outline blocks. An active Desk
+  keeps its natural layout height; closing Desk restores the compact chart-only
+  collapse and returns keyboard focus to the visible expand control. Repeated
+  toggles, restored collapsed views, sidebar copies, and cleanup are covered by
+  a renderer-shaped browser regression.
+
 ### Changed
 
 - The optional capacity bar keeps its 136px horizontal scale but reduces the

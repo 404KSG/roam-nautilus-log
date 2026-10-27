@@ -58,6 +58,7 @@ export function createDeskView({
 
   function createSession(binding) {
     const { planUid, container, pageTitle = '', origin = document.activeElement } = binding;
+    const chart = container.closest('.nautilus-log-container');
     const roam = host.roamAlphaAPI;
     const graph = graphName(host);
     const { el, icon, button, check, preview } = nativeElements(document);
@@ -649,10 +650,15 @@ export function createDeskView({
       host.removeEventListener('hashchange', onNavigation);
       host.removeEventListener('focus', onVisible);
       root.remove(); layer.remove();
+      if (!chart?.querySelector(':scope > .nautilus-log-desk-host > .nautilus-desk')) chart?.removeAttribute('data-nautilus-desk-active');
       if (focusOwner === session) focusOwner = null;
       if (binding.session === session) binding.session = null;
       origin?.setAttribute?.('aria-expanded', 'false');
-      if (restoreFocus && origin?.isConnected && graph === graphName(host)) origin.focus?.({ preventScroll: true });
+      if (restoreFocus && graph === graphName(host)) {
+        const target = origin?.isConnected && origin.getClientRects?.()?.length
+          ? origin : chart?.querySelector('.nautilus-log-collapse-btn');
+        if (target?.isConnected) target.focus?.({ preventScroll: true });
+      }
     }
     function start() {
       // The chart has its own text color. Inherit typography from the actual
@@ -664,6 +670,9 @@ export function createDeskView({
         layer.style[property] = typography[property];
       }
       if (origin?.closest?.('.bp3-dark,.rm-dark-theme,.dark') || document.querySelector('.roam-app.rm-dark-theme')) layer.classList.add('bp3-dark');
+      // The legacy collapsed chart has zero height. An open Desk remains real
+      // content even when the spiral is folded, so its renderer must keep space.
+      chart?.setAttribute('data-nautilus-desk-active', 'true');
       container.append(root);
       widthBinding = createDeskWidth({ root, container, host, onResize: masonry.layoutNow });
       origin?.setAttribute?.('aria-expanded', 'true');

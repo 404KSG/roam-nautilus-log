@@ -884,6 +884,19 @@ test('Log owns the previously tested controls and collapses without reserving ch
   assert.doesNotMatch(css, /#roam-right-sidebar-content \.nautilus-log-container/);
 });
 
+test('an active Desk keeps its layout space when only the spiral is collapsed', () => {
+  const view = fs.readFileSync(path.join(__dirname, '..', 'src', 'desk-view.js'), 'utf8');
+  assert.match(css, /\.nautilus-log-collapsed\[data-nautilus-desk-active="true"\]\s*\{[^}]*height:\s*auto;/s);
+  assert.match(view, /setAttribute\('data-nautilus-desk-active', 'true'\);\s*container\.append\(root\)/);
+  assert.match(view, /root\.remove\(\);[\s\S]{0,240}removeAttribute\('data-nautilus-desk-active'\)/);
+  const main = component.indexOf('(defn main');
+  const branch = component.indexOf('(if @collapsed-state', main);
+  const host = component.indexOf(':class "nautilus-log-desk-host"', branch);
+  assert.ok(branch >= 0 && host > branch);
+  assert.equal(parenDepthBefore(component, host), parenDepthBefore(component, branch),
+    'the renderer-shaped browser fixture must keep Desk outside the chart-only collapse branch');
+});
+
 test('Tidy is a stable, reversible direct-child action that does not rewrite schedule inputs', () => {
   assert.match(component, /nautilus-log-tidy-btn/);
   assert.match(component, /Keep one 18px control canvas while optically reducing this dense glyph/);

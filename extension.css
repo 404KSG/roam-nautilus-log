@@ -969,6 +969,12 @@
   overflow: visible;
 }
 
+/* Folding the spiral must not collapse the space occupied by an active Desk.
+   The DOM flag survives React replacing the renderer's collapsed class string. */
+.nautilus-log-collapsed[data-nautilus-desk-active="true"] {
+  height: auto;
+}
+
 .nautilus-log-collapsed .nautilus-log-controls-top {
   position: absolute;
   top: -26px;
