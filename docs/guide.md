@@ -99,7 +99,9 @@ embeds stay within their own bounds. Native auto-fill determines the column coun
 there is no fixed two-column layout or three-column cap. The embedded root does
 not use Roam's full-page `rm-desk-page` marker: current host styles use that marker
 to change ancestor padding and impose a viewport-sized canvas. Only native card
-sizes are retained locally; opening this component must not change page spacing.
+sizes are retained locally; opening this component must not change page spacing. Search, New note and Hide Desk
+share one flex-aligned tool group, so the close X stays aligned with the plus
+control at wide and narrow widths, with the same keyboard order.
 
 - **Unfinished tasks only.** Each direct task becomes a card, including unscheduled
   work. Events, DONE blocks, and dividers are excluded. Implicit tasks and referenced
@@ -133,10 +135,13 @@ sizes are retained locally; opening this component must not change page spacing.
   Escape-before-fake-Copy prelude. The footer shows **esc Roam editor** there;
   focusing Desk chrome changes it to **esc Close**. Use Close, the backdrop, or
   Esc from Desk chrome to return to cards. Drafts retain their own Esc behavior. Holding Alt reveals number hints; **Alt + 1–9** opens
-  the corresponding card. Horizontal trackpad gestures switch notes without
-  intercepting vertical scrolling or nested horizontal scrollers. Motion respects
-  reduced-motion preferences. The ordinary page and IME input are not intercepted
-  by global shortcuts.
+  the corresponding card. Existing keyboard bindings are unchanged.
+  Horizontal trackpad gestures and **Shift + wheel** switch notes in the existing
+  direction. Partial gestures follow the input and spring back; momentum does not
+  repeatedly skip cards. Pixel, line and page wheel units are normalized. Ordinary
+  vertical scroll, pinch zoom and nested horizontal scrollers remain native.
+  Motion respects reduced-motion preferences and IME. Only the focused native
+  editor is mounted; smooth feedback does not create editable neighbor copies.
 - **Remember the view.** Desk mode is saved by graph and plan UID. Returning to a
   page, refreshing, reloading the extension, or expanding an already-folded chart
   restores the view without opening an editor or creating content. Folding does not
@@ -144,8 +149,10 @@ sizes are retained locally; opening this component must not change page spacing.
   is a localStorage flag, not task text, and does not sync across devices. A manual
   open that cannot save its preference reports the limitation.
 
-Previews follow native Desk's page budget: up to eleven child rows, at most two
-levels, respecting collapsed rows. Markdown images outside inline/fenced code in
+Previews use native Desk's compact-panel budget: up to five child rows, at most
+two levels, respecting collapsed rows. Additional content is indicated by `...`;
+opening the card still edits the full original block. This only changes the
+preview budget, never the source outline's content or open/collapsed state. Markdown images outside inline/fenced code in
 the card root, preview subtree, and resolved references use Roam's native `rm-desk-tile__image` /
 `__images` layouts (one bounded image or up to three cells). Only `http`, `https`,
 `blob`, and base64 raster-image URLs are inserted as image elements; arbitrary graph
@@ -227,7 +234,8 @@ Artifacts use `/tmp/nautilus-desk-verify`, `/tmp/nautilus-desk-collapse`, and
 suite (`npm run test:desk-drop-feedback`) uses `/tmp/nautilus-desk-drop-feedback`;
 `test:desk-scope` and `test:desk-drag-parity` use `/tmp/nautilus-desk-scope` and
 `/tmp/nautilus-desk-drag-parity` (override with `DESK_SCOPE_TEST_OUT` and
-`DESK_DRAG_PARITY_TEST_OUT`);
+`DESK_DRAG_PARITY_TEST_OUT`); `test:desk-polish` covers compact previews, aligned
+controls, wheel response, reduced motion and cleanup (`DESK_POLISH_TEST_OUT`).
 override it with `DESK_DROP_FEEDBACK_TEST_OUT`. Set
 `ROAM_NATIVE_CSS` and `ROAM_BLUEPRINT_CSS` to host stylesheet snapshots to test
 against actual Roam CSS. `ROAM_ICONS_CSS` and `ROAM_FONT_CSS` can supply native

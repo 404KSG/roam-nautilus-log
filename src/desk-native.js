@@ -2,8 +2,10 @@ import { nativeDeskText, nativeDeskPreviewText, readDeskPreview } from './desk-c
 
 // Native contract inspected in Roam's current route-app.js and site.css:
 // rm-desk-page, rm-desk-tile, Blueprint buttons, 240px auto-fill columns,
-// 4px masonry rows, and eleven preview rows at depth <= 2. No native private
-// functions are called and no Roam client bundle or font definitions are shipped.
+// 4px masonry rows, and bounded preview depth. This embedded panel uses the
+// native compact-panel budget (six blocks including the root), not the full
+// route's twelve. No private functions, client bundle or fonts are shipped.
+export const DESK_PREVIEW_ROWS = 5;
 export const nativeText = nativeDeskText;
 export const nativePreviewText = nativeDeskPreviewText;
 export const readNativePreview = readDeskPreview;

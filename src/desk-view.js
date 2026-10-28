@@ -1,6 +1,6 @@
 import { graphName } from './graph-context';
 import { projectDeskTasks, reconcileDeskSelection, stepDeskSelection, deskShortcut, nativeEditorOwnsEscape } from './desk-core';
-import { nativeElements, nativeText, nativePreviewText, readNativePreview } from './desk-native';
+import { nativeElements, nativeText, nativePreviewText, readNativePreview, DESK_PREVIEW_ROWS } from './desk-native';
 import { createDeskMasonry } from './desk-masonry';
 import { createDeskWidth } from './desk-width';
 import { createDeskNavigation } from './desk-navigation';
@@ -133,6 +133,7 @@ export function createDeskView({
     let compositionFrame = null;
     let selectionFrame = null;
     let editingHoldUid = null;
+    let swipeFrame = null, swipeAnimation = null, swipeTarget = null, swipeOffset = 0, swipeGeneration = 0;
     let observer = null;
     let foldObserver = null;
     let widthBinding = null;
@@ -166,8 +167,8 @@ export function createDeskView({
       close(true, 'hide-button');
     }, 'nautilus-desk__hide');
     hide.classList.remove('bp3-small');
-    tools.append(searchGroup, add);
-    toolbar.append(title, tools, hide);
+    tools.append(searchGroup, add, hide);
+    toolbar.append(title, tools);
     const message = el('div', 'nautilus-desk__notice');
     message.setAttribute('role', 'status');
     message.hidden = true;
@@ -277,7 +278,12 @@ export function createDeskView({
       root, grid, body, origin, host,
       isOverview: () => !closed && mode === 'overview',
       canNavigate: () => inScope() && status === 'ready' && mode !== 'overview' && !busy && !composing,
-      step,
+      step: direction => {
+        const beforeUid = selectedUid, beforeMode = mode;
+        step(direction);
+        return beforeUid !== selectedUid || beforeMode !== mode;
+      },
+      onSwipe: paintSwipe,
     });
     const checkScope = () => { if (inScope()) return true; close(false, 'scope-invalid'); return false; };
     const notice = (text) => { message.textContent = String(text); message.hidden = !text; };
@@ -291,12 +297,59 @@ export function createDeskView({
       else notify(`Desk could not confirm a pending action. Check the original plan. ${text}`);
     }
     const nativeCurrent = (record) => inScope() && mount === record && mode === 'task';
+    const reduceMotion = () => Boolean(host.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+    function clearSwipeMotion() {
+      swipeGeneration += 1;
+      if (swipeFrame !== null) host.cancelAnimationFrame(swipeFrame);
+      swipeFrame = null;
+      swipeAnimation?.cancel(); swipeAnimation = null;
+      if (swipeTarget) swipeTarget.style.transform = '';
+      swipeTarget = null; swipeOffset = 0;
+    }
+    function paintSwipe(delta) {
+      const target = mode === 'draft' ? draftInput : mode === 'task' ? mount?.el : null;
+      if (!inScope() || folded || composing || !target?.isConnected || reduceMotion()) { clearSwipeMotion(); return; }
+      if (swipeTarget && swipeTarget !== target) clearSwipeMotion();
+      swipeAnimation?.cancel(); swipeAnimation = null;
+      const previous = swipeOffset;
+      const direction = delta > 0 ? -1 : 1;
+      const index = tasks.findIndex(task => task.uid === selectedUid);
+      const available = mode === 'draft' ? direction > 0 && tasks.length > 0
+        : direction < 0 ? index >= 0 : index >= 0 && index < tasks.length - 1;
+      swipeTarget = target;
+      swipeOffset = delta === null ? 0 : -delta / (available ? 1 : 3);
+      if (swipeFrame !== null) host.cancelAnimationFrame(swipeFrame);
+      const generation = ++swipeGeneration;
+      swipeFrame = host.requestAnimationFrame(() => {
+        if (generation !== swipeGeneration) return;
+        swipeFrame = null;
+        const current = mode === 'draft' ? draftInput : mount?.el;
+        if (!inScope() || folded || composing || target !== current || !target.isConnected) return;
+        if (delta === null) {
+          target.style.transform = '';
+          if (previous && target.animate) swipeAnimation = target.animate([
+            { transform: `translateX(${previous}px)` }, { transform: 'translateX(0)' },
+          ], { duration: 200, easing: 'ease-out' });
+        } else target.style.transform = `translateX(${swipeOffset}px)`;
+      });
+    }
+    function animateEntry(target, direction, offset = 0) {
+      if (!direction || !target.animate || reduceMotion()) return;
+      swipeAnimation?.cancel();
+      swipeTarget = target;
+      swipeAnimation = target.animate([
+        { transform: `translateX(${(direction > 0 ? -body.clientWidth : body.clientWidth) + offset}px)` },
+        { transform: 'translateX(0)' },
+      ], { duration: 200, easing: 'ease-out' });
+    }
     const cleanupNative = async (record) => {
       if (!record.attempted || record.cleaned) return;
       record.cleaned = true;
       await record.components.unmountNode({ el: record.el });
     };
     function dropEditor() {
+      affordances?.resetForSelection();
+      clearSwipeMotion();
       const record = mount;
       mount = null;
       if (!record) return;
@@ -432,8 +485,10 @@ export function createDeskView({
     function showTask(uid, force = false, caret = null, slide = 0) {
       if (!uid || !checkScope() || status !== 'ready' || !tasks.some((task) => task.uid === uid)) return;
       if (uid === selectedUid && mode === 'task' && !force) return;
+      const entryOffset = swipeOffset;
       if (mode === 'draft') { captureDraft(); void saveDraft(); }
       dropEditor();
+      const entryGeneration = swipeGeneration;
       mode = 'task';
       selectedUid = returnUid = uid;
       draftInput.hidden = true;
@@ -456,20 +511,18 @@ export function createDeskView({
         record.attempted = true;
         try { await components.renderBlock({ uid, el: record.el, 'open?': true, 'zoom-path?': true }); }
         catch (_error) {
-          if (nativeCurrent(record)) { editorMessage.textContent = 'The native Roam editor could not open this note.'; retryEditor.hidden = false; record.el.remove(); }
+          if (nativeCurrent(record)) { clearSwipeMotion(); editorMessage.textContent = 'The native Roam editor could not open this note.'; retryEditor.hidden = false; record.el.remove(); }
           await cleanupNative(record);
           return;
         }
         if (!nativeCurrent(record)) { await cleanupNative(record); return; }
         editorStatus.hidden = true;
         body.scrollTop = scrollPositions.get(uid) || 0;
-        if (slide && record.el.animate && !host.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-          record.el.animate([{ transform: `translateX(${slide > 0 ? -body.clientWidth : body.clientWidth}px)` }, { transform: 'translateX(0)' }], { duration: 200, easing: 'ease-out' });
-        }
+        if (entryGeneration === swipeGeneration) animateEntry(record.el, slide, entryOffset);
         if (caret !== null) await focusNativeInput(record, caret);
       });
     }
-    function showDraft() {
+    function showDraft(slide = 0) {
       if (!checkScope() || busy || status !== 'ready' || !actions) return;
       if (mode === 'draft') { draftInput.focus(); return; }
       let reserved = draft && !draft.handedOff ? draft : null;
@@ -478,6 +531,7 @@ export function createDeskView({
         catch (error) { noticeError(error); return; }
       }
       returnUid = selectedUid || returnUid;
+      const entryOffset = swipeOffset;
       dropEditor();
       mode = 'draft';
       selectedUid = null;
@@ -489,6 +543,7 @@ export function createDeskView({
       editorStatus.hidden = true;
       revealFocus();
       draftInput.focus({ preventScroll: true });
+      animateEntry(draftInput, slide, entryOffset);
     }
     function captureDraft() {
       if (!draft || mode !== 'draft') return;
@@ -542,7 +597,7 @@ export function createDeskView({
       if (busy || composing) return;
       if (mode === 'draft') { if (direction > 0 && tasks[0]) showTask(tasks[0].uid, false, null, direction); return; }
       const index = tasks.findIndex((task) => task.uid === selectedUid);
-      if (direction < 0 && index === 0) { showDraft(); return; }
+      if (direction < 0 && index === 0) { showDraft(direction); return; }
       const targetUid = stepDeskSelection(tasks, selectedUid, direction);
       if (targetUid) showTask(targetUid, false, null, direction);
     }
@@ -578,13 +633,13 @@ export function createDeskView({
       const version = previewVersions.get(uid) || 0;
       try {
         const task = tasks.find((entry) => entry.uid === uid);
-        let model = readNativePreview(uid, readChildren, 11, readString, task?.localString);
+        let model = readNativePreview(uid, readChildren, DESK_PREVIEW_ROWS, readString, task?.localString);
         // The Plan projection also recognizes references inside code. Preview
         // fallback must use only references actually resolved from prose.
         const sourceUid = model.referenceUids?.[0];
         if (!model.rows.length && sourceUid && sourceUid !== uid) {
           const source = readString?.(sourceUid) || '';
-          const sourceModel = readNativePreview(sourceUid, readChildren, 11, readString, source);
+          const sourceModel = readNativePreview(sourceUid, readChildren, DESK_PREVIEW_ROWS, readString, source);
           const localImages = model.images || [];
           const sourceImages = sourceModel.images || [];
           model = { ...sourceModel, root: model.root,
@@ -816,6 +871,8 @@ export function createDeskView({
     };
     const onCompositionStart = (event) => {
       composing = true;
+      affordances?.resetGesture();
+      clearSwipeMotion();
       if (mode === 'draft' && event.target === draftInput && draft) draft.uncommitted = true;
     };
     const onCompositionEnd = (event) => {

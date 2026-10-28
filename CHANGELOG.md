@@ -43,6 +43,15 @@
 
 ### Fixed
 
+- Shift + wheel now supports devices that report horizontal intent on deltaY,
+  normalizes line/page units, and follows partial gestures with native-style
+  snap-back. Momentum is latched to one card per gesture; stale frames/timers
+  cannot change a later editor. Existing keyboard shortcuts stay unchanged.
+- Card overviews use the native compact-panel budget of five child rows rather
+  than the full route's eleven. Full editing and direct-child search remain
+  available; source content and fold state are untouched. An isolated 20-row
+  fixture reduces preview read calls and watch targets from 12 to 6; this is not
+  a measured live Desktop speedup.
 - Embedded Desk no longer claims the native `rm-desk-page` route marker. Current
   Roam CSS used that descendant to reset ancestor wrapper padding, reproducing
   the reported 12px shift. Native card sizes are scoped locally without changing
@@ -58,9 +67,10 @@
   messages clear after five seconds; lifecycle cleanup also clears their timers.
 - Alt-only hint labels now reconcile after ordinary ready reorder, add, remove,
   and filter updates so Alt+Digit matches the visible card number.
-- The overview close X keeps a reserved title-row slot in narrow sidebars rather
-  than wrapping onto a third line. Wide views retain compact search and a far-right
-  close button; Search → New note → Hide Desk keyboard order is preserved.
+- Search, New note and the close X share a single flex-aligned tool group. X is
+  centered with the plus control rather than absolutely positioned against the
+  title. Narrow layouts avoid a third control row; compact search, far-right
+  close and Search → New note → Hide Desk keyboard order are preserved.
 - A legacy later `gap` rule can no longer turn Desk's 4px masonry tracks into a
   giant reserved blank area: the Desk grid explicitly keeps its native zero
   row-gap while retaining the 12px column gap. Sparse/tall cards and responsive

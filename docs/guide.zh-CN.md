@@ -106,8 +106,10 @@ Schedule，避免裁切和视觉干扰。
   **Option/Alt + 逗号**为 Next，**Option/Alt + 句号**为 Previous。到最后一项不再循环；第一项的
   Previous 进入新笔记输入位，与原生 Desk 一致。焦点在已挂载原生编辑器内时，Esc 交给 Roam，
   页脚显示 **esc Roam editor**；焦点移到 Desk 外框后改为 **esc Close**。关闭按钮、背景点击或
-  Desk 外框的 Esc 返回卡片区；草稿仍保留自身的 Esc 行为。卡片区还支持按住 Alt 显示序号、**Alt + 1–9** 打开对应卡片。横向触控板手势可切卡，纵向滚动和
-  内部横向滚动区域不会触发切换；切换动画尊重减少动态效果设置。普通页面和输入法操作不会被全局劫持。
+  Desk 外框的 Esc 返回卡片区；草稿仍保留自身的 Esc 行为。卡片区还支持按住 Alt 显示序号、**Alt + 1–9** 打开对应卡片。
+  **键盘快捷键不变。** 横向触控板及 **Shift＋滚轮**按原有方向切卡；小幅手势有跟手反馈和回弹，惯性尾部不会连续跳过多张卡。
+  像素、行和页单位会归一化；普通纵向滚动、缩放及内部横向滚动区域仍交给原生处理，输入法和减少动态效果设置受保护。
+  始终只挂载当前聚焦的原生编辑器，不通过同时挂载多个可编辑副本换取动画。
 - **记住视图模式。** 按图谱和计划 UID 保存 Desk 开关。切页回来、刷新、重载插件，或展开已折叠的图表后都会恢复 Desk，
   不自动打开某张卡片或创建内容。折叠不会改变偏好；显式收起 Desk 才会保存关闭状态。偏好只存在当前浏览器的 localStorage，
   不同步到其他设备，不保存日志正文。手动开启但无法保存偏好时会提示。
@@ -127,7 +129,9 @@ Schedule，避免裁切和视觉干扰。
 导入和 Escape 前置步骤只在合成图谱中验证；Copy 使用内存中的模拟回调。编辑器优先处理 Esc 的修复已实现，
 但真实宏流程仍未验证：没有执行物理拖放、真实剪贴板、应用切换、粘贴或发送。
 
-预览按原生 Desk 页面的预算读取最多 11 条子行、最多两层，尊重子块折叠状态。卡片根、预览子树和已解析引用中不在
+预览采用原生 Desk 紧凑面板的预算，最多显示 5 条子行、最多两层，尊重子块折叠状态；超出部分显示 `...`。
+点开卡片仍可编辑完整原文，不修改源 Block 的内容或展开／折叠状态。Search、New note 和关闭 X 使用同一工具组，
+宽屏和窄栏都将 X 与＋居中对齐，并保持原来的键盘顺序。卡片根、预览子树和已解析引用中不在
 行内／围栏代码中的 Markdown 图片使用 Roam 原生 `rm-desk-tile__image`／`__images` 布局（单张有边界图片，或最多三格）。
 只会创建 `http`、`https`、`blob` 和 base64 栅格图片 URL；不会渲染任意图谱 HTML 或不安全 scheme。
 除宿主 `<img>` 可解析的 URL 外，未专门适配加密或专有附件的渲染。任务列表共享现有 Plan Pull Watch，
@@ -168,6 +172,7 @@ Schedule，避免裁切和视觉干扰。
 反馈测试 `npm run test:desk-drop-feedback` 默认输出到 `/tmp/nautilus-desk-drop-feedback`，可用 `DESK_DROP_FEEDBACK_TEST_OUT` 覆盖。
 `test:desk-scope` 和 `test:desk-drag-parity` 分别输出到 `/tmp/nautilus-desk-scope`、`/tmp/nautilus-desk-drag-parity`，
 可用 `DESK_SCOPE_TEST_OUT`、`DESK_DRAG_PARITY_TEST_OUT` 指定目录。
+`test:desk-polish` 覆盖紧凑预览、控件对齐、滚轮响应、减少动态效果与清理，可用 `DESK_POLISH_TEST_OUT` 指定目录。
 `ROAM_NATIVE_CSS`、`ROAM_BLUEPRINT_CSS` 可指向宿主样式快照；`ROAM_ICONS_CSS`、`ROAM_FONT_CSS` 可补充带本地资源路径的
 原生图标与字体样式。这些夹具测试不代表已重新验证当前真实 Roam 的 Pull Watch 行为。
 

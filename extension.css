@@ -2431,20 +2431,20 @@ button.nautilus-log-timing__plan-heading:focus-visible {
 .nautilus-desk__title--status .nautilus-desk__title-label { opacity: 0; }
 .nautilus-desk__drop-toast { position: absolute; inset: 0; display: flex; align-items: center; pointer-events: none; }
 .nautilus-desk__drop-toast > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Reserve a native close-button slot on the title row. Only the search/create
-   group wraps, based on its actual container width rather than the viewport. */
-.nautilus-desk .rm-desk-page__toolbar { position: relative; flex-wrap: wrap; padding-right: 54px; }
+/* Search, create and close share one native flex row. Align their centers
+   structurally, including inherited font metrics and narrow sidebar layouts. */
+.nautilus-desk .rm-desk-page__toolbar { position: relative; flex-wrap: wrap; }
 .nautilus-desk .rm-desk-page__title { position: relative; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nautilus-desk .rm-desk-page__tools { flex: 0 1 auto; min-width: 0; max-width: 100%; margin-left: auto; flex-wrap: nowrap; }
 .nautilus-desk .rm-desk-page__tools .bp3-input-group { flex: 1 1 200px; min-width: 0; max-width: 200px; }
 .nautilus-desk .rm-desk-page__new-note { flex: 0 0 auto; white-space: nowrap; }
-.nautilus-desk .nautilus-desk__hide { position: absolute; top: 8px; right: 12px; width: 30px; height: 30px; min-width: 30px; padding: 0; }
+.nautilus-desk .nautilus-desk__hide { flex: 0 0 30px; margin-left: auto; width: 30px; height: 30px; min-width: 30px; padding: 0; }
 :where(#right-sidebar,.rm-sidebar-window,.rm-embed-container,.rm-callout__body) .nautilus-desk .rm-desk-page__toolbar { flex-direction: column; align-items: stretch; gap: 6px; padding-right: 12px; }
-:where(#right-sidebar,.rm-sidebar-window,.rm-embed-container,.rm-callout__body) .nautilus-desk .rm-desk-page__title { max-width: calc(100% - 42px); }
+:where(#right-sidebar,.rm-sidebar-window,.rm-embed-container,.rm-callout__body) .nautilus-desk .rm-desk-page__title { max-width: 100%; }
 :where(#right-sidebar,.rm-sidebar-window,.rm-embed-container,.rm-callout__body) .nautilus-desk .rm-desk-page__tools { width: 100%; margin-left: 0; }
 @media (max-width: 560px) {
   .nautilus-desk .rm-desk-page__toolbar { flex-direction: column; align-items: stretch; gap: 6px; padding-right: 12px; }
-  .nautilus-desk .rm-desk-page__title { max-width: calc(100% - 42px); }
+  .nautilus-desk .rm-desk-page__title { max-width: 100%; }
   .nautilus-desk .rm-desk-page__tools { width: 100%; margin-left: 0; }
 }
 .nautilus-desk .rm-desk-tile { min-width: 0; }

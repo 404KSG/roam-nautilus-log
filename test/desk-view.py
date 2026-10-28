@@ -607,7 +607,7 @@ def run():
                 overflow:toolbar.scrollWidth-toolbar.clientWidth, rows };
             }''')
             toolbar_geometry.append({'width': 'wide-main', **wide})
-            assert abs(wide['close']['centerY'] - wide['title']['centerY']) <= 4, wide
+            assert abs(wide['close']['centerY'] - wide['add']['centerY']) <= 0.5, wide
             assert wide['close']['width'] >= 30 and wide['close']['height'] >= 30, wide
             assert wide['close']['left'] >= wide['toolbar']['left'] - 1 and wide['close']['right'] <= wide['toolbar']['right'] + 1, wide
             assert wide['search']['left'] >= wide['toolbar']['left'] - 1 and wide['search']['right'] <= wide['toolbar']['right'] + 1, wide
@@ -643,18 +643,23 @@ def run():
                   const add = toolbar.querySelector('.rm-desk-page__new-note');
                   const rows = [...toolbar.querySelectorAll('input, button')].map(el => rect(el).centerY)
                     .sort((a, b) => a - b).reduce((all, y) => !all.length || y - all.at(-1) > 4 ? [...all, y] : all, []);
+                  const tools=toolbar.querySelector('.rm-desk-page__tools'),style=getComputedStyle(tools);
+                  const searchBudget=tools.getBoundingClientRect().width-rect(add).width-rect(close).width-2*(parseFloat(style.columnGap)||0);
                   return { toolbar:rect(toolbar), title:rect(title), close:rect(close), search:rect(search), add:rect(add),
-                    overflow:toolbar.scrollWidth-toolbar.clientWidth, rows };
+                    overflow:toolbar.scrollWidth-toolbar.clientWidth, rows, searchBudget };
                 }''')
                 toolbar_geometry.append({'width': width, **metrics})
-                assert abs(metrics['close']['centerY'] - metrics['title']['centerY']) <= 4, metrics
+                assert abs(metrics['close']['centerY'] - metrics['add']['centerY']) <= 0.5, metrics
                 assert metrics['close']['left'] >= metrics['toolbar']['left'] - 1 and metrics['close']['right'] <= metrics['toolbar']['right'] + 1, metrics
                 assert metrics['close']['width'] >= 30 and metrics['close']['height'] >= 30, metrics
                 assert metrics['overflow'] <= 1, metrics
                 assert metrics['search']['left'] >= metrics['toolbar']['left'] - 1 and metrics['search']['right'] <= metrics['toolbar']['right'] + 1, metrics
                 assert metrics['add']['left'] >= metrics['toolbar']['left'] - 1 and metrics['add']['right'] <= metrics['toolbar']['right'] + 1, metrics
                 assert len(metrics['rows']) <= 2, metrics
-                if width >= 320: assert metrics['search']['width'] >= 120, metrics
+                # Close now shares this row by user request. Search should use
+                # all remaining room up to the native 200px cap, not retain a
+                # minimum derived from the previous two-control row.
+                assert metrics['search']['width'] >= min(200, metrics['searchBudget']) - 0.5, metrics
             # Preserve the original logical order: search, create, then dismiss.
             owner.evaluate('(el) => { el.style.width = "320px"; }')
             sidebar.get_by_role('textbox', name='Search Desk', exact=True).focus()
@@ -677,7 +682,7 @@ def run():
             expect(sidebar).to_have_count(0)
             assert not main_grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
             (OUT/'sidebar-toolbar-geometry.json').write_text(json.dumps(toolbar_geometry, indent=2))
-            checks.append('sidebar toolbar keeps the Hide Desk control beside its title at 280–520px, has no toolbar overflow or third control row, preserves keyboard order, and closes without writes')
+            checks.append('sidebar toolbar aligns Hide Desk with New note at 280–520px, has no overflow or third control row, preserves keyboard order, and closes without writes')
 
             mount(editor=False)
             card('task-0').locator('[role="button"]').click()
@@ -732,11 +737,11 @@ def run():
                 assert page.locator('.nautilus-desk').evaluate('(el) => {const r=el.getBoundingClientRect();return r.left>=-1 && r.right<=innerWidth+1}')
                 if width == 390:
                     narrow_main = page.locator('.nautilus-desk .rm-desk-page__toolbar').evaluate('''toolbar => {
-                      const title=toolbar.querySelector('.rm-desk-page__title').getBoundingClientRect();
+                      const add=toolbar.querySelector('[aria-label="New note"]').getBoundingClientRect();
                       const close=toolbar.querySelector('[aria-label="Hide Desk"]').getBoundingClientRect();
-                      return {overflow:toolbar.scrollWidth-toolbar.clientWidth, centerDelta:Math.abs((title.top+title.bottom-close.top-close.bottom)/2)};
+                      return {overflow:toolbar.scrollWidth-toolbar.clientWidth, centerDelta:Math.abs((add.top+add.bottom-close.top-close.bottom)/2)};
                     }''')
-                    assert narrow_main['overflow'] <= 1 and narrow_main['centerDelta'] <= 4, narrow_main
+                    assert narrow_main['overflow'] <= 1 and narrow_main['centerDelta'] <= 0.5, narrow_main
             page.set_viewport_size({'width':1280,'height':1000})
             page.wait_for_function('Number(document.querySelector(".nautilus-desk__grid").dataset.columns)>=4')
             responsive_gaps = []
