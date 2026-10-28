@@ -4,6 +4,16 @@
 
 ### Added
 
+- Internal Desk drags now show native-style position badges for every visible
+  card. Alt-only hints retain their first-nine behavior. Ready updates reconcile
+  detached sources and clear stale drag state without attempting a stale move.
+- The Draft preview includes opt-in Desk diagnostics through the command palette.
+  It defaults off, retains at most 40 local in-memory geometry/reason events, and
+  clears on stop, panel close, or unload. It does not record note/input text, raw
+  keys, URLs, graph identifiers, or credentials, and does not send data or write
+  to the graph. A report can be downloaded only by an explicit user action.
+  The reported live outer gap, horizontal shift, and copy/send dismissal remain
+  unresolved; this diagnostic preview does not claim to fix them.
 - Nautilus Desk reuses Roam's native Desk/Blueprint styles, native grid-span
   masonry, and available main-content width below the chart. It hides only the
   original plan's child outline while active and restores it on close or unload.
@@ -24,6 +34,9 @@
 
 ### Fixed
 
+- The overview close X keeps a reserved title-row slot in narrow sidebars rather
+  than wrapping onto a third line. Wide views retain compact search and a far-right
+  close button; Search → New note → Hide Desk keyboard order is preserved.
 - A legacy later `gap` rule can no longer turn Desk's 4px masonry tracks into a
   giant reserved blank area: the Desk grid explicitly keeps its native zero
   row-gap while retaining the 12px column gap. Sparse/tall cards and responsive

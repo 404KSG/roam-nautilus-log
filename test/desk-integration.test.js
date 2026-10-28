@@ -45,6 +45,18 @@ test('renderer Desk button passes the clicked component and origin, without an e
   assert.match(controls, /\[desk-button block-uid page-title-val \(:controls copy\)\]/);
 });
 
+test('diagnostics commands are wired to the current view and removed on reload/unload', () => {
+  const source = fs.readFileSync(path.join(root, 'src/index.js'), 'utf8');
+  assert.match(source, /createDeskDiagnosticCommands\(\{\s*extensionAPI, diagnostics: deskView\.diagnostics/);
+  assert.match(source, /deskDiagnosticCommands\.initialize\(\)/);
+  assert.match(source, /revision: typeof __NAUTILUS_SOURCE_REVISION__/);
+  for (const section of [source.slice(source.indexOf('async function onload'), source.indexOf('function onunload')),
+    source.slice(source.indexOf('function onunload'), source.indexOf('\nexport {'))]) {
+    assert.ok(section.indexOf('deskDiagnosticCommands?.destroy()') >= 0);
+    assert.ok(section.indexOf('deskDiagnosticCommands?.destroy()') < section.indexOf('deskView?.destroy()'));
+  }
+});
+
 test('extension binds Desk to shared reads and destroys it before destroying the watch bridge', () => {
   const source = fs.readFileSync(path.join(root, 'src/index.js'), 'utf8');
   const binding = source.match(/deskView = createDeskView\(\{([\s\S]*?)\n  \}\);/)?.[1] || '';

@@ -31,6 +31,7 @@ import { createPlanWatchBridge } from "./plan-watch";
 import { createRendererPlanSession } from "./renderer-plan-session";
 import { createDeskView } from "./desk-view";
 import { createDeskActions } from "./desk-actions";
+import { createDeskDiagnosticCommands } from "./desk-diagnostics";
 import { createPlanTidy } from "./tidy-plan";
 import { createTidyCommands, settledUidsForTidy } from "./tidy-commands";
 import {
@@ -102,6 +103,7 @@ let todayPlanCommands = null;
 let planWatchBridge = null;
 let deskView = null;
 let deskActions = null;
+let deskDiagnosticCommands = null;
 let planTidy = null;
 let tidyCommands = null;
 let calendarRuntime = null;
@@ -804,12 +806,14 @@ async function onload({ extensionAPI }) {
   activeCodeBlockUID = codeBlockUID;
   activeRenderStringCore = renderStringCore;
   calendarPanelState = { action: "", error: "" };
+  deskDiagnosticCommands?.destroy();
   deskView?.destroy();
   deskActions?.destroy();
   planWatchBridge?.destroy();
   planWatchBridge = createPlanWatchBridge({ readString: readBlockString });
   deskActions = createDeskActions();
   deskView = createDeskView({
+    revision: typeof __NAUTILUS_SOURCE_REVISION__ === 'string' ? __NAUTILUS_SOURCE_REVISION__ : 'unknown',
     actions: deskActions,
     notify: (message) => showToast(message, 'warning'),
     openTask: (uid, sidebar) => sidebar ? openTaskInRightSidebar(uid) : openPrimaryPlan(uid),
@@ -819,6 +823,11 @@ async function onload({ extensionAPI }) {
     readChildren,
     getSettings: () => window.nautilusLogExtensionData?.settings || {},
   });
+  deskDiagnosticCommands = createDeskDiagnosticCommands({
+    extensionAPI, diagnostics: deskView.diagnostics,
+    notify: (message) => showToast(message, 'info'),
+  });
+  deskDiagnosticCommands.initialize();
   planTidy?.destroy();
   planTidy = createPlanTidy({
     runningTaskUid: () => timingRuntime?.getSnapshot?.()?.entries
@@ -952,6 +961,8 @@ function onunload() {
   todayPlanSession?.destroy();
   todayPlanSession = null;
   stopTiming({ closeActive: false });
+  deskDiagnosticCommands?.destroy();
+  deskDiagnosticCommands = null;
   deskView?.destroy();
   deskView = null;
   deskActions?.destroy();

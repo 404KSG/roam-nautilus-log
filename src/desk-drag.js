@@ -1,5 +1,5 @@
 /** Desk-only drag sorting. Never hand Roam a block-move payload. */
-export function createDeskDrag({ grid, canDrag, move, nudge, now = () => Date.now() }) {
+export function createDeskDrag({ grid, canDrag, move, nudge, setDragHints = () => {}, host = globalThis.window, now = () => Date.now() }) {
   let source = null;
   let target = null;
   let suppressUntil = 0;
@@ -15,6 +15,12 @@ export function createDeskDrag({ grid, canDrag, move, nudge, now = () => Date.no
     source?.classList.remove('is-dragging');
     source = null;
     clearTarget();
+    setDragHints(false);
+  };
+  const reconcile = () => {
+    if (!source) return;
+    if (source.parentElement !== grid || !source.draggable || !canDrag()) { cancel(); return; }
+    setDragHints(true);
   };
   const start = (event) => {
     const card = cardFor(event.target);
@@ -25,6 +31,7 @@ export function createDeskDrag({ grid, canDrag, move, nudge, now = () => Date.no
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('application/x-nautilus-desk-task', card.dataset.taskUid);
     source.classList.add('is-dragging');
+    setDragHints(true);
   };
   const over = (event) => {
     if (!source || !canDrag()) return;
@@ -77,15 +84,19 @@ export function createDeskDrag({ grid, canDrag, move, nudge, now = () => Date.no
   // Suppress only the trailing click of the drag gesture, not a new deliberate
   // click (which starts with a fresh pointerdown) on any card or its actions.
   const pointerDown = () => { if (!source) suppressUntil = 0; };
+  const blur = () => { if (source) { suppressUntil = now() + 300; cancel(); } };
   const events = [['dragstart', start], ['dragover', over], ['drop', drop], ['dragend', end], ['keydown', key], ['pointerdown', pointerDown]];
   for (const [name, listener] of events) grid.addEventListener(name, listener);
   grid.addEventListener('click', click, true);
+  host?.addEventListener?.('blur', blur);
   return {
     cancel,
+    reconcile,
     destroy() {
       cancel();
       for (const [name, listener] of events) grid.removeEventListener(name, listener);
       grid.removeEventListener('click', click, true);
+      host?.removeEventListener?.('blur', blur);
     },
   };
 }

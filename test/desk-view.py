@@ -75,6 +75,16 @@ def run():
             def card(uid):
                 return page.locator(f'.nautilus-desk__card[data-task-uid="{uid}"]')
 
+            def drag_start(tile):
+                tile.evaluate('''el => el.dispatchEvent(new DragEvent('dragstart', {
+                  bubbles:true, cancelable:true, dataTransfer:new DataTransfer()
+                }))''')
+
+            def drag_end(tile):
+                tile.evaluate('''el => el.dispatchEvent(new DragEvent('dragend', {
+                  bubbles:true, cancelable:true, dataTransfer:new DataTransfer()
+                }))''')
+
             def activate(uid):
                 card(uid).locator('.rm-desk-tile__preview').click()
                 focused(uid)
@@ -265,12 +275,107 @@ def run():
             checks.append('native UID/children editing, zoom path, bounded native navigation, no remount on text edits, and per-task scroll restoration')
 
             visible_order = page.locator('.nautilus-desk__card').evaluate_all('(els) => els.map(el=>el.dataset.taskUid)')
+            hint_writes = page.evaluate('() => deskHarness.api.stats.writes.length')
             card(visible_order[0]).locator('[role="button"]').focus()
             page.keyboard.down('Alt')
             expect(page.locator('.nautilus-desk__grid')).to_have_class('rm-desk-overview rm-desk-overview--masonry nautilus-desk__grid rm-desk-overview--numbers')
+            assert not page.locator('.nautilus-desk__grid').evaluate('(el) => el.classList.contains("nautilus-desk__grid--drag-numbers")')
+            assert page.locator('.nautilus-desk__card').nth(9).evaluate('el => getComputedStyle(el,"::after").content') in ['none', 'normal']
             page.keyboard.press('2')
             page.keyboard.up('Alt')
             focused(visible_order[1]); close_focus()
+            assert page.evaluate('() => deskHarness.api.stats.writes.length') == hint_writes
+
+            # This real pointer motion enters the production HTML drag path.
+            # The grid contains more than nine cards, so its DOM mapping proves
+            # drag mode extends native first-nine feedback to every visible card.
+            drag_preview = card(visible_order[2]).locator('.rm-desk-tile__preview').bounding_box()
+            page.mouse.move(drag_preview['x'] + 12, drag_preview['y'] + 12)
+            page.mouse.down()
+            page.mouse.move(drag_preview['x'] + 42, drag_preview['y'] + 24, steps=8)
+            page.wait_for_function('document.querySelector(".nautilus-desk__card.is-dragging")')
+            grid = page.locator('.nautilus-desk__grid')
+            assert grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers") && el.classList.contains("nautilus-desk__grid--drag-numbers")')
+            positions = grid.evaluate('(el) => [...el.children].map(card => card.dataset.dragPosition)')
+            assert positions == [str(index) for index in range(1, len(positions) + 1)] and len(positions) > 9, positions
+            badge_mapping = {'unfiltered': positions}
+            tenth_badge = grid.locator('.nautilus-desk__card').nth(9).evaluate('el => ({content:getComputedStyle(el,"::after").content,pointerEvents:getComputedStyle(el,"::after").pointerEvents})')
+            assert 'counter(rm-desk-tile)' in tenth_badge['content'] and tenth_badge['pointerEvents'] == 'none', tenth_badge
+            grid.screenshot(path=str(OUT/'drag-number-badges.png'))
+            page.mouse.up()
+            page.wait_for_function('!document.querySelector(".nautilus-desk__card.is-dragging")')
+            assert not grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
+            expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
+
+            # Filtered cards are numbered in their visible grid order, not their
+            # unfiltered plan order. Synthetic events supplement the real drag.
+            search_control = page.get_by_role('textbox', name='Search Desk', exact=True)
+            search_control.fill('整理')
+            page.wait_for_function('(total) => { const count=document.querySelectorAll(".nautilus-desk__grid > .nautilus-desk__card").length; return count > 0 && count < total; }', arg=len(visible_order))
+            filtered = page.locator('.nautilus-desk__card')
+            filtered_count = filtered.count()
+            drag_start(filtered.first)
+            filtered_positions = grid.evaluate('(el) => [...el.children].map(card => card.dataset.dragPosition)')
+            assert filtered_positions == [str(index) for index in range(1, filtered_count + 1)]
+            badge_mapping['filtered'] = filtered_positions
+            drag_end(filtered.first)
+            assert not grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
+            search_control.fill('')
+            expect(page.locator('.nautilus-desk__card')).to_have_count(len(visible_order))
+
+            # Drag and Alt reasons compose: neither cleanup removes the other.
+            drag_source = card(visible_order[0])
+            drag_source.locator('[role="button"]').focus()
+            drag_start(drag_source)
+            page.keyboard.down('Alt'); page.wait_for_timeout(450)
+            assert grid.evaluate('(el) => el.classList.contains("nautilus-desk__grid--drag-numbers") && el.classList.contains("rm-desk-overview--numbers")')
+            page.keyboard.up('Alt')
+            assert grid.evaluate('(el) => el.classList.contains("nautilus-desk__grid--drag-numbers") && el.classList.contains("rm-desk-overview--numbers")')
+            drag_end(drag_source)
+            assert not grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
+
+            drag_source.locator('[role="button"]').focus()
+            drag_start(drag_source)
+            page.keyboard.down('Alt'); page.wait_for_timeout(450)
+            drag_end(drag_source)
+            assert grid.evaluate('(el) => !el.classList.contains("nautilus-desk__grid--drag-numbers") && el.classList.contains("rm-desk-overview--numbers")')
+            page.keyboard.up('Alt')
+            assert not grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
+
+            # Escape and blur cancel only the drag feedback; neither opens focus
+            # nor closes the entire Desk. Folding cancels the same active state.
+            drag_source.locator('[role="button"]').focus()
+            drag_start(drag_source)
+            page.keyboard.press('Escape')
+            page.wait_for_function('!document.querySelector(".nautilus-desk__card.is-dragging")')
+            assert page.locator('.nautilus-desk').count() == 1 and not grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
+            drag_start(drag_source)
+            page.evaluate('() => window.dispatchEvent(new Event("blur"))')
+            page.wait_for_function('!document.querySelector(".nautilus-desk__card.is-dragging")')
+            assert not grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
+            drag_start(drag_source)
+            page.evaluate('() => deskHarness.api.setCollapsed("plan-desk", true)')
+            expect(page.locator('.nautilus-desk')).to_be_hidden()
+            assert not grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
+            page.evaluate('() => deskHarness.api.setCollapsed("plan-desk", false)')
+            expect(page.locator('.nautilus-desk')).to_be_visible()
+
+            # Native hints remain unavailable from text/IME and unrelated toolbar
+            # controls, while card-grid Alt+Digit continues to work above.
+            search_control.focus()
+            page.keyboard.down('Alt'); page.wait_for_timeout(450)
+            assert not grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
+            page.keyboard.up('Alt')
+            search_control.evaluate('el => el.dispatchEvent(new KeyboardEvent("keydown", {key:"Alt", bubbles:true, isComposing:true}))')
+            page.wait_for_timeout(450)
+            assert not grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
+            page.get_by_role('button', name='New note', exact=True).first.focus()
+            page.keyboard.down('Alt'); page.wait_for_timeout(450)
+            assert not grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
+            page.keyboard.up('Alt')
+            (OUT/'drag-number-mapping.json').write_text(json.dumps(badge_mapping, indent=2))
+            checks.append('native Alt first-nine hints and Alt+Digit remain write-free; physical and synthetic drag state numbers every visible card, composes with Alt, and clears on end, Escape, blur, and fold')
+
             activate('task-1')
             previous_uid = visible_order[visible_order.index('task-1') - 1]
             page.locator('.nautilus-desk__focus-body').evaluate('''el => {
@@ -385,16 +490,90 @@ def run():
             expect(page.locator('.nautilus-desk')).to_have_attribute('data-status', 'ready')
             checks.append('completion/reference state, mount-error retry, stale-read pause, and recovery remain safe')
 
+            toolbar_geometry = []
+            wide = page.locator('[data-fixture-host="plan-desk"] .rm-desk-page__toolbar').evaluate('''toolbar => {
+              const rect = el => { const r = el.getBoundingClientRect(); return {left:r.left, right:r.right, top:r.top, bottom:r.bottom, width:r.width, height:r.height, centerY:(r.top+r.bottom)/2}; };
+              const title = toolbar.querySelector('.rm-desk-page__title');
+              const close = toolbar.querySelector('[aria-label="Hide Desk"]');
+              const search = toolbar.querySelector('[aria-label="Search Desk"]');
+              const add = toolbar.querySelector('.rm-desk-page__new-note');
+              const rows = [...toolbar.querySelectorAll('input, button')].map(el => rect(el).centerY)
+                .sort((a, b) => a - b).reduce((all, y) => !all.length || y - all.at(-1) > 4 ? [...all, y] : all, []);
+              return { toolbar:rect(toolbar), title:rect(title), close:rect(close), search:rect(search), add:rect(add),
+                overflow:toolbar.scrollWidth-toolbar.clientWidth, rows };
+            }''')
+            toolbar_geometry.append({'width': 'wide-main', **wide})
+            assert abs(wide['close']['centerY'] - wide['title']['centerY']) <= 4, wide
+            assert wide['close']['width'] >= 30 and wide['close']['height'] >= 30, wide
+            assert wide['close']['left'] >= wide['toolbar']['left'] - 1 and wide['close']['right'] <= wide['toolbar']['right'] + 1, wide
+            assert wide['search']['left'] >= wide['toolbar']['left'] - 1 and wide['search']['right'] <= wide['toolbar']['right'] + 1, wide
+            assert wide['add']['left'] >= wide['toolbar']['left'] - 1 and wide['add']['right'] <= wide['toolbar']['right'] + 1, wide
+            assert wide['overflow'] <= 1 and len(wide['rows']) == 1, wide
+            assert 120 <= wide['search']['width'] <= 220, wide
+            assert wide['close']['left'] >= wide['add']['right'], wide
+            assert wide['toolbar']['right'] - wide['close']['right'] <= 20, wide
+
             watches = page.evaluate('() => deskHarness.api.stats.watches')
             page.evaluate('() => deskHarness.api.openCopy()')
             expect(page.locator('.nautilus-desk')).to_have_count(2)
             assert page.evaluate('() => deskHarness.api.stats.watches') >= watches
             sidebar = page.locator('[data-fixture-host="copy"] .nautilus-desk')
-            expect(sidebar.locator('.nautilus-desk__grid')).to_have_attribute('data-columns', '1')
+            owner = page.locator('[data-fixture-host="copy"]')
+            sidebar_grid = sidebar.locator('.nautilus-desk__grid')
+            main_grid = page.locator('[data-fixture-host="plan-desk"] .nautilus-desk__grid')
+            expect(sidebar_grid).to_have_attribute('data-columns', '1')
             assert sidebar.evaluate('(el) => el.getBoundingClientRect().width <= 280')
+            drag_start(sidebar.locator('.nautilus-desk__card').first)
+            assert sidebar_grid.evaluate('(el) => el.classList.contains("nautilus-desk__grid--drag-numbers")')
+            assert not main_grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
+            drag_end(sidebar.locator('.nautilus-desk__card').first)
+            assert not sidebar_grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
+            for width in [280, 320, 360, 480, 520]:
+                owner.evaluate('(el, width) => { el.style.width = `${width}px`; }', width)
+                page.evaluate('() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))')
+                metrics = sidebar.locator('.rm-desk-page__toolbar').evaluate('''toolbar => {
+                  const rect = el => { const r = el.getBoundingClientRect(); return {left:r.left, right:r.right, top:r.top, bottom:r.bottom, width:r.width, height:r.height, centerY:(r.top+r.bottom)/2}; };
+                  const title = toolbar.querySelector('.rm-desk-page__title');
+                  const close = toolbar.querySelector('[aria-label="Hide Desk"]');
+                  const search = toolbar.querySelector('[aria-label="Search Desk"]');
+                  const add = toolbar.querySelector('.rm-desk-page__new-note');
+                  const rows = [...toolbar.querySelectorAll('input, button')].map(el => rect(el).centerY)
+                    .sort((a, b) => a - b).reduce((all, y) => !all.length || y - all.at(-1) > 4 ? [...all, y] : all, []);
+                  return { toolbar:rect(toolbar), title:rect(title), close:rect(close), search:rect(search), add:rect(add),
+                    overflow:toolbar.scrollWidth-toolbar.clientWidth, rows };
+                }''')
+                toolbar_geometry.append({'width': width, **metrics})
+                assert abs(metrics['close']['centerY'] - metrics['title']['centerY']) <= 4, metrics
+                assert metrics['close']['left'] >= metrics['toolbar']['left'] - 1 and metrics['close']['right'] <= metrics['toolbar']['right'] + 1, metrics
+                assert metrics['close']['width'] >= 30 and metrics['close']['height'] >= 30, metrics
+                assert metrics['overflow'] <= 1, metrics
+                assert metrics['search']['left'] >= metrics['toolbar']['left'] - 1 and metrics['search']['right'] <= metrics['toolbar']['right'] + 1, metrics
+                assert metrics['add']['left'] >= metrics['toolbar']['left'] - 1 and metrics['add']['right'] <= metrics['toolbar']['right'] + 1, metrics
+                assert len(metrics['rows']) <= 2, metrics
+                if width >= 320: assert metrics['search']['width'] >= 120, metrics
+            # Preserve the original logical order: search, create, then dismiss.
+            owner.evaluate('(el) => { el.style.width = "320px"; }')
+            sidebar.get_by_role('textbox', name='Search Desk', exact=True).focus()
+            page.keyboard.press('Tab')
+            expect(sidebar.get_by_role('button', name='New note', exact=True)).to_be_focused()
+            page.keyboard.press('Tab')
+            expect(sidebar.get_by_role('button', name='Hide Desk', exact=True)).to_be_focused()
+            writes_before_close = page.evaluate('() => deskHarness.api.stats.writes.length')
+            sidebar.get_by_role('button', name='Hide Desk', exact=True).click()
+            expect(sidebar).to_have_count(0)
+            expect(page.locator('[data-fixture-host="copy"] > .fixture-raw')).to_be_visible()
+            assert page.evaluate('() => deskHarness.api.stats.writes.length') == writes_before_close
+            # Removing an actively dragging duplicate host clears only its scoped
+            # badges and does not disturb the main Desk instance.
+            page.get_by_role('button', name='Open copy Desk', exact=True).click()
+            expect(sidebar).to_have_count(1)
+            drag_start(sidebar.locator('.nautilus-desk__card').first)
+            assert sidebar.locator('.nautilus-desk__grid').evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
             page.evaluate('() => deskHarness.api.removeHost("copy")')
-            expect(page.locator('.nautilus-desk')).to_have_count(1)
-            checks.append('sidebar is confined and responsive; duplicate plan instances share plan watches and release scoped preview listeners on teardown')
+            expect(sidebar).to_have_count(0)
+            assert not main_grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
+            (OUT/'sidebar-toolbar-geometry.json').write_text(json.dumps(toolbar_geometry, indent=2))
+            checks.append('sidebar toolbar keeps the Hide Desk control beside its title at 280–520px, has no toolbar overflow or third control row, preserves keyboard order, and closes without writes')
 
             mount(editor=False)
             card('task-0').locator('[role="button"]').click()
@@ -447,6 +626,13 @@ def run():
                     expect(page.locator('.nautilus-desk__grid')).to_have_attribute('data-columns','1')
                 page.evaluate('() => new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
                 assert page.locator('.nautilus-desk').evaluate('(el) => {const r=el.getBoundingClientRect();return r.left>=-1 && r.right<=innerWidth+1}')
+                if width == 390:
+                    narrow_main = page.locator('.nautilus-desk .rm-desk-page__toolbar').evaluate('''toolbar => {
+                      const title=toolbar.querySelector('.rm-desk-page__title').getBoundingClientRect();
+                      const close=toolbar.querySelector('[aria-label="Hide Desk"]').getBoundingClientRect();
+                      return {overflow:toolbar.scrollWidth-toolbar.clientWidth, centerDelta:Math.abs((title.top+title.bottom-close.top-close.bottom)/2)};
+                    }''')
+                    assert narrow_main['overflow'] <= 1 and narrow_main['centerDelta'] <= 4, narrow_main
             page.set_viewport_size({'width':1280,'height':1000})
             page.wait_for_function('Number(document.querySelector(".nautilus-desk__grid").dataset.columns)>=4')
             responsive_gaps = []
@@ -467,8 +653,72 @@ def run():
             page.locator('.nautilus-desk').screenshot(path=str(OUT/'native-desk-overview.png'))
             activate('task-1')
             page.screenshot(path=str(OUT/'native-desk-focus.png'))
+            close_focus()
+
+            # A ready snapshot can reconcile while the browser still owns a
+            # dragend on a source that is about to detach. It must clean state
+            # without relying on that late event bubbling back to the grid.
+            reconcile_grid = page.locator('.nautilus-desk__grid')
+            reconcile_source = card('task-4')
+            drag_start(reconcile_source)
+            page.evaluate('''() => { window.retainedDragSource = document.querySelector('[data-task-uid="task-4"]'); }''')
+            stale_writes = page.evaluate('() => deskHarness.api.stats.writes.length')
+            page.evaluate('() => deskHarness.api.setString("task-4", "{{[[DONE]]}} Completed while dragging")')
+            expect(card('task-4')).to_have_count(0)
+            expect(page.locator('.nautilus-desk')).to_have_attribute('data-status', 'ready')
+            assert not reconcile_grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers") || el.classList.contains("nautilus-desk__grid--drag-numbers") || [...el.children].some(card => card.dataset.dragPosition)')
+            stale_source = page.evaluate('''() => ({
+              dragging:window.retainedDragSource.classList.contains('is-dragging'),
+              position:window.retainedDragSource.dataset.dragPosition
+            })''')
+            assert stale_source == {'dragging': False, 'position': None}, stale_source
+            page.evaluate('''() => {
+              for (const type of ['drop', 'dragend']) window.retainedDragSource.dispatchEvent(new DragEvent(type, {
+                bubbles:true, cancelable:true, dataTransfer:new DataTransfer()
+              }));
+            }''')
+            assert page.evaluate('() => deskHarness.api.stats.writes.length') == stale_writes
+
+            # A new source can start cleanly after completion cleanup; deletion
+            # follows the same ready-snapshot reconciliation path.
+            deletion_source = card('task-3')
+            drag_start(deletion_source)
+            assert reconcile_grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
+            page.evaluate('''() => { window.retainedDeletedDragSource = document.querySelector('[data-task-uid="task-3"]'); }''')
+            page.evaluate('() => deskHarness.api.remove("task-3")')
+            expect(card('task-3')).to_have_count(0)
+            expect(page.locator('.nautilus-desk')).to_have_attribute('data-status', 'ready')
+            assert not reconcile_grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers") || el.classList.contains("nautilus-desk__grid--drag-numbers") || [...el.children].some(card => card.dataset.dragPosition)')
+            deleted_source = page.evaluate('''() => ({
+              dragging:window.retainedDeletedDragSource.classList.contains('is-dragging'),
+              position:window.retainedDeletedDragSource.dataset.dragPosition
+            })''')
+            assert deleted_source == {'dragging': False, 'position': None}, deleted_source
+
+            # A ready reorder or filter can detach non-source live cards. The
+            # valid source remains active and its visible-order mapping refreshes.
+            mapping_source = card('task-1')
+            drag_start(mapping_source)
+            page.evaluate('() => deskHarness.api.setOrder("task-2", 0)')
+            expect(mapping_source).to_be_visible()
+            assert mapping_source.evaluate('(el) => el.classList.contains("is-dragging")')
+            assert reconcile_grid.evaluate('(el) => [...el.children].map(card => card.dataset.dragPosition)') == [str(index) for index in range(1, reconcile_grid.locator('.nautilus-desk__card').count() + 1)]
+            reconcile_search = page.get_by_role('textbox', name='Search Desk', exact=True)
+            page.evaluate('''() => { window.retainedFilteredCard = document.querySelector('[data-task-uid="reference-wrapper"]'); }''')
+            reconcile_search.fill('提示词')
+            expect(mapping_source).to_be_visible()
+            assert mapping_source.evaluate('(el) => el.classList.contains("is-dragging")')
+            assert page.evaluate('() => window.retainedFilteredCard.dataset.dragPosition') is None
+            assert reconcile_grid.evaluate('(el) => [...el.children].map(card => card.dataset.dragPosition)') == [str(index) for index in range(1, reconcile_grid.locator('.nautilus-desk__card').count() + 1)]
+            reconcile_search.fill('')
+            expect(mapping_source).to_be_visible()
+            drag_end(mapping_source)
+
+            drag_start(card('task-1'))
+            assert page.locator('.nautilus-desk__grid').evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
             checks.append('native auto-fill adapts from one to five columns without changing fonts or overflowing its surface')
             page.evaluate('() => deskHarness.destroy()')
+            expect(page.locator('.nautilus-desk')).to_have_count(0)
             page.wait_for_function('deskHarness.api.activeEditors()===0 && deskHarness.api.stats.watches===0')
             expect(page.locator('[data-fixture-host="plan-desk"] > .fixture-raw')).to_be_visible()
             assert page.evaluate('() => deskHarness.api.stats.forbiddenWrites') == 0

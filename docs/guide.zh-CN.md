@@ -120,6 +120,22 @@ Schedule，避免裁切和视觉干扰。
 只检查同一个预留 UID，不盲目重复创建。锁不协调其他设备或手动写入者；并发修改会保守地拒绝确认。
 读取失败时保留过期卡片并暂停写入；可收起 Desk 检查原始大纲。
 
+### 临时 Desk 诊断（Draft 预览）
+
+诊断**默认关闭**，重载后也会复位。通过 Roam 命令面板操作：
+
+1. 运行 **Nautilus Log: Start Desk diagnostics (temporary)**，再复现问题。
+2. 运行 **Nautilus Log: Show Desk diagnostics** 查看报告。**Capture layout** 补采当前布局；
+   **Download report** 导出本地 JSON 文件。
+3. 运行 **Nautilus Log: Stop and clear Desk diagnostics**，或点击 **Close diagnostics**，停止观察并清空内存报告。
+
+报告最多保留 40 条事件，只包含布局尺寸、滚动位置及固定的视图切换／弹窗关闭原因。
+不记录笔记正文、输入内容、原始按键、URL、图谱／Block 标识或凭据；不使用持久存储、不发送数据、不写图谱。
+只有主动点击 Download report 才会导出文件；可用时会附带源码版本。报告面板不会锁定页面滚动或自动抢走编辑焦点。
+
+本次预览修正窄栏工具栏位置，并让拖动中的可见卡片显示顺序编号。
+此前报告的**外层留白、横向位移、复制／发送时弹窗退出仍在定位中**；诊断用于收集证据，不代表这三项已修好。
+
 ### 验证边界
 
 `PYTHONDONTWRITEBYTECODE=1 npm run test:desk` 覆盖生产读写适配器、任务投影、布局、状态恢复、编辑器生命周期和预览竞态。

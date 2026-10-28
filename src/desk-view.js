@@ -6,15 +6,17 @@ import { createDeskWidth } from './desk-width';
 import { createDeskNavigation } from './desk-navigation';
 import { createDeskDrag } from './desk-drag';
 import { createDeskPreferences, createDeskOutlineVisibility } from './desk-host';
+import { createDeskDiagnostics } from './desk-diagnostics';
 
 /** A scoped data adapter around Roam's native Desk styles, not its starred-note store. */
 export function createDeskView({
   host = globalThis.window, document = host?.document,
   readPlan, watchPlan, readString, readChildren, actions,
   openTask = () => {}, getSettings = () => ({}),
-  notify = (message) => console.warn('[Nautilus Log] Desk', message),
+  notify = (message) => console.warn('[Nautilus Log] Desk', message), revision = 'unknown',
 } = {}) {
   const hosts = new Map();
+  const diagnostics = createDeskDiagnostics({ host, document, revision });
   const preferences = createDeskPreferences(host);
   const providerApi = host?.roamAlphaAPI;
   const providerGraph = graphName(host);
@@ -72,7 +74,7 @@ export function createDeskView({
   const registerHost = (options = {}) => {
     if (!validHost(options)) return;
     let binding = hosts.get(options.container);
-    if (binding && binding.planUid !== options.planUid) { binding.session?.close(false); hosts.delete(options.container); binding = null; }
+    if (binding && binding.planUid !== options.planUid) { binding.session?.close(false, 'host-rebound'); hosts.delete(options.container); binding = null; }
     if (!binding) {
       binding = { ...options, session: null };
       hosts.set(options.container, binding);
@@ -92,9 +94,10 @@ export function createDeskView({
     if (!binding) { binding = { ...options, session: null }; hosts.set(options.container, binding); }
     if (options.origin) binding.origin = options.origin;
     const enabled = !binding.session;
+    if (enabled) diagnostics.capture('before-open');
     const saved = preferences.write(providerGraph, options.planUid, enabled);
     if (enabled) start(binding);
-    else binding.session.close();
+    else binding.session.close(true, 'hide-toggle');
     if (!saved && enabled) binding.session?.notice('Desk is open, but browser storage is unavailable. This view may not survive a reload.');
   };
 
@@ -153,10 +156,11 @@ export function createDeskView({
     add.append(el('span', 'bp3-button-text', 'New note'));
     const hide = button('Hide Desk', 'cross', () => {
       preferences.write(graph, planUid, false);
-      close();
-    });
-    tools.append(searchGroup, add, hide);
-    toolbar.append(title, tools);
+      close(true, 'hide-button');
+    }, 'nautilus-desk__hide');
+    hide.classList.remove('bp3-small');
+    tools.append(searchGroup, add);
+    toolbar.append(title, tools, hide);
     const message = el('div', 'nautilus-desk__notice');
     message.setAttribute('role', 'status');
     message.hidden = true;
@@ -166,8 +170,10 @@ export function createDeskView({
     const empty = el('div', 'rm-desk-card__missing');
     root.append(toolbar, message, retryRead, grid, empty);
     const masonry = createDeskMasonry({ grid, host });
+    let affordances = null;
     const drag = createDeskDrag({
-      grid,
+      grid, host,
+      setDragHints: (active) => affordances?.setDragHints(active),
       canDrag: () => inScope() && status === 'ready' && !busy && mode === 'overview' && Boolean(actions),
       move: (uid, targetUid) => move(uid, targetUid),
       nudge: (uid, direction) => {
@@ -179,7 +185,7 @@ export function createDeskView({
 
     const layer = el('div', 'nautilus-desk__focus-layer');
     const backdrop = el('div', 'rm-desk-backdrop');
-    backdrop.addEventListener('click', () => showOverview());
+    backdrop.addEventListener('click', () => showOverview(true, 'focus-backdrop'));
     const focus = el('section', 'rm-desk rm-desk--dialog rm-desk--overlay bp3-elevation-3');
     focus.setAttribute('role', 'dialog');
     focus.setAttribute('aria-modal', 'true');
@@ -201,7 +207,7 @@ export function createDeskView({
       menu.style.right = `${frame.right - anchor.right}px`;
       menu.hidden = !menu.hidden;
     }, 'rm-desk__more');
-    const back = button('Close', 'cross', () => showOverview(), 'rm-desk__close');
+    const back = button('Close', 'cross', () => showOverview(true, 'focus-close-button'), 'rm-desk__close');
     end.append(newNote, more, back);
     header.append(navigation, el('div', 'rm-desk__title', 'Desk'), end);
     const menu = el('div', 'bp3-popover bp3-minimal rm-desk__more-menu nautilus-desk__menu');
@@ -220,7 +226,7 @@ export function createDeskView({
       return link;
     };
     const openMain = menuAction('Open in main window', 'share', () => {
-      if (selectedUid) { const uid = selectedUid; showOverview(false); Promise.resolve().then(() => openTask(uid, false)).catch(noticeError); }
+      if (selectedUid) { const uid = selectedUid; showOverview(false, 'focus-open-main'); Promise.resolve().then(() => openTask(uid, false)).catch(noticeError); }
     });
     const focusTop = menuAction('Move to top', 'double-chevron-up', () => { menu.hidden = true; if (selectedUid) move(selectedUid, null, 'top'); });
     menuContent.append(menuList); menu.append(menuContent);
@@ -251,13 +257,13 @@ export function createDeskView({
     layer.append(backdrop, focus);
 
     const inScope = () => !closed && container.isConnected && roam === host.roamAlphaAPI && graph === graphName(host);
-    const affordances = createDeskNavigation({
+    affordances = createDeskNavigation({
       root, grid, body, origin, host,
       isOverview: () => !closed && mode === 'overview',
       canNavigate: () => inScope() && status === 'ready' && mode !== 'overview' && !busy && !composing,
       step,
     });
-    const checkScope = () => { if (inScope()) return true; close(false); return false; };
+    const checkScope = () => { if (inScope()) return true; close(false, 'scope-invalid'); return false; };
     const notice = (text) => { message.textContent = String(text); message.hidden = !text; };
     function noticeError(error) {
       const text = error?.message || 'Desk could not complete this action.';
@@ -300,7 +306,7 @@ export function createDeskView({
       }
     }
     function revealFocus() {
-      if (focusOwner && focusOwner !== session) focusOwner.showOverview(false);
+      if (focusOwner && focusOwner !== session) focusOwner.showOverview(false, 'focus-other-desk');
       focusOwner = session;
       drag.cancel();
       menu.hidden = true;
@@ -312,8 +318,10 @@ export function createDeskView({
       root.inert = true;
       root.setAttribute('aria-hidden', 'true');
       updateControls();
+      diagnostics.capture('focus-open');
     }
-    function showOverview(restoreFocus = true) {
+    function showOverview(restoreFocus = true, reason = 'focus-overview') {
+      if (mode !== 'overview' || layer.isConnected) diagnostics.capture(reason);
       const uid = selectedUid || returnUid;
       if (mode === 'draft') {
         captureDraft();
@@ -361,6 +369,7 @@ export function createDeskView({
         root.inert = true;
         root.hidden = true;
         root.setAttribute('aria-hidden', 'true');
+        diagnostics.afterLayout('fold');
         return;
       }
       root.hidden = false;
@@ -368,6 +377,7 @@ export function createDeskView({
       root.removeAttribute('aria-hidden');
       renderCards();
       host.requestAnimationFrame(() => { if (!closed && !folded) masonry.layoutNow(); });
+      diagnostics.afterLayout('unfold');
     }
     async function focusNativeInput(record, caret) {
       const candidates = [...record.el.querySelectorAll('.roam-block[id],textarea')];
@@ -477,7 +487,7 @@ export function createDeskView({
           if (inScope() && mode === 'draft' && draft === current && current.text.trim() && !composing && !current.uncommitted) {
             current.handedOff = true;
             if (tasks.some((task) => task.uid === current.uid)) showTask(current.uid, true, current.caret);
-            else { showOverview(false); notice('Saved under this Nautilus plan. Events and completed blocks are not shown as cards.'); }
+            else { showOverview(false, 'focus-non-task-saved'); notice('Saved under this Nautilus plan. Events and completed blocks are not shown as cards.'); }
             actions.releaseDraft(current.uid);
           } else if (!composing && !current.uncommitted && current.text === current.saved && (closed || mode !== 'draft' || draft !== current)) {
             current.handedOff = true;
@@ -646,6 +656,7 @@ export function createDeskView({
         const tile = cards.get(task.uid).tile;
         if (grid.children[index] !== tile) grid.insertBefore(tile, grid.children[index] || null);
       });
+      drag.reconcile();
       masonry.setItems(visible.map((task) => cards.get(task.uid).tile));
       if (focusedCard && mode === 'overview') {
         const target = status === 'ready' ? cards.get(focusedCard)?.open : retryRead;
@@ -715,7 +726,7 @@ export function createDeskView({
       if (status === 'ready' && previousStatus !== 'ready') notice('');
       if (status !== 'ready') {
         drag.cancel();
-        if (mode !== 'overview') showOverview(false);
+        if (mode !== 'overview') showOverview(false, 'focus-read-unavailable');
         notice('The last known cards are shown. Editing is paused until the plan can be read again.');
       }
       editingHoldUid = null;
@@ -730,7 +741,7 @@ export function createDeskView({
         if (index >= 0) { tasks.splice(Math.min(index, tasks.length), 0, previousTasks[index]); editingHoldUid = selectedUid; }
       }
       const nextUid = reconcileDeskSelection(previousTasks, tasks, selectedUid);
-      if (mode === 'task' && nextUid !== selectedUid) { if (nextUid && status === 'ready') showTask(nextUid); else showOverview(false); }
+      if (mode === 'task' && nextUid !== selectedUid) { if (nextUid && status === 'ready') showTask(nextUid); else showOverview(false, 'focus-selection-removed'); }
       if (status === 'ready') reconcilePreviews(previousTasks, tasks);
       renderCards();
     }
@@ -754,8 +765,9 @@ export function createDeskView({
       }
       const action = deskShortcut(event);
       if (action && (mode !== 'overview' || action === 'back' && event.target !== searchInput)) {
+        diagnostics.capture(`shortcut-${action}`, event.isTrusted);
         event.preventDefault(); event.stopPropagation();
-        if (action === 'back') { if (mode !== 'overview') showOverview(); else { preferences.write(graph, planUid, false); close(); } }
+        if (action === 'back') { if (mode !== 'overview') showOverview(true, 'focus-escape'); else { preferences.write(graph, planUid, false); close(true, 'hide-escape'); } }
         else step(action === 'next' ? 1 : -1);
         return;
       }
@@ -787,10 +799,11 @@ export function createDeskView({
       if (!editingHoldUid || selectionFrame !== null) return;
       selectionFrame = host.requestAnimationFrame(() => { selectionFrame = null; if (!closed) refresh(); });
     };
-    const onNavigation = () => { if (checkScope() && mode !== 'overview') showOverview(false); };
+    const onNavigation = () => { if (checkScope() && mode !== 'overview') showOverview(false, 'focus-hashchange'); };
     const onVisible = () => { if (!folded && document.visibilityState !== 'hidden') refresh(); };
-    function close(restoreFocus = true) {
+    function close(restoreFocus = true, reason = 'view-close') {
       if (closed) return;
+      diagnostics.capture(reason);
       if (mode === 'draft') captureDraft();
       if (draft && !draft.handedOff) {
         if (!draft.saving && (draft.uncommitted || draft.saved === null && !draft.text.trim())) {
@@ -814,6 +827,7 @@ export function createDeskView({
       host.removeEventListener('hashchange', onNavigation);
       host.removeEventListener('focus', onVisible);
       root.remove(); layer.remove();
+      diagnostics.afterLayout('after-hide');
       if (focusOwner === session) focusOwner = null;
       if (binding.session === session) binding.session = null;
       origin?.setAttribute?.('aria-expanded', 'false');
@@ -856,13 +870,14 @@ export function createDeskView({
       }, { rootMargin: '300px' });
       try { stopWatch = watchPlan(planUid, acceptSnapshot, { emitInitial: false }); refresh(); }
       catch (_error) { status = 'unavailable'; renderCards(); }
+      diagnostics.afterLayout('after-open');
     }
     const session = { start, close, showOverview, notice };
     return session;
   }
-  const closeForHost = (container) => { const binding = hosts.get(container); binding?.session?.close(false); hosts.delete(container); };
+  const closeForHost = (container, reason = 'host-removed') => { const binding = hosts.get(container); binding?.session?.close(false, reason); hosts.delete(container); };
   return {
-    open, registerHost, closeForHost,
+    open, registerHost, closeForHost, diagnostics,
     restoreMountedHosts() {
       if (!document?.querySelectorAll) return;
       for (const container of document.querySelectorAll('[data-nautilus-desk-plan]')) registerHost({
@@ -870,7 +885,7 @@ export function createDeskView({
         origin: container.closest('.nautilus-log-container')?.querySelector('.nautilus-log-desk-btn'),
       });
     },
-    close: () => { for (const binding of hosts.values()) binding.session?.close(false); },
-    destroy: () => { destroyed = true; for (const container of [...hosts.keys()]) closeForHost(container); return nativeLane; },
+    close: () => { for (const binding of hosts.values()) binding.session?.close(false, 'view-close'); },
+    destroy: () => { destroyed = true; for (const container of [...hosts.keys()]) closeForHost(container, 'view-destroy'); diagnostics.destroy(); return nativeLane; },
   };
 }

@@ -4,24 +4,52 @@
 export function createDeskNavigation({ root, grid, body, origin, host = window, isOverview, canNavigate, step }) {
   const document = root.ownerDocument;
   let hintTimer = null;
+  let altHints = false;
+  let dragHints = false;
+  const dragCards = new Set();
   let dx = 0, dy = 0, last = -Infinity, locked = false, direction = 0;
-  const clear = () => {
+  const updateHints = () => {
+    grid.classList.toggle('rm-desk-overview--numbers', altHints || dragHints);
+    grid.classList.toggle('nautilus-desk__grid--drag-numbers', dragHints);
+    if (!dragHints) {
+      for (const card of dragCards) delete card.dataset.dragPosition;
+      dragCards.clear();
+      return;
+    }
+    const visible = [...grid.children];
+    const visibleCards = new Set(visible);
+    for (const card of dragCards) if (!visibleCards.has(card)) {
+      delete card.dataset.dragPosition;
+      dragCards.delete(card);
+    }
+    for (const [index, card] of visible.entries()) {
+      dragCards.add(card);
+      card.dataset.dragPosition = String(index + 1);
+    }
+  };
+  const clearAlt = () => {
     if (hintTimer !== null) host.clearTimeout(hintTimer);
     hintTimer = null;
-    grid.classList.remove('rm-desk-overview--numbers');
+    altHints = false;
+    updateHints();
   };
-  const allowed = target => isOverview() && (root.contains(target) || target === origin)
+  const clear = () => {
+    clearAlt();
+    dragHints = false;
+    updateHints();
+  };
+  const allowed = target => isOverview() && (grid.contains(target) || target === origin)
     && !target?.closest?.('input,textarea,[contenteditable="true"]');
   const keydown = event => {
     if (event.key !== 'Alt' || event.ctrlKey || event.metaKey || event.shiftKey || event.isComposing || event.defaultPrevented || !allowed(event.target)) return;
     event.preventDefault();
     if (hintTimer === null) hintTimer = host.setTimeout(() => {
       hintTimer = null;
-      if (allowed(document.activeElement)) grid.classList.add('rm-desk-overview--numbers');
+      if (allowed(document.activeElement)) { altHints = true; updateHints(); }
     }, 400);
   };
-  const keyup = event => { if (event.key === 'Alt') clear(); };
-  const focus = event => { if (!allowed(event.target)) clear(); };
+  const keyup = event => { if (event.key === 'Alt') clearAlt(); };
+  const focus = event => { if (!allowed(event.target)) clearAlt(); };
   const wheel = event => {
     if (!canNavigate() || event.ctrlKey || event.defaultPrevented) return;
     for (let node = event.target; node && node !== body; node = node.parentElement) {
@@ -43,12 +71,18 @@ export function createDeskNavigation({ root, grid, body, origin, host = window, 
   document.addEventListener('focusin', focus);
   host.addEventListener('blur', clear);
   body.addEventListener('wheel', wheel, { passive: true });
-  return { destroy() {
-    clear();
-    document.removeEventListener('keydown', keydown);
-    document.removeEventListener('keyup', keyup);
-    document.removeEventListener('focusin', focus);
-    host.removeEventListener('blur', clear);
-    body.removeEventListener('wheel', wheel);
-  } };
+  return {
+    setDragHints(active) {
+      dragHints = Boolean(active);
+      updateHints();
+    },
+    destroy() {
+      clear();
+      document.removeEventListener('keydown', keydown);
+      document.removeEventListener('keyup', keyup);
+      document.removeEventListener('focusin', focus);
+      host.removeEventListener('blur', clear);
+      body.removeEventListener('wheel', wheel);
+    },
+  };
 }

@@ -2377,15 +2377,50 @@ button.nautilus-log-timing__plan-heading:focus-visible {
 
 /* Desk deliberately uses Roam's rm-desk-* and Blueprint styles. Only embedding,
    scoped outline hiding, narrow-container safety, and write state belong here. */
+/* Opt-in diagnostic report only; fixed positioning never changes page flow. */
+.nautilus-desk-diagnostics { position: fixed; right: 12px; bottom: 12px; z-index: 10000; width: min(480px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; }
+.nautilus-desk-diagnostics__controls { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.nautilus-desk-diagnostics .nautilus-desk-diagnostics__report { display: block; width: 100%; height: auto; min-height: 180px; resize: vertical; }
 .nautilus-log-desk-host { width: 100%; min-width: 0; }
 .nautilus-desk { position: relative; width: 100%; margin: 12px 0; }
 /* Native row spans use the 4px tracks directly. A late legacy `gap` rule
    changes row-gap as well as the native 12px column gap and inflates every
    span into blank space, so keep the masonry axis explicit. */
 .nautilus-desk .nautilus-desk__grid { row-gap: 0; }
-.nautilus-desk .rm-desk-page__toolbar { flex-wrap: wrap; }
-.nautilus-desk .rm-desk-page__tools { min-width: 0; max-width: 100%; flex-wrap: wrap; }
-.nautilus-desk .rm-desk-page__tools .bp3-input-group { max-width: 100%; }
+/* Native numbers stop at nine. While dragging, extend that same counter badge
+   to the remaining visible cards without changing the native first-nine rule. */
+.nautilus-desk__grid.nautilus-desk__grid--drag-numbers > .rm-desk-tile:nth-child(n + 10)::after {
+  content: counter(rm-desk-tile);
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+  color: white;
+  background: #137CBD;
+  pointer-events: none;
+}
+/* Reserve a native close-button slot on the title row. Only the search/create
+   group wraps, based on its actual container width rather than the viewport. */
+.nautilus-desk .rm-desk-page__toolbar { position: relative; flex-wrap: wrap; padding-right: 54px; }
+.nautilus-desk .rm-desk-page__title { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nautilus-desk .rm-desk-page__tools { flex: 0 1 auto; min-width: 0; max-width: 100%; margin-left: auto; flex-wrap: nowrap; }
+.nautilus-desk .rm-desk-page__tools .bp3-input-group { flex: 1 1 200px; min-width: 0; max-width: 200px; }
+.nautilus-desk .rm-desk-page__new-note { flex: 0 0 auto; white-space: nowrap; }
+.nautilus-desk .nautilus-desk__hide { position: absolute; top: 8px; right: 12px; width: 30px; height: 30px; min-width: 30px; padding: 0; }
+:where(#right-sidebar,.rm-sidebar-window,.rm-embed-container,.rm-callout__body) .nautilus-desk .rm-desk-page__toolbar { flex-direction: column; align-items: stretch; gap: 6px; padding-right: 12px; }
+:where(#right-sidebar,.rm-sidebar-window,.rm-embed-container,.rm-callout__body) .nautilus-desk .rm-desk-page__title { max-width: calc(100% - 42px); }
+:where(#right-sidebar,.rm-sidebar-window,.rm-embed-container,.rm-callout__body) .nautilus-desk .rm-desk-page__tools { width: 100%; margin-left: 0; }
+@media (max-width: 560px) {
+  .nautilus-desk .rm-desk-page__toolbar { flex-direction: column; align-items: stretch; gap: 6px; padding-right: 12px; }
+  .nautilus-desk .rm-desk-page__title { max-width: calc(100% - 42px); }
+  .nautilus-desk .rm-desk-page__tools { width: 100%; margin-left: 0; }
+}
 .nautilus-desk .rm-desk-tile { min-width: 0; }
 .nautilus-desk .rm-desk-tile:focus-within .rm-desk-tile__actions { opacity: 1; }
 .nautilus-desk .rm-desk-tile.is-dragging { opacity: .4; }

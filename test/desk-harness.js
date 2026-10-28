@@ -4,6 +4,7 @@ import { createDeskView } from '../src/desk-view';
 import { createDeskActions } from '../src/desk-actions';
 import { createPlanWatchBridge } from '../src/plan-watch';
 import { readBlockString, readChildren } from '../src/timing-roam';
+import { createDeskDiagnosticCommands } from '../src/desk-diagnostics';
 
 let cleanup = () => {};
 function mount({ count = 8, dark = false, editor = true, empty = false, preservePreferences = false, collapsed = false, watchResult = 'undefined' } = {}) {
@@ -188,11 +189,22 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
   };
   window.roamAlphaAPI = roam;
   const bridge = createPlanWatchBridge({ readString: readBlockString });
-  let actions = createDeskActions();
-  const newView = () => createDeskView({
-    actions, readPlan: bridge.read, watchPlan: bridge.subscribe, readString: readBlockString, readChildren,
-    openTask: (uid, sidebar) => stats.opened.push({ uid, sidebar }), getSettings: () => ({ language: 'en', 'todo-duration': 15 }),
-  });
+  let actions = createDeskActions(), diagnosticCommands;
+  const commandCallbacks = new Map();
+  const extensionAPI = { ui: { commandPalette: {
+    addCommand: command => commandCallbacks.set(command.label, command.callback),
+    removeCommand: ({ label }) => commandCallbacks.delete(label),
+  } } };
+  const newView = () => {
+    const view = createDeskView({
+      revision: 'd'.repeat(40),
+      actions, readPlan: bridge.read, watchPlan: bridge.subscribe, readString: readBlockString, readChildren,
+      openTask: (uid, sidebar) => stats.opened.push({ uid, sidebar }), getSettings: () => ({ language: 'en', 'todo-duration': 15 }),
+    });
+    diagnosticCommands = createDeskDiagnosticCommands({ extensionAPI, diagnostics: view.diagnostics });
+    diagnosticCommands.initialize();
+    return view;
+  };
   let desk = newView();
   const addHost = (uid, label, key = uid, sidebar = false, initiallyCollapsed = collapsed) => {
     const owner = document.createElement('section'); owner.className = 'roam-block-container fixture-owner'; owner.dataset.fixtureHost = key;
@@ -236,9 +248,13 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     return hosts.get(key);
   };
   addHost(planUid, 'Open Desk'); addHost('other-plan', 'Open other Desk');
-  cleanup = () => { desk.destroy(); actions.destroy(); bridge.destroy(); };
+  cleanup = () => { diagnosticCommands.destroy(); desk.destroy(); actions.destroy(); bridge.destroy(); };
   window.deskHarness.api = {
     stats, setString, setOpen, setOrder, addChild, children, text: uid => nodes.get(uid)?.string, activeEditors: () => nativeEditors.size,
+    diagnosticCommands: () => [...commandCallbacks.keys()],
+    runDiagnosticCommand: label => { const run = commandCallbacks.get(label); if (!run) throw new Error('Unknown fixture command'); return run(); },
+    diagnosticReport: () => desk.diagnostics.report(),
+    captureDiagnostic: (reason, metadata) => desk.diagnostics.capture(reason, metadata),
     watchSnapshot: () => [...watchRecords.values()].map(({ id, uid, pattern, state, calls }) => ({ id, uid, pattern, state, calls })),
     fireWatch: id => { const record = watchRecords.get(id); if (!record) throw new Error('Unknown fixture watch'); record.invoke(); },
     failRead: value => { failPlan = value; notify({ uid: planUid, fields: ['string'] }); }, failNextRender: () => { failRender = true; }, failNextMove: () => { failMove = true; },
@@ -249,7 +265,7 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     openCopy: () => { const h = addHost(planUid, 'Open copy Desk', 'copy', true, false); h.owner.style.width = '280px'; },
     removeHost: key => { const h = hosts.get(key); desk.closeForHost(h.slot); h.owner.remove(); hosts.delete(key); },
     restoreHost: () => addHost(planUid, 'Open Desk'),
-    reloadView: () => { desk.destroy(); actions.destroy(); actions = createDeskActions(); desk = newView(); desk.restoreMountedHosts(); },
+    reloadView: () => { diagnosticCommands.destroy(); desk.destroy(); actions.destroy(); actions = createDeskActions(); desk = newView(); desk.restoreMountedHosts(); },
     remove: uid => { const parent = nodes.get(uid)?.parentUid; nodes.delete(uid); notify({ uid, fields: ['string'] }, { uid: parent, fields: ['children'] }); },
     move: (uid, order) => roam.moveBlock({ block: { uid }, location: { 'parent-uid': nodes.get(uid).parentUid, order } }),
     destroy: cleanup,

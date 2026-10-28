@@ -153,6 +153,28 @@ other devices or manual writers; concurrent changes fail conservatively. Read
 failures retain visibly stale cards and pause writes. Hide Desk to inspect the
 original outline.
 
+### Temporary Desk diagnostics (Draft preview)
+
+Diagnostics are **off by default** and reset on reload. Use Roam's command palette:
+
+1. **Nautilus Log: Start Desk diagnostics (temporary)**, then reproduce the issue.
+2. **Nautilus Log: Show Desk diagnostics** to inspect the report. **Capture layout**
+   adds a current measurement; **Download report** exports a local JSON file.
+3. **Nautilus Log: Stop and clear Desk diagnostics**, or **Close diagnostics**, to
+   stop observation and erase the in-memory report.
+
+The bounded report keeps at most 40 events: layout sizes/scroll positions and
+fixed reason codes for Desk transitions and focus-dialog dismissal. It records
+no note text, typed input, raw keys, URLs, graph/block identifiers, or credentials.
+It does not use storage, send data, or write to the graph. Export happens only
+when you click Download report. The build revision is included when available.
+The report panel does not lock page scrolling or automatically take editor focus.
+
+This preview fixes narrow toolbar placement and adds visible-position badges
+throughout a drag. The reported outer whitespace, horizontal shift, and copy/send
+focus dismissal are **still under investigation**; diagnostics are evidence for
+that investigation, not a claim those issues are fixed.
+
 ### Validation boundary
 
 `PYTHONDONTWRITEBYTECODE=1 npm run test:desk` covers production adapters, projection,
