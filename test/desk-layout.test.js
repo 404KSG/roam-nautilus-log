@@ -11,18 +11,25 @@ test('native masonry uses a four-pixel row span plus the host column gap', () =>
   assert.equal(nativeRowSpan(199.5,12),53);
 });
 
-test('Desk styling adds no custom typography or fixed column cap', () => {
+test('embedded scope restores only native card sizing and drag chrome, never native page ownership', () => {
   const css=fs.readFileSync(path.join(__dirname,'../extension.css'),'utf8').split('/* Desk deliberately uses Roam')[1];
   assert.ok(css);
-  const positionBadge=css.match(/\.nautilus-desk \.nautilus-desk__position\s*\{([^}]+)\}/)?.[1] || '';
-  assert.match(positionBadge,/pointer-events:\s*none/);
-  assert.match(positionBadge,/font-size:\s*11px/);
-  assert.match(positionBadge,/font-weight:\s*600/);
-  assert.match(positionBadge,/background:\s*#137CBD/);
-  assert.match(positionBadge,/visibility:\s*hidden/);
-  assert.match(css,/\.nautilus-desk \.rm-desk-overview--numbers > \.rm-desk-tile::after\s*\{\s*content:\s*none/);
-  assert.doesNotMatch(css.replace(positionBadge,''),/font(?:-size|-family|-weight)?\s*:/);
-  assert.doesNotMatch(css,/grid-template-columns/);
+  assert.doesNotMatch(css,/nautilus-desk__position|is-drop-before|60vh|font-family\s*:|\bfont\s*:/);
+  assert.doesNotMatch(css,/\.rm-article-wrapper[^{}]*\{|\.roam-article[^{}]*\{|\.rm-spacing--[^{}]*\{/);
+  const columns=[...css.matchAll(/grid-template-columns:\s*([^;]+);/g)].map(match=>match[1]);
+  assert.deepEqual(columns,['repeat(auto-fill, minmax(240px, 1fr))']);
+  const sizes=[...new Set([...css.matchAll(/font-size:\s*(\w+);/g)].map(match=>match[1]))].sort();
+  assert.deepEqual(sizes,['11px','13px']);
+  assert.match(css,/\.rm-desk-tile__preview\s*\{\s*font-size:\s*13px;\s*line-height:\s*1\.5/);
+  assert.match(css,/content:\s*counter\(rm-desk-tile\)/);
+  assert.match(css,/content:\s*attr\(data-position\)/);
+  assert.match(css,/inset-inline-start:\s*-7\.5px/);
+  assert.match(css,/inset-inline-end:\s*-7\.5px/);
+  assert.match(css,/color:\s*#8A9BA8;\s*background:\s*#F5F8FA/);
+  assert.match(css,/pointer-events:\s*none/);
+  const view=fs.readFileSync(path.join(__dirname,'../src/desk-view.js'),'utf8');
+  assert.match(view,/el\('section', 'nautilus-desk'\)/);
+  assert.doesNotMatch(view,/el\('section', 'rm-desk-page/);
   const layout=fs.readFileSync(path.join(__dirname,'../src/desk-masonry.js'),'utf8');
   assert.doesNotMatch(layout,/maxColumns|\.style\.left|\.style\.top/);
   assert.match(layout,/gridRowEnd/);

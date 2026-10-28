@@ -2386,34 +2386,44 @@ button.nautilus-log-timing__plan-heading:focus-visible {
 /* Native row spans use the 4px tracks directly. A late legacy `gap` rule
    changes row-gap as well as the native 12px column gap and inflates every
    span into blank space, so keep the masonry axis explicit. */
-.nautilus-desk .nautilus-desk__grid { row-gap: 0; }
-/* A fixed footer slot keeps native-looking numbers out of titles/images and
-   reserves identical geometry before Alt or drag feedback begins. */
-.nautilus-desk .rm-desk-overview--numbers > .rm-desk-tile::after { content: none; }
-.nautilus-desk .nautilus-desk__position {
-  flex: 0 0 32px;
-  box-sizing: border-box;
-  min-width: 32px;
-  height: 18px;
-  padding: 0 4px;
-  border-radius: 9px;
-  visibility: hidden;
-  pointer-events: none;
-  color: white;
-  background: #137CBD;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 18px;
-  text-align: center;
+.nautilus-desk .nautilus-desk__grid { row-gap: 0; min-height: 0; }
+/* Native page-sized cards, not native page ownership. Never add rm-desk-page
+   to the embedded root: its host :has() rule changes the surrounding article. */
+.nautilus-desk .rm-desk-overview { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); column-gap: 12px; padding: 8px 12px; }
+.nautilus-desk .rm-desk-tile { padding: 12px 12px 8px; }
+.nautilus-desk .rm-desk-tile__image img { max-height: 200px; }
+.nautilus-desk .rm-desk-tile__images-cell { height: 80px; }
+.nautilus-desk .rm-desk-tile__preview { font-size: 13px; line-height: 1.5; }
+.nautilus-desk .rm-desk-page__toolbar .rm-desk-page__title { color: inherit; }
+/* Current native Desk drag chrome, scoped for hosts that predate these rules.
+   Alt counters are visible-order blue; drag positions are full-list gray.
+   Both are absolute: no footer reservation or feedback-time geometry change. */
+.nautilus-desk .rm-desk-overview--masonry { counter-reset: rm-desk-tile; }
+.nautilus-desk .rm-desk-overview--masonry > .rm-desk-tile { counter-increment: rm-desk-tile; }
+.nautilus-desk .rm-desk-overview--numbers > .rm-desk-tile:nth-child(-n + 9)::after {
+  content: counter(rm-desk-tile); position: absolute; top: 6px; right: 6px;
+  min-width: 18px; padding: 0 4px; border-radius: 9px; font-size: 11px;
+  font-weight: 600; line-height: 18px; text-align: center; color: white; background: #137CBD; pointer-events: none;
 }
-.nautilus-desk .nautilus-desk__position--visible { visibility: visible; }
-.nautilus-desk .rm-desk-tile__source { flex: 1 1 auto; min-width: 0; }
-.nautilus-desk.nautilus-desk--external-background { outline: 1px solid #137CBD; outline-offset: -1px; }
-.nautilus-desk .nautilus-desk__grid--external-background { box-shadow: inset 0 0 0 1px #137CBD; }
-.nautilus-desk .rm-desk-card__missing.nautilus-desk__external-empty { outline: 2px solid #137CBD; outline-offset: 2px; }
-.nautilus-desk .rm-desk-tile.nautilus-desk__external-before { box-shadow: inset 0 3px 0 #137CBD; }
-.nautilus-desk .rm-desk-tile.nautilus-desk__external-after { box-shadow: inset 0 -3px 0 #137CBD; }
+.nautilus-desk .rm-desk-tile--dragging { opacity: .4; }
+.nautilus-desk .rm-desk-tile__drop { position: absolute; z-index: 1; top: 0; bottom: 0; width: 3px; border-radius: 2px; background: #137CBD; pointer-events: none; }
+.nautilus-desk .rm-desk-tile__drop--before { inset-inline-start: -7.5px; }
+.nautilus-desk .rm-desk-tile__drop--after { inset-inline-end: -7.5px; }
+.nautilus-desk .rm-desk-tile__drop-position { position: absolute; top: -4px; min-width: 18px; padding: 0 4px; border-radius: 9px; font-size: 11px; font-weight: 600; line-height: 16px; text-align: center; color: #5C7080; background: #F5F8FA; border: 1px solid #E1E8ED; }
+.nautilus-desk .rm-desk-tile__drop--before .rm-desk-tile__drop-position { inset-inline-start: 0; }
+.nautilus-desk .rm-desk-tile__drop--after .rm-desk-tile__drop-position { inset-inline-end: 0; }
+.nautilus-desk .rm-desk-overview--masonry:has(> .rm-desk-tile--dragging) > .rm-desk-tile::after,
+.nautilus-desk .rm-desk-overview--masonry:has(> .rm-desk-tile > .rm-desk-tile__drop) > .rm-desk-tile::after {
+  position: absolute; top: 6px; right: 6px; min-width: 18px; padding: 0 4px; border-radius: 9px;
+  font-size: 11px; font-weight: 600; line-height: 16px; text-align: center; pointer-events: none;
+  color: #8A9BA8; background: #F5F8FA; border: 1px solid #E1E8ED; content: attr(data-position);
+}
+.bp3-dark .nautilus-desk .rm-desk-tile__drop-position,
+.bp3-dark .nautilus-desk .rm-desk-overview--masonry:has(> .rm-desk-tile--dragging) > .rm-desk-tile::after,
+.bp3-dark .nautilus-desk .rm-desk-overview--masonry:has(> .rm-desk-tile > .rm-desk-tile__drop) > .rm-desk-tile::after { color: #A7B6C2; background: #293742; border-color: #394B59; }
+.nautilus-desk .rm-desk-overview--masonry:has(> .rm-desk-tile--dragging) > .rm-desk-tile:has(> .rm-desk-tile__drop)::after,
+.nautilus-desk .rm-desk-overview--masonry:has(> .rm-desk-tile > .rm-desk-tile__drop) > .rm-desk-tile:has(> .rm-desk-tile__drop)::after { content: none; }
+.nautilus-desk .rm-desk-overview--drop { outline: 2px dashed #137CBD; outline-offset: -4px; border-radius: 8px; }
 .nautilus-desk__drop-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 /* Reuse the title's existing, clipped rectangle for feedback. The original
    label still defines its intrinsic size, so status never moves the grid or
@@ -2439,8 +2449,6 @@ button.nautilus-log-timing__plan-heading:focus-visible {
 }
 .nautilus-desk .rm-desk-tile { min-width: 0; }
 .nautilus-desk .rm-desk-tile:focus-within .rm-desk-tile__actions { opacity: 1; }
-.nautilus-desk .rm-desk-tile.is-dragging { opacity: .4; }
-.nautilus-desk .rm-desk-tile.is-drop-before { outline: 1px dashed currentColor; }
 .nautilus-desk [aria-disabled="true"] { cursor: default; opacity: .65; }
 .nautilus-desk [hidden], .nautilus-desk__focus-layer [hidden] { display: none !important; }
 .nautilus-desk__notice { padding: 8px 12px; }

@@ -5,6 +5,7 @@ import { createDeskMasonry } from './desk-masonry';
 import { createDeskWidth } from './desk-width';
 import { createDeskNavigation } from './desk-navigation';
 import { createDeskDrag } from './desk-drag';
+import { createDeskDropFeedback } from './desk-drop-feedback';
 import { createDeskExternalDrop } from './desk-external-drop';
 import { createDeskPreferences, createDeskOutlineVisibility } from './desk-host';
 import { createDeskDiagnostics } from './desk-diagnostics';
@@ -139,7 +140,9 @@ export function createDeskView({
     let folded = false;
     let search = '';
 
-    const root = el('section', 'rm-desk-page nautilus-desk');
+    // rm-desk-page owns the native route, including ancestor :has() padding.
+    // An embedded component must never claim that page-level ownership.
+    const root = el('section', 'nautilus-desk');
     root.setAttribute('role', 'region');
     root.setAttribute('aria-label', 'Nautilus Desk');
     root.dataset.planUid = planUid;
@@ -175,11 +178,11 @@ export function createDeskView({
     root.append(toolbar, message, retryRead, grid, empty);
     const masonry = createDeskMasonry({ grid, host });
     let affordances = null;
+    const dropFeedback = createDeskDropFeedback({ root, grid, empty, host, getTasks: () => tasks });
     const drag = createDeskDrag({
-      grid, host,
-      setDragHints: (active) => affordances?.setDragHints(active),
-      canDrag: () => inScope() && status === 'ready' && !busy && mode === 'overview' && Boolean(actions),
-      move: (uid, targetUid) => move(uid, targetUid),
+      grid, host, feedback: dropFeedback,
+      canDrag: () => inScope() && !folded && status === 'ready' && !busy && mode === 'overview' && Boolean(actions),
+      move,
       nudge: (uid, direction) => {
         const index = tasks.findIndex((task) => task.uid === uid);
         const target = tasks[index + direction];
@@ -279,7 +282,7 @@ export function createDeskView({
     const checkScope = () => { if (inScope()) return true; close(false, 'scope-invalid'); return false; };
     const notice = (text) => { message.textContent = String(text); message.hidden = !text; };
     externalDrop = createDeskExternalDrop({
-      root, grid, empty, statusRegion: title, host, actions, planUid,
+      root, grid, empty, statusRegion: title, host, actions, planUid, feedback: dropFeedback,
       canAccept: () => inScope() && !folded && status === 'ready' && mode === 'overview' && !busy && typeof actions?.importReferenceDrop === 'function',
     });
     function noticeError(error) {
@@ -619,7 +622,7 @@ export function createDeskView({
         scrollPositions.delete(uid);
         clearPreviewWatches(uid);
       }
-      for (const task of tasks) {
+      for (const [taskIndex, task] of tasks.entries()) {
         let card = cards.get(task.uid);
         if (!card) {
           const tile = el('div', 'rm-desk-tile nautilus-desk__card');
@@ -635,14 +638,10 @@ export function createDeskView({
           open.append(images, heading, lines);
           const footer = el('div', 'rm-desk-tile__footer');
           const source = el('span', 'rm-desk-tile__source', pageTitle);
-          // This fixed slot is always present so Alt/drag numbering cannot
-          // change card dimensions or cover native title/image interactions.
-          const position = el('span', 'nautilus-desk__position');
-          position.setAttribute('aria-hidden', 'true');
           const tools = el('div', 'rm-desk-tile__actions');
           const top = button('Move to top', 'double-chevron-up', () => move(task.uid, null, 'top'), 'rm-desk-tile__move-to-top');
           tools.append(top);
-          footer.append(source, position, tools);
+          footer.append(source, tools);
           tile.append(open, footer);
           const activate = (event) => {
             if (busy || status !== 'ready') return;
@@ -653,9 +652,12 @@ export function createDeskView({
           open.addEventListener('keydown', (event) => {
             if (!event.defaultPrevented && !event.isComposing && ['Enter', ' '].includes(event.key)) { event.preventDefault(); activate(event); }
           });
-          card = { tile, open, images, heading, headingText, lines, top, position };
+          card = { tile, open, images, heading, headingText, lines, top };
           cards.set(task.uid, card);
         }
+        // Native drag pills use full collection order; Alt counters use the
+        // visible DOM order independently, including when search is active.
+        card.tile.dataset.position = String(taskIndex + 1);
         const text = nativeText(task.localString);
         const safeText = nativePreviewText(task.localString);
         const cached = previews.get(task.uid);

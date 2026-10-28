@@ -109,8 +109,8 @@ def run():
                   fire(source,'dragstart');
                   const over=fire(dest,'dragover');
                   const empty=document.querySelector('.nautilus-desk > .rm-desk-card__missing');
-                  const feedback={root:dest.closest('.nautilus-desk').classList.contains('nautilus-desk--external-background'),
-                    empty:empty?.classList.contains('nautilus-desk__external-empty'),outline:empty ? getComputedStyle(empty).outlineWidth : null};
+                  const feedback={root:dest.closest('.nautilus-desk').classList.contains('rm-desk-overview--drop'),
+                    empty:empty?.classList.contains('rm-desk-overview--drop'),outline:empty ? getComputedStyle(empty).outlineWidth : null};
                   const drop=fire(dest,'drop'); fire(source,'dragend');
                   document.removeEventListener('dragover',overHost); document.removeEventListener('drop',dropHost);
                   return {over:over.defaultPrevented,drop:drop.defaultPrevented,hostOver,hostDrop,feedback};
@@ -252,7 +252,7 @@ def run():
             after = page.evaluate('() => deskHarness.api.children("plan-desk").map(r=>[r.uid,r.string,r.open])')
             assert sorted(before) == sorted(after)
             assert page.evaluate('() => window.taskPreviewBeforeMove === document.querySelector(`[data-task-uid="task-0"] img`)')
-            card('task-2').drag_to(card('task-4'))
+            card('task-2').drag_to(card('task-4'), target_position={'x': 12, 'y': 12})
             page.wait_for_function('deskHarness.api.children("plan-desk")[0].uid === "task-2"')
             assert page.evaluate('() => deskHarness.api.stats.writes.at(-1).uid') == 'task-2'
             assert page.evaluate('() => deskHarness.api.stats.forbiddenWrites') == 0
@@ -355,15 +355,15 @@ def run():
             card(visible_order[0]).locator('[role="button"]').focus()
             page.keyboard.down('Alt')
             expect(page.locator('.nautilus-desk__grid')).to_have_class('rm-desk-overview rm-desk-overview--masonry nautilus-desk__grid rm-desk-overview--numbers')
-            assert not page.locator('.nautilus-desk__grid').evaluate('(el) => el.classList.contains("nautilus-desk__grid--drag-numbers")')
-            assert page.locator('.nautilus-desk__card').nth(9).locator('.nautilus-desk__position').evaluate('el => getComputedStyle(el).visibility') == 'hidden'
-            # A normal ready update reorders cards while Alt remains held. The
-            # fixed slot must reconcile to DOM order without any internal drag.
+            assert page.locator('.nautilus-desk__card').nth(9).evaluate('el => getComputedStyle(el,"::after").content') in ['none', 'normal']
+            expect(page.locator('.nautilus-desk__position')).to_have_count(0)
+            # A normal ready update reorders cards while Alt remains held.
+            # Native counters and Alt+Digit follow the updated visible order.
             page.evaluate('() => deskHarness.api.setOrder("task-3", 0)')
             page.wait_for_function('document.querySelector(".nautilus-desk__card")?.dataset.taskUid === "task-3"')
-            alt_order = page.locator('.nautilus-desk__card').evaluate_all('(els) => els.map(el => ({uid:el.dataset.taskUid,label:el.querySelector(".nautilus-desk__position").textContent,visible:getComputedStyle(el.querySelector(".nautilus-desk__position")).visibility}))')
-            assert all(row['label'] == str(index + 1) and row['visible'] == 'visible' for index, row in enumerate(alt_order[:9])), alt_order
-            assert all(row['visible'] == 'hidden' for row in alt_order[9:]), alt_order
+            alt_order = page.locator('.nautilus-desk__card').evaluate_all('(els) => els.map(el => ({uid:el.dataset.taskUid,label:el.dataset.position,content:getComputedStyle(el,"::after").content}))')
+            assert all(row['label'] == str(index + 1) and 'counter(' in row['content'] for index, row in enumerate(alt_order[:9])), alt_order
+            assert all(row['content'] in ['none', 'normal'] for row in alt_order[9:]), alt_order
             page.keyboard.press('2')
             page.keyboard.up('Alt')
             focused(alt_order[1]['uid']); close_focus()
@@ -386,13 +386,13 @@ def run():
             page.mouse.move(drag_preview['x'] + 12, drag_preview['y'] + 12)
             page.mouse.down()
             page.mouse.move(drag_preview['x'] + 42, drag_preview['y'] + 24, steps=8)
-            page.wait_for_function('document.querySelector(".nautilus-desk__card.is-dragging")')
-            assert grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers") && el.classList.contains("nautilus-desk__grid--drag-numbers")')
-            positions = grid.evaluate('(el) => [...el.children].map(card => card.dataset.dragPosition)')
+            page.wait_for_function('document.querySelector(".nautilus-desk__card.rm-desk-tile--dragging")')
+            assert not grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
+            positions = grid.evaluate('(el) => [...el.children].map(card => card.dataset.position)')
             assert positions == [str(index) for index in range(1, len(positions) + 1)] and len(positions) > 9, positions
             badge_mapping = {'unfiltered': positions}
-            tenth_badge = grid.locator('.nautilus-desk__card').nth(9).locator('.nautilus-desk__position').evaluate('el => ({text:el.textContent,visibility:getComputedStyle(el).visibility,pointerEvents:getComputedStyle(el).pointerEvents,background:getComputedStyle(el).backgroundColor})')
-            assert tenth_badge == {'text': '10', 'visibility': 'visible', 'pointerEvents': 'none', 'background': 'rgb(19, 124, 189)'}, tenth_badge
+            tenth_badge = grid.locator('.nautilus-desk__card').nth(9).evaluate('el => { const s=getComputedStyle(el,"::after");return {text:s.content,pointerEvents:s.pointerEvents,background:s.backgroundColor}; }')
+            assert tenth_badge == {'text': '"10"', 'pointerEvents': 'none', 'background': 'rgb(245, 248, 250)'}, tenth_badge
             badge_geometry_during = grid.evaluate('''el => [...el.children].map(card => {
               const image=card.querySelector('img')?.getBoundingClientRect();
               const title=card.querySelector('.rm-desk-tile__title')?.getBoundingClientRect();
@@ -405,20 +405,22 @@ def run():
             assert badge_geometry_during == badge_geometry_before
             grid.screenshot(path=str(OUT/'drag-number-badges.png'))
             page.mouse.up()
-            page.wait_for_function('!document.querySelector(".nautilus-desk__card.is-dragging")')
+            page.wait_for_function('!document.querySelector(".nautilus-desk__card.rm-desk-tile--dragging")')
             assert not grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
             expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
 
-            # Filtered cards are numbered in their visible grid order, not their
-            # unfiltered plan order. Synthetic events supplement the real drag.
+            # Gray native drag pills retain full collection positions. Only Alt
+            # counters use filtered visible order. Synthetic events supplement the real drag.
+            full_positions = grid.evaluate('el => Object.fromEntries([...el.children].map(card=>[card.dataset.taskUid,card.dataset.position]))')
             search_control = page.get_by_role('textbox', name='Search Desk', exact=True)
             search_control.fill('整理')
             page.wait_for_function('(total) => { const count=document.querySelectorAll(".nautilus-desk__grid > .nautilus-desk__card").length; return count > 0 && count < total; }', arg=len(visible_order))
             filtered = page.locator('.nautilus-desk__card')
             filtered_count = filtered.count()
             drag_start(filtered.first)
-            filtered_positions = grid.evaluate('(el) => [...el.children].map(card => card.dataset.dragPosition)')
-            assert filtered_positions == [str(index) for index in range(1, filtered_count + 1)]
+            filtered_positions = grid.evaluate('(el) => [...el.children].map(card => card.dataset.position)')
+            filtered_uids = filtered.evaluate_all('els=>els.map(el=>el.dataset.taskUid)')
+            assert filtered_positions == [full_positions[uid] for uid in filtered_uids]
             badge_mapping['filtered'] = filtered_positions
             drag_end(filtered.first)
             assert not grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
@@ -430,9 +432,9 @@ def run():
             drag_source.locator('[role="button"]').focus()
             drag_start(drag_source)
             page.keyboard.down('Alt'); page.wait_for_timeout(450)
-            assert grid.evaluate('(el) => el.classList.contains("nautilus-desk__grid--drag-numbers") && el.classList.contains("rm-desk-overview--numbers")')
+            assert grid.evaluate('(el) => !!el.querySelector(".rm-desk-tile--dragging") && el.classList.contains("rm-desk-overview--numbers")')
             page.keyboard.up('Alt')
-            assert grid.evaluate('(el) => el.classList.contains("nautilus-desk__grid--drag-numbers") && el.classList.contains("rm-desk-overview--numbers")')
+            assert grid.evaluate('(el) => !!el.querySelector(".rm-desk-tile--dragging") && !el.classList.contains("rm-desk-overview--numbers")')
             drag_end(drag_source)
             assert not grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
 
@@ -440,7 +442,7 @@ def run():
             drag_start(drag_source)
             page.keyboard.down('Alt'); page.wait_for_timeout(450)
             drag_end(drag_source)
-            assert grid.evaluate('(el) => !el.classList.contains("nautilus-desk__grid--drag-numbers") && el.classList.contains("rm-desk-overview--numbers")')
+            assert grid.evaluate('(el) => !el.querySelector(".rm-desk-tile--dragging") && el.classList.contains("rm-desk-overview--numbers")')
             page.keyboard.up('Alt')
             assert not grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
 
@@ -449,11 +451,11 @@ def run():
             drag_source.locator('[role="button"]').focus()
             drag_start(drag_source)
             page.keyboard.press('Escape')
-            page.wait_for_function('!document.querySelector(".nautilus-desk__card.is-dragging")')
+            page.wait_for_function('!document.querySelector(".nautilus-desk__card.rm-desk-tile--dragging")')
             assert page.locator('.nautilus-desk').count() == 1 and not grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
             drag_start(drag_source)
             page.evaluate('() => window.dispatchEvent(new Event("blur"))')
-            page.wait_for_function('!document.querySelector(".nautilus-desk__card.is-dragging")')
+            page.wait_for_function('!document.querySelector(".nautilus-desk__card.rm-desk-tile--dragging")')
             assert not grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
             drag_start(drag_source)
             page.evaluate('() => deskHarness.api.setCollapsed("plan-desk", true)')
@@ -626,7 +628,7 @@ def run():
             expect(sidebar_grid).to_have_attribute('data-columns', '1')
             assert sidebar.evaluate('(el) => el.getBoundingClientRect().width <= 280')
             drag_start(sidebar.locator('.nautilus-desk__card').first)
-            assert sidebar_grid.evaluate('(el) => el.classList.contains("nautilus-desk__grid--drag-numbers")')
+            assert sidebar_grid.evaluate('(el) => !!el.querySelector(".rm-desk-tile--dragging")')
             assert not main_grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
             drag_end(sidebar.locator('.nautilus-desk__card').first)
             assert not sidebar_grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
@@ -670,7 +672,7 @@ def run():
             page.get_by_role('button', name='Open copy Desk', exact=True).click()
             expect(sidebar).to_have_count(1)
             drag_start(sidebar.locator('.nautilus-desk__card').first)
-            assert sidebar.locator('.nautilus-desk__grid').evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
+            assert sidebar.locator('.nautilus-desk__grid').evaluate('(el) => !!el.querySelector(".rm-desk-tile--dragging")')
             page.evaluate('() => deskHarness.api.removeHost("copy")')
             expect(sidebar).to_have_count(0)
             assert not main_grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
@@ -768,12 +770,12 @@ def run():
             page.evaluate('() => deskHarness.api.setString("task-4", "{{[[DONE]]}} Completed while dragging")')
             expect(card('task-4')).to_have_count(0)
             expect(page.locator('.nautilus-desk')).to_have_attribute('data-status', 'ready')
-            assert not reconcile_grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers") || el.classList.contains("nautilus-desk__grid--drag-numbers") || [...el.children].some(card => card.dataset.dragPosition)')
+            assert not reconcile_grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers") || el.querySelector(".rm-desk-tile--dragging,.rm-desk-tile__drop")')
             stale_source = page.evaluate('''() => ({
-              dragging:window.retainedDragSource.classList.contains('is-dragging'),
-              position:window.retainedDragSource.dataset.dragPosition
+              dragging:window.retainedDragSource.classList.contains('rm-desk-tile--dragging'),
+              rail:!!window.retainedDragSource.querySelector('.rm-desk-tile__drop')
             })''')
-            assert stale_source == {'dragging': False, 'position': None}, stale_source
+            assert stale_source == {'dragging': False, 'rail': False}, stale_source
             page.evaluate('''() => {
               for (const type of ['drop', 'dragend']) window.retainedDragSource.dispatchEvent(new DragEvent(type, {
                 bubbles:true, cancelable:true, dataTransfer:new DataTransfer()
@@ -785,17 +787,17 @@ def run():
             # follows the same ready-snapshot reconciliation path.
             deletion_source = card('task-3')
             drag_start(deletion_source)
-            assert reconcile_grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
+            assert reconcile_grid.evaluate('(el) => !!el.querySelector(".rm-desk-tile--dragging")')
             page.evaluate('''() => { window.retainedDeletedDragSource = document.querySelector('[data-task-uid="task-3"]'); }''')
             page.evaluate('() => deskHarness.api.remove("task-3")')
             expect(card('task-3')).to_have_count(0)
             expect(page.locator('.nautilus-desk')).to_have_attribute('data-status', 'ready')
-            assert not reconcile_grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers") || el.classList.contains("nautilus-desk__grid--drag-numbers") || [...el.children].some(card => card.dataset.dragPosition)')
+            assert not reconcile_grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers") || el.querySelector(".rm-desk-tile--dragging,.rm-desk-tile__drop")')
             deleted_source = page.evaluate('''() => ({
-              dragging:window.retainedDeletedDragSource.classList.contains('is-dragging'),
-              position:window.retainedDeletedDragSource.dataset.dragPosition
+              dragging:window.retainedDeletedDragSource.classList.contains('rm-desk-tile--dragging'),
+              rail:!!window.retainedDeletedDragSource.querySelector('.rm-desk-tile__drop')
             })''')
-            assert deleted_source == {'dragging': False, 'position': None}, deleted_source
+            assert deleted_source == {'dragging': False, 'rail': False}, deleted_source
 
             # A ready reorder or filter can detach non-source live cards. The
             # valid source remains active and its visible-order mapping refreshes.
@@ -803,15 +805,17 @@ def run():
             drag_start(mapping_source)
             page.evaluate('() => deskHarness.api.setOrder("task-2", 0)')
             expect(mapping_source).to_be_visible()
-            assert mapping_source.evaluate('(el) => el.classList.contains("is-dragging")')
-            assert reconcile_grid.evaluate('(el) => [...el.children].map(card => card.dataset.dragPosition)') == [str(index) for index in range(1, reconcile_grid.locator('.nautilus-desk__card').count() + 1)]
+            assert mapping_source.evaluate('(el) => el.classList.contains("rm-desk-tile--dragging")')
+            assert reconcile_grid.evaluate('(el) => [...el.children].map(card => card.dataset.position)') == [str(index) for index in range(1, reconcile_grid.locator('.nautilus-desk__card').count() + 1)]
+            ready_positions = reconcile_grid.evaluate('el=>Object.fromEntries([...el.children].map(card=>[card.dataset.taskUid,card.dataset.position]))')
             reconcile_search = page.get_by_role('textbox', name='Search Desk', exact=True)
             page.evaluate('''() => { window.retainedFilteredCard = document.querySelector('[data-task-uid="reference-wrapper"]'); }''')
             reconcile_search.fill('提示词')
             expect(mapping_source).to_be_visible()
-            assert mapping_source.evaluate('(el) => el.classList.contains("is-dragging")')
-            assert page.evaluate('() => window.retainedFilteredCard.dataset.dragPosition') is None
-            assert reconcile_grid.evaluate('(el) => [...el.children].map(card => card.dataset.dragPosition)') == [str(index) for index in range(1, reconcile_grid.locator('.nautilus-desk__card').count() + 1)]
+            assert mapping_source.evaluate('(el) => el.classList.contains("rm-desk-tile--dragging")')
+            assert page.evaluate('() => !window.retainedFilteredCard.isConnected && !window.retainedFilteredCard.querySelector(".rm-desk-tile__drop")')
+            ready_filtered = reconcile_grid.evaluate('el=>[...el.children].map(card=>({uid:card.dataset.taskUid,position:card.dataset.position}))')
+            assert all(row['position']==ready_positions[row['uid']] for row in ready_filtered)
             reconcile_search.fill('')
             expect(mapping_source).to_be_visible()
             drag_end(mapping_source)
@@ -833,7 +837,7 @@ def run():
                 modified = external_drag('[data-task-uid="task-1"]', modifiers={modifier: True})
                 assert not modified['over'] and not modified['drop'] and modified['hostOver'] == 1 and modified['hostDrop'] == 1, modified
             drag_start(card('task-1'))
-            assert card('task-1').evaluate('el=>el.classList.contains("is-dragging")')
+            assert card('task-1').evaluate('el=>el.classList.contains("rm-desk-tile--dragging")')
             drag_end(card('task-1'))
             page.locator('#page-after').dispatch_event('dragstart', {'bubbles': True})
             assert page.evaluate('() => deskHarness.api.stats.referenceRequests') == [{'state': 'pending', 'aborted': False}]
@@ -882,7 +886,7 @@ def run():
             page.evaluate('() => deskHarness.api.holdNextCreate()')
             empty_drop = external_drag('.nautilus-desk > .rm-desk-card__missing')
             page.wait_for_function('deskHarness.api.pending()')
-            assert empty_drop['feedback'] == {'root': True, 'empty': True, 'outline': '2px'}, empty_drop
+            assert empty_drop['feedback'] == {'root': False, 'empty': True, 'outline': '2px'}, empty_drop
             expect(empty_target).to_be_visible()
             expect(page.locator('.nautilus-desk__drop-toast')).to_be_visible()
             assert page.locator('.nautilus-desk').evaluate('el=>{const r=el.getBoundingClientRect();return [r.x,r.y,r.width,r.height];}') == empty_geometry
@@ -916,7 +920,7 @@ def run():
             mount(count=3)
 
             drag_start(card('task-1'))
-            assert page.locator('.nautilus-desk__grid').evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
+            assert page.locator('.nautilus-desk__grid').evaluate('(el) => !!el.querySelector(".rm-desk-tile--dragging")')
             checks.append('native auto-fill adapts from one to five columns without changing fonts or overflowing its surface')
             page.evaluate('() => deskHarness.destroy()')
             expect(page.locator('.nautilus-desk')).to_have_count(0)

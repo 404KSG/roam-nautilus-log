@@ -1,60 +1,51 @@
 /** Desk-only drag sorting. Never hand Roam a block-move payload. */
-export function createDeskDrag({ grid, canDrag, move, nudge, setDragHints = () => {}, host = globalThis.window, now = () => Date.now() }) {
+export function createDeskDrag({ grid, canDrag, move, nudge, feedback, host = globalThis.window, now = () => Date.now() }) {
   let source = null;
-  let target = null;
   let suppressUntil = 0;
   const cardFor = (node) => {
     const card = node?.closest?.('.nautilus-desk__card');
     return card?.parentElement === grid ? card : null;
   };
-  const clearTarget = () => {
-    target?.classList.remove('is-drop-before', 'is-drop-after');
-    target = null;
-  };
   const cancel = () => {
-    source?.classList.remove('is-dragging');
+    source?.classList.remove('rm-desk-tile--dragging');
     source = null;
-    clearTarget();
-    setDragHints(false);
+    feedback.clear();
   };
   const reconcile = () => {
     if (!source) return;
     if (source.parentElement !== grid || !source.draggable || !canDrag()) { cancel(); return; }
-    setDragHints(true);
+    feedback.reconcile();
   };
   const start = (event) => {
     const card = cardFor(event.target);
     if (!card) return;
     if (!canDrag() || card.disabled || !event.dataTransfer) { event.preventDefault(); return; }
+    cancel();
     source = card;
     event.stopPropagation();
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('application/x-nautilus-desk-task', card.dataset.taskUid);
-    source.classList.add('is-dragging');
-    setDragHints(true);
+    source.classList.add('rm-desk-tile--dragging');
   };
   const over = (event) => {
     if (!source || !canDrag()) return;
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = 'move';
-    const card = cardFor(event.target);
-    clearTarget();
-    if (!card || card === source) return;
-    target = card;
-    card.classList.add('is-drop-before');
+    feedback.show(event, { sourceUid: source.dataset.taskUid, internal: true });
   };
   const drop = (event) => {
     if (!source) return;
     event.preventDefault();
     event.stopPropagation();
     if (canDrag()) {
-      const card = cardFor(event.target);
-      if (card) move(source.dataset.taskUid, card.dataset.taskUid, false);
+      const insertion = feedback.show(event, { sourceUid: source.dataset.taskUid, internal: true });
+      if (insertion?.targetUid) move(source.dataset.taskUid, insertion.targetUid, insertion.kind);
     }
     suppressUntil = now() + 300;
     cancel();
   };
+  const leave = event => { if (!grid.contains(event.relatedTarget)) feedback.clear(); };
   const end = (event) => {
     if (!source && !cardFor(event.target)) return;
     event.stopPropagation();
@@ -81,17 +72,15 @@ export function createDeskDrag({ grid, canDrag, move, nudge, setDragHints = () =
     event.stopPropagation();
     nudge(card.dataset.taskUid, event.key === 'ArrowLeft' ? -1 : 1);
   };
-  // Suppress only the trailing click of the drag gesture, not a new deliberate
-  // click (which starts with a fresh pointerdown) on any card or its actions.
+  // Suppress only the trailing click, not a new deliberate pointer gesture.
   const pointerDown = () => { if (!source) suppressUntil = 0; };
   const blur = () => { if (source) { suppressUntil = now() + 300; cancel(); } };
-  const events = [['dragstart', start], ['dragover', over], ['drop', drop], ['dragend', end], ['keydown', key], ['pointerdown', pointerDown]];
+  const events = [['dragstart', start], ['dragover', over], ['drop', drop], ['dragleave', leave], ['dragend', end], ['keydown', key], ['pointerdown', pointerDown]];
   for (const [name, listener] of events) grid.addEventListener(name, listener);
   grid.addEventListener('click', click, true);
   host?.addEventListener?.('blur', blur);
   return {
-    cancel,
-    reconcile,
+    cancel, reconcile,
     destroy() {
       cancel();
       for (const [name, listener] of events) grid.removeEventListener(name, listener);

@@ -5,45 +5,17 @@ export function createDeskNavigation({ root, grid, body, origin, host = window, 
   const document = root.ownerDocument;
   let hintTimer = null;
   let altHints = false;
-  let dragHints = false;
-  const dragCards = new Set();
   let dx = 0, dy = 0, last = -Infinity, locked = false, direction = 0;
-  const updateHints = () => {
-    grid.classList.toggle('rm-desk-overview--numbers', altHints || dragHints);
-    grid.classList.toggle('nautilus-desk__grid--drag-numbers', dragHints);
-    const visible = [...grid.children];
-    const visibleCards = new Set(visible);
-    for (const card of dragCards) if (!visibleCards.has(card)) {
-      delete card.dataset.dragPosition;
-      dragCards.delete(card);
-    }
-    for (const [index, card] of visible.entries()) {
-      const position = card.querySelector?.('.nautilus-desk__position');
-      const show = dragHints || (altHints && index < 9);
-      if (position) {
-        position.textContent = String(index + 1);
-        position.classList.toggle('nautilus-desk__position--visible', show);
-      }
-      if (dragHints) {
-        dragCards.add(card);
-        card.dataset.dragPosition = String(index + 1);
-      } else {
-        delete card.dataset.dragPosition;
-        dragCards.delete(card);
-      }
-    }
-  };
+  // Drag feedback is native :has(--dragging / __drop), not Alt-number state.
+  // Keeping them separate lets gray drag pills yield back to held-Alt counters.
+  const updateHints = () => grid.classList.toggle('rm-desk-overview--numbers', altHints);
   const clearAlt = () => {
     if (hintTimer !== null) host.clearTimeout(hintTimer);
     hintTimer = null;
     altHints = false;
     updateHints();
   };
-  const clear = () => {
-    clearAlt();
-    dragHints = false;
-    updateHints();
-  };
+  const clear = clearAlt;
   const allowed = target => isOverview() && (grid.contains(target) || target === origin)
     && !target?.closest?.('input,textarea,[contenteditable="true"]');
   const keydown = event => {
@@ -78,12 +50,7 @@ export function createDeskNavigation({ root, grid, body, origin, host = window, 
   host.addEventListener('blur', clear);
   body.addEventListener('wheel', wheel, { passive: true });
   return {
-    setDragHints(active) {
-      dragHints = Boolean(active);
-      updateHints();
-    },
-    // Card rendering can reorder/filter while Alt remains held. Recompute the
-    // visible DOM mapping so labels and Alt+Digit always name the same card.
+    // Native CSS counters follow the reconciled visible DOM order.
     reconcile() { updateHints(); },
     destroy() {
       clear();

@@ -2,6 +2,14 @@
    Production inherits Roam's site.css and Blueprint CSS. For parity validation,
    test/desk-view.py also accepts ROAM_NATIVE_CSS and ROAM_BLUEPRINT_CSS snapshots.
    Native contract inspected at https://roamresearch.com/assets/css/less-compiled/site.css. */
+/* Current native route-level rules: an embedded component must not trigger
+   these by borrowing the full-page marker. Keep this regression host-only. */
+.rm-article-wrapper { transition: padding 300ms ease-in-out; padding-left: 12px; }
+.rm-article-wrapper.rm-spacing--small { padding-left: calc((100% - 800px) / 2); padding-right: calc((100% - 800px) / 2); }
+.rm-article-wrapper.rm-spacing--medium { padding-left: calc((100% - 1000px) / 2); padding-right: calc((100% - 1000px) / 2); }
+.rm-article-wrapper.rm-spacing--large { padding-left: calc((100% - 1400px) / 2); padding-right: calc((100% - 1400px) / 2); }
+.rm-article-wrapper[class*="rm-spacing--"]:has(.rm-desk-page) { padding-left: 12px; padding-right: 0; }
+.rm-desk-page .rm-desk-overview--masonry { min-height: 60vh; align-content: start; }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: Inter, sans-serif; font-size: 15px; line-height: 1.5; color: #202b33; background: white; }
 .bp3-button { display:inline-flex;align-items:center;justify-content:center;gap:7px;font:inherit;font-size:14px;cursor:pointer;border:0;border-radius:3px;min-height:30px;padding:5px 10px;color:#182026;background:transparent; }

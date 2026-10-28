@@ -96,7 +96,10 @@ Desk. The view uses Roam's `rm-desk-*` and Blueprint styles rather than a separa
 font, size, or card theme. In the main window it can use the available article
 wrapper width instead of being confined to the centered Daily Note. Sidebars and
 embeds stay within their own bounds. Native auto-fill determines the column count;
-there is no fixed two-column layout or three-column cap.
+there is no fixed two-column layout or three-column cap. The embedded root does
+not use Roam's full-page `rm-desk-page` marker: current host styles use that marker
+to change ancestor padding and impose a viewport-sized canvas. Only native card
+sizes are retained locally; opening this component must not change page spacing.
 
 - **Unfinished tasks only.** Each direct task becomes a card, including unscheduled
   work. Events, DONE blocks, and dividers are excluded. Implicit tasks and referenced
@@ -105,12 +108,17 @@ there is no fixed two-column layout or three-column cap.
   area below this Nautilus renderer is hidden, including events and completed logs.
   Nothing is deleted or collapsed in the graph. Other plans and the native editor's
   children remain visible. Hiding Desk or unloading restores the original area.
-- **Drag moves the real block.** Drop a card before another card to change the
-  actual outline order and therefore planning priority. The footer's hover action,
+- **Drag moves the real block.** The left/right halves of a target card choose
+  before/after (mirrored in RTL), changing actual outline order and planning priority. The footer's hover action,
   **Move to top**, moves that same UID to index zero, ahead of any hidden events or
   completed blocks. Dropping before the first active card also means actual index
   zero. Text, descendants, and referenced source blocks are not moved or rewritten.
   The previous view-only ordering cache and reset-layout control are gone.
+  Drag feedback matches current native Desk: gray top-right position pills, a blue
+  vertical insertion rail, and its resulting-position label. Gray positions refer
+  to the full unfinished-task collection even during search; blue Alt counters
+  refer to the first nine visible cards. No footer number slot or custom drag ghost
+  is used. Background insertion uses the full collection's end, not a filtered order.
 - **Plus adds content under this plan.** **New note** in the overview and **+** in
   the focus header open a native-style draft. The first committed, nonblank input
   creates one direct child at the start of the current Nautilus block, then hands
@@ -152,9 +160,11 @@ built-in starred/Desk collection.
 
 Drag one ordinary native Roam block from the same window and graph onto a Desk card
 (or the background). Desk preserves the original block and creates one local
-`TODO` reference wrapper under the current plan. Upper/lower card halves choose
-before/after; background adds after the last active task (or first in an empty
-plan). Files, pages, queries, embeds/renderers, events, ambiguous/multi-block and
+`TODO` reference wrapper under the current plan. Left/right card halves choose
+before/after (mirrored in RTL), with the same native insertion rail and number.
+Background adds after the last unfiltered active task (or first in an empty plan).
+Accepted native transfers use the copy cursor; move-only or link-only transfers
+are not imported. Files, pages, queries, embeds/renderers, events, ambiguous/multi-block and
 cross-graph payloads are rejected. Nautilus ignores modifier gestures and leaves
 those events entirely to Roam; it does not suppress Roam's own modifier behavior.
 Repeated drops reuse the same deterministic wrapper. An unconfirmed attempt in
@@ -196,10 +206,12 @@ It does not use storage, send data, or write to the graph. Export happens only
 when you click Download report. The build revision is included when available.
 The report panel does not lock page scrolling or automatically take editor focus.
 
-This preview fixes narrow toolbar placement and adds visible-position badges
-throughout a drag. The reported outer whitespace and horizontal shift are **still
-under investigation**; diagnostics are evidence for
-that investigation, not a claim those issues are fixed.
+The page-scope CSS collision is now reproduced and corrected: current host CSS
+made the old embedded page marker change wrapper padding, producing a 12px shift
+in the narrow case. Removing that marker leaves existing anchors unchanged across
+spacing/context regressions and avoids the page-only 60vh grid floor. Native pages
+retain their own layout rules. A fresh check of the installed Desktop build is still
+needed; these fixtures do not claim to diagnose every possible outer whitespace issue.
 
 ### Validation boundary
 
@@ -213,6 +225,9 @@ Artifacts use `/tmp/nautilus-desk-verify`, `/tmp/nautilus-desk-collapse`, and
 `/tmp/nautilus-desk-preview-lifecycle`. Override them with `DESK_TEST_OUT`,
 `DESK_COLLAPSE_TEST_OUT`, and `DESK_PREVIEW_TEST_OUT` for separate runs. The feedback
 suite (`npm run test:desk-drop-feedback`) uses `/tmp/nautilus-desk-drop-feedback`;
+`test:desk-scope` and `test:desk-drag-parity` use `/tmp/nautilus-desk-scope` and
+`/tmp/nautilus-desk-drag-parity` (override with `DESK_SCOPE_TEST_OUT` and
+`DESK_DRAG_PARITY_TEST_OUT`);
 override it with `DESK_DROP_FEEDBACK_TEST_OUT`. Set
 `ROAM_NATIVE_CSS` and `ROAM_BLUEPRINT_CSS` to host stylesheet snapshots to test
 against actual Roam CSS. `ROAM_ICONS_CSS` and `ROAM_FONT_CSS` can supply native

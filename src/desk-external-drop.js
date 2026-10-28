@@ -9,11 +9,11 @@ const hasType = (transfer, type) => {
   try { return Array.from(transfer?.types || []).includes(type); } catch (_error) { return false; }
 };
 const cursorFor = transfer => ['all', 'uninitialized', 'copy', 'copyLink', 'copyMove'].includes(transfer?.effectAllowed || 'uninitialized')
-  ? 'copy' : ['link', 'linkMove'].includes(transfer?.effectAllowed) ? 'link' : null;
+  ? 'copy' : null;
 
 /** DOM ownership only: graph validation and synchronous payload freezing live in importReferenceDrop. */
 export function createDeskExternalDrop({
-  root, grid, empty, statusRegion, host = globalThis.window, actions, planUid, canAccept = () => false,
+  root, grid, empty, statusRegion, feedback, host = globalThis.window, actions, planUid, canAccept = () => false,
   getContext = () => readDeskDropContext(host),
 } = {}) {
   const document = root?.ownerDocument || host?.document;
@@ -53,18 +53,7 @@ export function createDeskExternalDrop({
       if (!operations.size) say('');
     }, TERMINAL_MESSAGE_MS);
   };
-  const cardFor = node => {
-    const card = node?.closest?.('.nautilus-desk__card');
-    return card?.parentElement === grid ? card : null;
-  };
-  const clearFeedback = () => {
-    root?.classList?.remove('nautilus-desk--external-background');
-    grid?.classList?.remove('nautilus-desk__grid--external-background');
-    empty?.classList?.remove('nautilus-desk__external-empty');
-    for (const card of grid?.querySelectorAll?.('.nautilus-desk__external-before,.nautilus-desk__external-after') || []) {
-      card.classList.remove('nautilus-desk__external-before', 'nautilus-desk__external-after');
-    }
-  };
+  const clearFeedback = () => feedback.clear();
   const clearCandidate = () => { candidate = null; clearFeedback(); };
   const stopOwned = event => { event.preventDefault(); event.stopPropagation(); };
   const abortOperations = () => {
@@ -75,20 +64,7 @@ export function createDeskExternalDrop({
   const cancelAll = () => { clearCandidate(); abortOperations(); say(''); };
   const candidateCurrent = () => Boolean(candidate && !suspended && sameDeskDropContext(candidate.context, getContext()));
   const ownedTarget = event => Boolean(root?.contains?.(event.target));
-  const setFeedback = event => {
-    clearFeedback();
-    const card = cardFor(event.target);
-    if (!card) {
-      root?.classList?.add('nautilus-desk--external-background');
-      grid?.classList?.add('nautilus-desk__grid--external-background');
-      if (empty && !empty.hidden) empty.classList.add('nautilus-desk__external-empty');
-      return { kind: 'background' };
-    }
-    const rect = card.getBoundingClientRect();
-    const before = event.clientY < rect.top + rect.height / 2;
-    card.classList.add(before ? 'nautilus-desk__external-before' : 'nautilus-desk__external-after');
-    return { kind: before ? 'before' : 'after', targetUid: card.dataset.taskUid };
-  };
+  const setFeedback = event => feedback.show(event, { sourceUid: candidate?.uid || null });
   const dragStart = event => {
     // Classify before touching candidate state: unrelated, internal, and modifier
     // starts must never abort or otherwise alter an issued import.
@@ -106,6 +82,7 @@ export function createDeskExternalDrop({
     candidate = { uid, context };
   };
   const dragEnd = () => { if (candidate) clearCandidate(); };
+  const dragLeave = event => { if (ownedTarget(event) && !root.contains(event.relatedTarget)) clearFeedback(); };
   const dragOver = event => {
     if (!ownedTarget(event)) return;
     if (hasDropModifier(event) || hasType(event.dataTransfer, INTERNAL_TYPE)) { if (hasDropModifier(event)) clearFeedback(); return; }
@@ -165,11 +142,11 @@ export function createDeskExternalDrop({
   const keydown = event => { if (event.key === 'Escape' && (candidate || operations.size || messageTimer !== null)) cancelAll(); };
   // A settled operation can still own terminal feedback and a timer.
   const lifecycle = () => cancelAll();
-  const events = [['dragstart', dragStart, true], ['dragend', dragEnd, true], ['dragover', dragOver, true], ['drop', drop, true], ['keydown', keydown, true]];
+  const events = [['dragstart', dragStart, true], ['dragend', dragEnd, true], ['dragleave', dragLeave, true], ['dragover', dragOver, true], ['drop', drop, true], ['keydown', keydown, true]];
   for (const [type, listener, capture] of events) document?.addEventListener?.(type, listener, capture);
   host?.addEventListener?.('blur', lifecycle); host?.addEventListener?.('hashchange', lifecycle);
   return {
-    reconcile() { if (!root?.isConnected || suspended || !canAccept()) lifecycle(); },
+    reconcile() { if (!root?.isConnected || suspended || !canAccept()) lifecycle(); else feedback.reconcile(); },
     suspend() { suspended = true; cancelAll(); },
     resume() { suspended = false; },
     destroy() {

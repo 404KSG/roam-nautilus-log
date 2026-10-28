@@ -9,16 +9,19 @@
   events, ambiguous payloads, and cross-graph sources are rejected. Modifier
   gestures are ignored by Nautilus and remain Roam-owned. Repeated drops and
   reloads use the same reserved UID rather than allocating another wrapper UID.
-- Internal Desk drags now show native-style position badges for every visible
-  card. Alt-only hints retain their first-nine behavior. Ready updates reconcile
+- Internal and accepted external drags use current native Desk's gray top-right
+  full-collection position pills, vertical insertion rails, and resulting-position
+  labels. Left/right halves choose before/after (mirrored in RTL). The previous
+  custom footer badge is removed. Alt-only blue counters retain visible first-nine behavior. Ready updates reconcile
   detached sources and clear stale drag state without attempting a stale move.
 - The Draft preview includes opt-in Desk diagnostics through the command palette.
   It defaults off, retains at most 40 local in-memory geometry/reason events, and
   clears on stop, panel close, or unload. It does not record note/input text, raw
   keys, URLs, graph identifiers, or credentials, and does not send data or write
   to the graph. A report can be downloaded only by an explicit user action.
-  The reported live outer gap and horizontal shift remain unresolved. The
-  editor-first Escape fix below covers the simulated copy prelude only; the live
+  The native page-scope cause of horizontal movement is fixed below; confirmation
+  in the updated live Desktop build and unrelated whitespace remain separate.
+  The editor-first Escape fix covers the simulated copy prelude only; the live
   macro's clipboard/navigation/send workflow remains unvalidated.
 - Nautilus Desk reuses Roam's native Desk/Blueprint styles, native grid-span
   masonry, and available main-content width below the chart. It hides only the
@@ -40,6 +43,11 @@
 
 ### Fixed
 
+- Embedded Desk no longer claims the native `rm-desk-page` route marker. Current
+  Roam CSS used that descendant to reset ancestor wrapper padding, reproducing
+  the reported 12px shift. Native card sizes are scoped locally without changing
+  host ancestors or inheriting the page-only 60vh canvas floor. Spacing/context
+  round trips cover the failure; genuine native pages keep their own rules.
 - Escape from a mounted native editor now remains with Roam, including the
   mocked Escape-before-Copy prelude. The footer hint follows editor versus chrome
   focus. Desk chrome, Close/backdrop, and drafts retain their deliberate Escape
