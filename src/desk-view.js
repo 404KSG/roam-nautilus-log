@@ -1,10 +1,11 @@
 import { graphName } from './graph-context';
-import { projectDeskTasks, reconcileDeskSelection, stepDeskSelection, deskShortcut } from './desk-core';
+import { projectDeskTasks, reconcileDeskSelection, stepDeskSelection, deskShortcut, nativeEditorOwnsEscape } from './desk-core';
 import { nativeElements, nativeText, nativePreviewText, readNativePreview } from './desk-native';
 import { createDeskMasonry } from './desk-masonry';
 import { createDeskWidth } from './desk-width';
 import { createDeskNavigation } from './desk-navigation';
 import { createDeskDrag } from './desk-drag';
+import { createDeskExternalDrop } from './desk-external-drop';
 import { createDeskPreferences, createDeskOutlineVisibility } from './desk-host';
 import { createDeskDiagnostics } from './desk-diagnostics';
 
@@ -134,6 +135,7 @@ export function createDeskView({
     let observer = null;
     let foldObserver = null;
     let widthBinding = null;
+    let externalDrop = null;
     let folded = false;
     let search = '';
 
@@ -142,9 +144,11 @@ export function createDeskView({
     root.setAttribute('aria-label', 'Nautilus Desk');
     root.dataset.planUid = planUid;
     const toolbar = el('div', 'rm-desk-page__toolbar');
-    const title = el('h1', 'rm-desk-page__title', 'Nautilus Desk');
+    const title = el('h1', 'rm-desk-page__title');
+    const titleLabel = el('span', 'nautilus-desk__title-label', 'Nautilus Desk');
     const count = el('span', 'rm-desk-page__count');
-    title.append(count);
+    titleLabel.append(count);
+    title.append(titleLabel);
     const tools = el('div', 'rm-desk-page__tools');
     const searchGroup = el('div', 'bp3-input-group');
     const searchInput = el('input', 'bp3-input bp3-round bp3-minimal');
@@ -248,11 +252,20 @@ export function createDeskView({
     body.append(editorStatus, editor, draftInput);
     const keys = el('div', 'rm-desk__keys');
     const alt = /Mac|iPhone|iPad/.test(host.navigator?.platform || '') ? 'opt' : 'alt';
-    for (const [chord, label] of [[`${alt}+,`, 'Next'], [`${alt}+.`, 'Previous'], ['esc', 'Close']]) {
+    for (const [chord, label] of [[`${alt}+,`, 'Next'], [`${alt}+.`, 'Previous']]) {
       const key = el('span', 'rm-sidecar__key');
       key.append(el('span', 'rm-sidecar__chord', chord), label);
       keys.append(key);
     }
+    const escapeKey = el('span', 'rm-sidecar__key');
+    const escapeHint = el('span', 'nautilus-desk__escape-hint', 'Close');
+    escapeKey.append(el('span', 'rm-sidecar__chord', 'esc'), escapeHint);
+    keys.append(escapeKey);
+    const updateEscapeHint = (target = document.activeElement) => {
+      escapeHint.textContent = mode === 'task' && mount?.el?.isConnected && mount.el.contains(target) ? 'Roam editor' : 'Close';
+    };
+    layer.addEventListener('focusin', event => updateEscapeHint(event.target));
+    layer.addEventListener('focusout', event => updateEscapeHint(event.relatedTarget));
     focus.append(header, menu, body, keys);
     layer.append(backdrop, focus);
 
@@ -265,6 +278,10 @@ export function createDeskView({
     });
     const checkScope = () => { if (inScope()) return true; close(false, 'scope-invalid'); return false; };
     const notice = (text) => { message.textContent = String(text); message.hidden = !text; };
+    externalDrop = createDeskExternalDrop({
+      root, grid, empty, statusRegion: title, host, actions, planUid,
+      canAccept: () => inScope() && !folded && status === 'ready' && mode === 'overview' && !busy && typeof actions?.importReferenceDrop === 'function',
+    });
     function noticeError(error) {
       const text = error?.message || 'Desk could not complete this action.';
       if (!closed) notice(text);
@@ -289,6 +306,7 @@ export function createDeskView({
       if (card) observer?.observe(card.tile);
     }
     function updateControls() {
+      updateEscapeHint();
       const index = tasks.findIndex((task) => task.uid === selectedUid);
       counter.textContent = mode === 'draft' ? 'new' : String(Math.max(0, index + 1));
       next.disabled = busy || status !== 'ready' || (mode === 'draft' ? !tasks.length : index < 0 || index === tasks.length - 1);
@@ -309,6 +327,7 @@ export function createDeskView({
       if (focusOwner && focusOwner !== session) focusOwner.showOverview(false, 'focus-other-desk');
       focusOwner = session;
       drag.cancel();
+      externalDrop?.suspend();
       menu.hidden = true;
       const left = Math.max(0, document.querySelector('.roam-main')?.getBoundingClientRect().left || 0);
       focus.style.left = `${left}px`;
@@ -329,6 +348,7 @@ export function createDeskView({
         else void saveDraft();
       }
       mode = 'overview';
+      externalDrop?.resume();
       selectedUid = null;
       composing = false;
       deferredSnapshot = null;
@@ -359,6 +379,7 @@ export function createDeskView({
         composing = false;
         deferredSnapshot = null;
         drag.cancel();
+        externalDrop?.suspend();
         menu.hidden = true;
         dropEditor();
         layer.remove();
@@ -373,6 +394,7 @@ export function createDeskView({
         return;
       }
       root.hidden = false;
+      externalDrop?.resume();
       root.inert = false;
       root.removeAttribute('aria-hidden');
       renderCards();
@@ -613,10 +635,14 @@ export function createDeskView({
           open.append(images, heading, lines);
           const footer = el('div', 'rm-desk-tile__footer');
           const source = el('span', 'rm-desk-tile__source', pageTitle);
+          // This fixed slot is always present so Alt/drag numbering cannot
+          // change card dimensions or cover native title/image interactions.
+          const position = el('span', 'nautilus-desk__position');
+          position.setAttribute('aria-hidden', 'true');
           const tools = el('div', 'rm-desk-tile__actions');
           const top = button('Move to top', 'double-chevron-up', () => move(task.uid, null, 'top'), 'rm-desk-tile__move-to-top');
           tools.append(top);
-          footer.append(source, tools);
+          footer.append(source, position, tools);
           tile.append(open, footer);
           const activate = (event) => {
             if (busy || status !== 'ready') return;
@@ -627,7 +653,7 @@ export function createDeskView({
           open.addEventListener('keydown', (event) => {
             if (!event.defaultPrevented && !event.isComposing && ['Enter', ' '].includes(event.key)) { event.preventDefault(); activate(event); }
           });
-          card = { tile, open, images, heading, headingText, lines, top };
+          card = { tile, open, images, heading, headingText, lines, top, position };
           cards.set(task.uid, card);
         }
         const text = nativeText(task.localString);
@@ -656,7 +682,10 @@ export function createDeskView({
         const tile = cards.get(task.uid).tile;
         if (grid.children[index] !== tile) grid.insertBefore(tile, grid.children[index] || null);
       });
+      affordances?.reconcile();
       drag.reconcile();
+      if (!folded && mode === 'overview') externalDrop?.resume();
+      externalDrop?.reconcile();
       masonry.setItems(visible.map((task) => cards.get(task.uid).tile));
       if (focusedCard && mode === 'overview') {
         const target = status === 'ready' ? cards.get(focusedCard)?.open : retryRead;
@@ -763,6 +792,11 @@ export function createDeskView({
       if (!menu.hidden && event.key === 'Escape' && !event.defaultPrevented) {
         event.preventDefault(); event.stopPropagation(); menu.hidden = true; more.focus({ preventScroll: true }); return;
       }
+      // Roam owns Escape inside its mounted editor (for example, to turn an
+      // editing block into a native selection before a host copy action). Do
+      // not classify the event by trust, timing, or typed input; preserving the
+      // editor subtree is sufficient and leaves Desk chrome behavior unchanged.
+      if (mode === 'task' && mount?.el?.isConnected && nativeEditorOwnsEscape(event, mount)) return;
       const action = deskShortcut(event);
       if (action && (mode !== 'overview' || action === 'back' && event.target !== searchInput)) {
         diagnostics.capture(`shortcut-${action}`, event.isTrusted);
@@ -818,7 +852,7 @@ export function createDeskView({
       clearPreviewWatches();
       observer?.disconnect();
       foldObserver?.disconnect();
-      masonry.destroy(); drag.destroy(); affordances.destroy(); outlineVisibility.destroy(); widthBinding?.destroy();
+      masonry.destroy(); drag.destroy(); externalDrop?.destroy(); affordances.destroy(); outlineVisibility.destroy(); widthBinding?.destroy();
       if (previewFrame !== null) host.cancelAnimationFrame(previewFrame);
       if (compositionFrame !== null) host.cancelAnimationFrame(compositionFrame);
       if (selectionFrame !== null) host.cancelAnimationFrame(selectionFrame);

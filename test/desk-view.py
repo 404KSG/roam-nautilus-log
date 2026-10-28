@@ -85,6 +85,37 @@ def run():
                   bubbles:true, cancelable:true, dataTransfer:new DataTransfer()
                 }))''')
 
+            def external_drag(target='.nautilus-desk__grid', modifiers=None, payload=None):
+                return page.evaluate('''({target, modifiers, payload}) => {
+                  const source=document.querySelector('#fixture-external-outline .rm-bullet');
+                  const dest=document.querySelector(target);
+                  const fields={
+                    'roam/block-uid-list-only-parents':'outside-source',
+                    'roam/block-uid-list':'outside-source',
+                    'roam/roam-uri-list':'https://roamresearch.com/#/app/desk-fixture/page/outside-source',
+                    ...payload.fields,
+                  };
+                  const data={types:payload.types || Object.keys(fields),files:{length:payload.files || 0},effectAllowed:'copy',dropEffect:'none',getData:type=>fields[type] || ''};
+                  let hostOver=0,hostDrop=0;
+                  const overHost=()=>hostOver++,dropHost=()=>hostDrop++;
+                  document.addEventListener('dragover',overHost); document.addEventListener('drop',dropHost);
+                  const fire=(node,type)=>{
+                    const rect=dest.getBoundingClientRect();
+                    const event=new Event(type,{bubbles:true,cancelable:true});
+                    const props={dataTransfer:{value:data},clientX:{value:rect.x+4},clientY:{value:rect.y+2}};
+                    for(const key of ['altKey','ctrlKey','metaKey','shiftKey']) props[key]={value:Boolean(modifiers[key])};
+                    Object.defineProperties(event,props);node.dispatchEvent(event);return event;
+                  };
+                  fire(source,'dragstart');
+                  const over=fire(dest,'dragover');
+                  const empty=document.querySelector('.nautilus-desk > .rm-desk-card__missing');
+                  const feedback={root:dest.closest('.nautilus-desk').classList.contains('nautilus-desk--external-background'),
+                    empty:empty?.classList.contains('nautilus-desk__external-empty'),outline:empty ? getComputedStyle(empty).outlineWidth : null};
+                  const drop=fire(dest,'drop'); fire(source,'dragend');
+                  document.removeEventListener('dragover',overHost); document.removeEventListener('drop',dropHost);
+                  return {over:over.defaultPrevented,drop:drop.defaultPrevented,hostOver,hostDrop,feedback};
+                }''', {'target': target, 'modifiers': modifiers or {}, 'payload': payload or {}})
+
             def activate(uid):
                 card(uid).locator('.rm-desk-tile__preview').click()
                 focused(uid)
@@ -244,10 +275,55 @@ def run():
             activate('task-0')
             assert page.evaluate('() => deskHarness.api.stats.renders.at(-1).zoom') is True
             expect(page.locator('.nautilus-desk__native .rm-block-children')).to_be_visible()
+
+            # Generic host prelude only: native Escape selects this block, then
+            # an in-memory copy callback reads it. No OS clipboard, app switch,
+            # paste, send, or macro is invoked by this fixture.
+            prelude_before = page.evaluate('''() => ({
+              writes: deskHarness.api.stats.writes.length,
+              nativeWrites: deskHarness.api.stats.nativeWrites.length,
+              value: deskHarness.api.text('task-0'), hash: location.hash,
+              preferences: JSON.stringify(Object.fromEntries(Object.entries(localStorage)
+                .filter(([key]) => key.startsWith('nautilus-log:desk-view:'))))
+            })''')
+            page.evaluate('''() => {
+              window.copyPreludeAfterPlugin = [];
+              document.addEventListener('keydown', event => window.copyPreludeAfterPlugin.push({
+                defaultPrevented: event.defaultPrevented,
+                focusUid: document.querySelector('.nautilus-desk__native')?.dataset.taskUid || null
+              }), { once: true });
+            }''')
+            prelude = page.evaluate('() => deskHarness.api.replayEscapeBeforeCopy("task-0")')
+            assert prelude == {'defaultPrevented': False, 'copied': {
+              'uid': 'task-0', 'block': prelude_before['value']}}, prelude
+            focused('task-0')
+            expect(page.locator('.nautilus-desk__escape-hint')).to_have_text('Roam editor')
+            assert page.evaluate('() => window.copyPreludeAfterPlugin') == [{'defaultPrevented': False, 'focusUid': 'task-0'}]
+            prelude_after = page.evaluate('''() => ({
+              writes: deskHarness.api.stats.writes.length,
+              nativeWrites: deskHarness.api.stats.nativeWrites.length,
+              value: deskHarness.api.text('task-0'), hash: location.hash,
+              preferences: JSON.stringify(Object.fromEntries(Object.entries(localStorage)
+                .filter(([key]) => key.startsWith('nautilus-log:desk-view:')))),
+              nativeEscape: deskHarness.api.stats.nativeEscapes.at(-1),
+              fakeCopy: deskHarness.api.stats.fakeCopies.at(-1),
+              outbound: [deskHarness.api.stats.appActivations, deskHarness.api.stats.pastes,
+                deskHarness.api.stats.sends, deskHarness.api.stats.outboundCallbacks]
+            })''')
+            assert {key: prelude_after[key] for key in ['writes', 'nativeWrites', 'value', 'hash', 'preferences']} == prelude_before
+            assert prelude_after['nativeEscape'] == {'uid': 'task-0', 'defaultPreventedBefore': False, 'prevented': False}
+            assert prelude_after['fakeCopy'] == prelude['copied']
+            assert prelude_after['outbound'] == [0, 0, 0, 0]
+            # A native handler that owns and prevents Escape remains compatible.
+            prevented = page.evaluate('() => deskHarness.api.replayEscapeBeforeCopy("task-0", { preventDefault: true })')
+            assert prevented['defaultPrevented'] is True and prevented['copied']['uid'] == 'task-0'
+            focused('task-0')
+            checks.append('generic native Escape-before-fake-Copy prelude keeps the same focus/editor selection, preserves graph/hash/preferences, and has no outbound operations')
             current = page.evaluate('() => deskHarness.api.stats.renders.length')
             edit = page.locator('textarea[data-block-uid="task-0"]')
             edit.fill('{{[[TODO]]}} Edited original title 45m')
             page.locator('.rm-desk--dialog').focus()
+            expect(page.locator('.nautilus-desk__escape-hint')).to_have_text('Close')
             expect(card('task-0').locator('[role="button"]')).to_have_attribute('aria-label', 'Edited original title 45m')
             assert page.evaluate('() => deskHarness.api.stats.renders.length') == current
             edit.fill('')
@@ -280,27 +356,53 @@ def run():
             page.keyboard.down('Alt')
             expect(page.locator('.nautilus-desk__grid')).to_have_class('rm-desk-overview rm-desk-overview--masonry nautilus-desk__grid rm-desk-overview--numbers')
             assert not page.locator('.nautilus-desk__grid').evaluate('(el) => el.classList.contains("nautilus-desk__grid--drag-numbers")')
-            assert page.locator('.nautilus-desk__card').nth(9).evaluate('el => getComputedStyle(el,"::after").content') in ['none', 'normal']
+            assert page.locator('.nautilus-desk__card').nth(9).locator('.nautilus-desk__position').evaluate('el => getComputedStyle(el).visibility') == 'hidden'
+            # A normal ready update reorders cards while Alt remains held. The
+            # fixed slot must reconcile to DOM order without any internal drag.
+            page.evaluate('() => deskHarness.api.setOrder("task-3", 0)')
+            page.wait_for_function('document.querySelector(".nautilus-desk__card")?.dataset.taskUid === "task-3"')
+            alt_order = page.locator('.nautilus-desk__card').evaluate_all('(els) => els.map(el => ({uid:el.dataset.taskUid,label:el.querySelector(".nautilus-desk__position").textContent,visible:getComputedStyle(el.querySelector(".nautilus-desk__position")).visibility}))')
+            assert all(row['label'] == str(index + 1) and row['visible'] == 'visible' for index, row in enumerate(alt_order[:9])), alt_order
+            assert all(row['visible'] == 'hidden' for row in alt_order[9:]), alt_order
             page.keyboard.press('2')
             page.keyboard.up('Alt')
-            focused(visible_order[1]); close_focus()
+            focused(alt_order[1]['uid']); close_focus()
             assert page.evaluate('() => deskHarness.api.stats.writes.length') == hint_writes
 
             # This real pointer motion enters the production HTML drag path.
             # The grid contains more than nine cards, so its DOM mapping proves
             # drag mode extends native first-nine feedback to every visible card.
+            grid = page.locator('.nautilus-desk__grid')
+            badge_geometry_before = grid.evaluate('''el => [...el.children].map(card => {
+              const image=card.querySelector('img')?.getBoundingClientRect();
+              const title=card.querySelector('.rm-desk-tile__title')?.getBoundingClientRect();
+              const footer=card.querySelector('.rm-desk-tile__footer')?.getBoundingClientRect();
+              const action=card.querySelector('.rm-desk-tile__actions')?.getBoundingClientRect();
+              return {height:card.offsetHeight, span:card.style.gridRowEnd, image:image&&[image.x,image.y,image.width,image.height],
+                title:title&&[title.x,title.y,title.width,title.height], footer:footer&&[footer.x,footer.y,footer.width,footer.height],
+                action:action&&[action.x,action.y,action.width,action.height]};
+            })''')
             drag_preview = card(visible_order[2]).locator('.rm-desk-tile__preview').bounding_box()
             page.mouse.move(drag_preview['x'] + 12, drag_preview['y'] + 12)
             page.mouse.down()
             page.mouse.move(drag_preview['x'] + 42, drag_preview['y'] + 24, steps=8)
             page.wait_for_function('document.querySelector(".nautilus-desk__card.is-dragging")')
-            grid = page.locator('.nautilus-desk__grid')
             assert grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers") && el.classList.contains("nautilus-desk__grid--drag-numbers")')
             positions = grid.evaluate('(el) => [...el.children].map(card => card.dataset.dragPosition)')
             assert positions == [str(index) for index in range(1, len(positions) + 1)] and len(positions) > 9, positions
             badge_mapping = {'unfiltered': positions}
-            tenth_badge = grid.locator('.nautilus-desk__card').nth(9).evaluate('el => ({content:getComputedStyle(el,"::after").content,pointerEvents:getComputedStyle(el,"::after").pointerEvents})')
-            assert 'counter(rm-desk-tile)' in tenth_badge['content'] and tenth_badge['pointerEvents'] == 'none', tenth_badge
+            tenth_badge = grid.locator('.nautilus-desk__card').nth(9).locator('.nautilus-desk__position').evaluate('el => ({text:el.textContent,visibility:getComputedStyle(el).visibility,pointerEvents:getComputedStyle(el).pointerEvents,background:getComputedStyle(el).backgroundColor})')
+            assert tenth_badge == {'text': '10', 'visibility': 'visible', 'pointerEvents': 'none', 'background': 'rgb(19, 124, 189)'}, tenth_badge
+            badge_geometry_during = grid.evaluate('''el => [...el.children].map(card => {
+              const image=card.querySelector('img')?.getBoundingClientRect();
+              const title=card.querySelector('.rm-desk-tile__title')?.getBoundingClientRect();
+              const footer=card.querySelector('.rm-desk-tile__footer')?.getBoundingClientRect();
+              const action=card.querySelector('.rm-desk-tile__actions')?.getBoundingClientRect();
+              return {height:card.offsetHeight, span:card.style.gridRowEnd, image:image&&[image.x,image.y,image.width,image.height],
+                title:title&&[title.x,title.y,title.width,title.height], footer:footer&&[footer.x,footer.y,footer.width,footer.height],
+                action:action&&[action.x,action.y,action.width,action.height]};
+            })''')
+            assert badge_geometry_during == badge_geometry_before
             grid.screenshot(path=str(OUT/'drag-number-badges.png'))
             page.mouse.up()
             page.wait_for_function('!document.querySelector(".nautilus-desk__card.is-dragging")')
@@ -713,6 +815,105 @@ def run():
             reconcile_search.fill('')
             expect(mapping_source).to_be_visible()
             drag_end(mapping_source)
+
+            # These are synthetic native-shaped events, not physical OS drops.
+            # Hold the real adapter promise BEFORE repeated/modified/internal
+            # gestures; a retry after settlement cannot cover this race.
+            source_before = page.evaluate('() => deskHarness.api.sourceSnapshot("outside-source")')
+            import_before = page.evaluate('() => deskHarness.api.stats.writes.length')
+            drop_geometry_before = page.locator('.nautilus-desk__grid').evaluate('el => { const r=el.getBoundingClientRect(); return [r.x,r.y,r.width]; }')
+            page.evaluate('() => deskHarness.api.holdNextCreate()')
+            imported = external_drag('[data-task-uid="task-1"]')
+            assert imported['over'] and imported['drop'] and imported['hostDrop'] == 0 and imported['hostOver'] == 0, imported
+            page.wait_for_function('deskHarness.api.pending()')
+            assert page.evaluate('() => deskHarness.api.stats.referenceRequests') == [{'state': 'pending', 'aborted': False}]
+            repeat = external_drag('[data-task-uid="task-1"]')
+            assert repeat['drop'] and repeat['hostDrop'] == 0, repeat
+            for modifier in ['altKey', 'ctrlKey', 'metaKey', 'shiftKey']:
+                modified = external_drag('[data-task-uid="task-1"]', modifiers={modifier: True})
+                assert not modified['over'] and not modified['drop'] and modified['hostOver'] == 1 and modified['hostDrop'] == 1, modified
+            drag_start(card('task-1'))
+            assert card('task-1').evaluate('el=>el.classList.contains("is-dragging")')
+            drag_end(card('task-1'))
+            page.locator('#page-after').dispatch_event('dragstart', {'bubbles': True})
+            assert page.evaluate('() => deskHarness.api.stats.referenceRequests') == [{'state': 'pending', 'aborted': False}]
+            assert page.evaluate('() => deskHarness.api.stats.writes.length') == import_before + 1
+            assert page.evaluate('() => deskHarness.api.children("plan-desk").some(row=>row.uid==="ref-outside-source")') is False
+            page.evaluate('() => deskHarness.api.release()')
+            page.wait_for_function('deskHarness.api.stats.referenceRequests[0]?.state === "fulfilled"')
+            assert page.evaluate('() => deskHarness.api.stats.referenceRequests') == [{'state': 'fulfilled', 'aborted': False, 'status': 'added'}]
+            drop_geometry_after = page.locator('.nautilus-desk__grid').evaluate('el => { const r=el.getBoundingClientRect(); return [r.x,r.y,r.width]; }')
+            assert drop_geometry_after == drop_geometry_before, (drop_geometry_before, drop_geometry_after)
+            toast = page.locator('.nautilus-desk__drop-toast')
+            expect(toast).to_have_text('Added reference. Original kept.')
+            assert toast.evaluate('el => ({position:getComputedStyle(el).position,pointerEvents:getComputedStyle(el).pointerEvents})') == {'position': 'absolute', 'pointerEvents': 'none'}
+            imported_row = page.evaluate('() => deskHarness.api.children("plan-desk").find(row => row.uid === "ref-outside-source")')
+            assert imported_row['string'] == '{{[[TODO]]}} ((outside-source))', imported_row
+            assert page.evaluate('() => deskHarness.api.sourceSnapshot("outside-source")') == source_before
+            # Settled retry and a fresh view/action owner also do not create again.
+            external_drag('[data-task-uid="task-1"]')
+            page.wait_for_function('deskHarness.api.stats.referenceRequests.at(-1)?.status === "existing-reference"')
+            page.evaluate('() => deskHarness.api.reloadView()')
+            expect(card('ref-outside-source')).to_be_visible()
+            external_drag('[data-task-uid="task-1"]')
+            page.wait_for_function('deskHarness.api.stats.referenceRequests.length === 3 && deskHarness.api.stats.referenceRequests.at(-1)?.state === "fulfilled"')
+            assert page.evaluate('() => deskHarness.api.stats.writes.length') == import_before + 1
+            checks.append('held reference create survives repeated, modifier, internal, and unrelated drags; settled/reloaded retries make no second create')
+
+            # Rejected unmodified drops are owned too: later host handlers must
+            # never receive a file, malformed multi-block, HTML, or URL fallback.
+            for payload in [
+                {'files': 1},
+                {'fields': {'roam/block-uid-list': 'outside-source\\noutside-other'}},
+                {'fields': {'roam/roam-uri-list': 'https://roamresearch.com/#/app/other/page/outside-source'}},
+                {'types': ['text/html'], 'fields': {'text/html': '<div>not a block</div>'}},
+                {'types': ['text/uri-list'], 'fields': {'text/uri-list': 'https://example.invalid/'}},
+            ]:
+                rejected = external_drag('[data-task-uid="task-1"]', payload=payload)
+                assert rejected['over'] and rejected['drop'] and rejected['hostOver'] == 0 and rejected['hostDrop'] == 0, rejected
+                page.wait_for_function('deskHarness.api.stats.referenceRequests.every(r=>r.state!=="pending")')
+                assert page.evaluate('() => deskHarness.api.stats.writes.length') == import_before + 1
+            checks.append('owned rejected drops cannot reach later host bubble handlers or create content')
+
+            mount(empty=True)
+            empty_target = page.locator('.nautilus-desk > .rm-desk-card__missing')
+            expect(empty_target).to_be_visible()
+            empty_geometry = page.locator('.nautilus-desk').evaluate('el=>{const r=el.getBoundingClientRect();return [r.x,r.y,r.width,r.height];}')
+            page.evaluate('() => deskHarness.api.holdNextCreate()')
+            empty_drop = external_drag('.nautilus-desk > .rm-desk-card__missing')
+            page.wait_for_function('deskHarness.api.pending()')
+            assert empty_drop['feedback'] == {'root': True, 'empty': True, 'outline': '2px'}, empty_drop
+            expect(empty_target).to_be_visible()
+            expect(page.locator('.nautilus-desk__drop-toast')).to_be_visible()
+            assert page.locator('.nautilus-desk').evaluate('el=>{const r=el.getBoundingClientRect();return [r.x,r.y,r.width,r.height];}') == empty_geometry
+            page.screenshot(path=str(OUT/'empty-drop-pending.png'))
+            page.evaluate('() => deskHarness.api.release()')
+            expect(card('ref-outside-source')).to_be_visible()
+            expect(empty_target).to_be_hidden()
+            assert page.evaluate('() => deskHarness.api.stats.writes.length') == 1
+            checks.append('empty target receives visible landing feedback and pending toast without flow geometry changes')
+
+            # Lifecycle cancellation cannot revoke an issued host call. Late
+            # completion is not reported as success and cannot resurrect UI.
+            for lifecycle in ['fold', 'destroy', 'blur', 'hashchange']:
+                mount(count=3)
+                source_before = page.evaluate('() => deskHarness.api.sourceSnapshot("outside-source")')
+                page.evaluate('() => deskHarness.api.holdNextCreate()')
+                external_drag('[data-task-uid="task-1"]')
+                page.wait_for_function('deskHarness.api.pending()')
+                page.evaluate('''kind=>{
+                  if(kind==='fold') deskHarness.api.setCollapsed('plan-desk',true);
+                  else if(kind==='destroy') deskHarness.destroy();
+                  else window.dispatchEvent(new Event(kind));
+                }''', lifecycle)
+                page.wait_for_function('deskHarness.api.stats.referenceRequests[0]?.aborted')
+                page.evaluate('() => deskHarness.api.release()')
+                page.wait_for_function('deskHarness.api.stats.referenceRequests[0]?.state === "rejected"')
+                assert page.evaluate('() => deskHarness.api.stats.writes.length') == 1
+                assert page.evaluate('() => deskHarness.api.sourceSnapshot("outside-source")') == source_before
+                assert page.evaluate('() => [...document.querySelectorAll(".nautilus-desk__drop-toast")].every(el=>el.hidden || !el.isConnected)')
+            checks.append('fold, unload, blur, and navigation cancel ownership without claiming rollback of a late host create')
+            mount(count=3)
 
             drag_start(card('task-1'))
             assert page.locator('.nautilus-desk__grid').evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')

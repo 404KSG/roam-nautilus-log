@@ -120,8 +120,11 @@ there is no fixed two-column layout or three-column cap.
 - **Native focus editing.** Click a card to edit its original UID, path, and children
   with `renderBlock`; Shift-click opens it in the sidebar. **Option/Alt + comma** is
   Next and **Option/Alt + period** is Previous. Navigation stops at the last card;
-  Previous from the first card opens the new-note slot, as native Desk does. Esc or
-  Close returns to the cards. Holding Alt reveals number hints; **Alt + 1–9** opens
+  Previous from the first card opens the new-note slot, as native Desk does.
+  Esc within the mounted native editor belongs to Roam, including the tested
+  Escape-before-fake-Copy prelude. The footer shows **esc Roam editor** there;
+  focusing Desk chrome changes it to **esc Close**. Use Close, the backdrop, or
+  Esc from Desk chrome to return to cards. Drafts retain their own Esc behavior. Holding Alt reveals number hints; **Alt + 1–9** opens
   the corresponding card. Horizontal trackpad gestures switch notes without
   intercepting vertical scrolling or nested horizontal scrollers. Motion respects
   reduced-motion preferences. The ordinary page and IME input are not intercepted
@@ -144,6 +147,29 @@ Search Desk covers titles and direct child content. Only the focused card mounts
 existing Pull Watch; text updates do not remount the editor. Completing or removing
 an active task advances focus. Browsing does not control CLOCK or alter Roam's
 built-in starred/Desk collection.
+
+### Safe outside-block references
+
+Drag one ordinary native Roam block from the same window and graph onto a Desk card
+(or the background). Desk preserves the original block and creates one local
+`TODO` reference wrapper under the current plan. Upper/lower card halves choose
+before/after; background adds after the last active task (or first in an empty
+plan). Files, pages, queries, embeds/renderers, events, ambiguous/multi-block and
+cross-graph payloads are rejected. Nautilus ignores modifier gestures and leaves
+those events entirely to Roam; it does not suppress Roam's own modifier behavior.
+Repeated drops reuse the same deterministic wrapper. An unconfirmed attempt in
+that running view is verification-only; reload checks the same reserved UID and
+never allocates a second UID for that source and plan. Imports require the public
+`data.pull` and `data.block.create` APIs and a verifiable graph/type/user context.
+Progress temporarily uses the existing title area, leaving Search, New note, and
+Hide Desk unobstructed. Hover over a truncated message to read it in full. The
+full message is also announced to assistive technology; terminal feedback clears
+after five seconds and restores the title without moving the cards.
+
+The import and Escape-prelude checks use synthetic graphs and a fake in-memory
+Copy callback. The editor-first fix is implemented, but the live macro workflow
+remains unvalidated: no physical drop, real clipboard, app switch, paste, or send
+was exercised.
 
 Moves and creation share Tidy's graph-scoped `outline` Web Lock. Parent and task
 state are checked before writing; UID, text, and order are read back afterward.
@@ -171,8 +197,8 @@ when you click Download report. The build revision is included when available.
 The report panel does not lock page scrolling or automatically take editor focus.
 
 This preview fixes narrow toolbar placement and adds visible-position badges
-throughout a drag. The reported outer whitespace, horizontal shift, and copy/send
-focus dismissal are **still under investigation**; diagnostics are evidence for
+throughout a drag. The reported outer whitespace and horizontal shift are **still
+under investigation**; diagnostics are evidence for
 that investigation, not a claim those issues are fixed.
 
 ### Validation boundary
@@ -185,7 +211,9 @@ code previews, and draft recovery without writing to a live graph.
 
 Artifacts use `/tmp/nautilus-desk-verify`, `/tmp/nautilus-desk-collapse`, and
 `/tmp/nautilus-desk-preview-lifecycle`. Override them with `DESK_TEST_OUT`,
-`DESK_COLLAPSE_TEST_OUT`, and `DESK_PREVIEW_TEST_OUT` for separate runs. Set
+`DESK_COLLAPSE_TEST_OUT`, and `DESK_PREVIEW_TEST_OUT` for separate runs. The feedback
+suite (`npm run test:desk-drop-feedback`) uses `/tmp/nautilus-desk-drop-feedback`;
+override it with `DESK_DROP_FEEDBACK_TEST_OUT`. Set
 `ROAM_NATIVE_CSS` and `ROAM_BLUEPRINT_CSS` to host stylesheet snapshots to test
 against actual Roam CSS. `ROAM_ICONS_CSS` and `ROAM_FONT_CSS` can supply native
 icon/font styles with locally resolved assets. These fixtures do not establish

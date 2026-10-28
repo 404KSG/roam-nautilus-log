@@ -4,6 +4,11 @@
 
 ### Added
 
+- Desk accepts one ordinary same-window, same-graph native Roam block drop as a
+  local TODO reference while preserving the original. Files, pages, renderers,
+  events, ambiguous payloads, and cross-graph sources are rejected. Modifier
+  gestures are ignored by Nautilus and remain Roam-owned. Repeated drops and
+  reloads use the same reserved UID rather than allocating another wrapper UID.
 - Internal Desk drags now show native-style position badges for every visible
   card. Alt-only hints retain their first-nine behavior. Ready updates reconcile
   detached sources and clear stale drag state without attempting a stale move.
@@ -12,8 +17,9 @@
   clears on stop, panel close, or unload. It does not record note/input text, raw
   keys, URLs, graph identifiers, or credentials, and does not send data or write
   to the graph. A report can be downloaded only by an explicit user action.
-  The reported live outer gap, horizontal shift, and copy/send dismissal remain
-  unresolved; this diagnostic preview does not claim to fix them.
+  The reported live outer gap and horizontal shift remain unresolved. The
+  editor-first Escape fix below covers the simulated copy prelude only; the live
+  macro's clipboard/navigation/send workflow remains unvalidated.
 - Nautilus Desk reuses Roam's native Desk/Blueprint styles, native grid-span
   masonry, and available main-content width below the chart. It hides only the
   original plan's child outline while active and restores it on close or unload.
@@ -34,6 +40,16 @@
 
 ### Fixed
 
+- Escape from a mounted native editor now remains with Roam, including the
+  mocked Escape-before-Copy prelude. The footer hint follows editor versus chrome
+  focus. Desk chrome, Close/backdrop, and drafts retain their deliberate Escape
+  behavior; no real macro, clipboard, app switch, paste, or send workflow was run.
+- External-drop ownership now blocks later native graph-drop handlers and
+  preserves the original source. Feedback stays inside the existing title area,
+  without moving cards or covering Search, New note, or Hide Desk. Terminal
+  messages clear after five seconds; lifecycle cleanup also clears their timers.
+- Alt-only hint labels now reconcile after ordinary ready reorder, add, remove,
+  and filter updates so Alt+Digit matches the visible card number.
 - The overview close X keeps a reserved title-row slot in narrow sidebars rather
   than wrapping onto a third line. Wide views retain compact search and a far-right
   close button; Search → New note → Hide Desk keyboard order is preserved.

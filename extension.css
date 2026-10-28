@@ -2387,28 +2387,44 @@ button.nautilus-log-timing__plan-heading:focus-visible {
    changes row-gap as well as the native 12px column gap and inflates every
    span into blank space, so keep the masonry axis explicit. */
 .nautilus-desk .nautilus-desk__grid { row-gap: 0; }
-/* Native numbers stop at nine. While dragging, extend that same counter badge
-   to the remaining visible cards without changing the native first-nine rule. */
-.nautilus-desk__grid.nautilus-desk__grid--drag-numbers > .rm-desk-tile:nth-child(n + 10)::after {
-  content: counter(rm-desk-tile);
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  min-width: 18px;
+/* A fixed footer slot keeps native-looking numbers out of titles/images and
+   reserves identical geometry before Alt or drag feedback begins. */
+.nautilus-desk .rm-desk-overview--numbers > .rm-desk-tile::after { content: none; }
+.nautilus-desk .nautilus-desk__position {
+  flex: 0 0 32px;
+  box-sizing: border-box;
+  min-width: 32px;
+  height: 18px;
   padding: 0 4px;
   border-radius: 9px;
+  visibility: hidden;
+  pointer-events: none;
+  color: white;
+  background: #137CBD;
+  font: inherit;
   font-size: 11px;
   font-weight: 600;
   line-height: 18px;
   text-align: center;
-  color: white;
-  background: #137CBD;
-  pointer-events: none;
 }
+.nautilus-desk .nautilus-desk__position--visible { visibility: visible; }
+.nautilus-desk .rm-desk-tile__source { flex: 1 1 auto; min-width: 0; }
+.nautilus-desk.nautilus-desk--external-background { outline: 1px solid #137CBD; outline-offset: -1px; }
+.nautilus-desk .nautilus-desk__grid--external-background { box-shadow: inset 0 0 0 1px #137CBD; }
+.nautilus-desk .rm-desk-card__missing.nautilus-desk__external-empty { outline: 2px solid #137CBD; outline-offset: 2px; }
+.nautilus-desk .rm-desk-tile.nautilus-desk__external-before { box-shadow: inset 0 3px 0 #137CBD; }
+.nautilus-desk .rm-desk-tile.nautilus-desk__external-after { box-shadow: inset 0 -3px 0 #137CBD; }
+.nautilus-desk__drop-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+/* Reuse the title's existing, clipped rectangle for feedback. The original
+   label still defines its intrinsic size, so status never moves the grid or
+   covers toolbar controls, even in a two-row sidebar toolbar. */
+.nautilus-desk__title--status .nautilus-desk__title-label { opacity: 0; }
+.nautilus-desk__drop-toast { position: absolute; inset: 0; display: flex; align-items: center; pointer-events: none; }
+.nautilus-desk__drop-toast > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Reserve a native close-button slot on the title row. Only the search/create
    group wraps, based on its actual container width rather than the viewport. */
 .nautilus-desk .rm-desk-page__toolbar { position: relative; flex-wrap: wrap; padding-right: 54px; }
-.nautilus-desk .rm-desk-page__title { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nautilus-desk .rm-desk-page__title { position: relative; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nautilus-desk .rm-desk-page__tools { flex: 0 1 auto; min-width: 0; max-width: 100%; margin-left: auto; flex-wrap: nowrap; }
 .nautilus-desk .rm-desk-page__tools .bp3-input-group { flex: 1 1 200px; min-width: 0; max-width: 200px; }
 .nautilus-desk .rm-desk-page__new-note { flex: 0 0 auto; white-space: nowrap; }

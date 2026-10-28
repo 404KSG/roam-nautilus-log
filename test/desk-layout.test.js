@@ -14,11 +14,14 @@ test('native masonry uses a four-pixel row span plus the host column gap', () =>
 test('Desk styling adds no custom typography or fixed column cap', () => {
   const css=fs.readFileSync(path.join(__dirname,'../extension.css'),'utf8').split('/* Desk deliberately uses Roam')[1];
   assert.ok(css);
-  const dragBadge=css.match(/\.nautilus-desk__grid\.nautilus-desk__grid--drag-numbers[^}]+\{([^}]+)\}/)?.[1] || '';
-  assert.match(dragBadge,/content:\s*counter\(rm-desk-tile\)/);
-  assert.match(dragBadge,/pointer-events:\s*none/);
-  assert.match(dragBadge,/font-size:\s*11px/);
-  assert.doesNotMatch(css.replace(dragBadge,''),/font(?:-size|-family|-weight)?\s*:/);
+  const positionBadge=css.match(/\.nautilus-desk \.nautilus-desk__position\s*\{([^}]+)\}/)?.[1] || '';
+  assert.match(positionBadge,/pointer-events:\s*none/);
+  assert.match(positionBadge,/font-size:\s*11px/);
+  assert.match(positionBadge,/font-weight:\s*600/);
+  assert.match(positionBadge,/background:\s*#137CBD/);
+  assert.match(positionBadge,/visibility:\s*hidden/);
+  assert.match(css,/\.nautilus-desk \.rm-desk-overview--numbers > \.rm-desk-tile::after\s*\{\s*content:\s*none/);
+  assert.doesNotMatch(css.replace(positionBadge,''),/font(?:-size|-family|-weight)?\s*:/);
   assert.doesNotMatch(css,/grid-template-columns/);
   const layout=fs.readFileSync(path.join(__dirname,'../src/desk-masonry.js'),'utf8');
   assert.doesNotMatch(layout,/maxColumns|\.style\.left|\.style\.top/);

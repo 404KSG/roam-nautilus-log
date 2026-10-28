@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { projectDeskTasks, nativeDeskText, deskImages, readDeskPreview, reconcileDeskSelection, stepDeskSelection, deskShortcut } = require('../src/desk-core');
+const { projectDeskTasks, nativeDeskText, deskImages, readDeskPreview, reconcileDeskSelection, stepDeskSelection, deskShortcut, nativeEditorOwnsEscape } = require('../src/desk-core');
 
 const child = (uid, string, order, refs = []) => ({
   'block/uid': uid, 'block/string': string, 'block/order': order, 'block/refs': refs,
@@ -135,4 +135,16 @@ test('Desk shortcuts match the supplied Desk screenshot and respect IME, nested 
   }
   assert.equal(deskShortcut({ code: 'ArrowLeft', key: 'ArrowLeft' }), null);
   assert.equal(deskShortcut({ code: 'Comma', key: ',' }), null);
+});
+
+test('native editor Escape ownership ignores trust and leaves Desk chrome distinguishable', () => {
+  const nativeTarget = {};
+  const editor = { contains: (target) => target === nativeTarget };
+  const mount = { el: editor };
+  const event = (isTrusted) => ({ key: 'Escape', target: nativeTarget, isTrusted, defaultPrevented: false });
+  assert.equal(nativeEditorOwnsEscape(event(true), mount), true);
+  assert.equal(nativeEditorOwnsEscape(event(false), mount), true);
+  assert.equal(nativeEditorOwnsEscape({ key: 'Escape', target: {}, composedPath: () => [editor] }, mount), true);
+  assert.equal(nativeEditorOwnsEscape({ key: 'Escape', target: {} }, mount), false);
+  assert.equal(nativeEditorOwnsEscape({ key: 'Enter', target: nativeTarget }, mount), false);
 });

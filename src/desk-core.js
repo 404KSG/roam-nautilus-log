@@ -160,5 +160,16 @@ function deskShortcut(event) {
   return null;
 }
 
+// Native editor ownership, rather than event trust or timing, decides whether
+// Desk should yield Escape. The editor receives the event before the document
+// listener; this helper deliberately neither reads nor changes event state.
+function nativeEditorOwnsEscape(event, mount) {
+  const editor = mount?.el;
+  if (!editor || event?.key !== 'Escape') return false;
+  const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+  return (Array.isArray(path) && path.includes(editor))
+    || Boolean(event.target && typeof editor.contains === 'function' && editor.contains(event.target));
+}
+
 module.exports = { projectDeskTasks, plainDeskText, nativeDeskText, nativeDeskPreviewText, safeDeskImageUrl, deskImages, readDeskPreview, nativeRowSpan,
-  reconcileDeskSelection, stepDeskSelection, deskShortcut };
+  reconcileDeskSelection, stepDeskSelection, deskShortcut, nativeEditorOwnsEscape };

@@ -11,11 +11,6 @@ export function createDeskNavigation({ root, grid, body, origin, host = window, 
   const updateHints = () => {
     grid.classList.toggle('rm-desk-overview--numbers', altHints || dragHints);
     grid.classList.toggle('nautilus-desk__grid--drag-numbers', dragHints);
-    if (!dragHints) {
-      for (const card of dragCards) delete card.dataset.dragPosition;
-      dragCards.clear();
-      return;
-    }
     const visible = [...grid.children];
     const visibleCards = new Set(visible);
     for (const card of dragCards) if (!visibleCards.has(card)) {
@@ -23,8 +18,19 @@ export function createDeskNavigation({ root, grid, body, origin, host = window, 
       dragCards.delete(card);
     }
     for (const [index, card] of visible.entries()) {
-      dragCards.add(card);
-      card.dataset.dragPosition = String(index + 1);
+      const position = card.querySelector?.('.nautilus-desk__position');
+      const show = dragHints || (altHints && index < 9);
+      if (position) {
+        position.textContent = String(index + 1);
+        position.classList.toggle('nautilus-desk__position--visible', show);
+      }
+      if (dragHints) {
+        dragCards.add(card);
+        card.dataset.dragPosition = String(index + 1);
+      } else {
+        delete card.dataset.dragPosition;
+        dragCards.delete(card);
+      }
     }
   };
   const clearAlt = () => {
@@ -76,6 +82,9 @@ export function createDeskNavigation({ root, grid, body, origin, host = window, 
       dragHints = Boolean(active);
       updateHints();
     },
+    // Card rendering can reorder/filter while Alt remains held. Recompute the
+    // visible DOM mapping so labels and Alt+Digit always name the same card.
+    reconcile() { updateHints(); },
     destroy() {
       clear();
       document.removeEventListener('keydown', keydown);

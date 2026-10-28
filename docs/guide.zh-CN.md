@@ -101,12 +101,27 @@ Schedule，避免裁切和视觉干扰。
   不强制添加 TODO 标记；如果内容被识别为事件或 DONE，它仍会保存，但不显示为活动卡片。
 - **原生聚焦编辑。** 点击卡片使用 `renderBlock` 编辑原 UID、路径和子块；Shift + 单击可在侧栏打开。
   **Option/Alt + 逗号**为 Next，**Option/Alt + 句号**为 Previous。到最后一项不再循环；第一项的
-  Previous 进入新笔记输入位，与原生 Desk 一致。Esc 或关闭按钮返回卡片区。
-  卡片区还支持按住 Alt 显示序号、**Alt + 1–9** 打开对应卡片。横向触控板手势可切卡，纵向滚动和
+  Previous 进入新笔记输入位，与原生 Desk 一致。焦点在已挂载原生编辑器内时，Esc 交给 Roam，
+  页脚显示 **esc Roam editor**；焦点移到 Desk 外框后改为 **esc Close**。关闭按钮、背景点击或
+  Desk 外框的 Esc 返回卡片区；草稿仍保留自身的 Esc 行为。卡片区还支持按住 Alt 显示序号、**Alt + 1–9** 打开对应卡片。横向触控板手势可切卡，纵向滚动和
   内部横向滚动区域不会触发切换；切换动画尊重减少动态效果设置。普通页面和输入法操作不会被全局劫持。
 - **记住视图模式。** 按图谱和计划 UID 保存 Desk 开关。切页回来、刷新、重载插件，或展开已折叠的图表后都会恢复 Desk，
   不自动打开某张卡片或创建内容。折叠不会改变偏好；显式收起 Desk 才会保存关闭状态。偏好只存在当前浏览器的 localStorage，
   不同步到其他设备，不保存日志正文。手动开启但无法保存偏好时会提示。
+
+### 安全的外部 block 引用
+
+可从同一窗口、同一图谱拖入一个普通原生 Roam block 到卡片或背景。Desk 会保留原 block，
+并在当前计划下创建一个本地 `TODO` 引用包装块。卡片上／下半区分别表示前／后；背景放在最后一个活动任务后（空计划则第一个）。
+文件、页面、query、embed/renderer、事件、跨图谱、多 block 或含糊 payload 会被拒绝。
+含修饰键的拖拽则由 Nautilus 忽略，事件完全交给 Roam，不拦截 Roam 自己的修饰键行为。
+重复拖放复用同一确定性包装块；当前视图中结果未确认的请求只做读回验证。重载后仍检查同一个预留 UID，
+不会为相同来源和计划分配第二个 UID。导入要求公开的 `data.pull`、`data.block.create` API，以及可核对的图谱、类型和用户身份。
+进度提示临时使用原有标题区域，不遮挡 Search、New note 或关闭按钮；截断的消息可悬停查看全文，
+辅助技术也会收到完整播报。终态提示五秒后清除并恢复标题，不挤动卡片。
+
+导入和 Escape 前置步骤只在合成图谱中验证；Copy 使用内存中的模拟回调。编辑器优先处理 Esc 的修复已实现，
+但真实宏流程仍未验证：没有执行物理拖放、真实剪贴板、应用切换、粘贴或发送。
 
 预览按原生 Desk 页面的预算读取最多 11 条子行、最多两层，尊重子块折叠状态。卡片根、预览子树和已解析引用中不在
 行内／围栏代码中的 Markdown 图片使用 Roam 原生 `rm-desk-tile__image`／`__images` 布局（单张有边界图片，或最多三格）。
@@ -134,7 +149,7 @@ Schedule，避免裁切和视觉干扰。
 只有主动点击 Download report 才会导出文件；可用时会附带源码版本。报告面板不会锁定页面滚动或自动抢走编辑焦点。
 
 本次预览修正窄栏工具栏位置，并让拖动中的可见卡片显示顺序编号。
-此前报告的**外层留白、横向位移、复制／发送时弹窗退出仍在定位中**；诊断用于收集证据，不代表这三项已修好。
+此前报告的**外层留白、横向位移仍在定位中**；诊断用于收集证据，不代表这两项已修好。
 
 ### 验证边界
 
@@ -144,6 +159,7 @@ Schedule，避免裁切和视觉干扰。
 
 三组产物分别位于 `/tmp/nautilus-desk-verify`、`/tmp/nautilus-desk-collapse`、`/tmp/nautilus-desk-preview-lifecycle`，
 可用 `DESK_TEST_OUT`、`DESK_COLLAPSE_TEST_OUT`、`DESK_PREVIEW_TEST_OUT` 为不同运行设置独立目录。
+反馈测试 `npm run test:desk-drop-feedback` 默认输出到 `/tmp/nautilus-desk-drop-feedback`，可用 `DESK_DROP_FEEDBACK_TEST_OUT` 覆盖。
 `ROAM_NATIVE_CSS`、`ROAM_BLUEPRINT_CSS` 可指向宿主样式快照；`ROAM_ICONS_CSS`、`ROAM_FONT_CSS` 可补充带本地资源路径的
 原生图标与字体样式。这些夹具测试不代表已重新验证当前真实 Roam 的 Pull Watch 行为。
 
