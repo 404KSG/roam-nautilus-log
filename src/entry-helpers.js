@@ -1,4 +1,6 @@
 import cljsFile from "./component.cljs";
+import { isRightSidebarRenderContext } from "./render-context.js";
+export { isRightSidebarRenderContext };
 
 const RENDER_PAGE = "roam/render";
 const TEMPLATE_MARKER = "[[roam/templates]]";
@@ -31,30 +33,12 @@ const SUPPRESSED_RENDER_CONTEXT_SELECTOR = [
   ".rm-zoom-item-content.rm-zoom-collapsed-item",
 ].join(", ");
 
-const RIGHT_SIDEBAR_RENDER_CONTEXT_SELECTOR = [
-  "#roam-right-sidebar-content",
-  ".roam-right-sidebar-content",
-  '[data-testid="right-sidebar"]',
-].join(", ");
-
 export function shouldSuppressRenderContext(node) {
   try {
     return Boolean(
       node
       && typeof node.closest === "function"
       && node.closest(SUPPRESSED_RENDER_CONTEXT_SELECTOR),
-    );
-  } catch (_error) {
-    return false;
-  }
-}
-
-export function isRightSidebarRenderContext(node) {
-  try {
-    return Boolean(
-      node
-      && typeof node.closest === "function"
-      && node.closest(RIGHT_SIDEBAR_RENDER_CONTEXT_SELECTOR),
     );
   } catch (_error) {
     return false;

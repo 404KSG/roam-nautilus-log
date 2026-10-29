@@ -174,7 +174,8 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested L
   assert.match(timingRuntime, /Only a scoped graph read certifies complete history/);
   assert.match(component, /log-core-call "truncateTextToWidth"/);
   assert.match(component, /log-core-call "placeExternalLabels"/);
-  assert.match(component, /log-core-call "translateLabelRects"/);
+  assert.match(component, /log-core-call "chartPresentationFrame"/);
+  assert.doesNotMatch(component, /log-core-call "translateLabelRects"/);
   assert.match(component, /log-core-call "resolveRendererSettings"/);
   assert.match(component, /log-core-call "hourlyGridSegments"/);
   assert.match(component, /log-core-call "pastTimelineSegments"/);
@@ -196,23 +197,26 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested L
   assert.doesNotMatch(component, /\(abs \(- done-at duration\)\)/);
 });
 
-test('SVG label layout source wiring skips unused fallback and translates bounds rects; this is not SCI execution', () => {
+test('SVG label layout consumes a fixed presentation frame and bounds labels; this is not SCI execution', () => {
   const getLegendStart = component.indexOf('(defn get-legend-rect');
   const getLegendEnd = component.indexOf(';; --------------- Log core bridge');
   assert.ok(getLegendStart >= 0 && getLegendEnd > getLegendStart);
   const getLegend = component.slice(getLegendStart, getLegendEnd);
-  assert.match(getLegend, /fallback-rect \(when \(and \(nil\? external-rect\) rects\)/);
-  assert.match(getLegend, /:core-placement\? \(boolean external-rect\)/);
-  assert.match(getLegend, /iterate-rect-place/);
+  assert.match(getLegend, /\(min 152/);
+  assert.match(getLegend, /:maxVerticalOffset 158/);
+  assert.match(getLegend, /inside-frame\?/);
+  assert.doesNotMatch(getLegend, /iterate-rect-place/);
 
   const showEventsStart = component.indexOf('(defn show-events');
-  const showEvents = component.slice(showEventsStart, component.indexOf('(defn apply-plan-session-state!', showEventsStart));
-  assert.match(showEvents, /log-core-call "translateLabelRects"/);
-  assert.match(showEvents, /prepared-rects/);
-  assert.match(showEvents, /every\? :core-placement\? bounds-rects/);
+  const showEvents = component.slice(showEventsStart, component.indexOf('(defn add-start-after', showEventsStart));
+  assert.match(showEvents, /log-core-call "chartPresentationFrame"/);
+  assert.match(showEvents, /:viewBox \{:width 720 :height 420\}/);
+  assert.match(showEvents, /nautilus-log-workspace/);
+  assert.match(component, /nautilus-log-detail-region/);
+  assert.doesNotMatch(showEvents, /events->new-dimensions|prepared-rects|translateLabelRects/);
 
-  assert.match(logCore, /function translateLabelRects/);
-  assert.match(logCore, /translateLabelRects,/);
+  assert.match(logCore, /function chartPresentationFrame/);
+  assert.match(logCore, /chartPresentationFrame,/);
   assert.match(entry, /window\.nautilusLogCore = logCore/);
 });
 
@@ -281,58 +285,35 @@ test('chart write gates require a ready plan and do not block CLOCK stop', () =>
   assert.doesNotMatch(timingRuntime, /writesAllowed/);
 });
 
-test('the spiral exposes responsive slice and available-slot hover details above an inert grid', () => {
+test('the spiral uses a local fixed detail region above an inert grid', () => {
   const gridStart = component.indexOf('(defn snail-blueprint-component');
   const gridEnd = component.indexOf('(defn central-label-component', gridStart);
   const gridComponent = component.slice(gridStart, gridEnd);
-  const connectorStart = component.indexOf('(defn bent-line-component');
-  const connectorEnd = component.indexOf('(defn calculate-coordinates', connectorStart);
-  const connectorComponent = component.slice(connectorStart, connectorEnd);
-
-  assert.match(gridComponent, /\[:g \{:class "nautilus-log-grid" :aria-hidden "true"\}/);
-  assert.doesNotMatch(connectorComponent, /nautilus-log-grid/);
-  assert.match(component, /nautilus-log-available-slot-hit/);
-  assert.match(component, /nautilus-log-hover-tooltip/);
-  assert.match(component, /log-core-call "placeFloatingTooltip"/);
-  assert.match(component, /log-core-call "radialTooltipGeometry"/);
-  assert.match(component, /\.getScreenCTM/);
-  assert.match(component, /createPortal/);
-  assert.match(component, /nautilus-log-event-slice-group--interactive/);
-  assert.match(component, /hover-enabled\? true/);
-  assert.match(component, /\(when \(and hover-enabled\? \(:showAvailableSlots timeline-state\)\)\s+\[available-slot-component/);
-  assert.match(component, /\(if compact\?\s+\[compact-hover-context-component hover-info-state\]\s+\[hover-tooltip-component hover-info-state\]\)/);
-  assert.match(component, /:on-mouse-enter/);
-  assert.match(component, /:on-focus/);
-  assert.match(css, /\.nautilus-log-grid\s*\{[^}]*pointer-events:\s*none;/s);
-  assert.match(css, /\.nautilus-log-available-slot-hit/);
-  assert.match(css, /\.nautilus-log-hover-tooltip\s*\{[^}]*position:\s*fixed;[^}]*pointer-events:\s*none;/s);
-  assert.match(css, /\.nautilus-log-event-slice-group--interactive:hover/);
-  assert.doesNotMatch(css, /\.nautilus-log-event-slice-group:hover/);
-});
-
-test('compact timeline hover uses one stable context rail instead of a floating panel', () => {
-  const compactStart = component.indexOf('(defn compact-hover-context-component');
-  const compactEnd = component.indexOf(';; ---------------- helpers', compactStart);
-  const compactComponent = component.slice(compactStart, compactEnd);
   const observerStart = component.indexOf('(defn observe-compact-width!');
   const observerEnd = component.indexOf('(defn main', observerStart);
   const observer = component.slice(observerStart, observerEnd);
 
-  assert.ok(compactStart >= 0 && compactEnd > compactStart);
-  assert.match(compactComponent, /nautilus-log-compact-hover-context/);
-  assert.match(compactComponent, /:aria-hidden "true"/);
-  assert.match(compactComponent, /nautilus-log-compact-hover-context-dot--/);
-  assert.match(compactComponent, /nautilus-log-compact-hover-context-title/);
-  assert.match(compactComponent, /nautilus-log-compact-hover-context-meta/);
-  assert.match(component, /\(let \[anchor \(hover-anchor event info\)\]\s+\(reset! hover-info-state \(merge info anchor \{:positioned false\}\)\)\)/);
-  assert.match(component, /:tone \(cond[\s\S]*"completed"[\s\S]*"event"[\s\S]*"task"/);
-  assert.match(component, /:tone "available"/);
-  assert.match(css, /@container \(max-width: 520px\)[\s\S]*\.nautilus-log-visual--compact\s*\{[^}]*display:\s*grid;/s);
-  assert.match(css, /\.nautilus-log-compact-hover-context\s*\{[^}]*grid-row:\s*1;[^}]*width:\s*max-content;[^}]*pointer-events:\s*none;[^}]*visibility:\s*hidden;/s);
-  assert.match(css, /\.nautilus-log-compact-hover-context\.is-visible\s*\{[^}]*opacity:\s*1;[^}]*visibility:\s*visible;/s);
-  assert.match(css, /\.nautilus-log-compact-hover-context-meta\s*\{[^}]*font-variant-numeric:\s*tabular-nums;/s);
-  assert.match(observer, /when \(not= @compact-state next-state\)[\s\S]*reset! hover-info-state nil[\s\S]*reset! compact-state next-state/);
-  assert.doesNotMatch(observer, /when \(and next-state @hover-info-state\)/);
+  assert.match(gridComponent, /\[:g \{:class "nautilus-log-grid" :aria-hidden "true"\}/);
+  assert.match(component, /nautilus-log-available-slot-hit/);
+  assert.match(component, /nautilus-log-detail-region/);
+  assert.match(component, /clear-detail-on-workspace-exit!/);
+  assert.match(component, /:on-mouse-enter/);
+  assert.match(component, /:on-focus/);
+  assert.doesNotMatch(component, /createPortal|getScreenCTM|placeFloatingTooltip|radialTooltipGeometry/);
+  assert.match(css, /\.nautilus-log-detail-region\s*\{[^}]*height:\s*112px;[^}]*overflow:\s*auto;/s);
+  assert.match(css, /\.nautilus-log-workspace--side \.nautilus-log-detail-region\s*\{[^}]*border-left:/s);
+  assert.match(css, /\.nautilus-log-grid\s*\{[^}]*pointer-events:\s*none;/s);
+  assert.match(css, /\.nautilus-log-available-slot-hit/);
+  assert.doesNotMatch(css, /nautilus-log-hover-tooltip|nautilus-log-compact-hover-context/);
+  assert.match(component, /defn reconcile-detail-state!/);
+  assert.match(component, /:detail-kind :event/);
+  assert.match(component, /:pointer nil :focus nil/);
+  assert.match(component, /:on-mouse-out/);
+  assert.match(component, /"unload" unload-listener/);
+  assert.match(observer, /if-not node[\s\S]*clear-detail-state! hover-info-state/);
+  assert.match(observer, /when \(not= @presentation-width-state next-width\)[\s\S]*clear-detail-state! hover-info-state/);
+  assert.match(css, /\.nautilus-log-compact-list\s*\{[^}]*height:\s*168px;[^}]*max-height:\s*none;/s);
+  assert.match(css, /\.nautilus-log-detail-idle\s*\{\s*grid-column:\s*1;/s);
 });
 
 test('chart task activation is read-only navigation with no legacy progress mutation', () => {
@@ -1047,9 +1028,11 @@ test('Log moves metrics and the legend into a folded Overview in narrow containe
   assert.match(css, /\.nautilus-log-compact-overview\s*\{[^}]*display:\s*none;/s);
   assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-log-compact-overview\s*\{[^}]*display:\s*block;/);
   assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-log-header--compact\s*\{[^}]*justify-content:\s*flex-end;/);
-  assert.match(css, /\.nautilus-log-compact-overview-summary\s*\{[^}]*justify-content:\s*flex-start;/s);
+  assert.match(css, /\.nautilus-log-compact-overview-summary\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 14px;/s);
   assert.match(css, /\.nautilus-log-compact-overview-summary-content\s*\{[^}]*display:\s*inline-flex;[^}]*align-items:\s*baseline;/s);
-  assert.match(css, /\.nautilus-log-compact-overview-summary::after\s*\{[^}]*margin-left:\s*auto;/s);
+  assert.match(compactOverview, /nautilus-log-overview-chevron" :aria-hidden "true"/);
+  assert.match(css, /@container \(max-width:\s*360px\)[\s\S]*\.nautilus-log-compact-overview-summary\s*\{[^}]*height:\s*48px;/);
+  assert.match(css, /\.nautilus-log-compact-overview-summary::after\s*\{[^}]*display:\s*none;/s);
 });
 
 test('Log marks the active capacity bucket with an accessible static flame', () => {
@@ -1137,8 +1120,8 @@ test('Log feature-detects ResizeObserver with syntax supported by Roam SCI', () 
 
 test('Log prefers horizontal label rails and keeps past leader lines legible', () => {
   assert.match(component, /:layout "side-rails"/);
-  assert.match(component, /:maxVerticalOffset \(\* max-spiral-radius 0\.92\)/);
-  assert.match(component, /:rowGap 26/);
+  assert.match(component, /:maxVerticalOffset 158/);
+  assert.match(component, /:rowGap 22/);
   assert.match(component, /legend-color \(update-opacity-str bg-color "1"\)/);
   assert.match(component, /:anchorY anchor-y/);
   assert.match(component, /:sortKey order-key/);

@@ -7,7 +7,8 @@
     "build": "webpack",
     "watch": "webpack --watch",
     "test": "npm run build && node --test test/*.test.js oauth-worker/test/*.test.mjs",
-    "test:ui": "python3 test/energy-bar-settlement.py && python3 test/today-plan-launcher.py && python3 test/execution-refinement.py && python3 test/real-today-plan.py && python3 test/desk-view.py && python3 test/desk-collapse.py && python3 test/desk-preview-lifecycle.py && python3 test/desk-diagnostics.py && python3 test/desk-drop-feedback.py && python3 test/desk-scope.py && python3 test/desk-drag-parity.py && python3 test/desk-polish.py && python3 test/desk-removal.py",
+    "test:ui": "python3 test/energy-bar-settlement.py && python3 test/today-plan-launcher.py && python3 test/execution-refinement.py && python3 test/real-today-plan.py && python3 test/desk-view.py && python3 test/desk-collapse.py && python3 test/desk-preview-lifecycle.py && python3 test/desk-diagnostics.py && python3 test/desk-drop-feedback.py && python3 test/desk-scope.py && python3 test/desk-drag-parity.py && python3 test/desk-polish.py && python3 test/desk-removal.py && npm run test:chart-renderer",
+    "test:chart-renderer": "PYTHONDONTWRITEBYTECODE=1 python3 test/chart-renderer.py",
     "test:desk": "npm run build && node --test test/desk-*.test.js && python3 test/desk-view.py && python3 test/desk-collapse.py && python3 test/desk-preview-lifecycle.py && python3 test/desk-diagnostics.py && python3 test/desk-drop-feedback.py && python3 test/desk-scope.py && python3 test/desk-drag-parity.py && python3 test/desk-polish.py && python3 test/desk-removal.py",
     "test:desk-polish": "python3 test/desk-polish.py",
     "test:desk-drop-feedback": "python3 test/desk-drop-feedback.py",
@@ -21,6 +22,9 @@
   "license": "MIT",
   "author": "404KSG",
   "devDependencies": {
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "scittle": "0.8.33",
     "webpack": "^5.109.2",
     "webpack-cli": "^4.10.0"
   }

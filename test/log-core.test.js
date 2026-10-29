@@ -30,6 +30,7 @@ const {
   stableTidyOrder,
   childOrderMoves,
   isCompactChartWidth,
+  chartPresentationFrame,
   parseDurationToken,
   parseTimeRangeToken,
   stripGoogleCalendarSourceSuffix,
@@ -623,6 +624,8 @@ test('English UI settings localize all extension-owned status labels', () => {
     overflow: 'Unscheduled today',
     warnings: 'Schedule warnings',
     schedule: 'Schedule',
+    details: 'Details',
+    detailIdle: 'Hover or focus a segment to inspect it.',
     item: 'item',
     items: 'items',
   });
@@ -1304,6 +1307,37 @@ test('equal-height right-side anchors keep later tasks below earlier tasks', () 
   });
 
   assert.ok(placed[1].y > placed[0].y);
+});
+
+test('chart presentation frame preserves readable compact canvases', () => {
+  const narrow = chartPresentationFrame({ containerWidth: 320 });
+  const compact = chartPresentationFrame({ containerWidth: 520 });
+  const middle = chartPresentationFrame({ containerWidth: 521 });
+  const side = chartPresentationFrame({ containerWidth: 840 });
+  const fallback = chartPresentationFrame({ containerWidth: 0 });
+  assert.deepEqual(narrow.viewBox, { width: 330, height: 300 });
+  assert.deepEqual(narrow.center, { x: 165, y: 150 });
+  assert.equal(narrow.density, 'narrow');
+  assert.deepEqual(compact.viewBox, { width: 560, height: 400 });
+  assert.deepEqual(compact.center, { x: 280, y: 200 });
+  assert.equal(compact.density, 'compact');
+  for (const frame of [middle, side, fallback]) {
+    assert.deepEqual(frame.viewBox, { width: 720, height: 420 });
+    assert.deepEqual(frame.center, { x: 360, y: 210 });
+    assert.equal(frame.density, 'regular');
+  }
+  for (const frame of [narrow, compact, middle, side, fallback]) {
+    assert.equal(frame.labels.maxWidth, 152);
+    assert.equal(frame.labels.minY, 42);
+    assert.equal(frame.labels.maxY, 378);
+  }
+  assert.equal(narrow.inspector, 'bottom');
+  assert.equal(narrow.labels.visible, false);
+  assert.equal(compact.labels.visible, false);
+  assert.equal(middle.labels.visible, true);
+  assert.equal(side.inspector, 'side');
+  assert.equal(fallback.inspector, 'bottom');
+  assert.equal(fallback.compactHeader, true);
 });
 
 test('switches to the compact label list at the narrow-container boundary', () => {

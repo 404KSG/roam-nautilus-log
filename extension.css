@@ -352,7 +352,27 @@
 }
 
 .nautilus-log-compact-overview-summary {
-  justify-content: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 14px;
+  column-gap: 8px;
+  align-items: center;
+}
+
+@container (max-width: 360px) {
+  .nautilus-log-compact-overview-summary {
+    box-sizing: border-box;
+    height: 48px;
+    min-height: 48px;
+  }
+  .nautilus-log-compact-overview-summary .nautilus-log-compact-overview-summary-content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 8px;
+    row-gap: 2px;
+  }
+  .nautilus-log-compact-overview-summary-content > .nautilus-log-metric-separator {
+    display: none;
+  }
 }
 
 .nautilus-log-compact-overview-summary-content {
@@ -368,14 +388,21 @@
 }
 
 .nautilus-log-compact-overview-summary::after {
-  margin-left: auto;
+  content: none;
+  display: none;
+}
+
+.nautilus-log-overview-chevron {
+  justify-self: center;
+  color: var(--nautilus-log-chart-muted);
 }
 
 .nautilus-log-compact-summary::-webkit-details-marker {
   display: none;
 }
 
-.nautilus-log-compact-summary::after {
+.nautilus-log-compact-summary::after,
+.nautilus-log-overview-chevron {
   content: "";
   width: 6px;
   height: 6px;
@@ -387,7 +414,7 @@
 }
 
 .nautilus-log-compact-details:not([open]) .nautilus-log-compact-summary::after,
-.nautilus-log-compact-overview:not([open]) .nautilus-log-compact-summary::after {
+.nautilus-log-compact-overview:not([open]) .nautilus-log-overview-chevron {
   transform: rotate(-45deg) translate(-1px, -1px);
 }
 
@@ -539,56 +566,6 @@
 .nautilus-log-available-slot--now:hover .nautilus-log-available-slot-hit,
 .nautilus-log-available-slot--now:focus .nautilus-log-available-slot-hit {
   stroke-width: 1.6px;
-}
-
-.nautilus-log-hover-tooltip {
-  position: fixed;
-  z-index: 10060;
-  display: grid;
-  gap: 2px;
-  width: max-content;
-  max-width: min(240px, calc(100vw - 24px));
-  padding: 6px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 5px;
-  background: rgba(38, 43, 50, 0.96);
-  box-shadow: 0 4px 12px rgba(18, 23, 29, 0.16);
-  color: #fff;
-  font-family: var(--nl-exec-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
-  font-size: 11px;
-  line-height: 1.35;
-  opacity: 0;
-  pointer-events: none;
-  transform: none;
-  transition: opacity 80ms ease;
-}
-
-.nautilus-log-hover-tooltip--positioned {
-  opacity: 1;
-}
-
-.nautilus-log-hover-tooltip-title {
-  display: block;
-  max-width: 220px;
-  overflow: hidden;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.nautilus-log-hover-tooltip-meta {
-  color: rgba(255, 255, 255, 0.7);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.nautilus-log-hover-tooltip-hint {
-  color: rgba(255, 255, 255, 0.52);
-  white-space: nowrap;
-}
-
-.nautilus-log-compact-hover-context {
-  display: none;
 }
 
 .nautilus-log-past-overlay {
@@ -1029,92 +1006,6 @@
     margin-bottom: 0;
   }
 
-  .nautilus-log-visual--compact {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .nautilus-log-visual--compact > .nautilus-log-svg {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .nautilus-log-compact-hover-context {
-    align-items: center;
-    align-self: end;
-    box-sizing: border-box;
-    display: flex;
-    gap: 7px;
-    grid-column: 1;
-    grid-row: 1;
-    justify-self: center;
-    min-width: 0;
-    width: max-content;
-    max-width: calc(100% - 24px);
-    height: 28px;
-    margin-bottom: 8px;
-    padding: 0 8px;
-    border: 1px solid var(--nautilus-log-line);
-    border-radius: 5px;
-    background: rgba(255, 255, 255, 0.94);
-    box-shadow: 0 1px 3px rgba(18, 23, 29, 0.08);
-    color: var(--nautilus-log-text-main);
-    font-family: var(--nl-exec-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
-    font-size: 11px;
-    line-height: 18px;
-    opacity: 0;
-    pointer-events: none;
-    visibility: hidden;
-    transition: opacity 80ms ease, visibility 0s linear 80ms;
-    z-index: 2;
-  }
-
-  .nautilus-log-compact-hover-context.is-visible {
-    opacity: 1;
-    visibility: visible;
-    transition-delay: 0s;
-  }
-
-  .nautilus-log-compact-hover-context-dot {
-    flex: 0 0 auto;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--nautilus-log-text-sub);
-  }
-
-  .nautilus-log-compact-hover-context-dot--task {
-    background: var(--nautilus-log-task);
-  }
-
-  .nautilus-log-compact-hover-context-dot--event {
-    background: #fcc200;
-  }
-
-  .nautilus-log-compact-hover-context-dot--completed {
-    background: var(--nautilus-log-completed);
-  }
-
-  .nautilus-log-compact-hover-context-dot--available {
-    background: var(--nautilus-log-positive);
-  }
-
-  .nautilus-log-compact-hover-context-title {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    font-weight: 600;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .nautilus-log-compact-hover-context-meta {
-    flex: 0 0 auto;
-    color: var(--nautilus-log-text-sub);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-
   .nautilus-log-slice-group {
     display: none !important;
   }
@@ -1126,19 +1017,14 @@
   .nautilus-log-compact-list {
     display: grid;
   }
-}
 
-.bp3-dark .nautilus-log-compact-hover-context,
-.roam-app.rm-dark-theme .nautilus-log-compact-hover-context {
-  background: rgba(32, 37, 44, 0.94);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+  .nautilus-log-status-rail {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 64px;
+  }
 }
 
 @container (max-width: 360px) {
-  .nautilus-log-svg {
-    max-height: 48vh;
-  }
-
   .nautilus-log-overflow-panel,
   .nautilus-log-warning-panel {
     margin-left: 4px;
@@ -1155,6 +1041,214 @@
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Stable chart workspace ---------------------------------------------------
+ * Chart-owned materials intentionally stop at this workspace so Desk and the
+ * optional execution layer retain their native/independent visual contracts. */
+.nautilus-log-container {
+  --nautilus-log-chart-paper: #fafafa;
+  --nautilus-log-chart-panel: #f6f6f7;
+  --nautilus-log-chart-ink: #25262a;
+  --nautilus-log-chart-muted: #686c73;
+  --nautilus-log-chart-hairline: #dfe1e4;
+  --nautilus-log-chart-focus: #075985;
+  /* Chart-only semantic ink is dark enough for normal-size labels. */
+  --nautilus-log-task: #326a91;
+  --nautilus-log-positive: #277a59;
+  --nautilus-log-completed: #626d78;
+  --nautilus-log-now: #b23a3a;
+  --nautilus-log-spiral: #5f6670;
+  --nautilus-log-slot-stroke: #486676;
+  --nautilus-log-task-fill: rgba(50, 106, 145, 0.22);
+  --nautilus-log-event: #875d18;
+  --nautilus-log-event-fill: #f1e6d2;
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.nautilus-log-header {
+  height: 58px;
+  min-height: 58px;
+  align-items: center;
+  border-bottom-color: var(--nautilus-log-chart-hairline);
+}
+
+.nautilus-log-metrics,
+.nautilus-log-header-actions,
+.nautilus-log-detail-region,
+.nautilus-log-status-rail {
+  font-variant-numeric: tabular-nums;
+}
+
+.nautilus-log-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 720px);
+  justify-content: center;
+  width: 100%;
+  max-width: 720px;
+  margin: 8px auto 0;
+}
+
+.nautilus-log-workspace--side {
+  grid-template-columns: minmax(0, 720px) 236px;
+  gap: 12px;
+  justify-content: stretch;
+  max-width: 968px;
+}
+
+.nautilus-log-chart-stage {
+  min-width: 0;
+  aspect-ratio: 12 / 7;
+}
+/* These ratios match chartPresentationFrame's compact viewBoxes. */
+.nautilus-log-chart-stage--compact { aspect-ratio: 7 / 5; }
+.nautilus-log-chart-stage--narrow { aspect-ratio: 11 / 10; }
+
+.nautilus-log-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.nautilus-log-detail-region {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: start;
+  min-width: 0;
+  height: 112px;
+  padding: 10px 12px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  scrollbar-gutter: stable;
+  border-top: 1px solid var(--nautilus-log-chart-hairline);
+  background: var(--nautilus-log-chart-panel);
+  color: var(--nautilus-log-chart-ink);
+  outline: none;
+}
+
+.nautilus-log-detail-region:focus-visible {
+  outline: 2px solid var(--nautilus-log-chart-focus);
+  outline-offset: -2px;
+}
+
+.nautilus-log-workspace--side .nautilus-log-detail-region {
+  /* The SVG sets this grid row's height. Long detail text must scroll rather
+     than contribute its max-content height to the row. */
+  contain: size;
+  height: auto;
+  min-height: 0;
+  border-top: 0;
+  border-left: 1px solid var(--nautilus-log-chart-hairline);
+}
+
+.nautilus-log-detail-eyebrow {
+  color: var(--nautilus-log-chart-muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.nautilus-log-detail-content {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  align-content: start;
+  column-gap: 7px;
+  padding-top: 6px;
+}
+
+.nautilus-log-detail-tone {
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--nautilus-log-text-sub);
+}
+.nautilus-log-detail-tone--task { background: var(--nautilus-log-task); }
+.nautilus-log-detail-tone--event { background: var(--nautilus-log-event); }
+.nautilus-log-detail-tone--available { background: var(--nautilus-log-positive); }
+.nautilus-log-detail-tone--completed { background: var(--nautilus-log-completed); }
+
+.nautilus-log-detail-content > .nautilus-log-detail-title,
+.nautilus-log-detail-content > .nautilus-log-detail-meta,
+.nautilus-log-detail-content > .nautilus-log-detail-hint {
+  grid-column: 2;
+}
+.nautilus-log-detail-title { font-size: 13px; line-height: 18px; font-weight: 600; }
+.nautilus-log-detail-meta { color: var(--nautilus-log-chart-muted); font-size: 11px; line-height: 16px; }
+.nautilus-log-detail-hint { color: var(--nautilus-log-chart-muted); font-size: 11px; line-height: 16px; }
+.nautilus-log-detail-idle { grid-column: 1; padding-top: 6px; color: var(--nautilus-log-chart-muted); font-size: 11px; line-height: 16px; }
+
+.nautilus-log-link-line { stroke-dasharray: none; opacity: .34; }
+.nautilus-log-event-slice-group--interactive:hover .nautilus-log-slice,
+.nautilus-log-event-slice-group--interactive:focus .nautilus-log-slice {
+  filter: none;
+  stroke: var(--nautilus-log-chart-focus);
+  stroke-width: 2px;
+}
+.nautilus-log-now-needle-line { filter: none; stroke: var(--nautilus-log-now); stroke-width: 1.5px; }
+
+.nautilus-log-status-rail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  width: 100%;
+  height: 32px;
+  min-height: 32px;
+  margin-top: 4px;
+}
+.nautilus-log-status-slot { min-width: 0; height: 32px; overflow: hidden; }
+.nautilus-log-overflow-panel,
+.nautilus-log-warning-panel {
+  box-sizing: border-box;
+  height: 32px;
+  min-height: 32px;
+  margin: 0;
+  padding: 7px 0 3px;
+  overflow: hidden;
+  border-top-color: var(--nautilus-log-chart-hairline);
+  font-size: 11px;
+}
+.nautilus-log-overflow-panel:not([open]) > summary,
+.nautilus-log-warning-panel:not([open]) > summary {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Opening a disclosure is an explicit user action and may reveal its content. */
+.nautilus-log-status-rail:has(details[open]) { height: auto; }
+.nautilus-log-status-slot:has(details[open]),
+.nautilus-log-status-slot:has(details[open]) > details { height: auto; overflow: visible; }
+.nautilus-log-status-slot:empty::after { content: ""; display: block; height: 32px; }
+
+.nautilus-log-compact-list { box-sizing: border-box; height: 168px; max-height: none; overflow: auto; scrollbar-gutter: stable; }
+
+@container (max-width: 520px) {
+  .nautilus-log-status-rail { grid-template-columns: minmax(0, 1fr); height: 64px; min-height: 64px; }
+  .nautilus-log-status-rail:has(details[open]) { height: auto; }
+}
+
+.bp3-dark .nautilus-log-container,
+.roam-app.rm-dark-theme .nautilus-log-container,
+.dark .nautilus-log-container {
+  --nautilus-log-chart-paper: #1d1e21;
+  --nautilus-log-chart-panel: #25262a;
+  --nautilus-log-chart-ink: #ecedef;
+  --nautilus-log-chart-muted: #a9adb4;
+  --nautilus-log-chart-hairline: #3a3c42;
+  --nautilus-log-chart-focus: #9dd7f2;
+  --nautilus-log-task: #83b6d4;
+  --nautilus-log-positive: #77d7ab;
+  --nautilus-log-completed: #c2ccd5;
+  --nautilus-log-now: #ff9b8c;
+  --nautilus-log-spiral: #c5cbd1;
+  --nautilus-log-slot-stroke: #c6d3dc;
+  --nautilus-log-task-fill: rgba(131, 182, 212, 0.24);
+  --nautilus-log-event: #d9ad62;
+  --nautilus-log-event-fill: #5f451c;
 }
 
 /* Shared topbar / optional execution layer ---------------------------------

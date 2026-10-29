@@ -1,5 +1,9 @@
 # Compact timeline hover context
 
+> **Superseded for presentation.** The wide floating tooltip and compact overlay rail
+> decisions below are historical interaction evidence. The local fixed detail workspace
+> is now authoritative; see [2026-10-29-stable-chart-workspace-design.md](2026-10-29-stable-chart-workspace-design.md).
+
 ## Decision
 
 Keep the existing viewport-aware floating tooltip in wide layouts. At the compact

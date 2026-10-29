@@ -4,6 +4,16 @@
 
 ### Added
 
+- The Nautilus spiral now uses stable, container-keyed presentation frames:
+  `330 × 300` through 360px, `560 × 400` through 520px, and `720 × 420` above 520px,
+  with a local, readable Details region. Wide local containers place Details beside the chart; narrow
+  containers and the right sidebar reserve it below the chart. Hover and keyboard focus
+  share that fixed region, which scrolls internally for long content. Timeline details no
+  longer portal to the document body or follow the pointer. External overview labels are
+  bounded and may be omitted without changing chart or Desk geometry. Actual Scittle/Reagent
+  regression coverage verifies clock stability, responsive variants, themes, reduced motion,
+  synthetic content shapes, and zero graph writes.
+
 - Remove from Desk deletes only verified childless plain local reference wrappers.
   Content-bearing cards move with the same UID and subtree to the plan's verified
   owning Daily Note, including historical/future notes. Public APIs, overview/focus

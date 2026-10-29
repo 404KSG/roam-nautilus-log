@@ -49,7 +49,7 @@
 
 (def rect-height-coef 1.15) ;; bigger number = taller text rect (for legend)
 
-(def font-family "'方正屏显雅宋简体', 'FZPingXianYaSong-R-GBK', 'PingFang SC', 'Microsoft YaHei', sans-serif")
+(def font-family "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif")
 
 (def font-size (if mobile? 12 14))
 
@@ -263,42 +263,39 @@
 (declare log-core-call)
 
 (defn get-legend-rect
-  "Returns a new legend rectangle that does not overlap with any of the rects"
-  [rects text slice-radians outer-radius center settings order-key anchor-y]
-  (let [w (* (/ font-size rect-width-coef) (min (display-width text) (:legend-len-limit settings)))  
+  "Places one bounded overview label, or hides it when the fixed rails are full."
+  [rects text slice-radians _outer-radius center _settings order-key anchor-y]
+  (let [w (min 152 (* (/ font-size rect-width-coef) (display-width text)))
         h (* font-size rect-height-coef)
         max-spiral-radius (apply max (map outer-radius-at (range (count snail-blueprint-outer-radiuses))))
         external-rect (first
                        (log-core-call "placeExternalLabels"
-                                       {:centerX (:center-x center)
-                                        :centerY (:center-y center)
-                                        :exclusionRadius max-spiral-radius
-                                        :gap (if mobile? 14 24)
-                                        :trackGap 18
-                                        :layout "side-rails"
-                                        :maxVerticalOffset (* max-spiral-radius 0.92)
-                                        :rowGap 26
-                                        :collisionPadding 6
-                                        :occupiedRects rects
-                                        :labels [{:uid text
-                                                  :angle slice-radians
-                                                  :anchorY anchor-y
-                                                  :sortKey order-key
-                                                  :width w
-                                                  :height h}]}))
-        fallback-rect (when (and (nil? external-rect) rects)
-                        (assoc
-                         (iterate-rect-place {:w w :h h}
-                                             rects
-                                             (- slice-radians)
-                                             (+ outer-radius (if mobile? 0 init-starting-distance))
-                                             text
-                                             center)
-                         :text text))
-        new-text-rect (assoc (or external-rect fallback-rect {}) :text text)]
-    (assoc new-text-rect
-           :core-placement? (boolean external-rect)
-           :real-rect-radians (real-rect-radians new-text-rect center))))
+                                      {:centerX (:center-x center)
+                                       :centerY (:center-y center)
+                                       :exclusionRadius max-spiral-radius
+                                       :gap 16
+                                       :trackGap 18
+                                       :layout "side-rails"
+                                       :maxVerticalOffset 158
+                                       :rowGap 22
+                                       :collisionPadding 6
+                                       :occupiedRects rects
+                                       :labels [{:uid text
+                                                 :angle slice-radians
+                                                 :anchorY anchor-y
+                                                 :sortKey order-key
+                                                 :width w
+                                                 :height h}]}))
+        inside-frame? (and external-rect
+                           (>= (:x external-rect) 24)
+                           (<= (+ (:x external-rect) (:w external-rect)) 696)
+                           (>= (:y external-rect) 42)
+                           (<= (+ (:y external-rect) (:h external-rect)) 378))]
+    (when inside-frame?
+      (assoc external-rect
+             :text text
+             :core-placement? true
+             :real-rect-radians (real-rect-radians external-rect center)))))
 
 ;; --------------- Log core bridge ----------------------
 
@@ -416,48 +413,51 @@
      :aria-label (str title ". " kind-label ". " time-range ". " duration
                       (when (seq hint) (str ". " hint)))}))
 
-(defn timeline-tooltip-geometry [start end center]
-  (let [radius (+ 8 (apply max (map outer-radius-at (range (count snail-blueprint-outer-radiuses)))))]
-    (or (log-core-call "radialTooltipGeometry"
-                       {:startMinutes start
-                        :endMinutes end
-                        :centerX (:center-x center)
-                        :centerY (:center-y center)
-                        :radius radius})
-        {:center {:x (:center-x center) :y (:center-y center)}
-         :direction {:x (:center-x center) :y (:center-y center)}})))
+(defn clear-detail-state! [detail-state]
+  (reset! detail-state {:pointer nil :focus nil}))
 
-(defn svg-screen-point [svg point]
-  (try
-    (when-let [matrix (.getScreenCTM svg)]
-      (let [svg-point (.createSVGPoint svg)]
-        (set! (.-x svg-point) (:x point))
-        (set! (.-y svg-point) (:y point))
-        (let [screen-point (.matrixTransform svg-point matrix)]
-          {:x (.-x screen-point) :y (.-y screen-point)})))
-    (catch :default _e nil)))
+(defn active-detail [detail-state]
+  (let [{:keys [pointer focus]} @detail-state]
+    ;; Pointer ownership is temporary: once it leaves, a focused segment resumes
+    ;; ownership instead of leaving a stale hover record in the fixed inspector.
+    (or pointer focus)))
 
-(defn hover-anchor [event info]
-  (let [target (.-currentTarget event)
-        svg (when target (.closest target "svg.nautilus-log-svg"))
-        center-screen (when svg (svg-screen-point svg (:center info)))
-        direction-screen (when svg (svg-screen-point svg (:direction info)))]
-    (when (and center-screen direction-screen)
-      (let [dx (- (:x direction-screen) (:x center-screen))
-            dy (- (:y direction-screen) (:y center-screen))
-            preferred (if (>= (abs dx) (abs dy))
-                        (if (neg? dx) "left" "right")
-                        (if (neg? dy) "top" "bottom"))]
-        {:anchor-x (:x direction-screen)
-         :anchor-y (:y direction-screen)
-         :preferred preferred}))))
+(defn show-hover-tooltip! [detail-state owner info _event]
+  ;; Timeline details belong to their local workspace, not to pointer or
+  ;; viewport coordinates. Pointer and keyboard ownership are kept separately.
+  (swap! detail-state assoc owner info))
 
-(defn show-hover-tooltip! [hover-info-state info event]
-  (let [anchor (hover-anchor event info)]
-    (reset! hover-info-state (merge info anchor {:positioned false}))))
+(defn hide-hover-tooltip! [detail-state]
+  (clear-detail-state! detail-state))
 
-(defn hide-hover-tooltip! [hover-info-state]
-  (reset! hover-info-state nil))
+(defn clear-detail-on-workspace-exit! [detail-state event]
+  (let [workspace (.-currentTarget event)
+        next-target (.-relatedTarget event)
+        next-inside? (try
+                       (and next-target (.contains workspace next-target))
+                       (catch :default _e false))]
+    (when (and workspace (not next-inside?))
+      ;; Pointer exit must not erase focused details; blur must not erase an
+      ;; in-workspace pointer detail. Each owner is cleared independently.
+      (case (.-type event)
+        ("mouseleave" "mouseout") (swap! detail-state assoc :pointer nil)
+        "blur" (swap! detail-state assoc :focus nil)
+        (clear-detail-state! detail-state)))))
+
+(defn event-detail-signature [event]
+  (select-keys event [:description :start :end :meeting :todo :done :done-at :bg-color]))
+
+(defn reconcile-detail-state! [detail-state event-signatures available-slot-keys]
+  (swap! detail-state
+         (fn [owners]
+           (reduce-kv (fn [next-state owner info]
+                        (let [valid? (case (:detail-kind info)
+                                       :event (contains? event-signatures [(:uid info) (:detail-signature info)])
+                                       :available (contains? available-slot-keys (:uid info))
+                                       true)]
+                          (assoc next-state owner (if valid? info nil))))
+                      owners
+                      owners))))
 
 (defn locate-plan-task! [uid hover-info-state event]
   (when (and (seq uid) event)
@@ -475,57 +475,22 @@
   (when (= "Enter" (.-key event))
     (locate-plan-task! uid hover-info-state event)))
 
-(defn position-hover-tooltip! [hover-info-state node]
-  (when (and node @hover-info-state (not (:positioned @hover-info-state)))
-    (let [{:keys [anchor-x anchor-y preferred]} @hover-info-state
-          positioned (log-core-call "placeFloatingTooltip"
-                                    {:anchorX anchor-x
-                                     :anchorY anchor-y
-                                     :tooltipWidth (.-offsetWidth node)
-                                     :tooltipHeight (.-offsetHeight node)
-                                     :viewportWidth (.-innerWidth js/window)
-                                     :viewportHeight (.-innerHeight js/window)
-                                     :preferred preferred
-                                     :margin 12
-                                     :gap 10})]
-      (when positioned
-        (swap! hover-info-state merge positioned {:positioned true})))))
-
-(defn hover-tooltip-content [hover-info-state]
-  (when-let [{:keys [title meta hint x y anchor-x anchor-y positioned placement]} @hover-info-state]
-    [:div {:class (str "nautilus-log-hover-tooltip"
-                       (when positioned " nautilus-log-hover-tooltip--positioned")
-                       (when placement (str " nautilus-log-hover-tooltip--" placement)))
-           :role "tooltip"
-           :ref #(position-hover-tooltip! hover-info-state %)
-           :style {:left (str (or x anchor-x) "px")
-                   :top (str (or y anchor-y) "px")}}
-     [:strong {:class "nautilus-log-hover-tooltip-title"} title]
-     [:span {:class "nautilus-log-hover-tooltip-meta"} meta]
-     (when (seq hint)
-       [:span {:class "nautilus-log-hover-tooltip-hint"} hint])]))
-
-(defn hover-tooltip-component [hover-info-state]
-  (when @hover-info-state
-    (let [react-dom (.-ReactDOM js/window)
-          create-portal (when react-dom (.-createPortal react-dom))]
-      (if create-portal
-        (.call create-portal react-dom
-               (r/as-element [hover-tooltip-content hover-info-state])
-               (.-body js/document))
-        [hover-tooltip-content hover-info-state]))))
-
-(defn compact-hover-context-component [hover-info-state]
-  (let [{:keys [title meta tone]} @hover-info-state
-        visible? (and (seq title) (seq meta))]
-    [:div {:class (str "nautilus-log-compact-hover-context"
-                       (when visible? " is-visible"))
-           :aria-hidden "true"}
-     [:i {:class (str "nautilus-log-compact-hover-context-dot"
-                      (when (seq tone)
-                        (str " nautilus-log-compact-hover-context-dot--" tone)))}]
-     [:span {:class "nautilus-log-compact-hover-context-title"} (or title "")]
-     [:span {:class "nautilus-log-compact-hover-context-meta"} (or meta "")]]))
+(defn detail-region-component [detail-state copy]
+  (let [{:keys [title meta hint tone]} (active-detail detail-state)
+        active? (and (seq title) (seq meta))]
+    [:aside {:class "nautilus-log-detail-region"
+             :tab-index 0
+             :aria-live "polite"
+             :data-nautilus-detail (if active? "active" "idle")}
+     [:span {:class "nautilus-log-detail-eyebrow"} (get-in copy [:panels :details])]
+     (if active?
+       [:div {:class "nautilus-log-detail-content"}
+        [:span {:class (str "nautilus-log-detail-tone nautilus-log-detail-tone--" tone)
+                :aria-hidden "true"}]
+        [:strong {:class "nautilus-log-detail-title"} title]
+        [:span {:class "nautilus-log-detail-meta"} meta]
+        (when (seq hint) [:span {:class "nautilus-log-detail-hint"} hint])]
+       [:span {:class "nautilus-log-detail-idle"} (get-in copy [:panels :detailIdle])])]))
 
 ;; ---------------- helpers ----------------------
 
@@ -854,7 +819,9 @@
          (if debug? (str dbg-radians-txt)
              (or (log-core-call "truncateTextToWidth"
                                  {:text text
-                                  :maxWidth (* (:legend-len-limit settings) (/ font-size rect-width-coef))
+                                  ;; Keep rendered glyphs inside the accepted rail rect.
+                                  ;; The small inset accounts for SVG glyph overhang at the anchor.
+                                  :maxWidth (max 0 (- legend-w 4))
                                   :font (str font-size "px " font-family)})
                  text))
          ]])     
@@ -1005,7 +972,7 @@
         first-bound (if (<= first-bound start-min) (+ first-bound 60) first-bound)]
     (range first-bound end-min 60)))
 
-(defn event-slice-component [event index legend-rect inner-radius elapsed-page? interactive? timeline-minute center settings conflict? hover-enabled? hover-info-state copy]
+(defn event-slice-component [event index legend-rect labels-visible? inner-radius elapsed-page? interactive? timeline-minute center settings conflict? hover-enabled? hover-info-state copy]
   (let [{:keys [bg-color done meeting? expired? past-status current?]} (calculate-slice-params event index elapsed-page? interactive? timeline-minute settings)
         legend-color (cond
                        (= "completed" past-status) "var(--nautilus-log-completed)"
@@ -1020,8 +987,10 @@
         kind-label (when hover-enabled? (get-in copy [:tooltips (if meeting? :event :task)]))
         action-hint (when actionable? (get-in copy [:tooltips :locateTask]))
         tooltip-info (when hover-enabled?
-                       (assoc (merge (timeline-tooltip-info description kind-label start-min end-min action-hint)
-                                     (timeline-tooltip-geometry start-min end-min center))
+                       (assoc (timeline-tooltip-info description kind-label start-min end-min action-hint)
+                              :uid uid
+                              :detail-kind :event
+                              :detail-signature (event-detail-signature event)
                               :tone (cond
                                       (= "completed" past-status) "completed"
                                       meeting? "event"
@@ -1050,10 +1019,8 @@
                      {:aria-label (:aria-label tooltip-info)
                       :tab-index 0
                       :focusable "true"
-                      :on-mouse-enter #(show-hover-tooltip! hover-info-state tooltip-info %)
-                      :on-mouse-leave #(hide-hover-tooltip! hover-info-state)
-                      :on-focus #(show-hover-tooltip! hover-info-state tooltip-info %)
-                      :on-blur #(hide-hover-tooltip! hover-info-state)})
+                      :on-mouse-enter #(show-hover-tooltip! hover-info-state :pointer tooltip-info %)
+                      :on-focus #(show-hover-tooltip! hover-info-state :focus tooltip-info %)})
                    (if actionable?
                      {:aria-label (or (:aria-label tooltip-info)
                                       (str description ". " action-hint))
@@ -1073,7 +1040,7 @@
                 [start-angle end-angle seg-inner-radius seg-outer-radius center settings]
                 :bg-color bg-color
                 :legend-color legend-color
-                :text (if (= idx 0) description nil)
+                :text (if (and labels-visible? (= idx 0) legend-rect) description nil)
                 :shaky shaky
                 :done? done
                 :font-weight "bold"
@@ -1088,12 +1055,10 @@
     (into {} (map (juxt :uid :track) placed))))
 
 (defn events->slices
-  "Returns svg vector of all slice components + list of legend rectangles"
-  ([events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy]
-   (events->slices events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy []))
-  ([events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy init-rects]
-   (events->slices events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy init-rects {}))
-  ([events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy init-rects prepared-rects]
+  "Returns SVG slices and only the labels that fit inside the fixed frame."
+  ([events elapsed-page? interactive? timeline-minute center settings labels-visible? hover-enabled? hover-info-state copy]
+   (events->slices events elapsed-page? interactive? timeline-minute center settings labels-visible? hover-enabled? hover-info-state copy []))
+  ([events elapsed-page? interactive? timeline-minute center settings labels-visible? hover-enabled? hover-info-state copy init-rects]
    (let [events (vec (filter #(not= true (:freetime %)) events))
          track-map (label-track-map events)
          conflict-uids (set (or (log-core-call "overlappingFixedEventUids" {:events events}) []))]
@@ -1111,12 +1076,13 @@
             text (:description event)
             radius (+ (nth snail-blueprint-outer-radiuses (spiral-profile-index (:start event) settings))
                       (* 18 (or (get track-map (:uid event)) 0)))
-            new-rect (or (get prepared-rects (:uid event))
-                         (get-legend-rect rects text mid-radians radius center settings (:start event) anchor-y))]
+            new-rect (when labels-visible?
+                       (get-legend-rect rects text mid-radians radius center settings (:start event) anchor-y))
+            next-rects (if new-rect (conj rects new-rect) rects)]
         (println?debug "RADIUS INSIDE EVENTS-SLICES: " radius)              
-        (recur (inc i) (rest events) (conj rects new-rect)
+        (recur (inc i) (rest events) next-rects
                (conj all-slice-components
-                     (event-slice-component event i new-rect snail-inner-radius elapsed-page? interactive? timeline-minute center settings
+                     (event-slice-component event i new-rect labels-visible? snail-inner-radius elapsed-page? interactive? timeline-minute center settings
                                             (contains? conflict-uids (:uid event)) hover-enabled? hover-info-state copy))))
       [all-slice-components rects])))))
 
@@ -1221,25 +1187,19 @@
           (str (minutes->time (:start event)) "–" (minutes->time (:end event)))]
          [:span {:class "nautilus-log-compact-title"} (:description event)]])]]))
 
-(defn available-slot-tooltip-info [slot copy center]
+(defn available-slot-tooltip-info [slot copy _center]
   (let [slot-label (get-in copy [:tooltips (if (:availableNow slot) :availableNow :available)])
         time-range (str (minutes->time (:start slot)) "–" (minutes->time (:end slot)))
         duration (duration-label (:duration slot))]
-    (merge {:title slot-label
-            :meta (str time-range " · " duration)
-            :tone "available"
-            :aria-label (str slot-label ". " time-range ". " duration)}
-           (timeline-tooltip-geometry (:start slot) (:end slot) center))))
+    {:title slot-label
+     :meta (str time-range " · " duration)
+     :uid (:key slot)
+     :detail-kind :available
+     :tone "available"
+     :aria-label (str slot-label ". " time-range ". " duration)}))
 
-(defn available-slot-component [events daily-page? timeline-minute inner-radius center settings hover-info-state copy]
-  (let [slots (or (log-core-call "availableSlotGroups"
-                                 {:events events
-                                  :startMinutes (:workday-start settings)
-                                  :endMinutes (:workday-end settings)
-                                  :nowMinutes timeline-minute
-                                  :clampToNow daily-page?})
-                  [])]
-    [:g {:class "nautilus-log-available-slots"}
+(defn available-slot-component [slots inner-radius center settings hover-info-state copy]
+  [:g {:class "nautilus-log-available-slots"}
      (for [slot slots
            :let [tooltip-info (available-slot-tooltip-info slot copy center)]]
        ^{:key (:key slot)}
@@ -1249,10 +1209,8 @@
             :role "img"
             :tab-index 0
             :focusable "true"
-            :on-mouse-enter #(show-hover-tooltip! hover-info-state tooltip-info %)
-            :on-mouse-leave #(hide-hover-tooltip! hover-info-state)
-            :on-focus #(show-hover-tooltip! hover-info-state tooltip-info %)
-            :on-blur #(hide-hover-tooltip! hover-info-state)}
+            :on-mouse-enter #(show-hover-tooltip! hover-info-state :pointer tooltip-info %)
+            :on-focus #(show-hover-tooltip! hover-info-state :focus tooltip-info %)}
         (for [{:keys [start end]} (:segments slot)]
           ^{:key (str (:key slot) ":" start ":" end)}
           [:path {:class "nautilus-log-available-slot-hit"
@@ -1262,94 +1220,76 @@
                       (spiral-cell-inner-radius start settings inner-radius)
                       (spiral-outer-radius start settings)
                       center)
-                  :vector-effect "non-scaling-stroke"}])])]))
+                  :vector-effect "non-scaling-stroke"}])])])
 
-(defn show-events [events-state show-done-atom? _now-time-atom page-title dimensions settings compact? copy compact-open-state hover-info-state block-uid timeline-state]
+(defn show-events [events-state show-done-atom? _now-time-atom page-title container-width settings copy compact-open-state hover-info-state block-uid timeline-state]
   (let [[events done-todos] events-state
-        old-width (js/Math.round (:width dimensions))
-        old-height (js/Math.round (:height dimensions))
-        all-events-for-dim (vec (if @show-done-atom? (concat events done-todos) events))
+        all-events (vec (if @show-done-atom? (concat events done-todos) events))
         past-occupied-events (vec (concat events done-todos))
+        frame (or (log-core-call "chartPresentationFrame" {:containerWidth container-width})
+                  {:viewBox {:width 720 :height 420}
+                   :center {:x 360 :y 210}
+                   :labels {:visible true}})
+        frame-width (get-in frame [:viewBox :width])
+        frame-height (get-in frame [:viewBox :height])
+        center {:center-x (get-in frame [:center :x]) :center-y (get-in frame [:center :y])}
+        labels-visible? (get-in frame [:labels :visible])
         unplanned-pattern-id (str "nautilus-log-unplanned-" block-uid)
-        [center-x suggested-width center-y suggested-height bounds-rects]
-        (if compact?
-          [(/ old-width 2) old-width (/ old-height 2) old-height]
-          (events->new-dimensions all-events-for-dim {:center-x (/ old-width 2) :center-y (/ old-height 2)} settings))
-        center {:center-x center-x :center-y center-y}
-        prepared-rects (if (and (seq bounds-rects)
-                                (every? :core-placement? bounds-rects)
-                                (every? #(seq (:event-uid %)) bounds-rects)
-                                (= (count bounds-rects) (count (set (map :event-uid bounds-rects)))))
-                         (into {} (map (juxt :event-uid identity)
-                                       (or (log-core-call "translateLabelRects"
-                                             {:rects bounds-rects
-                                              :dx (- center-x (/ old-width 2))
-                                              :dy (- center-y (/ old-height 2))}) [])))
-                         {})
         hover-enabled? true
         elapsed-page? (:showElapsed timeline-state)
         interactive? (:interactive timeline-state)
         timeline-minute (:elapsedThroughMinutes timeline-state)
-        [all-slice-components rects] (events->slices events elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy [] prepared-rects)
+        available-slots (or (when (and hover-enabled? (:showAvailableSlots timeline-state))
+                              (log-core-call "availableSlotGroups"
+                                             {:events events
+                                              :startMinutes (:workday-start settings)
+                                              :endMinutes (:workday-end settings)
+                                              :nowMinutes timeline-minute
+                                              :clampToNow interactive?}))
+                            [])
+        _detail-reconciled (reconcile-detail-state! hover-info-state
+                                                     (set (map (juxt :uid event-detail-signature) all-events))
+                                                     (set (map :key available-slots)))
+        [all-slice-components rects] (events->slices events elapsed-page? interactive? timeline-minute center settings labels-visible? hover-enabled? hover-info-state copy [])
         done-slices-and-rects (when @show-done-atom?
-                                (events->slices done-todos elapsed-page? interactive? timeline-minute center settings hover-enabled? hover-info-state copy rects prepared-rects))
+                                (events->slices done-todos elapsed-page? interactive? timeline-minute center settings labels-visible? hover-enabled? hover-info-state copy rects))
         done-slice-components (first done-slices-and-rects)
-        rects (or (second done-slices-and-rects) rects)
         now-visible? (:showNow timeline-state)
         center-now-label (when now-visible? (minutes->time timeline-minute))]
-    [:div {:class (str "nautilus-log-visual" (when compact? " nautilus-log-visual--compact"))}
-     [:svg {:viewBox (str "0 0 " suggested-width " " suggested-height)
-           :width "100%"
-           :style {:max-width (str suggested-width "px")}
-           :xmlns "http://www.w3.org/2000/svg"
-           :class "nautilus-log-svg"
-           :font-family font-family
-           :font-size font-size}
-     [:g
-      (when elapsed-page?
-        [past-time-overlay-component snail-inner-radius center settings timeline-minute])
-      (when elapsed-page?
-        [past-unplanned-overlay-component past-occupied-events snail-inner-radius center settings timeline-minute unplanned-pattern-id])
-      (when @show-done-atom? done-slice-components)
-      all-slice-components         ;; zobrazení všech událostí
-      [snail-blueprint-component snail-template-color snail-inner-radius center settings elapsed-page? timeline-minute]
-      (when (and hover-enabled? (:showAvailableSlots timeline-state))
-        [available-slot-component events interactive? timeline-minute snail-inner-radius center settings hover-info-state copy])
-      (when now-visible?
-        (let [visible-now timeline-minute
-              now-angle (min->angle visible-now)
-              now-rad (angle->rad now-angle)
-              inner-r (+ snail-inner-radius 2)
-              max-r (apply max snail-blueprint-outer-radiuses)
-              x1 (+ (:center-x center) (* inner-r (js/Math.cos now-rad)))
-              y1 (- (:center-y center) (* inner-r (js/Math.sin now-rad)))
-              x2 (+ (:center-x center) (* (+ max-r 15) (js/Math.cos now-rad)))
-              y2 (- (:center-y center) (* (+ max-r 15) (js/Math.sin now-rad)))
-              label (minutes->time visible-now)
-              now-copy (get-in copy [:capacity :now])
-              label-aria (str now-copy " " label)]
-          [:g {:class "nautilus-log-now-needle" :aria-label label-aria}
-           [:line {:x1 x1 :y1 y1 :x2 x2 :y2 y2
-                   :stroke clock-hand-color
-                   :stroke-width 2
-                   :stroke-linecap "round"
-                   :class "nautilus-log-now-needle-line"
-                   :style {:filter "drop-shadow(0px 0px 4px rgba(233, 79, 79, 0.4))"}}]]))
-      [central-label-component (split-and-trim page-title len-central-legend) center center-now-label]
-     
-      (when @debug-state-atom ;; just for debug ⤵  #FIXME remove in production later
-        [:g                                                             
-         [draw-debug-rects rects]                                       
-         [:text {:x "0" :y "450" :text-anchor "start"}                  
-          "Suggested w: " suggested-width                               
-          " Center-x: " (:center-x center)                              
-          " Center-y: " (js/Math.round center-y)]                       
-         [:circle {:cx (:center-x center) :cy (:center-y center)        
-                   :r 200 :fill "none" :stroke "black" :stroke-width 1}]])]]
-     (if compact?
-       [compact-hover-context-component hover-info-state]
-       [hover-tooltip-component hover-info-state])
-     [compact-event-list all-events-for-dim copy compact-open-state hover-info-state]]))
+    [:div {:class (str "nautilus-log-workspace nautilus-log-workspace--" (:inspector frame))
+           :on-mouse-leave #(clear-detail-on-workspace-exit! hover-info-state %)
+           :on-mouse-out #(clear-detail-on-workspace-exit! hover-info-state %)
+           :on-blur #(clear-detail-on-workspace-exit! hover-info-state %)}
+     [:div {:class (str "nautilus-log-chart-stage nautilus-log-chart-stage--" (:density frame))}
+      [:svg {:viewBox (str "0 0 " frame-width " " frame-height)
+             :preserveAspectRatio "xMidYMid meet"
+             :xmlns "http://www.w3.org/2000/svg"
+             :class "nautilus-log-svg"
+             :font-family font-family
+             :font-size font-size}
+       [:g
+        (when elapsed-page? [past-time-overlay-component snail-inner-radius center settings timeline-minute])
+        (when elapsed-page? [past-unplanned-overlay-component past-occupied-events snail-inner-radius center settings timeline-minute unplanned-pattern-id])
+        (when @show-done-atom? done-slice-components)
+        all-slice-components
+        [snail-blueprint-component snail-template-color snail-inner-radius center settings elapsed-page? timeline-minute]
+        (when (and hover-enabled? (:showAvailableSlots timeline-state))
+          [available-slot-component available-slots snail-inner-radius center settings hover-info-state copy])
+        (when now-visible?
+          (let [now-angle (min->angle timeline-minute)
+                now-rad (angle->rad now-angle)
+                inner-r (+ snail-inner-radius 2)
+                max-r (apply max snail-blueprint-outer-radiuses)
+                x1 (+ (:center-x center) (* inner-r (js/Math.cos now-rad)))
+                y1 (- (:center-y center) (* inner-r (js/Math.sin now-rad)))
+                x2 (+ (:center-x center) (* (+ max-r 15) (js/Math.cos now-rad)))
+                y2 (- (:center-y center) (* (+ max-r 15) (js/Math.sin now-rad)))]
+            [:g {:class "nautilus-log-now-needle" :aria-label (str (get-in copy [:capacity :now]) " " center-now-label)}
+             [:line {:x1 x1 :y1 y1 :x2 x2 :y2 y2 :stroke clock-hand-color :stroke-width 2 :stroke-linecap "round" :class "nautilus-log-now-needle-line"}]]))
+        [central-label-component (split-and-trim page-title len-central-legend) center center-now-label]
+        (when @debug-state-atom [draw-debug-rects rects])]]]
+     [detail-region-component hover-info-state copy]
+     [compact-event-list all-events copy compact-open-state hover-info-state]]))
 
 (defn add-start-after
   "Adds an end time to events so that tasks placed after the meeting cannot start before it"
@@ -1814,7 +1754,8 @@
        [:span {:class "nautilus-log-metric-separator" :aria-hidden "true"} "·"]
        [metric-summary-component status]
        [:span {:class "nautilus-log-metric-separator" :aria-hidden "true"} "·"]
-       [metric-summary-component planned]]]
+       [metric-summary-component planned]]
+      [:span {:class "nautilus-log-overview-chevron" :aria-hidden "true"}]]
      [:div {:class "nautilus-log-compact-overview-body"}
       [metrics-capacity-component (:available metrics) (:events metrics)]
       [html-legend-component copy]]]))
@@ -1892,17 +1833,22 @@
 (defn compact-chart-width? [width]
   (boolean (log-core-call "isCompactChartWidth" width)))
 
-(defn observe-compact-width! [node compact-state hover-info-state resize-observer-state]
+(defn observe-compact-width! [node compact-state presentation-width-state hover-info-state resize-observer-state]
   (when-let [current-observer @resize-observer-state]
     (.disconnect current-observer)
     (reset! resize-observer-state nil))
-  (when node
+  (if-not node
+    (clear-detail-state! hover-info-state)
     (let [update-width! (fn [width]
-                          (let [next-state (compact-chart-width? width)]
-                            (when (not= @compact-state next-state)
-                              (when @hover-info-state
-                                (reset! hover-info-state nil))
-                              (reset! compact-state next-state))))]
+                          (let [next-width (max 0 (js/Math.round width))
+                                next-compact? (compact-chart-width? next-width)]
+                            ;; A local shell resize changes the presentation contract even
+                            ;; when it stays in the same variant; stale details must not linger.
+                            (when (not= @presentation-width-state next-width)
+                              (clear-detail-state! hover-info-state)
+                              (reset! presentation-width-state next-width))
+                            (when (not= @compact-state next-compact?)
+                              (reset! compact-state next-compact?))))]
       (update-width! (.-width (.getBoundingClientRect node)))
       (when (.-ResizeObserver js/window)
         (let [observer (js/ResizeObserver.
@@ -1941,11 +1887,14 @@
                render-context-state (r/atom :pending)
                compact-list-open-state (r/atom nil)
                compact-overview-open-state (r/atom false)
-               hover-info-state (r/atom nil)
+               hover-info-state (r/atom {:pointer nil :focus nil})
+               unload-listener (fn [_event] (clear-detail-state! hover-info-state))
+               _unload-listener (.addEventListener js/window "unload" unload-listener)
                compact-state (r/atom false)
+               presentation-width-state (r/atom 0)
                resize-observer-state (atom nil)
                container-ref (fn [node]
-                               (observe-compact-width! node compact-state hover-info-state resize-observer-state))
+                               (observe-compact-width! node compact-state presentation-width-state hover-info-state resize-observer-state))
                page-title-val (page-title block-uid)
                desk-host-node (atom nil)
                desk-host-ref (fn [node]
@@ -2025,8 +1974,6 @@
           (reset-now-time-atom now-time-atom)
           (let [settings @settings-state
                 copy (ui-copy settings)
-                dimensions {:width (if mobile? mob-width desk-width)
-                            :height (* start-svg-rect-ratio (if mobile? mob-width desk-width))}
                 show-debug-button? (= :debug (first args))
                 timeline-state (or (log-core-call "timelineDayState"
                                                    {:displayDate page-title-val
@@ -2077,12 +2024,11 @@
                 capacity (assoc capacity-base :burningBucket burning-bucket)
                 events-state [(fill-day text-events (:workday-start settings) (:workday-end settings) plan-from-time) done-events]]
             [:div {:class (str "nautilus-log-container" (when @collapsed-state " nautilus-log-collapsed"))
-                   :ref container-ref
                    :data-nautilus-log-block block-uid
                    :data-nautilus-plan-status (or (:status plan-status) "unbound")}
              (if @collapsed-state
                [log-controls show-done-state settings collapsed-state block-uid page-title-val @render-context-state settled-uids tidy-state calendar-state copy show-debug-button? plan-status-state]
-               [:div {:class "nautilus-log-shell"}
+               [:div {:class "nautilus-log-shell" :ref container-ref}
                 [:header {:class (str "nautilus-log-header"
                                      (when @compact-state " nautilus-log-header--compact"))}
                  [:div {:class "nautilus-log-header-copy"}
@@ -2093,9 +2039,10 @@
                 (when @compact-state
                   [compact-overview-component capacity settings copy compact-overview-open-state])
                 [:div {:class "nautilus-log-content"}
-                 [show-events events-state show-done-state now-time-atom page-title-val dimensions settings @compact-state copy compact-list-open-state hover-info-state block-uid timeline-state]
-                 [overflow-panel capacity copy]
-                 [schedule-warning-panel text-events copy]]])
+                 [show-events events-state show-done-state now-time-atom page-title-val @presentation-width-state settings copy compact-list-open-state hover-info-state block-uid timeline-state]
+                 [:div {:class "nautilus-log-status-rail"}
+                  [:div {:class "nautilus-log-status-slot"} [overflow-panel capacity copy]]
+                  [:div {:class "nautilus-log-status-slot"} [schedule-warning-panel text-events copy]]]]])
              ;; Keep the host mounted while folded so its scoped outline claim
              ;; survives; Desk itself watches the collapsed class and hides/pause.
              [:div {:class "nautilus-log-desk-host"
@@ -2108,6 +2055,8 @@
       (js/clearInterval clock-interval)
       (.removeEventListener js/window settings-event-name settings-listener)
       (.removeEventListener js/window "nautilus-log:clock-changed" clock-listener)
+      (.removeEventListener js/window "unload" unload-listener)
+      (clear-detail-state! hover-info-state)
       (when-let [node @desk-host-node]
         (when-let [close-host (some-> js/window .-nautilusLogExtensionData .-closeDeskHost)]
           (.call close-host nil node)))

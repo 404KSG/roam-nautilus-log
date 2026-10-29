@@ -914,6 +914,8 @@ const UI_COPY = {
       overflow: 'Unscheduled today',
       warnings: 'Schedule warnings',
       schedule: 'Schedule',
+      details: 'Details',
+      detailIdle: 'Hover or focus a segment to inspect it.',
       item: 'item',
       items: 'items',
     },
@@ -991,6 +993,8 @@ const UI_COPY = {
       overflow: '今日放不下',
       warnings: '时间范围提醒',
       schedule: '时间安排',
+      details: '详情',
+      detailIdle: '悬停或聚焦一个切片以查看详情。',
       item: '项',
       items: '项',
     },
@@ -1530,6 +1534,38 @@ function isCompactChartWidth(width, threshold = 520) {
 }
 
 /**
+ * A presentation-only frame for the Nautilus spiral. Its small interface
+ * deliberately excludes events, titles, clock state, and pointer state so
+ * routine scheduling updates cannot alter the SVG's flow geometry.
+ */
+function chartPresentationFrame({ containerWidth } = {}) {
+  const width = asNumber(containerWidth);
+  const usableWidth = Number.isFinite(width) && width > 0 ? width : 0;
+  const narrow = usableWidth > 0 && usableWidth <= 360;
+  const compact = usableWidth > 360 && usableWidth <= 520;
+  // A smaller viewBox keeps the spiral and its center text legible in the
+  // narrow right sidebar instead of shrinking the desktop canvas to a sliver.
+  const viewBox = narrow ? { width: 330, height: 300 }
+    : compact ? { width: 560, height: 400 }
+      : { width: 720, height: 420 };
+  return {
+    viewBox,
+    center: { x: viewBox.width / 2, y: viewBox.height / 2 },
+    density: narrow ? 'narrow' : compact ? 'compact' : 'regular',
+    inspector: usableWidth >= 840 ? 'side' : 'bottom',
+    compactHeader: usableWidth <= 640,
+    labels: {
+      visible: !(narrow || compact),
+      maxWidth: 152,
+      minX: 24,
+      maxX: 696,
+      minY: 42,
+      maxY: 378,
+    },
+  };
+}
+
+/**
  * Return the real SVG center and a radial point just outside an interval.
  * Keeping both points in the same `{ x, y }` coordinate contract prevents the
  * screen-space direction test from silently treating the center as (0, 0).
@@ -1703,4 +1739,5 @@ module.exports = {
   stableTidyOrder,
   childOrderMoves,
   isCompactChartWidth,
+  chartPresentationFrame,
 };

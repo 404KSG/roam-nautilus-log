@@ -733,7 +733,14 @@ def run():
             mount()
             for width in [1700, 900, 390]:
                 page.set_viewport_size({'width':width,'height':1000})
-                page.wait_for_function('Number(document.querySelector(".nautilus-desk__grid").dataset.columns) >= 1')
+                # ResizeObserver/rAF may still carry the previous width's data.
+                # Wait for the expected *new* layout, not merely any positive count.
+                page.wait_for_function('''() => {
+                  const grid=document.querySelector('.nautilus-desk__grid'), style=getComputedStyle(grid);
+                  const available=grid.clientWidth-(parseFloat(style.paddingLeft)||0)-(parseFloat(style.paddingRight)||0);
+                  const gap=parseFloat(style.columnGap)||0, expected=Math.max(1,Math.floor((available+gap)/(240+gap)));
+                  return Number(grid.dataset.columns)===expected && style.gridTemplateColumns.split(/\\s+/).filter(Boolean).length===expected;
+                }''')
                 columns = page.locator('.nautilus-desk__grid').evaluate('''grid => {
                   const style=getComputedStyle(grid), available=grid.clientWidth-(parseFloat(style.paddingLeft)||0)-(parseFloat(style.paddingRight)||0);
                   const gap=parseFloat(style.columnGap)||0;
@@ -932,7 +939,27 @@ def run():
                 assert page.evaluate('() => deskHarness.api.sourceSnapshot("outside-source")') == source_before
                 assert page.evaluate('() => [...document.querySelectorAll(".nautilus-desk__drop-toast")].every(el=>el.hidden || !el.isConnected)')
             checks.append('fold, unload, blur, and navigation cancel ownership without claiming rollback of a late host create')
+            # Desk's production typography boundary copies the host surface,
+            # even when the chart deliberately uses another font family.
+            page.evaluate("document.querySelector('.roam-article').style.fontFamily='Georgia, serif'")
             mount(count=3)
+            themed_fonts = page.evaluate('''() => {
+              const host=document.querySelector('.roam-article'),desk=document.querySelector('.nautilus-desk');
+              const native=desk.cloneNode(false);native.append(desk.querySelector('.rm-desk-tile').cloneNode(true));
+              host.append(native); // Same native rules, outside the chart inheritance scope.
+              const result={host:getComputedStyle(host).fontFamily,
+                chart:getComputedStyle(document.querySelector('.nautilus-log-shell')).fontFamily,
+                desk:getComputedStyle(desk).fontFamily,explicitDeskFont:desk.style.fontFamily,
+                card:getComputedStyle(desk.querySelector('.rm-desk-tile__title')).fontFamily,
+                native:getComputedStyle(native).fontFamily,
+                nativeCard:getComputedStyle(native.querySelector('.rm-desk-tile__title')).fontFamily};
+              native.remove();return result;
+            }''')
+            assert themed_fonts['desk'] == themed_fonts['host'] == themed_fonts['native'], themed_fonts
+            assert themed_fonts['card'] == themed_fonts['nativeCard'], themed_fonts
+            assert themed_fonts['chart'] != themed_fonts['host'] and 'Inter' in themed_fonts['chart'], themed_fonts
+            (OUT/'host-typography.json').write_text(json.dumps(themed_fonts,indent=2))
+            checks.append('Desk preserves a distinct host font while the chart owns its typography')
 
             drag_start(card('task-1'))
             assert page.locator('.nautilus-desk__grid').evaluate('(el) => !!el.querySelector(".rm-desk-tile--dragging")')
