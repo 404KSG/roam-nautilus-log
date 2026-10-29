@@ -2,10 +2,11 @@
 
 ## Decision
 
-Nautilus Log keeps the spiral as the daily overview and places its detail in one local,
-fixed workspace region. This supersedes the wide floating tooltip and the compact overlay
-rail. It is an original Nautilus interpretation of restrained, information-dense product
-surfaces; it does not use Linear assets, fonts, or branding.
+Nautilus Log keeps the original spiral as the overview. User feedback rejected the large
+side/bottom inspector, so the current presentation uses one slim local context rail below
+the chart. It is hidden when idle and never becomes a separate panel. The stable-frame
+fix remains; the rejected large-inspector layout is not retained as a second mode.
+No Linear assets, fonts, or branding are used.
 
 ## Presentation contract
 
@@ -13,16 +14,18 @@ surfaces; it does not use Linear assets, fonts, or branding.
 `330 × 300` through 360px, `560 × 400` through 520px, and `720 × 420` above 520px.
 Each container-keyed frame and center stays fixed across time/content/hover changes;
 the interface never accepts events, labels, clock time, or pointer coordinates.
-- At local widths of 840px and above, the workspace has a 236px side detail region. Below
-that threshold it has a 112px bottom detail region. At 520px and below external SVG labels
-are omitted; the Schedule and detail region retain full readable content.
+- The context rail is 32px tall, or 40px through 520px. Its idle state has no visible
+background, heading or instructions. A reserved small slot keeps hover/focus geometry stable.
+At 520px and below external SVG labels are omitted; Schedule and the rail retain full content.
 - The compact Overview reserves a separate chevron column. Through 360px its four
 summary groups occupy a fixed 48px, two-row grid; clock changes do not make it wrap
 under the control or change height.
-- Overview labels are bounded to fixed rails. Labels that do not fit are omitted
-chronologically with their connectors instead of changing the SVG frame.
+- Overview label allocation and painted text share actual font measurement, including
+maximum focus weight and padding. Ordinary short labels remain whole; only genuinely long
+labels are ellipsized. Labels that exceed the finite rail capacity do not expand the frame;
+the full title remains available on its segment and in the context rail.
 - Details are local to the workspace, use the same record for hover and focus, and scroll
-internally for long text. Timeline details never portal to `document.body`, use fixed
+horizontally for long text without opening a tall region. New selections reset the scroll. Timeline details never portal to `document.body`, use fixed
 positioning, or depend on pointer or viewport coordinates.
 - Shell resizing clears stale details. Unmount cleanup still disconnects observers and timers.
 

@@ -160,6 +160,13 @@ def assert_guards(page, page_errors, http_requests, label):
     writes = [entry for entry in page.evaluate('() => window.__chartHarness.traces()') if entry['kind'] == 'write']
     if state['writes'] != 0 or writes:
         raise RuntimeError(f'{label} attempted graph writes: {writes or state}')
+    rail = page.locator('.nautilus-log-detail-region')
+    if rail.count():
+        assert state['detail']['height'] <= 40.5, (label, state['detail'])
+        assert not page.locator('.nautilus-log-detail-eyebrow, .nautilus-log-detail-idle').count()
+        if rail.get_attribute('data-nautilus-detail') == 'idle':
+            assert not rail.text_content().strip(), label
+            assert rail.evaluate('el => getComputedStyle(el).visibility') == 'hidden', label
     overview = state.get('overview')
     if overview and overview['rect']['width'] > 0:
         assert overview['chevron'], (label, overview)
@@ -364,7 +371,7 @@ def responsive_matrix(page, screenshots, page_errors, http_requests):
     results = {}
     for width in (280, 320, 360, 480, 520, 521, 839, 840, 960):
         set_width(page, width)
-        expected = 'nautilus-log-workspace--side' if width >= 840 else 'nautilus-log-workspace--bottom'
+        expected = 'nautilus-log-workspace--rail'
         state = page.evaluate('() => window.__chartHarness.state()')
         if expected not in state['workspaceClass']:
             raise RuntimeError(f'Width {width} did not select {expected}: {state}')
@@ -372,7 +379,7 @@ def responsive_matrix(page, screenshots, page_errors, http_requests):
             raise RuntimeError(f'Width {width} produced horizontal overflow: {state}')
         if width <= 520 and state['externalLabelCount'] != 0:
             raise RuntimeError(f'Width {width} retained external labels: {state}')
-        if state['detail']['height'] != 112 and width < 840:
+        if state['detail']['height'] != (40 if width <= 520 else 32):
             raise RuntimeError(f'Width {width} detail region lost its fixed height: {state}')
         if width <= 520 and state['compactList'] and state['compactList']['height'] != 168:
             raise RuntimeError(f'Width {width} compact Schedule viewport is not fixed: {state}')
@@ -434,22 +441,49 @@ def long_detail_contract(page, screenshots, page_errors, http_requests):
             assert_rect_equal(before, active, f'{context}/{uid} active Details')
             detail = page.locator('.nautilus-log-detail-region')
             detail.focus()
-            detail.press('End')
+            detail.press('ArrowRight')
+            page.wait_for_function('document.querySelector(".nautilus-log-detail-region").scrollLeft > 0')
+            # Chromium's native key-scroll animation can suppress a wheel
+            # arriving mid-scroll. Wait for actual settled offsets, not a sleep.
+            detail.evaluate('''el => new Promise((resolve, reject) => {
+              let last = el.scrollLeft, stable = 0, frames = 0;
+              const step = () => {
+                const value = el.scrollLeft;
+                stable = Math.abs(value - last) < 0.1 ? stable + 1 : 0; last = value;
+                if (stable >= 3) resolve();
+                else if (++frames > 120) reject(Error('Native key scroll did not settle'));
+                else requestAnimationFrame(step);
+              }; requestAnimationFrame(step);
+            })''')
+            detail.hover()
+            page.mouse.wheel(detail.evaluate('el => el.scrollWidth + 100'), 0)
             page.wait_for_function('''() => {
               const el = document.querySelector('.nautilus-log-detail-region');
-              return el.scrollHeight > el.clientHeight && el.scrollTop > 0 && el.scrollHeight - el.clientHeight - el.scrollTop <= 2;
+              return el.scrollWidth > el.clientWidth && el.scrollLeft > 0 && el.scrollWidth - el.clientWidth - el.scrollLeft <= 2;
             }''')
             tail = detail.evaluate('''el => {
               const title = el.querySelector('.nautilus-log-detail-title');
               const text = title.firstChild, range = document.createRange();
               range.setStart(text, Math.max(0, text.length - 5)); range.setEnd(text, text.length);
               const r = range.getBoundingClientRect(), box = el.getBoundingClientRect();
-              return {bottom:r.bottom, top:r.top, viewportTop:box.top, viewportBottom:box.bottom,
-                scrollTop:el.scrollTop, scrollHeight:el.scrollHeight, clientHeight:el.clientHeight};
+              return {bottom:r.bottom, top:r.top, left:r.left, right:r.right,
+                viewportTop:box.top, viewportBottom:box.bottom, viewportLeft:box.left, viewportRight:box.right,
+                scrollLeft:el.scrollLeft, scrollWidth:el.scrollWidth, clientWidth:el.clientWidth};
             }''')
+            assert tail['left'] >= tail['viewportLeft'] - 1 and tail['right'] <= tail['viewportRight'] + 1, (uid, tail)
             assert tail['top'] >= tail['viewportTop'] - 1 and tail['bottom'] <= tail['viewportBottom'] + 1, (uid, tail)
             assert_rect_equal(before, page.evaluate('() => window.__chartHarness.state()'), f'{context}/{uid} scroll')
             page.screenshot(path=str(screenshots / f'long-{context}-{uid}.png'), full_page=True)
+            if uid == 'long-latin':
+                next_title = expected['long-cjk']
+                next_index = page.locator('.nautilus-log-event-slice-group').evaluate_all(
+                    '(nodes, title) => nodes.findIndex(n => n.getAttribute("aria-label").startsWith(title))', next_title)
+                page.locator('.nautilus-log-event-slice-group').nth(next_index).focus()
+                page.wait_for_function('''title => document.querySelector('.nautilus-log-detail-title')?.textContent === title
+                  && document.querySelector('.nautilus-log-detail-region').scrollLeft === 0''', arg=next_title)
+                page.locator('.nautilus-log-event-slice-group').nth(target).focus()
+                page.wait_for_function('''title => document.querySelector('.nautilus-log-detail-title')?.textContent === title
+                  && document.querySelector('.nautilus-log-detail-region').scrollLeft === 0''', arg=title)
             # Changing a selected record without changing its UID cannot keep old Details.
             page.evaluate('({uid}) => window.__chartHarness.updateChild(uid, "{{TODO}} Updated project brief 30m")', {'uid': uid})
             page.wait_for_function('''() => {
@@ -474,6 +508,34 @@ def long_detail_contract(page, screenshots, page_errors, http_requests):
     page.wait_for_function('document.querySelector(".nautilus-log-detail-region")?.dataset.nautilusDetail === "idle"')
     assert_guards(page, page_errors, http_requests, 'available slot plan update')
     results['availableUpdate'] = page.evaluate('() => window.__chartHarness.state()')
+    return results
+
+
+def routine_label_contract(page, screenshots, page_errors, http_requests):
+    results = {}
+    for context, width in [('main', 560), ('main', 640), ('main', 960), ('embed', 720)]:
+        load_context(page, context, 'routine')
+        set_width(page, width)
+        page.evaluate("() => __chartHarness.setClock('2026-10-29T19:31:00')")
+        state = wait_for_clock(page, '2026-10-29T19:31:00')
+        labels = page.evaluate('''() => __chartHarness.routineTitles().map(title => {
+          const group = [...document.querySelectorAll('.nautilus-log-event-slice-group')]
+            .find(el => el.getAttribute('aria-label').startsWith(title + '.'));
+          return {title, shown:group?.querySelector('.nautilus-log-slice-group text')?.textContent || null};
+        })''')
+        assert all(row['title'] == row['shown'] for row in labels), (context, width, labels)
+        assert_label_bounds(state, f'routine/{context}/{width}')
+        assert_guards(page, page_errors, http_requests, 'routine idle')
+        page.screenshot(path=str(screenshots / f'routine-{context}-{width}-idle.png'), full_page=True)
+        page.locator('.nautilus-log-event-slice-group[aria-label^="Nap."]').focus()
+        page.wait_for_function('document.querySelector(".nautilus-log-detail-title")?.textContent === "Nap"')
+        settle_renderer(page)
+        active = page.evaluate('() => __chartHarness.state()')
+        assert_rect_equal(state, active, 'thin rail selection')
+        assert_label_bounds(active, 'routine focused labels')
+        assert_guards(page, page_errors, http_requests, 'routine active')
+        page.screenshot(path=str(screenshots / f'routine-{context}-{width}-active.png'), full_page=True)
+        results[f'{context}-{width}'] = {'labels': labels, 'idle': state, 'active': active}
     return results
 
 
@@ -628,8 +690,8 @@ def main():
             page.wait_for_selector('.nautilus-log-workspace', state='detached', timeout=5000)
             page.locator('.nautilus-log-collapse-btn').click()
             page.wait_for_selector('.nautilus-log-workspace', timeout=5000)
-            if page.evaluate('() => window.__chartHarness.state().detailText').find('Hover or focus') == -1:
-                raise RuntimeError('Fold/re-expand retained stale Details content')
+            if page.evaluate('() => window.__chartHarness.state().detailText'):
+                raise RuntimeError('Fold/re-expand retained stale context-rail content')
             assert_guards(page, page_errors, http_requests, 'detail lifecycle cleanup')
 
             observations = rect_series(page, OUT / 'screenshots', page_errors, http_requests)
@@ -720,6 +782,7 @@ def main():
 
             boundaries = setting_boundaries(page, OUT / 'screenshots', page_errors, http_requests)
             long_details = long_detail_contract(page, OUT / 'screenshots', page_errors, http_requests)
+            routine_labels = routine_label_contract(page, OUT / 'screenshots', page_errors, http_requests)
             page.evaluate('() => window.__chartHarness.unmount()')
             page.wait_for_function('window.__chartHarness.state().svgCount === 0', timeout=5000)
             unmount_state = page.evaluate('() => window.__chartHarness.state()')
@@ -752,6 +815,7 @@ def main():
                 'scenarioSmoke': scenario_smoke,
                 'settingBoundaries': boundaries,
                 'longDetails': long_details,
+                'routineLabels': routine_labels,
                 'responsive': responsive,
                 'compactContexts': compact_contexts,
                 'compactClock': compact_clock,

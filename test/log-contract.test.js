@@ -172,7 +172,7 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested L
   assert.match(component, /nautilus-log:clock-changed/);
   assert.match(timingRuntime, /entryTaskUids/);
   assert.match(timingRuntime, /Only a scoped graph read certifies complete history/);
-  assert.match(component, /log-core-call "truncateTextToWidth"/);
+  assert.match(component, /log-core-call "chartLabelMetrics"/);
   assert.match(component, /log-core-call "placeExternalLabels"/);
   assert.match(component, /log-core-call "chartPresentationFrame"/);
   assert.doesNotMatch(component, /log-core-call "translateLabelRects"/);
@@ -202,7 +202,9 @@ test('SVG label layout consumes a fixed presentation frame and bounds labels; th
   const getLegendEnd = component.indexOf(';; --------------- Log core bridge');
   assert.ok(getLegendStart >= 0 && getLegendEnd > getLegendStart);
   const getLegend = component.slice(getLegendStart, getLegendEnd);
-  assert.match(getLegend, /\(min 152/);
+  assert.match(getLegend, /log-core-call "chartLabelMetrics"/);
+  assert.match(getLegend, /:maxWidth 170/);
+  assert.match(getLegend, /:label-text \(:text label\)/);
   assert.match(getLegend, /:maxVerticalOffset 158/);
   assert.match(getLegend, /inside-frame\?/);
   assert.doesNotMatch(getLegend, /iterate-rect-place/);
@@ -300,8 +302,9 @@ test('the spiral uses a local fixed detail region above an inert grid', () => {
   assert.match(component, /:on-mouse-enter/);
   assert.match(component, /:on-focus/);
   assert.doesNotMatch(component, /createPortal|getScreenCTM|placeFloatingTooltip|radialTooltipGeometry/);
-  assert.match(css, /\.nautilus-log-detail-region\s*\{[^}]*height:\s*112px;[^}]*overflow:\s*auto;/s);
-  assert.match(css, /\.nautilus-log-workspace--side \.nautilus-log-detail-region\s*\{[^}]*border-left:/s);
+  assert.match(css, /\.nautilus-log-detail-region\s*\{[^}]*height:\s*32px;[^}]*overflow-x:\s*auto;/s);
+  assert.doesNotMatch(css, /\.nautilus-log-workspace--side/);
+  assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-log-detail-region\s*\{[^}]*height:\s*40px;/);
   assert.match(css, /\.nautilus-log-grid\s*\{[^}]*pointer-events:\s*none;/s);
   assert.match(css, /\.nautilus-log-available-slot-hit/);
   assert.doesNotMatch(css, /nautilus-log-hover-tooltip|nautilus-log-compact-hover-context/);
@@ -313,7 +316,8 @@ test('the spiral uses a local fixed detail region above an inert grid', () => {
   assert.match(observer, /if-not node[\s\S]*clear-detail-state! hover-info-state/);
   assert.match(observer, /when \(not= @presentation-width-state next-width\)[\s\S]*clear-detail-state! hover-info-state/);
   assert.match(css, /\.nautilus-log-compact-list\s*\{[^}]*height:\s*168px;[^}]*max-height:\s*none;/s);
-  assert.match(css, /\.nautilus-log-detail-idle\s*\{\s*grid-column:\s*1;/s);
+  assert.match(css, /\.nautilus-log-detail-region\[data-nautilus-detail="idle"\]\s*\{\s*visibility:\s*hidden;/s);
+  assert.doesNotMatch(component, /nautilus-log-detail-eyebrow|nautilus-log-detail-idle/);
 });
 
 test('chart task activation is read-only navigation with no legacy progress mutation', () => {
@@ -1148,7 +1152,8 @@ test('the current planned task is outlined and its label receives stronger empha
   assert.match(component, /nautilus-log-current-task/);
   assert.match(component, /:aria-current \(when current\? "true"\)/);
   assert.match(css, /\.nautilus-log-current-task \.nautilus-log-slice\s*\{[^}]*stroke:\s*var\(--nautilus-log-task\);[^}]*stroke-width:\s*2px;/s);
-  assert.match(css, /\.nautilus-log-current-task \.nautilus-log-slice-group text\s*\{[^}]*font-weight:\s*800;/s);
+  assert.match(css, /\.nautilus-log-current-task \.nautilus-log-slice-group text\s*\{[^}]*font-weight:\s*600;/s);
+  assert.match(component, /:font-weight "500"/);
 });
 
 test('the Roam renderer cleanup remains a sibling of the render body inside with-let', () => {

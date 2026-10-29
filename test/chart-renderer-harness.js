@@ -59,6 +59,13 @@ const denseChildren = Array.from({ length: 10 }, (_value, index) => ({
   'block/refs': [],
 }));
 const parameters = new URLSearchParams(window.location.search);
+const routineTitles = ['Plan', 'Read', 'Nap', 'Ship', 'Build', 'Lunch', 'Brief review', 'Team sync',
+  'Commute home', 'Commute to work', 'Exercise', 'Breakfast', 'Social', 'Walk', 'Notes', 'Wrap up'];
+const routineChildren = routineTitles.map((title, order) => {
+  const start = 300 + order * 45;
+  const time = minutes => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+  return { 'block/uid': `routine-${order}`, 'block/string': `${time(start)}-${time(start + 30)} ${title}`, 'block/order': order, 'block/refs': [] };
+});
 const scenario = parameters.get('scenario') || 'mixed';
 const context = parameters.get('context') || 'main';
 const windowMode = parameters.get('window') || 'normal';
@@ -69,6 +76,7 @@ const longTitles = {
 };
 let children = clone({
   mixed: mixedChildren,
+  routine: routineChildren,
   sparse: mixedChildren.slice(0, 2),
   dense: denseChildren,
   cjk: [
@@ -198,6 +206,7 @@ window.__chartHarness = {
     trace('resize', { requested: Number(width), outerBefore: outer, innerBefore: inner });
   },
   longTitles: () => clone(longTitles),
+  routineTitles: () => [...routineTitles],
   updateChild(uid, string) {
     const item = children.find(child => child['block/uid'] === uid);
     if (!item) throw new Error('Unknown synthetic fixture UID');

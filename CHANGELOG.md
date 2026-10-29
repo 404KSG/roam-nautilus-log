@@ -6,10 +6,13 @@
 
 - The Nautilus spiral now uses stable, container-keyed presentation frames:
   `330 × 300` through 360px, `560 × 400` through 520px, and `720 × 420` above 520px,
-  with a local, readable Details region. Wide local containers place Details beside the chart; narrow
-  containers and the right sidebar reserve it below the chart. Hover and keyboard focus
-  share that fixed region, which scrolls internally for long content. Timeline details no
-  longer portal to the document body or follow the pointer. External overview labels are
+  with a slim local context rail below it: 32px normally and 40px in narrow/sidebar views.
+  The oversized side/bottom inspector, visible idle box and DETAILS heading were removed
+  after user feedback. Hover and keyboard focus share the rail; complete long text scrolls
+  horizontally without growing it. Short labels such as Nap and Read now use the same
+  measured font for allocation and truncation, avoiding accidental ellipsis. Labels and
+  leaders use lighter emphasis closer to the original chart. Timeline details no longer
+  portal to the document body or follow the pointer. External overview labels are
   bounded and may be omitted without changing chart or Desk geometry. Actual Scittle/Reagent
   regression coverage verifies clock stability, responsive variants, themes, reduced motion,
   synthetic content shapes, and zero graph writes.

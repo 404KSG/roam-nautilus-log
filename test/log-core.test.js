@@ -31,6 +31,7 @@ const {
   childOrderMoves,
   isCompactChartWidth,
   chartPresentationFrame,
+  chartLabelMetrics,
   parseDurationToken,
   parseTimeRangeToken,
   stripGoogleCalendarSourceSuffix,
@@ -1327,17 +1328,30 @@ test('chart presentation frame preserves readable compact canvases', () => {
     assert.equal(frame.density, 'regular');
   }
   for (const frame of [narrow, compact, middle, side, fallback]) {
-    assert.equal(frame.labels.maxWidth, 152);
+    assert.equal(frame.labels.maxWidth, 170);
     assert.equal(frame.labels.minY, 42);
     assert.equal(frame.labels.maxY, 378);
   }
-  assert.equal(narrow.inspector, 'bottom');
+  assert.equal(narrow.inspector, 'rail');
   assert.equal(narrow.labels.visible, false);
   assert.equal(compact.labels.visible, false);
   assert.equal(middle.labels.visible, true);
-  assert.equal(side.inspector, 'side');
-  assert.equal(fallback.inspector, 'bottom');
+  assert.equal(side.inspector, 'rail');
+  assert.equal(fallback.inspector, 'rail');
   assert.equal(fallback.compactHeader, true);
+});
+
+test('chart label allocation and truncation share real measurement rather than under-budgeting short words', () => {
+  const measure = value => Array.from(value).length * 11;
+  for (const text of ['Nap', 'Read', 'Ship', 'Commute home', '午间休息']) {
+    const result = chartLabelMetrics({ text, measure });
+    assert.equal(result.text, text);
+    assert.equal(result.width, measure(text) + 8);
+  }
+  const long = chartLabelMetrics({ text: 'x'.repeat(100), measure });
+  assert.equal(long.width, 170);
+  assert.ok(long.text.endsWith('…'));
+  assert.ok(measure(long.text) <= long.width - 8);
 });
 
 test('switches to the compact label list at the narrow-container boundary', () => {

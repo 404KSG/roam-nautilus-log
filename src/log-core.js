@@ -1241,6 +1241,19 @@ function browserTextWidth(candidate, font) {
   return textCanvasContext.measureText(candidate).width;
 }
 
+// Allocate and paint labels using the same measured font. Character-count
+// estimates minus an inset used to truncate even short labels such as "Nap".
+function chartLabelMetrics({ text = '', font, fontSize = 14, maxWidth = 170, measure } = {}) {
+  const value = String(text);
+  const padding = 8;
+  const widthOf = typeof measure === 'function' ? measure : candidate => {
+    const result = browserTextWidth(candidate, font);
+    return textCanvasContext ? result : result * fontSize * 0.65;
+  };
+  const width = Math.min(maxWidth, Math.ceil(widthOf(value)) + padding);
+  return { width, text: truncateTextToWidth(value, Math.max(1, width - padding), widthOf) };
+}
+
 function truncateTextToWidth(textOrOptions, maxWidth, measure = null) {
   // The ClojureScript bridge passes an object, while the small public JS seam
   // historically accepted positional arguments.  Keep both contracts so the
@@ -1552,11 +1565,11 @@ function chartPresentationFrame({ containerWidth } = {}) {
     viewBox,
     center: { x: viewBox.width / 2, y: viewBox.height / 2 },
     density: narrow ? 'narrow' : compact ? 'compact' : 'regular',
-    inspector: usableWidth >= 840 ? 'side' : 'bottom',
+    inspector: 'rail',
     compactHeader: usableWidth <= 640,
     labels: {
       visible: !(narrow || compact),
-      maxWidth: 152,
+      maxWidth: 170,
       minX: 24,
       maxX: 696,
       minY: 42,
@@ -1740,4 +1753,5 @@ module.exports = {
   childOrderMoves,
   isCompactChartWidth,
   chartPresentationFrame,
+  chartLabelMetrics,
 };

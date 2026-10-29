@@ -81,10 +81,13 @@ Past gaps are factual schedule data, not a judgment that time was wasted.
   saved Desk preference is unchanged. Expand restores the spiral and, when Desk
   was selected, its cards.
 
-Hover or keyboard-focus a task, event, or future blank slot to show its exact range and
-duration in the fixed **Details** region. The region stays beside the spiral in wide local
-containers and below it in narrow containers or the right sidebar; long details scroll
-inside that region. It never follows the pointer or covers the chart. Click a flexible
+Hover or keyboard-focus a task, event, or future blank slot to show its title, exact range
+and duration in a slim context rail below the chart. It is 32px tall, or 40px in narrow
+containers and sidebars. When idle, it has no visible box, heading or instruction text;
+the small reserved slot prevents hover from shifting content. Long text stays complete
+and can be scrolled horizontally with the wheel or keyboard. Short chart labels use
+actual font measurements rather than character-count estimates. The rail never follows
+the pointer or covers the chart. Click a flexible
 task slice or its compact Schedule row to scroll to that block without changing the graph;
 Shift-click or Shift-Enter opens it in the right sidebar. If a collapsed target is not
 rendered, Nautilus Log falls back to Roam's official block navigation. Narrow charts omit

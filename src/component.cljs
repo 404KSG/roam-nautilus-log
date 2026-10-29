@@ -265,7 +265,11 @@
 (defn get-legend-rect
   "Places one bounded overview label, or hides it when the fixed rails are full."
   [rects text slice-radians _outer-radius center _settings order-key anchor-y]
-  (let [w (min 152 (* (/ font-size rect-width-coef) (display-width text)))
+  (let [label (or (log-core-call "chartLabelMetrics"
+                                 {:text text :font (str "600 " font-size "px " font-family)
+                                  :fontSize font-size :maxWidth 170})
+                  {:width (min 170 (+ 8 (* font-size (display-width text)))) :text text})
+        w (:width label)
         h (* font-size rect-height-coef)
         max-spiral-radius (apply max (map outer-radius-at (range (count snail-blueprint-outer-radiuses))))
         external-rect (first
@@ -294,6 +298,7 @@
     (when inside-frame?
       (assoc external-rect
              :text text
+             :label-text (:text label)
              :core-placement? true
              :real-rect-radians (real-rect-radians external-rect center)))))
 
@@ -476,21 +481,26 @@
     (locate-plan-task! uid hover-info-state event)))
 
 (defn detail-region-component [detail-state copy]
-  (let [{:keys [title meta hint tone]} (active-detail detail-state)
-        active? (and (seq title) (seq meta))]
+  (r/with-let [last-detail (atom ::unseen)]
+   (let [info (active-detail detail-state)
+         {:keys [title meta tone]} info
+         active? (and (seq title) (seq meta))]
     [:aside {:class "nautilus-log-detail-region"
-             :tab-index 0
+             :ref (fn [node]
+                    (when (and node (not= @last-detail info))
+                      (reset! last-detail info)
+                      (set! (.-scrollLeft node) 0)))
+             :tab-index (if active? 0 -1)
+             :aria-label (get-in copy [:panels :details])
+             :aria-hidden (not active?)
              :aria-live "polite"
              :data-nautilus-detail (if active? "active" "idle")}
-     [:span {:class "nautilus-log-detail-eyebrow"} (get-in copy [:panels :details])]
-     (if active?
+     (when active?
        [:div {:class "nautilus-log-detail-content"}
         [:span {:class (str "nautilus-log-detail-tone nautilus-log-detail-tone--" tone)
                 :aria-hidden "true"}]
         [:strong {:class "nautilus-log-detail-title"} title]
-        [:span {:class "nautilus-log-detail-meta"} meta]
-        (when (seq hint) [:span {:class "nautilus-log-detail-hint"} hint])]
-       [:span {:class "nautilus-log-detail-idle"} (get-in copy [:panels :detailIdle])])]))
+        [:span {:class "nautilus-log-detail-meta"} meta]])])))
 
 ;; ---------------- helpers ----------------------
 
@@ -804,7 +814,6 @@
      (when text
        [:g {:style {:--pb-delay (str (* (/ (or task-start-min 0) 1440.0) 6.0) "s")}
              :class "nautilus-log-slice-group"}
-        [:title text]
         [bent-line-component legend-line-start-x legend-line-start-y legend-line-end-x legend-line-end-y legend-color at-vertex? on-left?
          (:connector-knee-x legend-rect) (:connector-rail-x legend-rect)]
         [:text {:x (if at-vertex? legend-line-end-x (+ legend-line-end-x (if on-left? (- bent-line-gap) bent-line-gap))) 
@@ -817,13 +826,7 @@
                 :text-decoration (if done? "line-through" "none")
                 :fill (if-not done? legend-color "var(--nautilus-log-completed)")}
          (if debug? (str dbg-radians-txt)
-             (or (log-core-call "truncateTextToWidth"
-                                 {:text text
-                                  ;; Keep rendered glyphs inside the accepted rail rect.
-                                  ;; The small inset accounts for SVG glyph overhang at the anchor.
-                                  :maxWidth (max 0 (- legend-w 4))
-                                  :font (str font-size "px " font-family)})
-                 text))
+             (or (:label-text legend-rect) text))
          ]])     
      (when (seq timestamp)
        ;; ⤵ adds a clock label for the snail template
@@ -1043,7 +1046,7 @@
                 :text (if (and labels-visible? (= idx 0) legend-rect) description nil)
                 :shaky shaky
                 :done? done
-                :font-weight "bold"
+                :font-weight "500"
                 :legend-rect (if (= idx 0) legend-rect nil)
                 :task-start-min start-min
                 :task-end-min end-min]))
