@@ -481,7 +481,7 @@
     (locate-plan-task! uid hover-info-state event)))
 
 (defn detail-region-component [detail-state copy]
-  (r/with-let [last-detail (atom ::unseen)]
+  (r/with-let [last-detail (atom :unseen)]
    (let [info (active-detail detail-state)
          {:keys [title meta tone]} info
          active? (and (seq title) (seq meta))]

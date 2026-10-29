@@ -597,6 +597,22 @@ def main():
             }
             if exact_evaluator_input != component_source:
                 raise RuntimeError('Actual component evaluator input differs from src/component.cljs')
+            # SCI evaluates ns declarations, while the host can pre-read forms
+            # without a current namespace. Exercise the actual initializer with
+            # a namespace-free reader as well as the full SCI rendering below.
+            reader_check = page.evaluate('''source => {
+              const initializer = /last-detail\\s+(\\(atom\\s+[^)]+\\))/.exec(source)?.[1];
+              if (!initializer) throw Error('Missing context-rail initializer for reader check');
+              const read = text => scittle.core.eval_string('(clojure.edn/read-string ' + JSON.stringify(text) + ')');
+              const negativeError = scittle.core.eval_string(
+                '(try (clojure.edn/read-string "(atom ::unseen)") (catch :default error (.-message error)))');
+              if (typeof negativeError !== 'string' || !negativeError.includes('::unseen'))
+                throw Error('Reader negative control unexpectedly accepted ::unseen');
+              read(initializer);
+              return {initializer, namespaceFreeRead:true, autoResolvedNegativeError:negativeError,
+                scope:'Initializer reader compatibility, not a live-host parser invocation'};
+            }''', component_source)
+            report['readerCompatibility'] = reader_check
             initial = wait_for_clock(page, '2026-10-29T08:01:00')
             report['stylesheetOrder'] = page.evaluate('() => [...document.querySelectorAll("link[rel=stylesheet]")].map(el => el.href)')
             report['loadedFonts'] = page.evaluate('() => [...document.fonts].filter(f => f.status === "loaded").map(f => ({family:f.family,weight:f.weight,style:f.style}))')

@@ -63,6 +63,10 @@
 
 ### Fixed
 
+- The context-rail sentinel uses an ordinary keyword instead of `::unseen`.
+  Roam can pre-read component forms without a current namespace, even when
+  standalone SCI evaluation succeeds. A namespace-free initializer check and
+  a source-level auto-resolution guard now cover this compatibility regression.
 - Shift + wheel now supports devices that report horizontal intent on deltaY,
   normalizes line/page units, and follows partial gestures with native-style
   snap-back. Momentum is latched to one card per gesture; stale frames/timers

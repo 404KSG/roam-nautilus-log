@@ -113,6 +113,14 @@ test('Roam SCI component source keeps reader delimiters balanced', () => {
   assert.match(buildScript, /read \{:eof eof :read-cond :allow :features #\{:cljs\}\}/);
 });
 
+test('Roam component pre-reading needs no current namespace for keyword resolution', () => {
+  // Roam may read the whole form before evaluating its ns declaration. SCI's
+  // evaluator accepts ::keywords, but that does not certify the host pre-reader.
+  const code = component.replace(/"(?:\\[\s\S]|[^"\\])*"|;[^\n]*/g, ' ');
+  assert.deepEqual(code.match(/::[A-Za-z_][\w/-]*/g) || [], [],
+    'Use ordinary or explicitly qualified keywords, never auto-resolved ::keywords');
+});
+
 test('README media uses absolute HTTPS URLs for Roam Depot rendering', () => {
   for (const source of [readme, readmeZh]) {
     const media = [...source.matchAll(/\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)]
