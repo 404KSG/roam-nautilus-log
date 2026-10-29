@@ -146,6 +146,7 @@ export function createDeskExternalDrop({
   for (const [type, listener, capture] of events) document?.addEventListener?.(type, listener, capture);
   host?.addEventListener?.('blur', lifecycle); host?.addEventListener?.('hashchange', lifecycle);
   return {
+    announce(text) { say(text, true); },
     reconcile() { if (!root?.isConnected || suspended || !canAccept()) lifecycle(); else feedback.reconcile(); },
     suspend() { suspended = true; cancelAll(); },
     resume() { suspended = false; },

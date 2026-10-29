@@ -2381,8 +2381,8 @@ button.nautilus-log-timing__plan-heading:focus-visible {
 .nautilus-desk-diagnostics { position: fixed; right: 12px; bottom: 12px; z-index: 10000; width: min(480px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; }
 .nautilus-desk-diagnostics__controls { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
 .nautilus-desk-diagnostics .nautilus-desk-diagnostics__report { display: block; width: 100%; height: auto; min-height: 180px; resize: vertical; }
-.nautilus-log-desk-host { width: 100%; min-width: 0; }
-.nautilus-desk { position: relative; width: 100%; margin: 12px 0; }
+.nautilus-log-desk-host { width: 100%; min-width: 0; max-width: 100%; inline-size: 100%; max-inline-size: 100%; }
+.nautilus-desk { position: relative; width: 100%; max-width: 100%; inline-size: 100%; max-inline-size: 100%; margin: 12px 0; margin-inline: 0; }
 /* Native row spans use the 4px tracks directly. A late legacy `gap` rule
    changes row-gap as well as the native 12px column gap and inflates every
    span into blank space, so keep the masonry axis explicit. */

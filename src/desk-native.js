@@ -1,14 +1,15 @@
-import { nativeDeskText, nativeDeskPreviewText, readDeskPreview } from './desk-core';
+import { nativeDeskText, nativeDeskPreviewText, readDeskPreview, buildDeskFullPreview } from './desk-core';
 
 // Native contract inspected in Roam's current route-app.js and site.css:
 // rm-desk-page, rm-desk-tile, Blueprint buttons, 240px auto-fill columns,
 // 4px masonry rows, and bounded preview depth. This embedded panel uses the
-// native compact-panel budget (six blocks including the root), not the full
-// route's twelve. No private functions, client bundle or fonts are shipped.
-export const DESK_PREVIEW_ROWS = 5;
+// native full-route budget (twelve blocks including the root). No private
+// functions, client bundle or fonts are shipped.
+export const DESK_PREVIEW_ROWS = 11;
 export const nativeText = nativeDeskText;
 export const nativePreviewText = nativeDeskPreviewText;
-export const readNativePreview = readDeskPreview;
+export const readNativePreview = buildDeskFullPreview;
+export const readLegacyNativePreview = readDeskPreview;
 
 export function nativeElements(document) {
   const el = (tag, classes = '', text) => {
@@ -84,6 +85,7 @@ export function nativeElements(document) {
       parent.append(line);
     }
     if (model.more) parent.append(el('div', 'rm-desk-tile__more', '...'));
+    if (model.empty) parent.append(el('div', 'rm-desk-tile__empty', 'Empty note'));
   };
   return { el, icon, button, check, preview };
 }

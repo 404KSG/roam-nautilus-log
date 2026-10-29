@@ -1,6 +1,7 @@
 import { graphName } from './graph-context';
-import { projectDeskTasks, reconcileDeskSelection, stepDeskSelection, deskShortcut, nativeEditorOwnsEscape } from './desk-core';
-import { nativeElements, nativeText, nativePreviewText, readNativePreview, DESK_PREVIEW_ROWS } from './desk-native';
+import { projectDeskTasks, reconcileDeskSelection, stepDeskSelection, deskShortcut, nativeEditorOwnsEscape, createModernDeskPreviewAdapter } from './desk-core';
+import { nativeElements, nativePreviewText, readNativePreview } from './desk-native';
+import { readDeskPlan } from './desk-preview';
 import { createDeskMasonry } from './desk-masonry';
 import { createDeskWidth } from './desk-width';
 import { createDeskNavigation } from './desk-navigation';
@@ -25,50 +26,60 @@ export function createDeskView({
   let focusOwner = null;
   let destroyed = false;
   let nativeLane = Promise.resolve();
+  let nativeJobs = 0;
   // Preview rows are intentionally watched separately from the Plan projection:
   // the projection observes direct task strings/orders only, while a loaded card
   // needs child image/text changes without invalidating every other card.
   const previewWatchers = new Map();
+  let previewListeners = 0, pendingWatchRegistrations = 0;
   const previewLookup = (uid) => `[:block/uid "${String(uid || '').replace(/["\\]/g, '')}"]`;
-  const previewPattern = (fields) => `[${fields.map((field) => `:block/${field}`).join(' ')}]`;
+  const previewPattern = (fields) => `[${fields.map(field => `:${field.includes('/') ? field : `block/${field}`}`).join(' ')}]`;
   const subscribePreviewWatch = (target, listener) => {
     const api = host?.roamAlphaAPI?.data;
     const uid = target?.uid, pattern = previewPattern(target?.fields || []);
-    if (!uid || !target?.fields?.length || typeof listener !== 'function' || typeof api?.addPullWatch !== 'function') return () => {};
+    if (!uid || !target?.fields?.length || typeof listener !== 'function' || typeof api?.addPullWatch !== 'function' || typeof api?.removePullWatch !== 'function') {
+      const stop = () => {};
+      stop.ready = Promise.reject(new Error('Preview watch unavailable.')); stop.ready.catch(() => {}); return stop;
+    }
     const key = `${pattern}\u0000${uid}`;
     let entry = previewWatchers.get(key);
+    if (previewListeners >= 8192 || !entry && (previewWatchers.size >= 4096 || pendingWatchRegistrations >= 8192)) {
+      const stop = () => {}; stop.ready = Promise.reject(Object.assign(new Error('Preview watch limit reached.'), { code: 'preview-resource-limit' })); stop.ready.catch(() => {}); return stop;
+    }
     if (!entry) {
+      pendingWatchRegistrations += 1;
       entry = { uid, pattern, api, listeners: new Set(), callback: null, registered: null, removing: null };
       entry.callback = () => { for (const callback of [...entry.listeners]) callback(); };
       previewWatchers.set(key, entry);
       try {
         // Removal must wait for a delayed registration. This mirrors the Plan
         // bridge lifetime contract and prevents post-fold leaked listeners.
-        entry.registered = Promise.resolve(api.addPullWatch(pattern, previewLookup(uid), entry.callback)).catch((error) => {
-          if (previewWatchers.get(key) === entry) previewWatchers.delete(key);
-          console.debug('[Nautilus Log] Desk preview watch unavailable', error);
-        });
+        entry.registered = Promise.resolve(api.addPullWatch(pattern, previewLookup(uid), entry.callback));
       } catch (error) {
-        previewWatchers.delete(key);
-        entry.registered = Promise.resolve();
-        console.debug('[Nautilus Log] Desk preview watch unavailable', error);
+        entry.registered = Promise.reject(error);
       }
+      entry.registered.then(() => { pendingWatchRegistrations -= 1; }, () => { pendingWatchRegistrations -= 1; });
+      entry.registered.catch(() => { if (previewWatchers.get(key) === entry) previewWatchers.delete(key); });
     }
+    if (!entry.listeners.has(listener)) previewListeners += 1;
     entry.listeners.add(listener);
-    return () => {
-      entry.listeners.delete(listener);
+    const stop = () => {
+      if (entry.listeners.delete(listener)) previewListeners -= 1;
       if (entry.listeners.size || entry.removing) return;
       if (previewWatchers.get(key) === entry) previewWatchers.delete(key);
-      entry.removing = Promise.resolve(entry.registered).then(() => {
+      entry.removing = Promise.resolve(entry.registered).catch(() => {}).then(() => {
         // Registration has no meaningful return value (including host nil/null).
         // Even a rejected/ambiguous add may have installed this exact callback.
         if (typeof entry.api.removePullWatch !== 'function') return;
         return entry.api.removePullWatch(entry.pattern, previewLookup(entry.uid), entry.callback);
       }).catch(() => {});
     };
+    stop.ready = entry.registered;
+    return stop;
   };
   const enqueueNative = (work) => {
-    nativeLane = nativeLane.then(work, work).catch((error) => console.error('[Nautilus Log] Desk native editor cleanup failed', error));
+    nativeJobs += 1;
+    nativeLane = nativeLane.then(work, work).catch((error) => console.error('[Nautilus Log] Desk native editor cleanup failed', error)).finally(() => { nativeJobs -= 1; });
     return nativeLane;
   };
   const validHost = (options) => !destroyed && document?.body && options?.planUid
@@ -108,6 +119,9 @@ export function createDeskView({
     const chart = container.closest('.nautilus-log-container');
     const roam = host.roamAlphaAPI;
     const graph = graphName(host);
+    let previewAdapter = null;
+    try { previewAdapter = createModernDeskPreviewAdapter(roam); }
+    catch (_error) { /* A card reports Preview unavailable without falling back to query readers. */ }
     const { el, icon, button, check, preview } = nativeElements(document);
     const cards = new Map();
     const previews = new Map();
@@ -124,10 +138,12 @@ export function createDeskView({
     let mount = null;
     let closed = false;
     let busy = false;
+    let removeBusy = false, removeSurface = null, removeError = false;
     let stopWatch = null;
     let previewFrame = null;
     let previewEpoch = 0;
     const previewVersions = new Map();
+    const previewLoading = new Map();
     let composing = false;
     let deferredSnapshot = null;
     let compositionFrame = null;
@@ -172,7 +188,13 @@ export function createDeskView({
     const message = el('div', 'nautilus-desk__notice');
     message.setAttribute('role', 'status');
     message.hidden = true;
-    const retryRead = button('Refresh', 'refresh', () => refresh(true));
+    const retryRead = button('Refresh', 'refresh', async () => {
+      if (busy || !inScope()) return;
+      busy = true;
+      try { await actions?.verifyPendingRemovals?.(planUid); removeError = false; }
+      catch (error) { removeError = true; if (inScope()) externalDrop.announce(error?.message || 'Removal is still unconfirmed.'); }
+      finally { busy = false; if (inScope()) refresh(true); }
+    });
     retryRead.hidden = true;
     const grid = el('div', 'rm-desk-overview rm-desk-overview--masonry nautilus-desk__grid');
     const empty = el('div', 'rm-desk-card__missing');
@@ -484,6 +506,7 @@ export function createDeskView({
     }
     function showTask(uid, force = false, caret = null, slide = 0) {
       if (!uid || !checkScope() || status !== 'ready' || !tasks.some((task) => task.uid === uid)) return;
+      if (actions?.isRemovalLocked?.(planUid)) { noticeError(new Error('A removal is pending or unconfirmed. Use Refresh before editing.')); return; }
       if (uid === selectedUid && mode === 'task' && !force) return;
       const entryOffset = swipeOffset;
       if (mode === 'draft') { captureDraft(); void saveDraft(); }
@@ -524,6 +547,7 @@ export function createDeskView({
     }
     function showDraft(slide = 0) {
       if (!checkScope() || busy || status !== 'ready' || !actions) return;
+      if (actions?.isRemovalLocked?.(planUid)) { noticeError(new Error('A removal is pending or unconfirmed. Use Refresh before editing.')); return; }
       if (mode === 'draft') { draftInput.focus(); return; }
       let reserved = draft && !draft.handedOff ? draft : null;
       if (!reserved) {
@@ -615,6 +639,29 @@ export function createDeskView({
         if (inScope()) { renderCards(); if (mode === 'overview') cards.get(uid)?.open.focus({ preventScroll: true }); }
       }
     }
+    async function removeCard(uid) {
+      if (!checkScope() || mode !== 'overview' || folded || busy || composing || !removeSurface) return;
+      const item = tasks.find(task => task.uid === uid); if (!item) return;
+      const before = visibleTasks().map(task => task.uid), index = before.indexOf(uid);
+      busy = true; removeBusy = true; renderCards();
+      try {
+        const result = await removeSurface.remove({ uid, expectedString: item.localString });
+        if (inScope()) {
+          removeError = false; refresh();
+          externalDrop.announce(result.status === 'removed-reference' ? 'Local reference removed. Source unchanged.'
+            : result.status === 'moved-to-daily-note' ? 'Moved to the owning Daily Note. Content kept.' : 'Already outside this plan.');
+        }
+      } catch (error) { removeError = true; if (inScope()) externalDrop.announce(error?.message || 'Removal could not be confirmed. Check the original outline.'); }
+      finally {
+        busy = false; removeBusy = false;
+        if (inScope()) {
+          renderCards();
+          const candidates = [...before.slice(index + 1), ...before.slice(0, index).reverse(), uid];
+          const nextCard = candidates.map(id => cards.get(id)?.open).find(node => node?.isConnected);
+          (nextCard || add).focus({ preventScroll: true });
+        }
+      }
+    }
     function schedulePreviews() {
       if (closed || folded || mode !== 'overview' || previewFrame !== null || !previewQueue.size) return;
       previewFrame = host.requestAnimationFrame(() => {
@@ -626,45 +673,66 @@ export function createDeskView({
         schedulePreviews();
       });
     }
-    function loadPreview(uid) {
+    async function loadPreview(uid) {
       const card = cards.get(uid);
-      if (!card || previews.has(uid) || status !== 'ready' || !checkScope()) return;
-      const epoch = previewEpoch;
-      const version = previewVersions.get(uid) || 0;
+      if (!card || previews.has(uid) || previewLoading.has(uid) || status !== 'ready' || !checkScope()) return;
+      const epoch = previewEpoch, version = previewVersions.get(uid) || 0, token = {};
+      previewLoading.set(uid, token); card.tile.dataset.previewState = 'loading';
+      const current = () => inScope() && !folded && epoch === previewEpoch && version === (previewVersions.get(uid) || 0) && cards.get(uid) === card;
+      const query = Boolean(search);
+      let model;
       try {
-        const task = tasks.find((entry) => entry.uid === uid);
-        let model = readNativePreview(uid, readChildren, DESK_PREVIEW_ROWS, readString, task?.localString);
-        // The Plan projection also recognizes references inside code. Preview
-        // fallback must use only references actually resolved from prose.
-        const sourceUid = model.referenceUids?.[0];
-        if (!model.rows.length && sourceUid && sourceUid !== uid) {
-          const source = readString?.(sourceUid) || '';
-          const sourceModel = readNativePreview(sourceUid, readChildren, DESK_PREVIEW_ROWS, readString, source);
-          const localImages = model.images || [];
-          const sourceImages = sourceModel.images || [];
-          model = { ...sourceModel, root: model.root,
-            images: [...localImages, ...sourceImages.filter((image) => !localImages.some((local) => local.src === image.src))],
-            watchTargets: [...(model.watchTargets || []), ...(sourceModel.watchTargets || [])] };
+        if (!previewAdapter) throw new Error('Preview unavailable.');
+        // Each admission owns its reader cache; overlapping cards cannot clear
+        // or share an incomplete read set while their watches are registering.
+        const adapter = createModernDeskPreviewAdapter(roam, { origin: host.location?.origin });
+        const read = () => { adapter.clear(); return readNativePreview({ uid, adapter, search: query }); };
+        model = read();
+        const keys = value => JSON.stringify((value.watchTargets || []).map(t => [t.uid, [...t.fields].sort()]).sort((a, b) => a[0].localeCompare(b[0])));
+        let admitted = false;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          await syncPreviewWatches(uid, model);
+          if (!current()) return;
+          const after = read();
+          if (keys(model) === keys(after)) { model = after; admitted = true; break; }
+          model = after;
         }
-        if (!checkScope() || folded || epoch !== previewEpoch || version !== (previewVersions.get(uid) || 0) || cards.get(uid) !== card) return;
-        previews.set(uid, model);
-        syncPreviewWatches(uid, model);
-        const previewLabel = model.root?.text || (model.images?.length ? 'Image note' : '');
-        if (previewLabel) { card.headingText.textContent = previewLabel; card.open.setAttribute('aria-label', previewLabel); }
-        preview(card.images, card.lines, model, () => {
-          if (!closed && !folded && previewEpoch === epoch && version === (previewVersions.get(uid) || 0) && cards.get(uid) === card && card.tile.isConnected) masonry.layoutNow();
-        });
-        if (search) renderCards();
-        else masonry.layoutNow();
-      } catch (_error) {
-        if (inScope() && !folded && epoch === previewEpoch && version === (previewVersions.get(uid) || 0) && cards.get(uid) === card) {
-          previews.set(uid, { rows: [], more: false, searchText: '', error: true });
-          card.lines.textContent = 'Preview unavailable.';
+        if (!admitted) throw new Error('Preview changed during watch registration. Refresh to retry.');
+        if (!current()) return;
+        const cost = new TextEncoder().encode(JSON.stringify(model)).length;
+        const retained = [...previews.entries()].reduce((sum, [id, value]) => sum + (id === uid ? 0 : value.cost || 0), 0);
+        if (cost + retained > 8 * 1024 * 1024) throw Object.assign(new Error('Preview memory limit reached.'), { code: 'preview-resource-limit' });
+        model.cost = cost;
+        previews.set(uid, model); card.tile.dataset.previewState = 'ready';
+        const rootText = model.root.text, rootStatus = model.root.status;
+        card.headingText.textContent = rootText; card.heading.hidden = !rootText && !rootStatus;
+        card.heading.querySelector('.rm-desk-tile__check')?.remove();
+        if (rootStatus) card.heading.prepend(check(rootStatus));
+        card.open.setAttribute('aria-label', rootText || model.rows.find(row => row.text)?.text || 'Note');
+        preview(card.images, card.lines, model, () => { if (current() && card.tile.isConnected) masonry.layoutNow(); });
+        if (search) renderCards(); else masonry.layoutNow();
+      } catch (error) {
+        if (current()) {
+          const known = error.code === 'preview-resource-limit' ? [{ uid, fields: ['block/string', 'block/open', 'block/children'] }]
+            : error.watchTargets || model?.watchTargets;
+          if (known?.length) syncPreviewWatches(uid, { watchTargets: known }).catch(() => {});
+          previews.set(uid, { root: { text: '', status: null }, rows: [], images: [], more: false, searchText: '', searchIncomplete: true, error: true });
+          card.tile.dataset.previewState = 'error'; card.images.replaceChildren();
+          card.lines.textContent = 'Preview unavailable. Use Refresh to retry.';
+          retryRead.hidden = false;
           if (search) renderCards(); else masonry.layoutNow();
         }
+      } finally {
+        if (previewLoading.get(uid) === token) previewLoading.delete(uid);
+        if (inScope() && !folded && cards.has(uid) && !previews.has(uid)) { previewQueue.add(uid); schedulePreviews(); }
       }
     }
-    const visibleTasks = () => tasks.filter((task) => !search || `${task.title} ${pageTitle} ${previews.get(task.uid)?.searchText || ''} ${(previews.get(task.uid)?.rows || []).map((row) => row.text).join(' ')}`.toLocaleLowerCase().includes(search));
+    const visibleTasks = () => tasks.filter(task => {
+      if (!search) return true;
+      const model = previews.get(task.uid);
+      if (!model || model.error || model.searchIncomplete || !model.searchReady) return true;
+      return `${model.searchText} ${pageTitle}`.toLocaleLowerCase().includes(search);
+    });
     function renderCards() {
       const focusedCard = root.contains(document.activeElement) ? document.activeElement?.closest?.('[data-task-uid]')?.dataset.taskUid : null;
       const live = new Set(tasks.map((task) => task.uid));
@@ -695,38 +763,48 @@ export function createDeskView({
           const source = el('span', 'rm-desk-tile__source', pageTitle);
           const tools = el('div', 'rm-desk-tile__actions');
           const top = button('Move to top', 'double-chevron-up', () => move(task.uid, null, 'top'), 'rm-desk-tile__move-to-top');
-          tools.append(top);
+          const removeButton = button('Remove from Desk', 'log-out', () => removeCard(task.uid), 'rm-desk-tile__remove');
+          removeButton.addEventListener('pointerdown', event => event.stopPropagation());
+          removeButton.addEventListener('dragstart', event => { event.preventDefault(); event.stopPropagation(); });
+          tools.append(top, removeButton);
           footer.append(source, tools);
           tile.append(open, footer);
           const activate = (event) => {
-            if (busy || status !== 'ready') return;
-            if (event.shiftKey) Promise.resolve().then(() => openTask(task.uid, true)).catch(noticeError);
+            if (!checkScope() || busy || status !== 'ready') return;
+            if (actions?.isRemovalLocked?.(planUid)) { noticeError(new Error('A removal is pending or unconfirmed. Use Refresh before editing.')); return; }
+            if (event.shiftKey) Promise.resolve().then(() => inScope() && !actions?.isRemovalLocked?.(planUid) && openTask(task.uid, true)).catch(noticeError);
             else showTask(task.uid);
           };
           tile.addEventListener('click', activate);
           open.addEventListener('keydown', (event) => {
             if (!event.defaultPrevented && !event.isComposing && ['Enter', ' '].includes(event.key)) { event.preventDefault(); activate(event); }
           });
-          card = { tile, open, images, heading, headingText, lines, top };
+          card = { tile, open, images, heading, headingText, lines, top, removeButton };
           cards.set(task.uid, card);
         }
         // Native drag pills use full collection order; Alt counters use the
         // visible DOM order independently, including when search is active.
         card.tile.dataset.position = String(taskIndex + 1);
-        const text = nativeText(task.localString);
-        const safeText = nativePreviewText(task.localString);
         const cached = previews.get(task.uid);
-        // A loaded root is authoritative for reference/image-only labels; do
-        // not overwrite it on unrelated Plan snapshots.
-        const label = cached?.root?.text || (cached?.images?.length ? 'Image note' : safeText.text || task.title);
-        card.headingText.textContent = label;
+        // Loaded preview text/status is authoritative. Before it arrives, keep
+        // a neutral placeholder instead of briefly promoting image alt text.
+        const loaded = Boolean(cached);
+        let safeText = { text: '' };
+        try { safeText = nativePreviewText(task.localString); } catch (_error) { /* Full admission exposes the retryable error. */ }
+        const rootText = loaded ? cached.root?.text || '' : (safeText.text || 'Loading preview…');
+        const rootStatus = loaded ? cached.root?.status : null;
+        const rowLabel = loaded ? cached.rows?.find((row) => row.text)?.text || '' : '';
+        const label = rootText || rowLabel || 'Note';
+        card.headingText.textContent = rootText;
+        card.heading.hidden = loaded && !rootText && !rootStatus;
         card.heading.querySelector('.rm-desk-tile__check')?.remove();
-        if (text.status || task.statusOrigin === 'source') card.heading.prepend(check(task.status));
+        if (rootStatus) card.heading.prepend(check(rootStatus));
         card.open.setAttribute('aria-label', label);
         card.open.setAttribute('aria-disabled', String(busy || status !== 'ready'));
         card.open.tabIndex = status === 'ready' ? 0 : -1;
         card.tile.draggable = !busy && status === 'ready';
         card.top.disabled = busy || status !== 'ready' || !actions || task.uid === editingHoldUid;
+        card.removeButton.disabled = busy || status !== 'ready' || !removeSurface || task.uid === editingHoldUid;
         if (!previews.has(task.uid)) {
           if (search || !observer) previewQueue.add(task.uid);
           else observer.observe(card.tile);
@@ -754,7 +832,7 @@ export function createDeskView({
         : !tasks.length ? 'Nothing unfinished in this plan. Start a new note.'
           : search && previews.size < tasks.length ? 'Searching...'
             : search && [...previews.values()].some((model) => model.error) ? 'Some notes could not be searched. Refresh to try again.' : 'No notes match.';
-      retryRead.hidden = status === 'ready';
+      retryRead.hidden = status === 'ready' && !removeError && !actions?.hasUnconfirmedRemoval?.(planUid) && ![...previews.values()].some(model => model.error);
       root.dataset.status = status;
       updateControls();
       schedulePreviews();
@@ -770,7 +848,9 @@ export function createDeskView({
       clearPreviewWatches(uid);
       const targets = [...new Map((model.watchTargets || []).filter((target) => target?.uid)
         .map((target) => [`${target.uid}\u0000${(target.fields || []).join(',')}`, target])).values()];
-      previewWatchStops.set(uid, targets.map((target) => subscribePreviewWatch(target, () => invalidatePreview(uid))));
+      const stops = targets.map(target => subscribePreviewWatch(target, () => invalidatePreview(uid)));
+      previewWatchStops.set(uid, stops);
+      return Promise.all(stops.map(stop => stop.ready));
     }
     function invalidatePreview(uid) {
       clearPreviewWatches(uid);
@@ -794,6 +874,8 @@ export function createDeskView({
     }
     function resetPreviews() {
       previewEpoch += 1;
+      previewLoading.clear();
+      clearPreviewWatches();
       previews.clear();
       previewQueue.clear();
       for (const card of cards.values()) { card.images.replaceChildren(); card.lines.replaceChildren(); }
@@ -806,7 +888,13 @@ export function createDeskView({
       const previousStatus = status;
       if (snapshot?.missing) { tasks = []; status = 'missing'; }
       else {
-        try { tasks = projectDeskTasks(snapshot, planUid, { fallbackMinutes: getSettings()['todo-duration'] ?? 15, readString }); status = 'ready'; }
+        try {
+          if (snapshot?.unavailable) throw new Error('Plan unavailable.');
+          const projectionReader = createModernDeskPreviewAdapter(roam);
+          tasks = projectDeskTasks(readDeskPlan(roam, planUid), planUid, { fallbackMinutes: getSettings()['todo-duration'] ?? 15,
+            readString: uid => { const node = projectionReader.read(uid); return node ? node.string ?? node.title : null; },
+          }); status = 'ready';
+        }
         catch (_error) { status = 'unavailable'; }
       }
       if (status === 'ready' && previousStatus !== 'ready') notice('');
@@ -837,7 +925,11 @@ export function createDeskView({
       try { acceptSnapshot(readPlan(planUid)); }
       catch (_error) { acceptSnapshot({ unavailable: true }); }
     }
-    searchInput.addEventListener('input', () => { search = searchInput.value.trim().toLocaleLowerCase(); renderCards(); });
+    searchInput.addEventListener('input', () => {
+      const previous = Boolean(search); search = searchInput.value.trim().toLocaleLowerCase();
+      if (previous !== Boolean(search)) resetPreviews();
+      renderCards();
+    });
     const onKey = (event) => {
       if ((!root.contains(event.target) && !layer.contains(event.target) && event.target !== origin) || !checkScope() || composing) return;
       if (mode === 'overview' && event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey
@@ -904,6 +996,7 @@ export function createDeskView({
         } else if (!composing) void saveDraft();
       }
       closed = true;
+      removeSurface?.destroy(); removeSurface = null;
       mode = 'overview';
       selectedUid = null;
       dropEditor();
@@ -941,6 +1034,12 @@ export function createDeskView({
       }
       if (origin?.closest?.('.bp3-dark,.rm-dark-theme,.dark') || document.querySelector('.roam-app.rm-dark-theme')) layer.classList.add('bp3-dark');
       container.append(root);
+      try {
+        removeSurface = actions?.registerRemoveSurface?.({ planUid,
+          isAlive: () => inScope() && !folded && root.isConnected,
+          isQuiescent: () => mode === 'overview' && !mount && !nativeJobs && !composing && !draft?.saving && (!busy || removeBusy),
+        });
+      } catch (_error) { removeSurface = null; }
       widthBinding = createDeskWidth({ root, container, host, onResize: masonry.layoutNow });
       origin?.setAttribute?.('aria-expanded', 'true');
       outlineVisibility.setHidden(true);

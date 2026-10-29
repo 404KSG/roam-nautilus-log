@@ -156,7 +156,7 @@ def run():
             for uid in ['event', 'done', 'done-reference', 'divider']:
                 expect(card(uid)).to_have_count(0)
             expect(card('task-2')).to_be_visible()
-            page.wait_for_function('Number(document.querySelector(".nautilus-desk__grid").dataset.columns) >= 4')
+            page.wait_for_function('Number(document.querySelector(".nautilus-desk__grid").dataset.columns) >= 1')
             styles = card('task-0').locator('.rm-desk-tile__preview').evaluate('(el) => ({size:getComputedStyle(el).fontSize,line:getComputedStyle(el).lineHeight})')
             assert styles == {'size':'13px','line':'19.5px'}, styles
             assert page.locator('.rm-desk-page__title').evaluate('(el) => getComputedStyle(el).fontSize') == '22px'
@@ -418,8 +418,11 @@ def run():
             filtered = page.locator('.nautilus-desk__card')
             filtered_count = filtered.count()
             drag_start(filtered.first)
-            filtered_positions = grid.evaluate('(el) => [...el.children].map(card => card.dataset.position)')
-            filtered_uids = filtered.evaluate_all('els=>els.map(el=>el.dataset.taskUid)')
+            # Search admission can settle between two browser calls. Capture
+            # UID and position together without mixing different filter frames.
+            filtered_snapshot = grid.evaluate('(el) => [...el.children].map(card => ({uid:card.dataset.taskUid,position:card.dataset.position}))')
+            filtered_positions = [row['position'] for row in filtered_snapshot]
+            filtered_uids = [row['uid'] for row in filtered_snapshot]
             assert filtered_positions == [full_positions[uid] for uid in filtered_uids]
             badge_mapping['filtered'] = filtered_positions
             drag_end(filtered.first)
@@ -728,9 +731,15 @@ def run():
             checks.append('graph changes release the editor and outline hiding without leaking a saved view flag into another graph')
 
             mount()
-            for width, minimum in [(1700, 5), (900, 3), (390, 1)]:
+            for width in [1700, 900, 390]:
                 page.set_viewport_size({'width':width,'height':1000})
-                page.wait_for_function('(n) => Number(document.querySelector(".nautilus-desk__grid").dataset.columns) >= n', arg=minimum)
+                page.wait_for_function('Number(document.querySelector(".nautilus-desk__grid").dataset.columns) >= 1')
+                columns = page.locator('.nautilus-desk__grid').evaluate('''grid => {
+                  const style=getComputedStyle(grid), available=grid.clientWidth-(parseFloat(style.paddingLeft)||0)-(parseFloat(style.paddingRight)||0);
+                  const gap=parseFloat(style.columnGap)||0;
+                  return {actual:Number(grid.dataset.columns), expected:Math.max(1,Math.floor((available+gap)/(240+gap)))};
+                }''')
+                assert columns['actual'] == columns['expected'], (width, columns)
                 if width == 390:
                     expect(page.locator('.nautilus-desk__grid')).to_have_attribute('data-columns','1')
                 page.evaluate('() => new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
@@ -743,7 +752,7 @@ def run():
                     }''')
                     assert narrow_main['overflow'] <= 1 and narrow_main['centerDelta'] <= 0.5, narrow_main
             page.set_viewport_size({'width':1280,'height':1000})
-            page.wait_for_function('Number(document.querySelector(".nautilus-desk__grid").dataset.columns)>=4')
+            page.wait_for_function('Number(document.querySelector(".nautilus-desk__grid").dataset.columns)>=1')
             responsive_gaps = []
             for width in [1280, 900, 390]:
                 page.set_viewport_size({'width':width,'height':1000})
@@ -756,7 +765,7 @@ def run():
             assert all(row['rowGap'] == '0px' and row['reserved'] <= 32 for row in responsive_gaps), responsive_gaps
             (OUT/'gap-measurement-responsive.json').write_text(json.dumps(responsive_gaps, indent=2))
             page.set_viewport_size({'width':1280,'height':1000})
-            page.wait_for_function('Number(document.querySelector(".nautilus-desk__grid").dataset.columns)>=4')
+            page.wait_for_function('Number(document.querySelector(".nautilus-desk__grid").dataset.columns)>=1')
             card('task-1').hover()
             page.wait_for_function('getComputedStyle(document.querySelector("[data-task-uid=\\"task-1\\"] .rm-desk-tile__actions")).opacity === "1"')
             page.locator('.nautilus-desk').screenshot(path=str(OUT/'native-desk-overview.png'))
@@ -818,7 +827,8 @@ def run():
             reconcile_search.fill('提示词')
             expect(mapping_source).to_be_visible()
             assert mapping_source.evaluate('(el) => el.classList.contains("rm-desk-tile--dragging")')
-            assert page.evaluate('() => !window.retainedFilteredCard.isConnected && !window.retainedFilteredCard.querySelector(".rm-desk-tile__drop")')
+            page.wait_for_function('!window.retainedFilteredCard.isConnected')
+            assert page.evaluate('() => !window.retainedFilteredCard.querySelector(".rm-desk-tile__drop")')
             ready_filtered = reconcile_grid.evaluate('el=>[...el.children].map(card=>({uid:card.dataset.taskUid,position:card.dataset.position}))')
             assert all(row['position']==ready_positions[row['uid']] for row in ready_filtered)
             reconcile_search.fill('')
@@ -926,7 +936,7 @@ def run():
 
             drag_start(card('task-1'))
             assert page.locator('.nautilus-desk__grid').evaluate('(el) => !!el.querySelector(".rm-desk-tile--dragging")')
-            checks.append('native auto-fill adapts from one to five columns without changing fonts or overflowing its surface')
+            checks.append('native auto-fill follows the contained chart width from one column upward without changing fonts or overflowing its surface')
             page.evaluate('() => deskHarness.destroy()')
             expect(page.locator('.nautilus-desk')).to_have_count(0)
             page.wait_for_function('deskHarness.api.activeEditors()===0 && deskHarness.api.stats.watches===0')

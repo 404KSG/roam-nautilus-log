@@ -70,7 +70,7 @@ test('native preview keeps completed children, follows open rows to depth two, a
   assert.equal(result.rows.length,11); assert.equal(result.more,true);
   assert.deepEqual(result.rows[0],{status:'DONE',text:'Earlier Context',depth:1});
   assert.deepEqual(result.rows[1],{status:null,text:'Nested log',depth:2});
-  assert.equal(reads.includes('nested'),false); assert.equal(reads.includes('note-1'),false);
+  assert.equal(reads.includes('nested'),true, 'depth-two membership is read to determine truncation'); assert.equal(reads.includes('note-1'),true, 'closed rows still expose hidden-descendant ellipsis');
   assert.match(result.searchText,/Prompt 19/, 'search can match direct children beyond the preview budget');
   assert.deepEqual(nativeDeskText('<img onerror=alert(1)>'),{status:null,text:'<img onerror=alert(1)>'});
 });
@@ -82,14 +82,14 @@ test('preview images require Markdown, preserve code text, and resolve root refe
   (uid) => uid === 'source' ? '![referenced](https://example.test/referenced.png)' : '',
   '((source))');
   assert.deepEqual(preview.images.map(({ src }) => src), ['https://example.test/referenced.png', png]);
-  assert.equal(preview.root.text, 'referenced');
+  assert.equal(preview.root.text, '', 'image alt text is not promoted into a heading');
   const code = readDeskPreview('root', () => [], 11, () => '![expanded](https://example.test/nope.png)',
     '`keep this code text ((source)) ![literal](https://example.test/nope.png)`');
   assert.equal(code.root.text, '`keep this code text ((source)) ![literal](https://example.test/nope.png)`');
   assert.deepEqual(code.images, []);
   assert.deepEqual(deskImages('``![not](https://example.test/a.png)``\n```\n![also-not](https://example.test/b.png)\n'), []);
-  assert.deepEqual(deskImages('ordinary https://example.invalid/linked-not-embedded.png ![ok](blob:https://host/id)'), [{ src: 'blob:https://host/id', alt: 'ok' }]);
-  assert.deepEqual(deskImages('![bad](javascript:alert(1)) ![html](data:text/html;base64,AAAA) ![ok](blob:https://host/id)'), [{ src: 'blob:https://host/id', alt: 'ok' }]);
+  assert.deepEqual(deskImages('ordinary https://example.invalid/linked-not-embedded.png ![ok](blob:https://host/id)', { origin: 'https://host' }), [{ src: 'blob:https://host/id', alt: 'ok' }]);
+  assert.deepEqual(deskImages('![bad](javascript:alert(1)) ![html](data:text/html;base64,AAAA) ![ok](blob:https://host/id)', { origin: 'https://host' }), [{ src: 'blob:https://host/id', alt: 'ok' }]);
 });
 
 test('preview fallback metadata includes prose references only and distinguishes root/descendant fields', () => {
@@ -104,8 +104,8 @@ test('preview fallback metadata includes prose references only and distinguishes
   assert.deepEqual(model.referenceUids, ['visible-source']);
   assert.deepEqual(reads, ['visible-source']);
   assert.equal(model.root.text, '`((hidden-source))` Visible source');
-  assert.deepEqual(model.watchTargets.find(({ uid }) => uid === 'root').fields, ['string', 'open', 'children']);
-  assert.deepEqual(model.watchTargets.find(({ uid }) => uid === 'child').fields, ['string', 'order', 'open', 'children']);
+  assert.deepEqual(model.watchTargets.find(({ uid }) => uid === 'root').fields, ['block/string', 'block/open', 'block/children']);
+  assert.deepEqual(new Set(model.watchTargets.find(({ uid }) => uid === 'child').fields), new Set(['block/string', 'block/order', 'block/open', 'block/children']));
 });
 
 test('selection is UID-based: keep edited/reordered card, then successor, predecessor, or overview', () => {

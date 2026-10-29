@@ -50,9 +50,10 @@ def run():
             def snap():
                 page.wait_for_timeout(400)  # The native padding transition lasts 300ms.
                 return page.evaluate('''()=>{
-                  const q=s=>document.querySelector(s),r=el=>{const b=el.getBoundingClientRect();return {x:b.x,width:b.width};};
+                  const q=s=>document.querySelector(s),r=el=>{if(!el)return null;const b=el.getBoundingClientRect();return {x:b.x,width:b.width};};
                   const owner=q('[data-fixture-host="plan-desk"]'),root=owner.querySelector('.nautilus-desk');
-                  return {title:r(q('article>h1')),chart:r(owner.querySelector('.fixture-shell')),
+                  return {title:r(q('article>h1')),chart:r(owner.querySelector('.fixture-shell')),desk:r(root),
+                    deskStyle:root?{marginLeft:getComputedStyle(root).marginLeft,width:root.style.width,maxInlineSize:getComputedStyle(root).maxInlineSize}:null,
                     wrappers:[...document.querySelectorAll('.rm-article-wrapper')].map(el=>{const s=getComputedStyle(el);return {...r(el),left:s.paddingLeft,right:s.paddingRight,claimsPage:el.matches('.rm-article-wrapper[class*="rm-spacing--"]:has(.rm-desk-page)')};}),
                     rootClass:root?.className,gridMin:root?getComputedStyle(root.querySelector('.nautilus-desk__grid')).minHeight:null};
                 }''')
@@ -73,6 +74,10 @@ def run():
                 results.append(row)
                 (OUT/'measurements.json').write_text(json.dumps(results,indent=2))
                 assert all(abs(value)<=0.5 for value in delta.values()), row
+                for edge in ['x','width']:
+                    assert abs(on['desk'][edge]-on['chart'][edge])<=0.5, row
+                assert abs(on['desk']['x'] + on['desk']['width'] - on['chart']['x'] - on['chart']['width'])<=0.5, row
+                assert on['deskStyle']['marginLeft'] == '0px' and on['deskStyle']['width'] == '100%', row
                 assert 'rm-desk-page' not in on['rootClass'].split(), row
                 assert [(x['left'],x['right']) for x in on['wrappers']]==[(x['left'],x['right']) for x in off['wrappers']], row
                 assert all(not x['claimsPage'] for x in on['wrappers']), row

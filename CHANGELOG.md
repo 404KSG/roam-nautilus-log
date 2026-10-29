@@ -4,6 +4,13 @@
 
 ### Added
 
+- Remove from Desk deletes only verified childless plain local reference wrappers.
+  Content-bearing cards move with the same UID and subtree to the plan's verified
+  owning Daily Note, including historical/future notes. Public APIs, overview/focus
+  admission, graph serialization, exact preflight/readback, and retained uncertain
+  reservations guard the action. No source deletion, page creation, copy/recreate,
+  compensating write, or destructive shortcut is added. Tests use synthetic graphs.
+
 - Desk accepts one ordinary same-window, same-graph native Roam block drop as a
   local TODO reference while preserving the original. Files, pages, renderers,
   events, ambiguous payloads, and cross-graph sources are rejected. Modifier
@@ -24,7 +31,7 @@
   The editor-first Escape fix covers the simulated copy prelude only; the live
   macro's clipboard/navigation/send workflow remains unvalidated.
 - Nautilus Desk reuses Roam's native Desk/Blueprint styles, native grid-span
-  masonry, and available main-content width below the chart. It hides only the
+  masonry, and the same local width as the chart above. It hides only the
   original plan's child outline while active and restores it on close or unload.
   Graph/plan-scoped view flags survive page navigation and reload in localStorage.
 - Drag sorting and the footer's Move to top now move the original outer block,
@@ -37,7 +44,7 @@
 - Native Next/Previous boundaries, the new-note slot, search, and Alt+1–9 selection
   are supported. Completed tasks and events remain excluded as cards; completed
   child logs remain visible. Browsing does not control CLOCK or Roam's own Desk
-  collection. A real-Roam read-only probe verified styles, five-column layout,
+  collection. An earlier read-only Roam probe verified styles, the then-five-column layout,
   native editor mounting, and outline hiding/restoration. Graph writes are tested
   with isolated adapters, not by modifying live notes.
 
@@ -47,11 +54,16 @@
   normalizes line/page units, and follows partial gestures with native-style
   snap-back. Momentum is latched to one card per gesture; stale frames/timers
   cannot change a later editor. Existing keyboard shortcuts stay unchanged.
-- Card overviews use the native compact-panel budget of five child rows rather
-  than the full route's eleven. Full editing and direct-child search remain
-  available; source content and fold state are untouched. An isolated 20-row
-  fixture reduces preview read calls and watch targets from 12 to 6; this is not
-  a measured live Desktop speedup.
+- Card previews now follow full-page Desk traversal: root plus eleven counted
+  descendants, two levels, explicit-false folding, three raw image-row exemptions,
+  hierarchy-aware image pruning, stable image deduplication, and hidden-content
+  indicators. References, missing roots, code literals, and direct-child search
+  have explicit behavior. Staged public reads and resource limits replace the
+  former compact five-row approximation. Read/watch failures remain visible;
+  watch admission rereads the source and survives fold/reopen races.
+- Desk width now matches the chart's local renderer rather than the article
+  wrapper. Responsive native columns remain; no negative-margin breakout or
+  native full-page ownership marker is reintroduced.
 - Embedded Desk no longer claims the native `rm-desk-page` route marker. Current
   Roam CSS used that descendant to reset ancestor wrapper padding, reproducing
   the reported 12px shift. Native card sizes are scoped locally without changing

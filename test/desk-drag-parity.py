@@ -213,6 +213,8 @@ def run():
             # card. The visual end rail remains on the last visible tile.
             for external in [False,True]:
                 mount();page.get_by_role('textbox',name='Search Desk',exact=True).fill('Hide')
+                expect(page.locator('.nautilus-desk__card')).to_have_count(6)
+                expect(card(11)).to_have_count(0)
                 fire('#fixture-external-outline .rm-bullet' if external else '[data-task-uid="parity-0"]','dragstart',external=external)
                 fire('.nautilus-desk__grid','dragover','after')
                 page.evaluate('''()=>{

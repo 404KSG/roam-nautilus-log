@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compact preview, toolbar alignment and wheel response on an isolated graph."""
+"""Full preview, toolbar alignment and wheel response on an isolated graph."""
 import importlib.util
 import json
 import os
@@ -39,7 +39,7 @@ def run():
                 mount()
                 before=page.evaluate('()=>deskHarness.api.children("task-0").map(r=>({uid:r.uid,string:r.string,open:r.open}))')
                 rows=page.locator('[data-task-uid="task-0"] .rm-desk-tile__row')
-                expect(rows).to_have_count(5)
+                expect(rows).to_have_count(11)
                 expect(page.locator('[data-task-uid="task-0"] .rm-desk-tile__more')).to_have_text('...')
                 opened('task-0')
                 expect(page.locator('.nautilus-desk__native textarea')).to_have_count(21)
@@ -50,7 +50,7 @@ def run():
                 page.get_by_role('textbox',name='Search Desk',exact=True).fill('第 19 轮')
                 expect(page.locator('[data-task-uid="task-0"]')).to_be_visible()
                 page.screenshot(path=str(OUT/'compact-preview.png'))
-                return {'rows':5,'fullEditorRows':21,'sourceUnchanged':True}
+                return {'rows':11,'fullEditorRows':21,'sourceUnchanged':True}
             def toolbar():
                 mount();measurements=[]
                 def inspect(scope,width):
@@ -183,7 +183,7 @@ def run():
             (OUT/'results.json').write_text(json.dumps(report,indent=2)+'\n')
             for row in results:print(row['name'],row['status'],row.get('error',''))
             assert all(row['status']=='passed' for row in results) and not errors,report
-            print(f'PASSED: Desk compact previews, aligned controls and wheel response; artifacts: {OUT}')
+            print(f'PASSED: Desk full previews, aligned controls and wheel response; artifacts: {OUT}')
         finally:browser.close()
 
 

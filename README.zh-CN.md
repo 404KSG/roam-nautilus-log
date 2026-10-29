@@ -19,6 +19,7 @@
   `LOGBOOK::` / `CLOCK:` 记录任务时间。
 - **逐项聚焦长日志。** Desk 在海螺图下方使用 Roam 原生卡片样式，隐藏重复大纲并记住视图模式。
   拖拽和 Move to top 同步移动原任务、调整排程优先级；加号可在当前计划下新增内容。
+  使用完整 Desk 页预览规则，宽度与上方图表一致；Remove from Desk 只删除无本地内容的纯引用包装块，其他卡片完整移到所属 Daily Note。
   同窗口、同图谱的合格外部 block 可作为本地 TODO 引用拖入，原 block 保持不变。
   点击卡片用原生编辑器处理完整日志；编辑器内 Esc 交给 Roam，关闭按钮或 Desk 外框的 Esc 返回卡片区。
   不改动 Roam 自带的 Desk 收藏集合；[验证仍限于合成夹具](./docs/guide.zh-CN.md#安全的外部-block-引用)。

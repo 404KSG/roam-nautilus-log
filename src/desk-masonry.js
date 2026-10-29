@@ -16,10 +16,13 @@ export function createDeskMasonry({ grid, host = window }) {
     if (measuredWidth !== grid.clientWidth) {
       grid.style.gridTemplateColumns = '';
       const native = host.getComputedStyle(grid);
-      const widths = native.gridTemplateColumns.split(/\s+/).map(parseFloat).filter(Number.isFinite);
       const available = grid.clientWidth - (parseFloat(native.paddingLeft) || 0) - (parseFloat(native.paddingRight) || 0);
-      const used = widths.reduce((sum, width) => sum + width, 0) + Math.max(0, widths.length - 1) * (parseFloat(native.columnGap) || 0);
-      if (used > available + 1) grid.style.gridTemplateColumns = 'minmax(0, 1fr)';
+      const gap = parseFloat(native.columnGap) || 0;
+      // Native auto-fill prefers 240px tracks. Some legacy/current host CSS
+      // resolves a second fractional track below that floor before overflow is
+      // observable, so use the same preferred track to keep a local narrow
+      // surface to one contained column rather than letting cards escape.
+      if (available < 2 * 240 + gap) grid.style.gridTemplateColumns = 'minmax(0, 1fr)';
       measuredWidth = grid.clientWidth;
     }
     const style = host.getComputedStyle(grid);

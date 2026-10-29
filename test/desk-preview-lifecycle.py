@@ -308,33 +308,35 @@ def deferred_code_and_context(page, images):
     assert '/code.png' not in images.requests
     wrapper = card(page, 'context-wrapper')
     wrapper.scroll_into_view_if_needed()
-    expect(wrapper.locator('.rm-desk-tile__row')).to_have_text('Source content.')  # Wait for source fallback, not the initial label.
-    expected = 'Review Referenced prompt 30m Source fixture tomorrow 15m'
+    expect(wrapper.locator('.rm-desk-tile__row')).to_have_count(0)  # Contextual references do not borrow source descendants.
+    expected = 'Review Referenced prompt 30m tomorrow 15m'
     expect(wrapper.locator('.rm-desk-tile__title')).to_have_text(expected)
     page.evaluate('() => deskHarness.api.setString("task-2", "{{[[TODO]]}} Unrelated update 25m")')
     settle(page)
     expect(wrapper.locator('.rm-desk-tile__title')).to_have_text(expected)
-    return {'literalBeforeAndAfterLoading': literal, 'contextAfterSourceFallback': expected, 'codeRequests': 0}
+    return {'literalBeforeAndAfterLoading': literal, 'contextDoesNotAdoptSourceChildren': expected, 'codeRequests': 0}
 
 
 def image_only_heading(page, images):
     prepare(page, count=80)
     # Keep the existing Plan rule: completely untitled blocks are not tasks.
-    # An image-only task can use its Markdown alt text as its native title.
+    # Image alt text remains image accessibility metadata, never a note heading.
     page.evaluate('(url) => deskHarness.api.addChild("image-only", "plan-desk", "{{[[TODO]]}} ![Photo](" + url + ")")', HOST + '/image-only.png')
     open_desk(page)
     tile = card(page, 'image-only')
     assert tile.evaluate('el => el.getBoundingClientRect().top > innerHeight + 300')
-    expect(tile.locator('.rm-desk-tile__title')).to_have_text('Photo')
+    expect(tile.locator('.rm-desk-tile__title')).to_have_text('Loading preview…')
     tile.scroll_into_view_if_needed()
     expect(tile.locator('img')).to_have_js_property('naturalWidth', 640)
-    expect(tile.locator('.rm-desk-tile__title')).to_have_text('Photo')
+    expect(tile.locator('.rm-desk-tile__title')).to_have_text('')
+    expect(tile.locator('.rm-desk-tile__title .rm-desk-tile__check')).to_have_count(1)
+    expect(tile.locator('.rm-desk-tile__preview')).to_have_attribute('aria-label', 'Note')
     tile.locator('img').evaluate('el => window.unchangedImageOnly = el')
     page.evaluate('() => deskHarness.api.setString("task-2", "{{[[TODO]]}} Another title")')
     settle(page)
-    expect(tile.locator('.rm-desk-tile__title')).to_have_text('Photo')
+    expect(tile.locator('.rm-desk-tile__title .rm-desk-tile__check')).to_have_count(1)
     assert tile.locator('img').evaluate('el => el === unchangedImageOnly')
-    return {'label': 'Photo', 'unrelatedSnapshotKeepsImage': True}
+    return {'heading': 'absent', 'unrelatedSnapshotKeepsImage': True}
 
 
 def folded_composition(page, images):
@@ -428,6 +430,47 @@ def late_editor(page, images):
     return {'lateNativeMountCleaned': True, 'graphWrites': 0}
 
 
+def admission_reread(page, images):
+    prepare(page)
+    page.evaluate('''() => {
+      deskHarness.api.addChild('watch-child', 'task-3', 'Before registration');
+      deskHarness.api.holdNextWatchRegistration('watch-child');
+    }''')
+    open_desk(page)
+    page.wait_for_function('deskHarness.api.watchSnapshot().some(w=>w.uid==="watch-child" && w.state==="held")')
+    page.evaluate('()=>deskHarness.api.setString("watch-child","Changed inside registration gap")')
+    page.evaluate('()=>deskHarness.api.release()')
+    expect(card(page).locator('.rm-desk-tile__row')).to_contain_text('Changed inside registration gap')
+    assert page.evaluate('()=>deskHarness.api.stats.writes.length') == 0
+    return {'rereadAfterRegistration': True, 'graphWrites': 0}
+
+
+def page_title_watch(page, images):
+    prepare(page)
+    page.evaluate('''()=>{deskHarness.api.addPage('page-preview','Original page');
+      deskHarness.api.setString('task-3','{{TODO}} See ((page-preview))');}''')
+    open_desk(page)
+    expect(card(page).locator('.rm-desk-tile__title')).to_contain_text('Original page')
+    page.evaluate('()=>deskHarness.api.setTitle("page-preview","Updated page")')
+    expect(card(page).locator('.rm-desk-tile__title')).to_contain_text('Updated page')
+    assert page.evaluate('()=>deskHarness.api.watchSnapshot().some(w=>w.uid==="page-preview" && w.state==="active" && w.pattern.includes(":node/title"))')
+    return {'qualifiedPageTitleWatch': True}
+
+
+def rejected_preview_retry(page, images):
+    prepare(page)
+    page.evaluate('''()=>{window.savedPreviewWatch=roamAlphaAPI.data.addPullWatch;
+      roamAlphaAPI.data.addPullWatch=(pattern,...args)=>pattern.includes(':block/open')
+        ? Promise.reject(Error('Injected watch rejection')) : savedPreviewWatch(pattern,...args);}''')
+    open_desk(page)
+    expect(card(page)).to_have_attribute('data-preview-state','error')
+    expect(card(page)).to_contain_text('Preview unavailable')
+    page.evaluate('()=>{roamAlphaAPI.data.addPullWatch=savedPreviewWatch;}')
+    page.get_by_role('button',name='Refresh',exact=True).click()
+    expect(card(page)).to_have_attribute('data-preview-state','ready')
+    return {'visibleFailureAndExplicitRetry': True}
+
+
 def run():
     fixture.bundle()
     results = []
@@ -435,7 +478,9 @@ def run():
     cases = [(f'watch-{mode}', lambda p, i, mode=mode: watch_teardown(p, i, mode)) for mode in ['fold', 'off', 'destroy']]
     cases += [('watch-null-result', lambda p, i: watch_teardown(p, i, 'destroy', 'null')),
               ('watch-rejected-result', lambda p, i: watch_teardown(p, i, 'destroy', 'reject')),
-              ('watch-reopen-before-settlement', watch_reopen)]
+              ('watch-reopen-before-settlement', watch_reopen),
+              ('watch-admission-reread', admission_reread), ('watch-page-title', page_title_watch),
+              ('watch-rejection-retry', rejected_preview_retry)]
     cases += [(f'late-image-{mode}', lambda p, i, mode=mode: late_image(p, i, mode)) for mode in ['fold', 'off', 'destroy']]
     cases += [('replacement-removal-failure', replacement), ('descendant-fields', descendants),
               ('fallback-no-observer', lambda p, i: invalidation_fallback(p, i, 'no-observer')),

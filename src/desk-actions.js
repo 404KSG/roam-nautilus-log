@@ -1,4 +1,5 @@
 import { createGraphWriteGuard } from './graph-write-guard';
+import { createDeskRemoveController } from './desk-remove';
 import { isNautilusComponent, resolveTaskInstance } from './timing-core';
 import { readChildren, readBlockString, blockUidExists, moveGraphBlock, createGraphBlock, updateGraphBlock } from './timing-roam';
 import { canonicalDeskReference, createModernReferenceAdapter, DeskReferenceImportError, fingerprintDeskReferenceSource, freezeReferenceDrop, isSafeDeskReferenceUid, isUnsupportedReferenceSource, readDeskDropContext, readStrictReferenceEntity, readStrictReferenceOutline, sameDeskDropContext, stableDeskReferenceUid } from './desk-reference-import';
@@ -22,6 +23,7 @@ export function createDeskActions({
   };
   const outline = (planUid) => {
     assertActive();
+    removal.assertPlanClear(planUid);
     if (!isNautilusComponent(readString(planUid))) throw new Error('The Nautilus plan is no longer available.');
     const rows = read(planUid);
     if (!Array.isArray(rows) || rows.some((r) => !r?.uid || typeof r.string !== 'string'
@@ -38,6 +40,10 @@ export function createDeskActions({
     queue = next.catch(() => {});
     return next;
   };
+  const removal = createDeskRemoveController({
+    getApi: () => typeof referenceApi === 'function' ? referenceApi() : referenceApi,
+    getContext, runExclusive: (operation, signal) => exclusive(operation, signal),
+  });
   const sameOrder = (rows, expected) => rows.map((r) => r.uid).join('\0') === expected.join('\0');
   const task = (row) => resolveTaskInstance({ uid: row.uid, localString: row.string, readString });
 
@@ -89,6 +95,7 @@ export function createDeskActions({
     const pending = exclusive(async () => {
       const assertContext = () => {
         assertActive(signal);
+        removal.assertPlanClear(planUid);
         const current = getContext();
         if (!sameDeskDropContext(originContext, current) || current?.provider !== adapter.api) {
           throw new DeskReferenceImportError('The graph or user changed. Start a new drag.', 'context-changed');
@@ -264,7 +271,11 @@ export function createDeskActions({
   });
   return {
     moveTask, importReferenceDrop, beginDraft, saveDraft,
+    registerRemoveSurface: options => removal.registerSurface(options),
+    hasUnconfirmedRemoval: planUid => removal.hasUnconfirmed(planUid),
+    isRemovalLocked: planUid => removal.isBlocked(planUid),
+    verifyPendingRemovals: planUid => removal.verifyPending(planUid),
     releaseDraft: (uid) => drafts.delete(uid),
-    destroy: () => { destroyed = true; guard?.destroy(); drafts.clear(); imports.clear(); },
+    destroy: () => { destroyed = true; removal.destroy(); guard?.destroy(); drafts.clear(); imports.clear(); },
   };
 }

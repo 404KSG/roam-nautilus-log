@@ -93,9 +93,10 @@ visual noise.
 
 Click the chart's **Desk** button to expand cards below it; click again to hide
 Desk. The view uses Roam's `rm-desk-*` and Blueprint styles rather than a separate
-font, size, or card theme. In the main window it can use the available article
-wrapper width instead of being confined to the centered Daily Note. Sidebars and
-embeds stay within their own bounds. Native auto-fill determines the column count;
+font, size, or card theme. Desk stays within the same local renderer width as the
+chart above, including centered Daily Notes, sidebars, and embeds. It does not
+expand to the article wrapper or use a compensating negative margin.
+Native auto-fill determines the column count;
 there is no fixed two-column layout or three-column cap. The embedded root does
 not use Roam's full-page `rm-desk-page` marker: current host styles use that marker
 to change ancestor padding and impose a viewport-sized canvas. Only native card
@@ -121,6 +122,15 @@ control at wide and narrow widths, with the same keyboard order.
   to the full unfinished-task collection even during search; blue Alt counters
   refer to the first nine visible cards. No footer number slot or custom drag ghost
   is used. Background insertion uses the full collection's end, not a filtered order.
+- **Remove from Desk** sits beside Move to top. A verified, childless, plain
+  `((uid))` wrapper, optionally preceded by one `{{TODO}}` or `{{[[TODO]]}}` marker,
+  is deleted locally; its referenced source is not deleted. Ordinary tasks,
+  contextual references, and wrappers with local children move intact, with the
+  same UID and subtree, to the end of the plan's owning Daily Note page. That can
+  be a historical or future note: the destination is never guessed from today
+  or the current route, and no page is created. Unverifiable ownership blocks
+  the action. Finish editing or IME composition first. There is no destructive
+  keyboard shortcut or focus-menu action.
 - **Plus adds content under this plan.** **New note** in the overview and **+** in
   the focus header open a native-style draft. The first committed, nonblank input
   creates one direct child at the start of the current Nautilus block, then hands
@@ -149,16 +159,30 @@ control at wide and narrow widths, with the same keyboard order.
   is a localStorage flag, not task text, and does not sync across devices. A manual
   open that cannot save its preference reports the limitation.
 
-Previews use native Desk's compact-panel budget: up to five child rows, at most
-two levels, respecting collapsed rows. Additional content is indicated by `...`;
-opening the card still edits the full original block. This only changes the
-preview budget, never the source outline's content or open/collapsed state. Markdown images outside inline/fenced code in
+Previews follow the full-page Desk rules: the root plus eleven counted descendant
+rows, in outline order and at most two levels. Up to three raw image-only rows
+are exempt from the count; blank image rows are pruned without losing their
+images or necessary hierarchy context. Image URLs are deduplicated in encounter
+order. Only explicit `open: false` folds a row. Hidden descendants and budget
+truncation produce `...`. These are original-content projections, not summaries.
+A childless plain reference can show its source block or page and children;
+local children take precedence, and contextual references do not adopt another
+subtree. Missing external roots show `(missing)`. Code remains literal. Unsupported
+rich forms are not executed; this is not a replacement for Roam's full renderer.
+Opening a card edits the complete original block, without changing source folds.
+Markdown images outside inline/fenced code in
 the card root, preview subtree, and resolved references use Roam's native `rm-desk-tile__image` /
 `__images` layouts (one bounded image or up to three cells). Only `http`, `https`,
-`blob`, and base64 raster-image URLs are inserted as image elements; arbitrary graph
+same-origin `blob`, and base64 raster-image URLs are inserted as image elements; arbitrary graph
 HTML and unsafe schemes are not rendered. Encrypted or proprietary attachment
 rendering is not specially adapted beyond URLs that the host image element resolves.
-Search Desk covers titles and direct child content. Only the focused card mounts a full editor. Plan membership shares the
+Search covers titles and direct child content beyond the displayed rows, not a
+recursive descendant index. Staged public pulls, reference expansion, text,
+images, watches, and retained models have explicit limits. Read/watch failures
+show a retryable unavailable preview; incomplete search keeps the card visible
+rather than treating unread content as a mismatch. Read–watch–read admission
+protects registration races, including folding and reopening before a watch settles.
+Only the focused card mounts a full editor. Plan membership shares the
 existing Pull Watch; text updates do not remount the editor. Completing or removing
 an active task advances focus. Browsing does not control CLOCK or alter Roam's
 built-in starred/Desk collection.
@@ -188,8 +212,19 @@ Copy callback. The editor-first fix is implemented, but the live macro workflow
 remains unvalidated: no physical drop, real clipboard, app switch, paste, or send
 was exercised.
 
-Moves and creation share Tidy's graph-scoped `outline` Web Lock. Parent and task
-state are checked before writing; UID, text, and order are read back afterward.
+Removal, moves, and creation share Tidy's graph-scoped `outline` Web Lock.
+Removal requires public `data.pull` plus the applicable `data.block.delete` or
+`data.block.move` API, verified Daily Note helpers, and stable provider, graph,
+type, and user context. It checks registered surfaces, focus, and composition;
+compares fresh structural/source snapshots; makes one host mutation; then verifies
+UIDs, sibling order, source content, and subtree preservation. Lost, timed-out,
+no-op, or ambiguous responses retain a verification-only reservation in this
+runtime, including across view disposal. Other Desk writes to that plan pause
+while removal is unconfirmed. Refresh performs verification only, including after
+late completion removes the card. There is no compensating rollback or blind retry.
+These reservations are not durable transactions across extension/browser restarts.
+
+Other moves and creation also check parent and task state before writing; UID, text, and order are read back afterward.
 A host API response alone is not confirmation. An uncertain create is checked
 using its reserved UID, never blindly repeated with a new UID. Locks do not cover
 other devices or manual writers; concurrent changes fail conservatively. Read
@@ -231,13 +266,15 @@ code previews, and draft recovery without writing to a live graph.
 Artifacts use `/tmp/nautilus-desk-verify`, `/tmp/nautilus-desk-collapse`, and
 `/tmp/nautilus-desk-preview-lifecycle`. Override them with `DESK_TEST_OUT`,
 `DESK_COLLAPSE_TEST_OUT`, and `DESK_PREVIEW_TEST_OUT` for separate runs. The feedback
-suite (`npm run test:desk-drop-feedback`) uses `/tmp/nautilus-desk-drop-feedback`;
+suite (`npm run test:desk-drop-feedback`) uses `/tmp/nautilus-desk-drop-feedback`
+(override with `DESK_DROP_FEEDBACK_TEST_OUT`);
 `test:desk-scope` and `test:desk-drag-parity` use `/tmp/nautilus-desk-scope` and
 `/tmp/nautilus-desk-drag-parity` (override with `DESK_SCOPE_TEST_OUT` and
-`DESK_DRAG_PARITY_TEST_OUT`); `test:desk-polish` covers compact previews, aligned
+`DESK_DRAG_PARITY_TEST_OUT`); `test:desk-polish` covers full previews, aligned
 controls, wheel response, reduced motion and cleanup (`DESK_POLISH_TEST_OUT`).
-override it with `DESK_DROP_FEEDBACK_TEST_OUT`. Set
-`ROAM_NATIVE_CSS` and `ROAM_BLUEPRINT_CSS` to host stylesheet snapshots to test
+`desk-removal.py` exercises the real footer against a synthetic graph
+(`DESK_REMOVE_TEST_OUT`); no live graph deletion or promotion has been tested.
+Set `ROAM_NATIVE_CSS` and `ROAM_BLUEPRINT_CSS` to host stylesheet snapshots to test
 against actual Roam CSS. `ROAM_ICONS_CSS` and `ROAM_FONT_CSS` can supply native
 icon/font styles with locally resolved assets. These fixtures do not establish
 fresh live-host Pull Watch behavior.

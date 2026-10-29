@@ -5,6 +5,7 @@ import { createDeskActions } from '../src/desk-actions';
 import { createPlanWatchBridge } from '../src/plan-watch';
 import { readBlockString, readChildren } from '../src/timing-roam';
 import { createDeskDiagnosticCommands } from '../src/desk-diagnostics';
+import { projectPull } from './pull-projection.cjs';
 
 let cleanup = () => {};
 function mount({ count = 8, dark = false, editor = true, empty = false, preservePreferences = false, collapsed = false, watchResult = 'undefined' } = {}) {
@@ -18,6 +19,7 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
   let watchSequence = 0;
   let failPlan = false, failRender = false, holdRender = false, holdMove = false, holdCreate = false, holdWatchRegistration = false, failMove = false;
   let releaseRender = null, releaseMove = null, releaseCreate = null, releaseWatchRegistration = null;
+  let holdDelete = false, releaseDelete = null, externalFocusedUid = null;
   let sequence = 0;
   let nextNativeEscapePreventsDefault = false;
   let nativeSelection = null;
@@ -55,8 +57,10 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
   add('outside-parent', 'Outside outline parent', 'daily-page', 0);
   add('outside-source', '{{[[TODO]]}} Outside source task 20m', 'outside-parent', 0);
   add('divider', '---', planUid, count + 6);
-  // Real sibling orders are contiguous even when no unfinished cards exist.
-  children(planUid).forEach((row, order) => { row.order = order; });
+  nodes.set('daily-page', { uid: 'daily-page', title: 'October 26th, 2026', parentUid: null });
+  for (const parent of new Set([...nodes.values()].map(node => node.parentUid))) {
+    children(parent).forEach((row, order) => { row.order = order; });
+  }
   const externalOutline = document.createElement('section'); externalOutline.id = 'fixture-external-outline'; externalOutline.className = 'roam-article';
   const externalOwner = document.createElement('div'); externalOwner.className = 'rm-block-container'; externalOwner.dataset.blockUid = 'outside-source';
   const bullet = document.createElement('span'); bullet.className = 'rm-bullet'; bullet.textContent = '•';
@@ -73,7 +77,7 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     stats.notifications.push(...changes);
     for (const watch of [...watches]) for (const change of changes) {
       if (watch.uid !== change.uid) continue;
-      if (change.fields.some((field) => watch.pattern.includes(`:block/${field}`))) { watch.invoke(); break; }
+      if (change.fields.some((field) => watch.pattern.includes(`:${field.includes('/') ? field : `block/${field}`}`))) { watch.invoke(); break; }
     }
   };
   const setString = (uid, string) => { nodes.get(uid).string = string; notify({ uid, fields: ['string'] }); };
@@ -95,10 +99,12 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     notify({ uid: parentUid, fields: ['children'] });
   };
   const entity = (node) => ({
-    'block/uid': node.uid, 'block/string': node.string, 'block/order': node.order, 'block/open': node.open,
+    'block/uid': node.uid,
+    ...(node.title !== undefined ? { 'node/title': node.title } : { 'block/string': node.string, 'block/order': node.order, ...(node.open === undefined ? {} : { 'block/open': node.open }) }),
     'block/_children': node.parentUid ? [{ 'block/uid': node.parentUid }] : [],
-    'block/page': node.pageUid ? { 'block/uid': node.pageUid } : undefined,
-    'block/refs': [...node.string.matchAll(/\(\(([\w-]+)\)\)/g)].map((m) => ({ 'block/uid': m[1], 'block/string': nodes.get(m[1])?.string || '' })),
+    ...(node.pageUid ? { 'block/page': { 'block/uid': node.pageUid } } : {}),
+    'block/children': children(node.uid).map(child => ({ 'block/uid': child.uid })),
+    'block/refs': [...String(node.string || '').matchAll(/\(\(([\w-]+)\)\)/g)].map((m) => ({ 'block/uid': m[1] })),
   });
   const referenceEntity = (uid) => {
     const node = nodes.get(uid);
@@ -108,7 +114,12 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
   };
   const forbidden = () => { stats.forbiddenWrites++; throw new Error('Unexpected native Desk/deletion operation'); };
   const roam = {
-    graph: { name: 'desk-fixture', type: 'hosted' }, user: { uid: () => 'fixture-user' }, util: { generateUID: () => `new-note-${++sequence}` },
+    graph: { name: 'desk-fixture', type: 'hosted' }, user: { uid: () => 'fixture-user' }, util: {
+      generateUID: () => `new-note-${++sequence}`,
+      pageTitleToDate: title => title === 'October 26th, 2026' ? new Date(2026, 9, 26) : null,
+      dateToPageTitle: date => date?.getFullYear() === 2026 && date?.getMonth() === 9 && date?.getDate() === 26 ? 'October 26th, 2026' : '',
+      dateToPageUid: date => date?.getFullYear() === 2026 && date?.getMonth() === 9 && date?.getDate() === 26 ? 'daily-page' : '',
+    },
     deleteBlock: forbidden,
     async moveBlock({ location, block }) {
       stats.writes.push({ type: 'move', uid: block.uid, parent: location['parent-uid'], order: location.order });
@@ -119,6 +130,7 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
       const ordered = siblings.filter(row => row.uid !== node.uid);
       ordered.splice(location.order, 0, node);
       node.parentUid = location['parent-uid']; ordered.forEach((row, i) => row.order = i);
+      if (oldParent !== node.parentUid) children(oldParent).forEach((row, i) => row.order = i);
       notify({ uid: node.uid, fields: ['order'] }, { uid: oldParent, fields: ['children'] }, { uid: node.parentUid, fields: ['children'] });
     },
     async createBlock({ location, block }) {
@@ -137,9 +149,9 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
         const uid = lookup[1]; stats.reads.push(uid);
         if (failPlan && uid === planUid) throw new Error('Plan read failed');
         const node = nodes.get(uid); if (!node) return null;
-        const result = entity(node);
-        if (pattern.includes(':block/children')) result['block/children'] = children(uid).map(entity);
-        return result;
+        return projectPull(pattern, entity(node), value => {
+          const found = nodes.get(value?.['block/uid']); return found ? entity(found) : value;
+        });
       },
       addPullWatch: (pattern, lookup, callback) => {
         const uid = /"([^"]+)"/.exec(lookup)?.[1];
@@ -168,7 +180,17 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
           };
         });
       },
-      block: { create: args => roam.createBlock(args) },
+      block: {
+        create: args => roam.createBlock(args), move: args => roam.moveBlock(args),
+        async delete({ block }) {
+          stats.writes.push({ type: 'delete', uid: block.uid });
+          if (holdDelete) { holdDelete = false; await new Promise(resolve => { releaseDelete = resolve; }); }
+          if (children(block.uid).length) throw new Error('Refusing collateral fixture deletion');
+          const node = nodes.get(block.uid), parent = node?.parentUid; nodes.delete(block.uid);
+          children(parent).forEach((row, order) => { row.order = order; });
+          notify({ uid: block.uid, fields: ['string'] }, { uid: parent, fields: ['children'] });
+        },
+      },
       removePullWatch: (pattern, lookup, callback) => {
         for (const record of watchRecords.values()) if (record.pattern === pattern && record.lookup === lookup && record.callback === callback) {
           stats.watchEvents.push({ id: record.id, action: 'removed', uid: record.uid, pattern, wasActive: watches.has(record) });
@@ -177,7 +199,9 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
         stats.watches = watches.size;
       },
     },
-    ui: { desk: new Proxy({}, { get: () => forbidden }), components: {} },
+    ui: { desk: new Proxy({}, { get: () => forbidden }), components: {},
+      getFocusedBlock: () => { const id = externalFocusedUid || document.activeElement?.closest?.('[data-block-uid]')?.dataset.blockUid; return id ? { 'block-uid': id } : null; },
+    },
   };
   if (editor) roam.ui.components = {
     async renderBlock(options) {
@@ -322,14 +346,17 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     fireWatch: id => { const record = watchRecords.get(id); if (!record) throw new Error('Unknown fixture watch'); record.invoke(); },
     failRead: value => { failPlan = value; notify({ uid: planUid, fields: ['string'] }); }, failNextRender: () => { failRender = true; }, failNextMove: () => { failMove = true; },
     holdNextRender: () => { holdRender = true; }, holdNextMove: () => { holdMove = true; }, holdNextCreate: () => { holdCreate = true; }, holdNextWatchRegistration: (uid = true) => { holdWatchRegistration = uid; },
-    release: () => { releaseRender?.(); releaseMove?.(); releaseCreate?.(); releaseWatchRegistration?.(); releaseRender = releaseMove = releaseCreate = releaseWatchRegistration = null; },
-    pending: () => Boolean(releaseRender || releaseMove || releaseCreate || releaseWatchRegistration),
+    holdNextDelete: () => { holdDelete = true; }, setExternalFocus: uid => { externalFocusedUid = uid; },
+    setTitle: (uid, title) => { nodes.get(uid).title = title; notify({ uid, fields: ['node/title'] }); },
+    addPage: (uid, title) => { nodes.set(uid, { uid, title, parentUid: null }); },
+    release: () => { releaseRender?.(); releaseMove?.(); releaseCreate?.(); releaseDelete?.(); releaseWatchRegistration?.(); releaseRender = releaseMove = releaseCreate = releaseDelete = releaseWatchRegistration = null; },
+    pending: () => Boolean(releaseRender || releaseMove || releaseCreate || releaseDelete || releaseWatchRegistration),
     setCollapsed: (key, value) => hosts.get(key).setCollapsed(value),
     openCopy: () => { const h = addHost(planUid, 'Open copy Desk', 'copy', true, false); h.owner.style.width = '280px'; },
     removeHost: key => { const h = hosts.get(key); desk.closeForHost(h.slot); h.owner.remove(); hosts.delete(key); },
     restoreHost: () => addHost(planUid, 'Open Desk'),
     reloadView: () => { diagnosticCommands.destroy(); desk.destroy(); actions.destroy(); actions = createActions(); desk = newView(); desk.restoreMountedHosts(); },
-    remove: uid => { const parent = nodes.get(uid)?.parentUid; nodes.delete(uid); notify({ uid, fields: ['string'] }, { uid: parent, fields: ['children'] }); },
+    remove: uid => { const parent = nodes.get(uid)?.parentUid; nodes.delete(uid); children(parent).forEach((row, order) => { row.order = order; }); notify({ uid, fields: ['string'] }, { uid: parent, fields: ['children'] }); },
     move: (uid, order) => roam.moveBlock({ block: { uid }, location: { 'parent-uid': nodes.get(uid).parentUid, order } }),
     destroy: cleanup,
   };
