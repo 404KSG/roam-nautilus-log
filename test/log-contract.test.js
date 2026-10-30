@@ -219,7 +219,9 @@ test('the production scene uses the full source collection and never drops label
   assert.match(logCore, /require\('\.\/chart-scene'\)/);
   assert.match(sceneCore, /function chartPresentationFrame/);
   assert.match(sceneCore, /sourceItems\(items\)/);
-  assert.match(sceneCore, /Math\.min\(32, step \* 0\.82\)/);
+  assert.match(sceneCore, /record\.markerPath =/);
+  assert.doesNotMatch(sceneCore, /indexPath|spanDegrees|outsideY/);
+  assert.doesNotMatch(show, /index-caption|index-summary|indexTrack/);
   assert.match(sceneCore, /'time-claim': !timed \? 'none'/);
   assert.match(entry, /window\.nautilusLogCore = logCore/);
 });
@@ -1081,7 +1083,9 @@ test('Log replaces the center year with an in-range 24-hour now value', () => {
   assert.doesNotMatch(component, /needle-label-radius/);
   assert.doesNotMatch(css, /nautilus-log-now-label/);
   assert.doesNotMatch(css, /--nautilus-log-now-label-bg:/);
-  assert.match(component, /:font-size \(str \(\/ 10 scale\)\)/);
+  assert.match(component, /:font-size \(str \(\/ \(if small\? size 10\) scale\)\)/);
+  assert.match(component, /:hour-font-size hour-size/);
+  assert.match(component, /:style \{:font-size \(str \(or hour-font-size/);
   assert.match(css, /--nautilus-log-now:/);
   assert.match(css, /\.nautilus-log-center-now\s*\{[^}]*fill:\s*var\(--nautilus-log-now\);[^}]*font-variant-numeric:\s*tabular-nums;/s);
 });
@@ -1099,12 +1103,15 @@ test('Log shades elapsed time continuously behind slices and through the current
 test('Log separates recorded and unplanned past time without a missed-task category', () => {
   assert.match(component, /past-unplanned-overlay-component/);
   assert.match(component, /:fill "var\(--nautilus-log-unplanned-fill\)"/);
-  assert.doesNotMatch(component, /nautilus-log-unplanned-pattern|nautilus-log-unplanned-stripe/);
+  assert.match(component, /nautilus-log-unplanned-stripe/);
+  assert.match(component, /pattern-id \(str "nautilus-log-past-" \(random-uuid\)\)/);
+  assert.match(component, /:patternUnits "userSpaceOnUse"/);
   assert.match(component, /nautilus-log-past--completed/);
   assert.match(component, /nautilus-log-past--event/);
   assert.match(component, /:data-past-status past-status/);
   assert.match(css, /--nautilus-log-unplanned-fill:/);
-  assert.match(css, /\.nautilus-log-unplanned-overlay path\s*\{[^}]*fill:\s*var\(--nautilus-log-unplanned-fill\);/s);
+  assert.doesNotMatch(css, /\.nautilus-log-unplanned-overlay path\s*\{[^}]*fill:/s,
+    'CSS must not override the per-instance SVG pattern reference');
   assert.match(css, /\.nautilus-log-past--completed \.nautilus-log-slice\s*\{[^}]*fill:\s*var\(--nautilus-log-completed-fill\);/s);
   assert.match(css, /\.nautilus-log-past--event \.nautilus-log-slice\s*\{[^}]*fill:\s*var\(--nautilus-log-past-event-fill\);/s);
   assert.doesNotMatch(component, /nautilus-log-past--missed/);
@@ -1140,19 +1147,22 @@ test('Log feature-detects ResizeObserver with syntax supported by Roam SCI', () 
 test('current diagram labels have individually routed leaders without track-budget omission', () => {
   assert.match(sceneCore, /function labelLayout/);
   assert.match(sceneCore, /record\.label =/);
-  assert.match(sceneCore, /const shortX =/);
+  assert.match(sceneCore, /const controlX =/);
+  assert.match(sceneCore, /const side = record\.anchor\.x < frame\.center\.x \? 'left' : 'right'/);
+  assert.doesNotMatch(sceneCore, /side = side ===|outsideY/);
   assert.doesNotMatch(sceneCore, /maxTracks|records\.slice/);
   assert.match(component, /:d \(:connector label\)/);
   assert.match(css, /\.nautilus-log-record-leader/);
   assert.doesNotMatch(css, /\.nautilus-log-event-slice-group\s*\{[^}]*opacity:/s);
 });
 
-test('the chart uses indigo materials and neutral readable record titles', () => {
+test('the chart restores blue tasks, gold events and neutral completion history', () => {
   assert.match(component, /def task-fill-color "var\(--nautilus-log-task-fill\)"/);
   assert.doesNotMatch(component, /todo-color-palette/);
-  assert.match(css, /--nautilus-log-task:\s*#5d6ad3/);
-  assert.match(css, /--nautilus-log-task-fill:\s*#dfe5fb/);
-  assert.match(css, /\.nautilus-log-record-title\s*\{[^}]*fill:\s*var\(--nautilus-log-chart-ink\)/s);
+  assert.match(css, /--nautilus-log-task:\s*#246e99/);
+  assert.match(css, /--nautilus-log-event:\s*#8a6318/);
+  assert.match(css, /--nautilus-log-completed-fill:\s*#d1d6dd/);
+  assert.match(css, /\.nautilus-log-record-title\s*\{[^}]*fill:\s*var\(--nautilus-log-task\)/s);
   assert.match(css, /\.nautilus-log-legend-dot--task\s*\{\s*background:\s*var\(--nautilus-log-task\);\s*\}/);
 });
 
@@ -1166,7 +1176,7 @@ test('the current planned task is outlined and its label receives stronger empha
 });
 
 test('the Roam renderer cleanup remains a sibling of the render body inside with-let', () => {
-  const withLetIndex = component.indexOf('(r/with-let');
+  const withLetIndex = component.indexOf('(r/with-let', component.indexOf('(defn main'));
   const finallyIndex = component.indexOf('(finally', withLetIndex);
 
   assert.notEqual(withLetIndex, -1);

@@ -59,14 +59,17 @@ small flame marks whether the current minute is consuming Available or Event tim
 
 ## Visual language
 
-- Red: urgent task
-- Teal family: fixed event; future, current, elapsed and completed states have distinct fills
-- Indigo family: flexible task; current work has a stronger fill and outline
-- Completed records retain their category color and readable labels
-- Indigo outline outside the hour grid: a record without a position on this time axis
-- Dashed outline: pending work that has not been scheduled
-- Red needle: current time, confined to the time spiral
-- Gray, labeled **Past, no record**: elapsed time without a recorded interval; not completion or future availability
+- Blue: flexible tasks; the current task has a stronger fill and outline
+- Gold: fixed events; elapsed events fade to pale gold
+- Solid gray: completion history with a usable time interval
+- Pale hatching: elapsed time without a recorded interval, not future availability
+- Red needle: current time and the starting boundary for pending work
+- Red task color: an explicit urgency override
+
+Small marks beside titles retain records without a position on this clock: a dot for
+completion without a local time, a hollow diamond for unscheduled work, and a square for
+a known range outside the displayed hours. They have no time angle or duration area.
+Hover or focus the title for its explanation; clicking a task still locates its block.
 
 Past gaps are factual schedule data, not a judgment that time was wasted.
 
@@ -90,19 +93,23 @@ Past gaps are factual schedule data, not a judgment that time was wasted.
 
 Every titled source task or event has a visible diagram mark and a connected label.
 Ordinary titles wrap inside the SVG rather than disappearing when a label budget is full.
-At narrow widths the labels use two connected columns within the same diagram. The frame
-uses the full source titles and local container width: source edits may change its height,
-but clock updates, completion visibility and hover do not resize it.
+Labels stay on both sides of the spiral, including in narrow containers. Narrow views keep
+major hour labels and a compact center date so the task titles remain readable. Timed
+labels never switch to the opposite side to fill space. The frame budgets for all source
+titles, fixed source ranges and local width; source edits may change its height, but the
+clock, completion visibility and hover do not resize it.
 
-Completed tasks without a usable interval, pending tasks that do not fit, and fixed ranges
-outside the displayed hours remain in a separate **Outside the timeline** track around the
-spiral. The heading and short segment badges distinguish **Wait**, **No time** and
-**Off-hours** records. Each mark has its own task label. Its angle and area are not clock time or duration;
-a single record never becomes a full progress ring. Slots are reserved from the stable
-source collection, so END does not redistribute existing untimed records. The original
-time intervals, pending scheduler, capacity and Actual calculations remain separate.
-Inherited completion is identified as coming from its reference; source time is not
-borrowed for today's wrapper. There is no task inventory or scrolling Schedule below the plot.
+The spiral is the only time geometry. Records without a usable position remain in the
+same side columns, grouped in source order at the column ends. Their small marks connect
+only to their own titles, never to a guessed clock position. There is no outer track,
+below-chart task inventory, scrolling Schedule or repeated overflow counter. The header
+still reports remaining capacity and overload.
+
+CLOCK is optional. A local completion stamp such as `d14:30` and an estimate are enough
+for a completed historical slice. Without a usable stamp, the completed title remains
+visible without inventing a slice. Inherited completion is identified as coming from its
+reference; source time is not borrowed for today's wrapper. Scheduling, capacity and
+Actual calculations are unchanged.
 
 Hover or keyboard-focus a record or available slot to read its context in a centered
 tip that fits its content, capped at 280px and inset by 16px in narrower workspaces.

@@ -116,7 +116,7 @@ def assert_rect_equal(a, b, label):
 def compact_record(s):
     return {k: s[k] for k in ('viewBox', 'svg', 'stage', 'workspace', 'detail', 'status', 'desk', 'following', 'nowLabel', 'recordCount')} | {
         'kinds': {r['uid']: r['kind'] for r in s['records']},
-        'indexPaths': {r['uid']: r['indexPath'] for r in s['records'] if r['indexPath']},
+        'markerPaths': {r['uid']: r['markerPath'] for r in s['records'] if r['markerPath']},
     }
 
 
@@ -127,14 +127,18 @@ def coverage(page, hidden=False):
     for record in s['records']:
         assert record['marks'] > 0 and record['label'].strip(), record
         if not hidden: assert record['visible'], record
-        if record['kind'] != 'timed': assert record['timeClaim'] == 'none' and record['indexPath'], record
+        if record['kind'] != 'timed': assert record['timeClaim'] == 'none' and record['markerPath'], record
     scene = page.evaluate('() => __chartHarness.scene()')
     by_uid = {r['uid']: r for r in s['records']}
     for record in scene['records']:
         if not record['label']['truncated']:
             assert re.sub(r'\s+', '', by_uid[record['uid']]['label']) == re.sub(r'\s+', '', record['event']['description']), record['uid']
-        if record.get('slot'): assert 0 < record['slot']['spanDegrees'] <= 32
-    assert not page.locator('.nautilus-log-untimed-history,.nautilus-log-untimed-item,.nautilus-log-compact-details').count()
+        if record['kind'] != 'timed':
+            assert not record.get('anchor') and not record.get('slot') and not record.get('indexPath'), record
+            assert record['marker']['size'] <= 6 and record['label']['side'] == record['label']['sourceSide']
+        else:
+            assert record['label']['side'] == ('left' if record['anchor']['x'] < scene['frame']['center']['x'] else 'right'), record
+    assert not page.locator('.nautilus-log-untimed-history,.nautilus-log-untimed-item,.nautilus-log-compact-details,.nautilus-log-index-segment,.nautilus-log-index-caption,.nautilus-log-overflow-panel').count()
     scrollers = page.locator('.nautilus-log-content').evaluate('''root=>[...root.querySelectorAll('*')].filter(e=>{
       const s=getComputedStyle(e);return (['auto','scroll'].includes(s.overflowX)&&e.scrollWidth>e.clientWidth+1)
        ||(['auto','scroll'].includes(s.overflowY)&&e.scrollHeight>e.clientHeight+1);
@@ -174,7 +178,10 @@ def geometry_audit(page):
     result = page.evaluate('''()=>{
       const nodes=[...document.querySelectorAll('.nautilus-log-event-slice-group')].filter(e=>getComputedStyle(e).visibility==='visible');
       const boxes=nodes.map(e=>({uid:e.dataset.taskUid,r:e.querySelector('.nautilus-log-record-title').getBoundingClientRect()}));
-      const overlaps=[],crossings=[];
+      const overlaps=[],crossings=[],markerCollisions=[];
+      for(const node of nodes){const marker=node.querySelector('.nautilus-log-record-marker');if(!marker)continue;const a=marker.getBoundingClientRect();
+        for(const box of boxes){const b=box.r;if(Math.min(a.right,b.right)-Math.max(a.left,b.left)>.5&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>.5)markerCollisions.push([node.dataset.taskUid,box.uid]);}
+      }
       for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){
         const a=boxes[i].r,b=boxes[j].r;if(Math.min(a.right,b.right)-Math.max(a.left,b.left)>1&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1)overlaps.push([boxes[i].uid,boxes[j].uid]);
       }
@@ -184,9 +191,11 @@ def geometry_audit(page):
             if(q.x>r.left+.5&&q.x<r.right-.5&&q.y>r.top+.5&&q.y<r.bottom-.5)crossings.push({from:node.dataset.taskUid,to:box.uid,point:{x:q.x,y:q.y},box:{x:r.x,y:r.y,width:r.width,height:r.height}});}
         }
       }
-      return {frame:__chartHarness.scene().frame.viewBox,overlaps,crossings:crossings.slice(0,12)};
+      const hours=[...document.querySelectorAll('.nautilus-log-hour-label')].map(e=>({text:e.textContent,pixels:parseFloat(getComputedStyle(e).fontSize)*Math.abs(e.getScreenCTM().a)}));
+      return {frame:__chartHarness.scene().frame.viewBox,compact:__chartHarness.scene().frame.compact,hours,overlaps,markerCollisions,crossings:crossings.slice(0,12)};
     }''')
-    assert not result['overlaps'] and not result['crossings'], result
+    assert not result['overlaps'] and not result['crossings'] and not result['markerCollisions'], result
+    if result['compact']: assert all(h['pixels'] >= 8.5 for h in result['hours']), result
     return result
 
 
@@ -215,14 +224,14 @@ def contrast(page):
         task:paint('[data-task-uid="task-reference"] .nautilus-log-record-title','fill'),
         event:paint('[data-task-uid="event-standup"] .nautilus-log-record-title','fill'),
         completed:paint('[data-task-uid="task-completed"] .nautilus-log-record-title','fill'),
-        index:paint('.nautilus-log-index-segment','stroke'),
+        marker:paint('.nautilus-log-record-marker','stroke'),
         focus:paint('.nautilus-log-available-slot:focus .nautilus-log-available-slot-hit','stroke'),
         now:paint('.nautilus-log-now-needle-line','stroke'),
         control:paint('.nautilus-log-toggle-btn svg','stroke')};
     }''')
     scores = {k: ratio(v, paints['background']) for k, v in paints.items() if k != 'background'}
     assert min(scores[k] for k in ('task', 'event', 'completed')) >= 4.5, scores
-    assert min(scores[k] for k in ('index', 'focus', 'now', 'control')) >= 3, scores
+    assert min(scores[k] for k in ('marker', 'focus', 'now', 'control')) >= 3, scores
     return {'paint': paints, 'ratios': scores}
 
 
@@ -231,6 +240,21 @@ def select(page, uid):
     page.locator(f'[data-task-uid="{uid}"]').focus()
     page.wait_for_function('document.querySelector(".nautilus-log-detail-region").dataset.nautilusDetail === "active"')
     settle_renderer(page)
+
+
+def pattern_contract(page):
+    before = page.locator('.nautilus-log-unplanned-overlay pattern').get_attribute('id')
+    set_clock(page, '2026-10-29T08:02:00')
+    assert page.locator('.nautilus-log-unplanned-overlay pattern').get_attribute('id') == before
+    ids = page.evaluate('''()=>{
+      const host=document.createElement('div');host.id='pattern-proof';document.body.append(host);
+      scittle.core.eval_string('(rdom/render [:svg [nautilus-log-v1/past-unplanned-overlay-component [] 50 {:center-x 150 :center-y 150} {:workday-start 300 :workday-end 1260} 500 1] [nautilus-log-v1/past-unplanned-overlay-component [] 50 {:center-x 150 :center-y 150} {:workday-start 300 :workday-end 1260} 500 1]] (.getElementById js/document "pattern-proof"))');
+      const ids=[...document.querySelectorAll('.nautilus-log-unplanned-overlay pattern')].map(p=>p.id);
+      ReactDOM.unmountComponentAtNode(host);host.remove();return ids;
+    }''')
+    assert len(ids) == len(set(ids)) == 3, ids
+    set_clock(page, '2026-10-29T08:01:00')
+    return {'stableDuringTick': True, 'distinctMountedPatternIds': ids}
 
 
 def native_minute_contract(page):
@@ -306,10 +330,11 @@ def timeflow_recovery(page):
 
 
 def afternoon_flow_contract(page):
-    load(page,'flow','main',640,window='flow')
+    before=load(page,'flow','main',640,window='flow')
     observations=[]
     for iso in ['2026-10-29T13:29:00','2026-10-29T13:30:00','2026-10-29T13:31:00']:
         set_clock(page,iso);coverage(page)
+        assert_rect_equal(before,state(page),'ordinary pending flow frame')
         data=page.evaluate('''()=>({clock:__chartHarness.state().nowLabel,
           capacity:__chartHarness.traces().filter(t=>t.kind==='capacity').at(-1).result,
           scheduler:__chartHarness.traces().filter(t=>t.kind==='schedule-tasks').at(-1).result,
@@ -317,7 +342,7 @@ def afternoon_flow_contract(page):
           firstPath:document.querySelector('[data-task-uid="flow-task-0"] .nautilus-log-slice').getAttribute('d'),
           fixedPath:document.querySelector('[data-task-uid="flow-current-event"] .nautilus-log-slice').getAttribute('d'),
           fixedPhase:document.querySelector('[data-task-uid="flow-current-event"]').dataset.visualPhase,
-          caption:document.querySelector('.nautilus-log-index-caption').textContent})''')
+          looseKinds:[...document.querySelectorAll('.nautilus-log-loose-record')].map(e=>e.dataset.chartKind)})''')
         observations.append(data)
         if data['clock']=='13:29':
             select(page,'flow-review');coverage(page)
@@ -330,7 +355,10 @@ def afternoon_flow_contract(page):
     assert a['firstPath']==b['firstPath'] and b['firstPath']!=c['firstPath']
     assert a['fixedPath']==b['fixedPath']==c['fixedPath']
     assert a['fixedPhase']=='current' and b['fixedPhase']=='elapsed'
-    assert 'Wait 2' in a['caption'] and 'No time 2' in a['caption']
+    assert a['looseKinds'].count('unplaced') == 2 and a['looseKinds'].count('untimed-completed') == 2
+    set_clock(page,'2026-10-29T20:00:00');coverage(page)
+    assert_rect_equal(before,state(page),'ordinary pending flow through END')
+    assert page.locator('[data-chart-kind="unplaced"]').count() == 8
     return observations
 
 
@@ -350,7 +378,8 @@ def material_and_tip_contract(page):
     assert after['event']['phase']=='elapsed' and after['task']['phase']=='current'
     assert len({at_start['event']['fill'],during['event']['fill'],after['event']['fill']})==3
     assert at_start['task']['opacity']==during['task']['opacity']==after['task']['opacity']
-    assert 'Past, no record' in page.locator('.nautilus-log-html-legend').first.text_content()
+    assert page.locator('.nautilus-log-html-legend').first.locator('.nautilus-log-legend-item').count() == 3
+    assert page.locator('.nautilus-log-unplanned-overlay pattern').count() == 1
     result={'materials':{'start':at_start,'duringEvent':during,'afterEvent':after},'tips':{}}
     for context,width in [('main',960),('sidebar',280),('embed',520)]:
         load(page,'routine',context,width)
@@ -410,7 +439,7 @@ def lifecycle(page):
     assert page.locator('.nautilus-log-detail-region').get_attribute('data-nautilus-detail') == 'idle'
     load(page, 'mixed')
     select(page, 'task-reference')
-    page.locator('[data-task-uid="event-standup"] .nautilus-log-record-title').hover()
+    page.locator('[data-task-uid="event-standup"] .nautilus-log-record-label').hover()
     assert 'Stand-up' in page.locator('.nautilus-log-detail-title').inner_text()
     page.mouse.move(1180, 980); settle_renderer(page)
     assert 'Draft the project brief' == page.locator('.nautilus-log-detail-title').inner_text()
@@ -440,7 +469,10 @@ def full_text(page, context, width):
     assert expanded['detail']['height'] > before['detail']['height']
     assert all(abs(expanded['svg'][key] - before['svg'][key]) < .5 for key in ('x', 'width', 'height')), 'explicit expansion must not resize the SVG'
     assert abs(expanded['svg']['y'] + page.evaluate('() => scrollY') - before['svg']['y'] - scroll_before) < .5, 'the diagram must keep its document-flow position'
-    page.locator('[data-task-uid="overflow-1"] .nautilus-log-record-title').hover(); settle_renderer(page)
+    label = page.locator('[data-task-uid="overflow-1"] .nautilus-log-record-label')
+    label.hover(); settle_renderer(page)
+    hit = label.evaluate('''e=>{const r=e.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('[data-task-uid]')?.dataset.taskUid}''')
+    assert hit == 'overflow-1', 'multiline label gaps must belong to their own interactive record'
     assert 'END_LONG' in page.locator('.nautilus-log-detail-title').inner_text(), 'expanded reading must be pinned'
     page.get_by_role('button', name='Collapse text', exact=True).click(); page.mouse.move(1180, 980); settle_renderer(page)
     assert abs(state(page)['detail']['height'] - 44) < .5
@@ -469,6 +501,7 @@ def main():
             assert evaluated == source
             report['evaluatorInput'] = {'sha256': sha(evaluated), 'equalsProductionSource': True, 'productionSha256': sha(source)}
             report['evaluatorRuntime'] = page.evaluate('()=>__chartEvaluator')
+            report['pastPattern'] = pattern_contract(page)
             initializer = re.search(r'hover-info-state\s+(\(r/atom\s+\{[^}]+\}\))', source).group(1)
             report['readerCompatibility'] = page.evaluate('''initializer=>{
               const negative=scittle.core.eval_string('(try (clojure.edn/read-string "(atom ::unseen)") (catch :default e (.-message e)))');
@@ -491,7 +524,8 @@ def main():
                     coverage(page); geometry = geometry_audit(page)
                     if before['presentation']['plotScale'] < .9:
                         date_rows = page.locator('.nautilus-log-center-date > text:not(.nautilus-log-center-now)').all_text_contents()
-                        assert date_rows == ['October', '29th'], date_rows
+                        assert date_rows == (['Oct 29'] if before['presentation']['plotScale'] < .6 else ['October', '29th']), date_rows
+                        assert 'October 29th' in page.locator('.nautilus-log-center-date').get_attribute('aria-label')
                     for label in page.locator('[data-record-title^="Commute"] .nautilus-log-record-title').all():
                         lines = label.locator('tspan').all_text_contents()
                         assert not any(line.rstrip().endswith(('Commu', 'Commut')) for line in lines), lines
@@ -515,7 +549,7 @@ def main():
                 assert_rect_equal(before, late, 'END cannot drop overflow or resize frame')
                 for uid in ['overflow-0', 'overflow-1', 'overflow-2', 'overflow-3']:
                     a = next(r for r in before['records'] if r['uid'] == uid); b = next(r for r in late['records'] if r['uid'] == uid)
-                    assert a['kind'] == b['kind'] == 'unplaced' and a['indexPath'] == b['indexPath']
+                    assert a['kind'] == b['kind'] == 'unplaced' and a['labelSide'] == b['labelSide']
                 page.screenshot(path=str(OUT / 'screenshots' / f'stress-{context}-{width}.png'), full_page=True)
                 report['stress'][f'{context}-{width}'] = {'before': compact_record(before), 'after': compact_record(late), 'geometry': geometry}
             report['scenarios'] = {}
@@ -538,8 +572,8 @@ def main():
                 report['overnight'][f'{context}-{width}'] = observations
             report['fullText'] = {f'{c}-{w}': full_text(page, c, w) for c, w in [('main', 960), ('sidebar', 280), ('embed', 520)]}
             load(page, 'untimed', 'sidebar', 280, lang='zh'); select(page, 'untimed-reference'); coverage(page)
-            assert '非排程位置' in page.locator('.nautilus-log-index-caption').text_content()
-            assert '未记时' in page.locator('.nautilus-log-index-caption').text_content()
+            assert not page.locator('.nautilus-log-index-caption').count()
+            assert '未记录完成时刻' in page.locator('.nautilus-log-detail-region').text_content()
             assert page.get_by_role('button', name='全文', exact=True).count() == 1
             report['chinese'] = compact_record(state(page))
             report['afternoonFlow'] = afternoon_flow_contract(page)

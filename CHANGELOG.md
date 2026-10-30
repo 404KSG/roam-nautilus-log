@@ -8,20 +8,19 @@
   page show and CLOCK updates, including a same-minute next-day resume. The new
   integration gate verifies scheduler intervals and actual SVG path movement;
   fixed events remain anchored and still block pending work.
-- Task and event materials are now distinct indigo and teal families, with current,
-  future, elapsed and completed states. Both current tasks and current events are
-  outlined. Gray means elapsed time without a record and has its own legend key.
-  Outer markers now name waiting, no-time and off-hours states rather than relying
-  on an abstract caption. Explicit urgency colors remain authoritative.
+- The chart returns to its original time vocabulary: blue tasks, gold fixed events,
+  solid gray completion history and pale hatching for unrecorded past time. Current
+  tasks and events remain outlined. The spiral is the only time geometry; the rejected
+  outer track and its status badges are removed. Explicit urgency remains authoritative.
 - Short tips fit their content up to 280px, without a redundant full-text action.
   The closed slot is reduced to 44px and status spacing is tighter. Longer content
   can still explicitly expand in page flow, without internal scrollbars or overlays.
 
-- Every titled source task or event has a diagram mark and connected SVG label.
-  Untimed completion, unscheduled work and out-of-window ranges use a separate outlined
-  non-time-scaled track, not a footer inventory or invented timestamp. Stable source
-  slots and a 32-degree segment cap prevent redistribution at END or progress-ring
-  ambiguity. Desk retains its independent unfinished-task projection.
+- Every titled source task or event retains a diagram mark and connected label.
+  Untimed completion, unscheduled work and out-of-window ranges use small marks beside
+  their titles in the existing side columns, never invented time positions or a footer
+  inventory. Timed labels stay on the same side as their slices. Desk retains its
+  independent unfinished-task projection.
 - Source-sized frames replace the rejected finite label budget. Ordinary titles wrap,
   including CJK, and narrow views retain connected diagram labels instead of a scrolling
   Schedule. Frame height follows the full source titles and local width, not the clock,
@@ -31,9 +30,11 @@
   page flow without an internal scrollbar and stays pinned while reading. The closed
   44px slot is invisible when idle. The rejected below-chart completion list, its reserved
   gap, and wheel-based text reading are removed.
-- Indigo emphasis, crisp neutral labels, distinct completed/event/planned materials and
-  individually routed leaders replace the washed-out gray/ochre presentation. No new
-  dependency, font, navigation shortcut, graph-write authority or persistence feature is added.
+- Narrow charts keep side labels, readable major hour ticks and a compact center date.
+  Hour sizes are applied directly to SVG text instead of relying on a CSS variable that
+  the renderer did not emit. Past-time patterns have unique mounted-instance IDs.
+  No new dependency, font, navigation shortcut, graph-write authority or persistence
+  feature is added.
 
 - Remove from Desk deletes only verified childless plain local reference wrappers.
   Content-bearing cards move with the same UID and subtree to the plan's verified

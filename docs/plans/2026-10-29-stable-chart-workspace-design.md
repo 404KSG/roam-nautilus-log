@@ -1,110 +1,117 @@
-# Complete in-diagram chart
+# A single time spiral with complete diagram labels
 
 ## Current decision
 
-The user rejected the footer inventory and scroll-based context rail after seeing them
-in the real UI. That rejection supersedes the earlier named-list decision. Every titled
-source task or event must have its own visible diagram mark and connected SVG label.
-A count, hidden accessibility node, footer row or label-budget omission is not a substitute.
+Revised October 30, 2026. The outer non-temporal track, footer inventory and scrolling
+context rail were rejected. Their earlier acceptance does not govern this version.
 
-The original time spiral remains the signature. The current visual direction uses crisp
-neutral ink, indigo tasks, teal events, readable time/completion states and restrained outlines, informed
-by Linear's published product imagery and design principles. No Linear logo, artwork,
-downloaded font or endorsement is part of the product.
+Nautilus is a changing time budget, not a status dashboard. The original unequal-radius
+spiral is its only time geometry. The red needle is now; fixed events stay anchored;
+pending whole tasks move through future continuous gaps in outline order. No scheduler,
+END, capacity, CLOCK or reference-ownership policy changes in this design.
+
+Every titled source task or event remains visible in the diagram. A count, hidden
+accessibility node, omitted label or separate task inventory is not a substitute.
+Linear-inspired restraint applies to presentation, not to replacing the original model
+or claiming an official Linear palette. No downloaded artwork or font is shipped.
 
 ## Presentation seam
 
-`src/chart-scene.js` owns `chartScene` and `chartPresentationFrame`, re-exported through
-`src/log-core.js` for the existing renderer bridge. It is a pure presentation module with
-no graph, scheduler, clock, storage or mutation API.
+`src/chart-scene.js` owns `chartScene`, `chartPresentationFrame`, `labelLayout`,
+`chartRecordAppearance` and `chartTipLayout`, re-exported through `src/log-core.js`.
+This seam has no graph, scheduler, clock, storage or mutation authority.
 
-- The full source collection determines label measurements and frame height. The changing
-  scheduled subset, pointer and clock do not size the frame.
-- Ordinary labels wrap in the SVG. Balanced wrapping avoids isolated CJK final characters.
-  Pathological titles retain their full accessible text and an explicit full-text action.
-- Wide views use side columns; narrow views use two connected columns within the same SVG.
-  No source UID is dropped when a label track fills. Source title/collection edits may
-  change the frame; clock progression and completion visibility do not.
-- The plot keeps a container-keyed scale and reserves 20 drawing units beyond the maximum
-  time radius: an 8-unit gap and a 12-unit non-temporal track. The scale does not depend
-  on the current count of unplaced records.
-- Each connector has its own route and a short terminal segment outside the text box.
-  Compact routing arcs stay above the label area. The label audit checks both text overlap
-  and sampled leader intersections with other labels.
+- Source titles, source-defined ranges and local width determine the frame. Fixed ranges
+  reserve their own sides; flexible pending titles are budgeted for movement on either
+  side. The changing scheduled subset cannot resize the frame.
+- Timed records alone have a spiral anchor. Their labels stay on the same side, ordered
+  by angular position. Same-side curves share their horizontal routing coordinates;
+  no label flips across the clock or follows an outer circular route to fill space.
+- Untimed completion, unplaced work and out-of-window ranges have no angle or spiral
+  anchor. A six-unit dot, diamond or square sits beside the title's outer edge, joined
+  only by a short line. Their sides follow the full source order, not clock positions.
+- These records share the existing side columns, grouped at the column ends with a
+  gap from timed labels. There is no below-chart ledger or second track.
+- Ordinary titles wrap in full. Balanced wrapping avoids unnecessary Latin word splits
+  and isolated CJK final characters. Pathological titles retain their complete accessible
+  text and explicit full-text action.
+- Narrow containers still use side columns. Font measurement uses the same font family
+  as the SVG; normal words can receive slightly more column space. Major hour ticks and
+  a compact center date preserve clock readability without dropping task titles.
+- Hour text receives an explicit inline font size. It must not rely on a CSS variable
+  that the SCI/Reagent rendering path fails to emit. The current-time needle retains
+  a readable, non-scaling stroke.
+
+Source edits and explicit text expansion may change page flow. Clock updates, hover and
+completion visibility may not. The eye control hides records without re-running layout
+for a reduced source collection.
 
 ## Truthful record projection
 
 `partitionChartEvents` retains pending, timed-DONE and untimed-DONE collections for their
-existing domain roles. Every completed local UID remains available to Tidy; Desk still
-uses its independent TODO-only projection.
+existing roles. Every completed local UID remains available to Tidy. Desk retains its
+independent unfinished-task projection.
 
-`chartScene` joins the full source set with the actual scheduling result:
+`chartScene` joins source records with the actual scheduling result. Fixed ranges,
+pending plans, completion estimates and condensed CLOCK totals retain their provenance.
+Known ranges are clipped only for drawing; details retain their full range.
 
-- Available timed intervals use the original time geometry. Actual, fixed ranges, pending
-  plan ranges and completion-estimate ranges retain their distinct provenance.
-- Untimed DONE has an individual outlined index segment and a label, with no clock claim.
-- Pending work that cannot fit, including after END, has a dashed outlined segment and
-  an estimate, not an invented range.
-- Fixed or completed ranges outside the displayed hours remain visible in the index track;
-  details retain the original range while the index angle makes no time claim.
-- Index slots follow the full stable eligible source order, not the currently unplaced
-  subset. One mark spans at most 32 degrees; it cannot become a near-full progress ring.
-- Index positions never enter `scheduleTasks`, `calculateCapacity`, Actual or CLOCK.
-  Source completion timestamps are not borrowed for today's reference wrapper.
+A local `dHH:MM` stamp plus an estimate is sufficient for a completed slice. CLOCK remains
+optional. Without a usable local completion time, a completed title stays visible but
+receives no fabricated interval. Source completion timestamps are not borrowed for a
+daily reference wrapper, and edit time is never treated as completion time.
 
-The red current-time needle remains inside the temporal spiral. The center shows the
-original date and in-range current time, never a misleading global “completed” caption.
-Narrow plots wrap the date when needed rather than shrinking it to illegible text.
+The small title marks do not enter scheduling, capacity, Actual or CLOCK calculations.
+The header retains overload and available-time information; the repeated footer overflow
+counter is removed. Parsing warnings retain their separate disclosure.
 
-## Wall-clock recovery and state materials
+## Materials and wall-clock recovery
 
-The scheduler and END policy do not change. A minute tick, foreground focus, visible-page
-notification, page return and owned CLOCK notification resynchronize minute-of-day and an
-epoch-minute stamp. The stamp wakes the renderer even when a page returns at the same
-minute on a different date. Listeners and the one minute timer are removed on unmount.
-Integration checks observe the real callback through scheduler results and rendered paths,
-not just unchanged function bodies or fixed chart dimensions.
+Tasks use blue, fixed events gold, and timed completion history solid gray. Elapsed fixed
+events fade to pale gold. A light diagonal pattern identifies unrecorded past time;
+this is not a claim that the time was wasted. Patterns have mounted-instance IDs so
+multiple charts cannot share an unintended SVG definition. Only actual past gaps receive
+hatching, beneath recorded slices.
 
-`chartRecordAppearance` separates task/event category from future/current/elapsed/completed
-state. Tasks remain indigo; events use teal rather than near-white gray. Both current tasks
-and current events have stronger fills and outlines, only while the in-range time needle
-is shown. Explicit urgency overrides the state material. A UID-derived fill-opacity variation
-is stable and bounded to four percent; it never shuffles with the clock or outline order.
-Only elapsed, unrecorded time uses the gray region fill, with an explicit legend key.
-The outer heading and short segment badges identify waiting, no-time and off-hours records.
+Current tasks and events use stronger fills and outlines. Explicit urgency overrides
+ordinary slice materials. The header legend keeps three category dots. Small title
+marks explain their state in the existing context tip, not in a new legend or orbit.
 
-## Details and interactions
+Clock recovery remains unchanged: minute ticks, foreground focus, visible-page return,
+page show and owned CLOCK notifications share one refresh. An epoch-minute stamp handles
+same-minute next-day return. All listeners and the one minute timer are released on
+unmount. Tests must follow callbacks through exact scheduler intervals and rendered paths;
+unchanged function bodies alone do not prove live movement.
 
-`chartTipLayout` measures title and metadata, including tabular-digit advances. The local
-context box fits its content, is centered, and is capped at 280px with narrow-container
-insets. Short records use one row and no redundant More action. Truncated text or additional
-metadata exposes explicit expansion. The invisible closed slot is 44px rather than 64px;
-status slots are also tightened. There is no horizontal or vertical internal scroller.
-We do not remove spacing by absolutely positioning an expanding panel over following blocks.
+## Details and preserved interactions
 
-Full text is an explicit operation, shown only when needed. It expands content in normal page flow and pins that
-record while reading; hover cannot replace the expanded text. Closing returns to the
-fixed slot. Status, time, provenance, removal, eye-toggle, folding and unload invalidate
-stale ownership. Pointer, focus and explicit expansion are separate owners of one detail
-record. Existing task click/Enter/Shift routing is reused; no navigation keys are added.
+The centered tip fits its content, up to 280px with 16px narrow-container insets. Short
+records need no redundant More action. The closed 44px slot is invisible when idle.
+Explicit expansion stays in normal page flow, pins the selected record, and has no
+internal scrollbar or overlay over following blocks.
 
-The old footer inventory and compact scrolling Schedule are not rendered. Overflow remains
-a compact status count; its tasks are already represented in the diagram.
+Pointer, focus and expansion remain independent owners. Changes to a record's time,
+status, provenance or presence, as well as eye-toggle, fold and unload, invalidate stale
+detail. Existing click, Enter and Shift navigation is reused. No shortcuts are added.
 
-## Verification and limits
+Desk editing, IME, Escape, drag/import, previews, strict Remove, safe drafts, collapse,
+preferences, calendar integration and the independent execution layer are outside this
+presentation change. No global Roam padding, overflow or negative-margin compensation
+is introduced.
 
-The production-source SCI/Reagent gate checks exact evaluator-input hashes, source UID
-coverage, visible mark/label pairs, all ordinary titles at realistic density, non-temporal
-time claims, source-stable slots, frame stability through END and true overnight windows,
-reference/CLOCK updates, long-text expansion, pointer/focus cleanup, main/sidebar/embed,
-Chinese, default/native styles and computed light/dark contrast. It rejects graph writes,
-page/console/resource errors and unexpected HTTP(S).
+## Required verification and limits
 
-Native embed CSS itself outdents a standalone host by 116px. The fixture records that host
-before the chart mounts and checks that Nautilus adds no page overflow and has no local
-overflow. It does not mask the native rule with production padding or overflow hacks.
+The actual-source SCI/Reagent gate checks source hashes, visible mark/title coverage,
+real time claims, same-side routing, label and marker collisions, narrow hour sizes,
+unique pattern IDs, frame stability through END and overnight windows, reference/CLOCK
+updates, full-text ownership, pointer/focus cleanup, main/sidebar/embed contexts, Chinese,
+default/native styles and computed light/dark contrast. Graph writes, unexpected HTTP(S),
+resource failures and page/console errors remain failures.
 
-Explicit long-text expansion can scroll the page to its button. Tests compare the diagram's
-size and document-flow coordinates rather than mistaking viewport scrolling for resizing.
-Private screenshots, signed URLs and native assets are not shipped. Synthetic/native-style
-results do not certify a fresh authenticated Desktop reload or every custom theme.
+Native embed CSS can outdent its host before Nautilus mounts. Compare against that host
+baseline, never conceal it with production-wide CSS. Explicit text expansion may scroll
+the page; compare document-flow position rather than mistaking scrolling for resizing.
+
+Private notes, screenshots, signed URLs and native assets stay outside the repository.
+Isolated renderer tests and visual review do not certify an authenticated Desktop reload,
+private host lifecycle, physical device input or every custom theme.

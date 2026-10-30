@@ -628,10 +628,6 @@ test('English UI settings localize all extension-owned status labels', () => {
     schedule: 'Schedule',
     untimedCompleted: 'Completed · No time recorded',
     details: 'Details',
-    indexTrack: 'Outside the timeline',
-    indexUnplaced: 'Unscheduled',
-    indexCompleted: 'Done, no time',
-    indexOutside: 'Outside hours',
     expandDetails: 'Full text',
     collapseDetails: 'Collapse text',
     more: 'More',
@@ -647,16 +643,13 @@ test('English UI settings localize all extension-owned status labels', () => {
     noCompletionTime: 'No completion time recorded',
     inheritedCompletion: 'Completion status from reference',
     inheritedDone: 'Inherited completion',
-    noTime: 'No time recorded',
-    notTimeScaled: 'Segment angle is not a clock time',
+    noTime: 'Completion time not recorded',
+    notTimeScaled: 'Not placed on the timeline',
     unplaced: 'Unscheduled',
     estimated: 'Estimate',
     outsideWindow: 'Outside chart hours',
     actual: 'Actual',
     completionEstimate: 'Estimated interval',
-    unplacedBadge: 'Wait',
-    noTimeBadge: 'No time',
-    outsideBadge: 'Off-hours',
     available: 'Available slot',
     availableNow: 'Available now',
     locateTask: 'Click to locate · ⇧ Sidebar',
@@ -668,16 +661,13 @@ test('English UI settings localize all extension-owned status labels', () => {
     noCompletionTime: '未记录完成时间',
     inheritedCompletion: '完成状态来自引用',
     inheritedDone: '来源完成',
-    noTime: '未记时',
-    notTimeScaled: '分段角度不表示钟点',
+    noTime: '未记录完成时刻',
+    notTimeScaled: '不占用时间刻度',
     unplaced: '未排入',
     estimated: '估计',
     outsideWindow: '显示时段外',
     actual: '实际记录',
     completionEstimate: '估计区间',
-    unplacedBadge: '待排',
-    noTimeBadge: '未记时',
-    outsideBadge: '时段外',
     available: '可用空档',
     availableNow: '当前可用',
     locateTask: '单击定位 · ⇧ 侧边栏',
@@ -1354,11 +1344,11 @@ test('chart frame reserves every source title and sizes compact plots by local w
     const frame = chartPresentationFrame({ containerWidth: width, items });
     assert.equal(frame.viewBox.width, width <= 520 ? width : 720);
     assert.equal(frame.labels.length, items.length);
-    assert.equal(frame.outerRadius - frame.timeRadius, 20);
+    assert.equal(frame.outerRadius, undefined, 'there is no second orbital track');
     assert.equal(frame.inspector, 'wrapped');
     assert.deepEqual(frame, chartPresentationFrame({ containerWidth: width, items, nowMinutes: 1261, pointerX: 800 }));
-    assert.ok(frame.center.x - frame.outerRadius * frame.plotScale >= 0);
-    assert.ok(frame.center.x + frame.outerRadius * frame.plotScale <= frame.viewBox.width);
+    assert.ok(frame.center.x - frame.timeRadius * frame.plotScale >= 0);
+    assert.ok(frame.center.x + frame.timeRadius * frame.plotScale <= frame.viewBox.width);
   }
   assert.equal(chartPresentationFrame({ containerWidth: 0 }).viewBox.width, 720);
 });

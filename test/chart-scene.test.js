@@ -10,28 +10,30 @@ function scene(input = {}) {
 test('every source record gets an in-diagram record and label, not a footer fallback', () => {
   const s = scene();
   assert.deepEqual(s.records.map(r => r.uid), items.map(r => r.uid));
-  assert.ok(s.records.every(r => r.label.lines.length && r.indexPath && r.event['time-claim'] === 'none'));
+  assert.ok(s.records.every(r => r.label.lines.length && r.markerPath && !r.anchor && r.event['time-claim'] === 'none'));
   assert.equal(s.records.filter(r => r.kind === 'untimed-completed').length, 8);
   assert.equal(s.records.filter(r => r.kind === 'unplaced').length, 14);
   assert.ok(s.records.every(r => !Number.isFinite(r.event.start) && !Number.isFinite(r.event.end)));
 });
 
-test('clock-driven scheduling and END cannot change frame or stable non-time slots', () => {
+test('clock-driven scheduling and END cannot change frame or non-time source sides', () => {
   const a = scene({ events: items.slice(0, 14).map((r, i) => ({ ...r, start: 480 + i * 30, end: 510 + i * 30 })) });
   const b = scene({ events: [] });
   assert.deepEqual(a.frame, b.frame);
   for (const item of items.slice(14)) {
     const one = a.records.find(r => r.uid === item.uid), two = b.records.find(r => r.uid === item.uid);
-    assert.equal(one.indexPath, two.indexPath);
-    assert.deepEqual(one.slot, two.slot);
+    assert.equal(one.label.side, two.label.side);
+    assert.equal(one.marker.shape, two.marker.shape);
   }
   assert.ok(a.records.slice(0, 14).every(r => r.kind === 'timed'));
 });
 
-test('one non-time record never becomes a near-full progress ring', () => {
+test('one non-time record is a small title mark, never a progress ring', () => {
   const s = scene({ items: [items[20]] });
-  assert.ok(s.records[0].slot.spanDegrees <= 32);
-  assert.equal(s.frame.outerRadius - s.frame.timeRadius, 20);
+  assert.ok(s.records[0].marker.size <= 6);
+  assert.equal(s.records[0].marker.shape, 'dot');
+  assert.equal(s.records[0].anchor, undefined);
+  assert.equal(s.records[0].indexPath, undefined);
   assert.equal(s.records[0].event['time-claim'], 'none');
 });
 
@@ -39,7 +41,7 @@ test('out-of-window fixed ranges stay visible without a false visible clock posi
   const source = { uid: 'night', description: 'Night appointment', meeting: true, start: 60, end: 90, done: false };
   const s = scene({ items: [source], events: [], startMinutes: 300, endMinutes: 1260 });
   assert.equal(s.records[0].kind, 'outside-window');
-  assert.ok(s.records[0].indexPath);
+  assert.ok(s.records[0].markerPath);
   assert.equal(s.records[0].event['full-start'], 60);
   assert.equal(s.records[0].event['full-end'], 90);
   assert.equal(s.records[0].event['time-claim'], 'none');
@@ -76,12 +78,10 @@ for (const width of [280, 320, 520, 640, 960]) {
     for (const r of s.records) {
       const box = r.label;
       assert.ok(box.x >= 0 && box.y >= 0 && box.x + box.width <= s.frame.viewBox.width && box.y + box.height <= s.frame.viewBox.height);
-      assert.ok(r.slot.spanDegrees > 0 && r.slot.spanDegrees <= 32);
-      if (s.frame.compact) {
-        const routingRadius = Number(r.label.connector.match(/A([\d.]+)/)[1]);
-        assert.ok(s.frame.center.y + routingRadius < s.frame.labelTop,
-          'outer routing arcs must stay above the compact label area');
-      }
+      assert.ok(r.marker.size <= 6);
+      assert.ok(!r.anchor && !r.slot && !r.indexPath);
+      assert.ok(r.marker.x >= 3 && r.marker.x <= s.frame.viewBox.width - 3);
+      assert.doesNotMatch(r.label.connector, /[AC]/, 'non-time leaders are short straight label connections');
     }
     for (let i = 0; i < s.records.length; i += 1) for (let j = i + 1; j < s.records.length; j += 1) {
       const a = s.records[i].label, b = s.records[j].label;
