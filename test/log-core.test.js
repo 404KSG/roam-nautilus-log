@@ -628,6 +628,9 @@ test('English UI settings localize all extension-owned status labels', () => {
     schedule: 'Schedule',
     untimedCompleted: 'Completed · No time recorded',
     details: 'Details',
+    indexTrack: 'Not time-scaled',
+    expandDetails: 'Full text',
+    collapseDetails: 'Collapse text',
     detailIdle: 'Hover or focus a segment to inspect it.',
     item: 'item',
     items: 'items',
@@ -638,6 +641,14 @@ test('English UI settings localize all extension-owned status labels', () => {
     completed: 'Completed',
     noCompletionTime: 'No completion time recorded',
     inheritedCompletion: 'Completion status from reference',
+    inheritedDone: 'Inherited completion',
+    noTime: 'No time recorded',
+    notTimeScaled: 'Segment angle is not a clock time',
+    unplaced: 'Unscheduled',
+    estimated: 'Estimate',
+    outsideWindow: 'Outside chart hours',
+    actual: 'Actual',
+    completionEstimate: 'Estimated interval',
     available: 'Available slot',
     availableNow: 'Available now',
     locateTask: 'Click to locate · ⇧ Sidebar',
@@ -648,6 +659,14 @@ test('English UI settings localize all extension-owned status labels', () => {
     completed: '已完成',
     noCompletionTime: '未记录完成时间',
     inheritedCompletion: '完成状态来自引用',
+    inheritedDone: '来源完成',
+    noTime: '未记时',
+    notTimeScaled: '分段角度不表示钟点',
+    unplaced: '未排入',
+    estimated: '估计',
+    outsideWindow: '显示时段外',
+    actual: '实际记录',
+    completionEstimate: '估计区间',
     available: '可用空档',
     availableNow: '当前可用',
     locateTask: '单击定位 · ⇧ 侧边栏',
@@ -1318,35 +1337,19 @@ test('equal-height right-side anchors keep later tasks below earlier tasks', () 
   assert.ok(placed[1].y > placed[0].y);
 });
 
-test('chart presentation frame preserves readable compact canvases', () => {
-  const narrow = chartPresentationFrame({ containerWidth: 320 });
-  const compact = chartPresentationFrame({ containerWidth: 520 });
-  const middle = chartPresentationFrame({ containerWidth: 521 });
-  const side = chartPresentationFrame({ containerWidth: 840 });
-  const fallback = chartPresentationFrame({ containerWidth: 0 });
-  assert.deepEqual(narrow.viewBox, { width: 330, height: 300 });
-  assert.deepEqual(narrow.center, { x: 165, y: 150 });
-  assert.equal(narrow.density, 'narrow');
-  assert.deepEqual(compact.viewBox, { width: 560, height: 400 });
-  assert.deepEqual(compact.center, { x: 280, y: 200 });
-  assert.equal(compact.density, 'compact');
-  for (const frame of [middle, side, fallback]) {
-    assert.deepEqual(frame.viewBox, { width: 720, height: 420 });
-    assert.deepEqual(frame.center, { x: 360, y: 210 });
-    assert.equal(frame.density, 'regular');
+test('chart frame reserves every source title and sizes compact plots by local width, not clock', () => {
+  const items = Array.from({ length: 22 }, (_, i) => ({ uid: `record-${i}`, description: `Task ${i}` }));
+  for (const width of [280, 320, 520, 521, 840]) {
+    const frame = chartPresentationFrame({ containerWidth: width, items });
+    assert.equal(frame.viewBox.width, width <= 520 ? width : 720);
+    assert.equal(frame.labels.length, items.length);
+    assert.equal(frame.outerRadius - frame.timeRadius, 20);
+    assert.equal(frame.inspector, 'wrapped');
+    assert.deepEqual(frame, chartPresentationFrame({ containerWidth: width, items, nowMinutes: 1261, pointerX: 800 }));
+    assert.ok(frame.center.x - frame.outerRadius * frame.plotScale >= 0);
+    assert.ok(frame.center.x + frame.outerRadius * frame.plotScale <= frame.viewBox.width);
   }
-  for (const frame of [narrow, compact, middle, side, fallback]) {
-    assert.equal(frame.labels.maxWidth, 170);
-    assert.equal(frame.labels.minY, 42);
-    assert.equal(frame.labels.maxY, 378);
-  }
-  assert.equal(narrow.inspector, 'rail');
-  assert.equal(narrow.labels.visible, false);
-  assert.equal(compact.labels.visible, false);
-  assert.equal(middle.labels.visible, true);
-  assert.equal(side.inspector, 'rail');
-  assert.equal(fallback.inspector, 'rail');
-  assert.equal(fallback.compactHeader, true);
+  assert.equal(chartPresentationFrame({ containerWidth: 0 }).viewBox.width, 720);
 });
 
 test('chart label allocation and truncation share real measurement rather than under-budgeting short words', () => {

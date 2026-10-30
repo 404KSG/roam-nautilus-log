@@ -4,28 +4,23 @@
 
 ### Added
 
-- Completed tasks without a usable time interval remain visible by name below the
-  spiral. A bounded two-row list preserves outline order and exposes full titles and
-  reference provenance in the context rail. It does not manufacture time, restart
-  pending work, or add capacity demand. The chart's eye control has an explicit scope;
-  Desk keeps its separate unfinished-task projection.
-- The context rail is centered, capped at 400px and inset from narrow containers.
-  The spiral retains its geometry with quiet solid past fills, finer outlines,
-  horizontal hour labels and readable completion labels without strikethrough.
-  No new dependency, font, shortcut or graph-write behavior is introduced.
-
-- The Nautilus spiral now uses stable, container-keyed presentation frames:
-  `330 × 300` through 360px, `560 × 400` through 520px, and `720 × 420` above 520px,
-  with a slim local context rail below it: 32px normally and 40px in narrow/sidebar views.
-  The oversized side/bottom inspector, visible idle box and DETAILS heading were removed
-  after user feedback. Hover and keyboard focus share the rail; complete long text scrolls
-  horizontally without growing it. Short labels such as Nap and Read now use the same
-  measured font for allocation and truncation, avoiding accidental ellipsis. Labels and
-  leaders use lighter emphasis closer to the original chart. Timeline details no longer
-  portal to the document body or follow the pointer. External overview labels are
-  bounded and may be omitted without changing chart or Desk geometry. Actual Scittle/Reagent
-  regression coverage verifies clock stability, responsive variants, themes, reduced motion,
-  synthetic content shapes, and zero graph writes.
+- Every titled source task or event has a diagram mark and connected SVG label.
+  Untimed completion, unscheduled work and out-of-window ranges use a separate outlined
+  non-time-scaled track, not a footer inventory or invented timestamp. Stable source
+  slots and a 32-degree segment cap prevent redistribution at END or progress-ring
+  ambiguity. Desk retains its independent unfinished-task projection.
+- Source-sized frames replace the rejected finite label budget. Ordinary titles wrap,
+  including CJK, and narrow views retain connected diagram labels instead of a scrolling
+  Schedule. Frame height follows the full source titles and local width, not the clock,
+  pointer or currently scheduled subset. The original time geometry and domain calculations
+  remain intact.
+- Details now wrap in a centered, at-most-400px area. Full text explicitly expands in
+  page flow without an internal scrollbar and stays pinned while reading. The closed
+  64px slot is invisible when idle. The rejected below-chart completion list, its reserved
+  gap, and wheel-based text reading are removed.
+- Indigo emphasis, crisp neutral labels, distinct completed/event/planned materials and
+  individually routed leaders replace the washed-out gray/ochre presentation. No new
+  dependency, font, navigation shortcut, graph-write authority or persistence feature is added.
 
 - Remove from Desk deletes only verified childless plain local reference wrappers.
   Content-bearing cards move with the same UID and subtree to the plan's verified
@@ -76,10 +71,9 @@
 - Untimed DONE rows no longer fall between the completed-history and pending-task
   collections. Timestamped, fixed-event and CLOCK-backed history keep their existing
   interval rules; untimed completion stays visible without taking a time slot.
-- The context-rail sentinel uses an ordinary keyword instead of `::unseen`.
-  Roam can pre-read component forms without a current namespace, even when
-  standalone SCI evaluation succeeds. A namespace-free initializer check and
-  a source-level auto-resolution guard now cover this compatibility regression.
+- Roam's namespace-free pre-reader compatibility remains guarded: no `::unseen`
+  or other auto-resolved keyword is required. The actual detail-state initializer
+  is checked independently of standalone SCI evaluation.
 - Shift + wheel now supports devices that report horizontal intent on deltaY,
   normalizes line/page units, and follows partial gestures with native-style
   snap-back. Momentum is latched to one card per gesture; stale frames/timers

@@ -1,985 +1,408 @@
 #!/usr/bin/env python3
-"""Actual Scittle/Reagent regression gate for the stable chart workspace."""
+"""Exact-source SCI/Reagent gate: every source record belongs in the diagram.
+
+The former footer/scroll acceptance was explicitly rejected. Frame height now
+uses the full source titles, never the clock's scheduled subset. This remains
+an isolated synthetic renderer, not a live Roam Desktop certification.
+"""
 import hashlib
 import json
 import os
+import re
 import subprocess
-import sys
-from urllib.parse import urlencode
 from pathlib import Path
-
+from urllib.parse import urlencode
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
-# Inputs deliberately remain inside ROOT (or its installed dependencies). Historical
-# evidence can be supplied as an opt-in report annotation, never as a test input.
-OUTPUT_BASE = Path(os.environ.get('NAUTILUS_RENDERER_OUT', '/tmp/nautilus-renderer'))
 COMPONENT = ROOT / 'src/component.cljs'
 NODE_MODULES = Path(os.environ.get('NAUTILUS_NODE_MODULES', ROOT / 'node_modules'))
-NATIVE_CSS = [Path(value) for value in os.environ.get('NAUTILUS_NATIVE_CSS', '').split(os.pathsep) if value]
-EXPECTED_CONSOLE_WARNINGS = (
-    'ReactDOM.render is no longer supported',
-    'Each child in a list should have a unique "key" prop',
-)
+NATIVE_CSS = [Path(p) for p in os.environ.get('NAUTILUS_NATIVE_CSS', '').split(os.pathsep) if p]
+BASE = Path(os.environ.get('NAUTILUS_RENDERER_OUT', '/tmp/nautilus-renderer'))
+OUT = BASE
+suffix = 1
+while OUT.exists():
+    OUT = BASE.with_name(f'{BASE.name}-{suffix}'); suffix += 1
+OUT.mkdir(parents=True)
+EXPECTED_WARNINGS = ('ReactDOM.render is no longer supported', 'Each child in a list should have a unique "key" prop')
+CLOCKS = ['2026-10-29T08:01:00', '2026-10-29T10:30:00', '2026-10-29T15:00:00',
+          '2026-10-29T20:59:00', '2026-10-29T21:00:00', '2026-10-29T21:01:00', '2026-10-30T01:00:00']
+NIGHT = ['2026-10-29T21:00:00', '2026-10-29T23:59:00', '2026-10-30T00:00:00',
+         '2026-10-30T01:59:00', '2026-10-30T02:00:00', '2026-10-30T02:01:00']
 
 
-def sha256_bytes(value):
-    return hashlib.sha256(value).hexdigest()
-
-
-def sha256(path):
-    return sha256_bytes(path.read_bytes())
-
-
-
-def reserve_output_directory():
-    candidate = OUTPUT_BASE
-    suffix = 1
-    while candidate.exists():
-        candidate = OUTPUT_BASE.with_name(f'{OUTPUT_BASE.name}-{suffix}')
-        suffix += 1
-    candidate.mkdir(parents=True)
-    return candidate
-
-
-OUT = reserve_output_directory()
-
+def sha(text):
+    return hashlib.sha256(text.encode()).hexdigest()
 
 
 def script_tag(source, marker):
-    # Do not add a newline or other wrapper to the production evaluator input.
-    if '</script' in source.lower():
-        raise RuntimeError('Component source cannot safely be embedded without changing evaluator input')
+    assert '</script' not in source.lower()
     return f'<script type="application/x-scittle" data-chart-eval="{marker}">{source}</script>'
 
 
-def write_page(component_source):
+def write_page(source):
     shim = '''(ns roam.datascript)
-(defn q [query & args]
-  (.apply (.-q js/window.__chartHarness) nil
-          (clj->js (into [query] args))))'''
+(defn q [query & args] (.apply (.-q js/window.__chartHarness) nil (clj->js (into [query] args))))'''
     mount = '''(require '[reagent.dom :as rdom])
-(rdom/render [nautilus-log-v1/main {:block-uid "baseline-plan"}]
-             (.getElementById js/document "chart-root"))'''
-    html = f'''<!doctype html>
-<html><head><meta charset="utf-8">
-{''.join(f'<link rel="stylesheet" href="{path.resolve().as_uri()}">' for path in NATIVE_CSS)}
+(rdom/render [nautilus-log-v1/main {:block-uid "baseline-plan"}] (.getElementById js/document "chart-root"))'''
+    html = f'''<!doctype html><html><head><meta charset="utf-8">
+{''.join(f'<link rel="stylesheet" href="{p.resolve().as_uri()}">' for p in NATIVE_CSS)}
 <link rel="stylesheet" href="{(ROOT / 'extension.css').as_uri()}">
-<style>
-body {{ margin: 0; color: #25262a; font: 14px system-ui, sans-serif; }}
-#renderer-shell {{ width: 960px; margin: 24px; }}
-#following-sentinel {{ height: 40px; background: #eee; margin-top: 12px; }}
-</style>
-<script>
-window.__chartRealDate = window.Date;
-window.__chartFakeNowMs = window.Date.parse('2026-10-29T08:01:00');
-window.Date = class ChartFakeDate extends window.__chartRealDate {{
-  constructor(...args) {{ super(...(args.length ? args : [window.__chartFakeNowMs])); }}
-  static now() {{ return window.__chartFakeNowMs; }}
-}};
-</script>
+<style>body{{margin:0;color:#25262a;font:14px system-ui,sans-serif}}#renderer-shell{{width:960px;margin:24px}}#following-sentinel{{height:40px;background:#eee;margin-top:12px}}</style>
+<script>window.__chartRealDate=Date;window.__chartFakeNowMs=Date.parse('2026-10-29T08:01:00');
+window.Date=class extends window.__chartRealDate{{constructor(...args){{super(...(args.length?args:[window.__chartFakeNowMs]))}}static now(){{return window.__chartFakeNowMs}}}};</script>
 <script src="{(NODE_MODULES / 'react/umd/react.development.js').as_uri()}"></script>
 <script src="{(NODE_MODULES / 'react-dom/umd/react-dom.development.js').as_uri()}"></script>
 <script src="{(NODE_MODULES / 'scittle/dist/scittle.js').as_uri()}"></script>
 <script src="{(NODE_MODULES / 'scittle/dist/scittle.reagent.js').as_uri()}"></script>
 <script src="{(NODE_MODULES / 'scittle/dist/scittle.pprint.js').as_uri()}"></script>
 <script src="{(OUT / 'bundle/chart-renderer-harness.js').as_uri()}"></script>
-</head><body>
-<div id="main-render-context"><div id="renderer-shell" data-chart-context="main"><div id="chart-root"></div><div id="following-sentinel">Following content sentinel</div></div></div>
+</head><body><div id="main-render-context"><div id="renderer-shell" data-chart-context="main"><div id="chart-root"></div><div id="following-sentinel">Following content sentinel</div></div></div>
 <div id="roam-right-sidebar-content"><div class="roam-right-sidebar-content" id="sidebar-render-context"></div></div>
 <div class="rm-embed-container" id="embed-render-context"></div>
-<script>
-const chartContext = new URLSearchParams(location.search).get('context') || 'main';
-const shell = document.querySelector('#renderer-shell');
-const parent = chartContext === 'sidebar' ? document.querySelector('#sidebar-render-context')
-  : chartContext === 'embed' ? document.querySelector('#embed-render-context')
-  : document.querySelector('#main-render-context');
-parent.append(shell); shell.dataset.chartContext = chartContext;
-</script>
-{script_tag(shim, 'roam-datascript-shim')}
-{script_tag(component_source, 'component-cljs-exact')}
-{script_tag(mount, 'reagent-mount')}
-</body></html>'''
+<script>const c=new URLSearchParams(location.search).get('context')||'main',s=document.querySelector('#renderer-shell');
+(document.querySelector(c==='sidebar'?'#sidebar-render-context':c==='embed'?'#embed-render-context':'#main-render-context')).append(s);s.dataset.chartContext=c;
+// Native embed CSS can outdent its host even before Nautilus mounts. Record
+// that untouched host baseline; never compensate with production global CSS.
+window.__chartHostBaseline={{documentOverflow:document.documentElement.scrollWidth-document.documentElement.clientWidth}};</script>
+{script_tag(shim, 'roam-datascript-shim')}{script_tag(source, 'component-cljs-exact')}{script_tag(mount, 'reagent-mount')}</body></html>'''
     (OUT / 'index.html').write_text(html)
 
 
 def settle_renderer(page):
-    page.wait_for_function('document.fonts && document.fonts.status === "loaded"', timeout=15000)
-    page.evaluate('''() => new Promise((resolve) => requestAnimationFrame(() =>
-      requestAnimationFrame(() => Promise.resolve(document.fonts.ready).then(resolve))))''')
+    page.wait_for_function('document.fonts.status === "loaded"')
+    page.evaluate('() => new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
 
 
-def minute_label(iso):
-    hour_minute = iso.split('T', 1)[1][:5]
-    return hour_minute
+def load(page, scenario='mixed', context='main', width=720, window='normal', lang='en'):
+    page.goto((OUT / 'index.html').as_uri() + '?' + urlencode({'scenario': scenario, 'context': context, 'window': window, 'lang': lang}))
+    page.wait_for_function('window.__chartEvaluator && (__chartEvaluator.completed || __chartEvaluator.error)', timeout=15000)
+    runtime = page.evaluate('() => __chartEvaluator')
+    assert not runtime.get('error'), runtime
+    page.wait_for_selector('svg.nautilus-log-svg')
+    settle_renderer(page)
+    page.evaluate('(w)=>__chartHarness.setWidth(w)', width)
+    page.wait_for_function('''w=>{const s=__chartHarness.state(),f=s.presentation;return f
+      && Math.abs(s.observedShell.width-w)<.5 && Math.abs(s.lastPresentationObservation.width-w)<.5
+      && s.viewBox===`0 0 ${f.viewBox.width} ${f.viewBox.height}`;}''', arg=width)
+    settle_renderer(page)
+    return state(page)
 
 
-def clock_expectation(iso):
-    date, time = iso.split('T', 1)
-    hour, minute = map(int, time[:5].split(':'))
-    return {
-        'iso': iso,
-        'nowMinutes': hour * 60 + minute,
-        'label': minute_label(iso) if date == '2026-10-29' else None,
+def state(page):
+    return page.evaluate('() => __chartHarness.state()')
+
+
+def set_clock(page, iso):
+    page.evaluate('iso=>__chartHarness.setClock(iso)', iso)
+    expected = page.evaluate('iso=>new __chartRealDate(iso).getTime()', iso)
+    page.wait_for_function('epoch=>__chartHarness.state().lastTimeline?.input.currentDate===epoch', arg=expected)
+    settle_renderer(page)
+    s = state(page); timeline = s['lastTimeline']['result']
+    minute = int(timeline['elapsedThroughMinutes'])
+    expected_label = f'{minute // 60 % 24:02d}:{minute % 60:02d}' if timeline['showNow'] else None
+    assert s['nowLabel'] == expected_label, (iso, s['nowLabel'], expected_label)
+    assert s['activeClockIntervals'] == 1
+    return s
+
+
+def assert_rect_equal(a, b, label):
+    assert a['viewBox'] == b['viewBox'], label
+    for key in ('svg', 'workspace', 'stage', 'detail', 'status', 'desk', 'following'):
+        assert a[key] and b[key], (label, key)
+        assert all(abs(a[key][part] - b[key][part]) <= .5 for part in ('x', 'y', 'width', 'height')), (label, key, a[key], b[key])
+
+
+def compact_record(s):
+    return {k: s[k] for k in ('viewBox', 'svg', 'stage', 'workspace', 'detail', 'status', 'desk', 'following', 'nowLabel', 'recordCount')} | {
+        'kinds': {r['uid']: r['kind'] for r in s['records']},
+        'indexPaths': {r['uid']: r['indexPath'] for r in s['records'] if r['indexPath']},
     }
 
 
-def wait_for_clock(page, iso):
-    expected = clock_expectation(iso)
-    try:
-        page.wait_for_function('''(expected) => {
-          const state = window.__chartHarness?.state?.();
-          const timeline = state?.lastTimeline;
-          return state?.svgCount === 1
-            && timeline?.input?.nowMinutes === expected.nowMinutes;
-        }''', arg=expected, timeout=15000)
-    except Exception as error:
-        state = page.evaluate('() => window.__chartHarness.state()')
-        raise RuntimeError(f'Clock readiness did not converge for {iso}: {state}') from error
-    settle_renderer(page)
-    state = page.evaluate('() => window.__chartHarness.state()')
-    if state['lastTimeline']['input']['nowMinutes'] != expected['nowMinutes']:
-        raise RuntimeError(f'Clock minute did not reach production timeline input: {state["lastTimeline"]}')
-    expected_date = page.evaluate('(iso) => new window.__chartRealDate(iso).getTime()', expected['iso'])
-    if state['lastTimeline']['input']['currentDate'] != expected_date:
-        raise RuntimeError(f'Clock date did not reach production timeline input: {state["lastTimeline"]}')
-    policy = state['lastTimeline']['result']
-    minute = int(policy['elapsedThroughMinutes'])
-    expected_label = f'{minute // 60 % 24:02d}:{minute % 60:02d}' if policy['showNow'] else None
-    if state['nowLabel'] != expected_label:
-        raise RuntimeError(f'Clock-specific DOM readiness failed for {iso}: {state}')
-    return state
+def coverage(page, hidden=False):
+    s = state(page); expected = page.evaluate('() => __chartHarness.expectedSourceUids()')
+    assert len(s['records']) == len(expected) == len({r['uid'] for r in s['records']})
+    assert {r['uid'] for r in s['records']} == set(expected)
+    for record in s['records']:
+        assert record['marks'] > 0 and record['label'].strip(), record
+        if not hidden: assert record['visible'], record
+        if record['kind'] != 'timed': assert record['timeClaim'] == 'none' and record['indexPath'], record
+    scene = page.evaluate('() => __chartHarness.scene()')
+    by_uid = {r['uid']: r for r in s['records']}
+    for record in scene['records']:
+        if not record['label']['truncated']:
+            assert re.sub(r'\s+', '', by_uid[record['uid']]['label']) == re.sub(r'\s+', '', record['event']['description']), record['uid']
+        if record.get('slot'): assert 0 < record['slot']['spanDegrees'] <= 32
+    assert not page.locator('.nautilus-log-untimed-history,.nautilus-log-untimed-item,.nautilus-log-compact-details').count()
+    scrollers = page.locator('.nautilus-log-content').evaluate('''root=>[...root.querySelectorAll('*')].filter(e=>{
+      const s=getComputedStyle(e);return (['auto','scroll'].includes(s.overflowX)&&e.scrollWidth>e.clientWidth+1)
+       ||(['auto','scroll'].includes(s.overflowY)&&e.scrollHeight>e.clientHeight+1);
+    }).map(e=>e.getAttribute('class'))''')
+    assert not scrollers, scrollers
+    host_baseline = page.evaluate('() => __chartHostBaseline.documentOverflow')
+    local_overflow = page.locator('.nautilus-log-container').evaluate('e=>e.scrollWidth-e.clientWidth')
+    assert s['writes'] == 0 and not s['bodyTooltipCount'] and s['documentOverflow'] <= host_baseline + 1 and local_overflow <= 1, {
+        'writes': s['writes'], 'tooltips': s['bodyTooltipCount'], 'overflow': s['documentOverflow'],
+        'hostBaseline': host_baseline, 'localOverflow': local_overflow,
+        'context': s['context'], 'width': s['observedShell']['width'], 'svg': s['svg'],
+    }
+    for box in s['labels']:
+        svg = s['svg']
+        assert box['x'] >= svg['x'] - 1 and box['y'] >= svg['y'] - 1, (box, svg)
+        assert box['x'] + box['width'] <= svg['x'] + svg['width'] + 1 and box['bottom'] <= svg['bottom'] + 1, (box, svg)
+    detail = page.locator('.nautilus-log-detail-region')
+    if 'is-expanded' not in detail.get_attribute('class'):
+        assert abs(s['detail']['height'] - 64) < .5
+    assert abs(s['detail']['width'] - min(400, s['workspace']['width'] - 32)) <= 1
+    assert abs(s['detail']['x'] + s['detail']['width'] / 2 - s['workspace']['x'] - s['workspace']['width'] / 2) <= 1
+    if detail.get_attribute('data-nautilus-detail') == 'idle':
+        assert not detail.text_content().strip()
+        assert detail.evaluate('e=>getComputedStyle(e).visibility') == 'hidden'
+    return s
 
 
-def assert_guards(page, page_errors, http_requests, label):
-    if page_errors:
-        raise RuntimeError(f'{label} produced page errors: {page_errors}')
-    if http_requests:
-        raise RuntimeError(f'{label} made HTTP(S) requests: {http_requests}')
-    state = page.evaluate('() => window.__chartHarness.state()')
-    writes = [entry for entry in page.evaluate('() => window.__chartHarness.traces()') if entry['kind'] == 'write']
-    if state['writes'] != 0 or writes:
-        raise RuntimeError(f'{label} attempted graph writes: {writes or state}')
-    rail = page.locator('.nautilus-log-detail-region')
-    if rail.count():
-        assert state['detail']['height'] <= 40.5, (label, state['detail'])
-        assert not page.locator('.nautilus-log-detail-eyebrow, .nautilus-log-detail-idle').count()
-        if rail.get_attribute('data-nautilus-detail') == 'idle':
-            assert not rail.text_content().strip(), label
-            assert rail.evaluate('el => getComputedStyle(el).visibility') == 'hidden', label
-    overview = state.get('overview')
-    if overview and overview['rect']['width'] > 0:
-        assert overview['chevron'], (label, overview)
-        assert overview['scrollWidth'] <= overview['clientWidth'] + 1, (label, overview)
-        assert overview['contentScrollWidth'] <= overview['contentClientWidth'] + 1, (label, overview)
-        for item in overview['items']:
-            box = item['rect']
-            assert box['x'] + box['width'] <= overview['chevron']['x'] - 1, (label, overview)
-            assert box['y'] >= overview['rect']['y'] - 0.5 and box['bottom'] <= overview['rect']['bottom'] + 0.5, (label, overview)
-
-
-def detail_measurement(page):
-    return page.evaluate('''() => {
-      const el = document.querySelector('.nautilus-log-detail-region');
-      const r = el.getBoundingClientRect();
-      return { parentIsBody: el.parentElement === document.body,
-        parentIsWorkspace: Boolean(el.closest('.nautilus-log-workspace')),
-        x: r.x, y: r.y, width: r.width, height: r.height, text: el.textContent };
+def geometry_audit(page):
+    result = page.evaluate('''()=>{
+      const nodes=[...document.querySelectorAll('.nautilus-log-event-slice-group')].filter(e=>getComputedStyle(e).visibility==='visible');
+      const boxes=nodes.map(e=>({uid:e.dataset.taskUid,r:e.querySelector('.nautilus-log-record-title').getBoundingClientRect()}));
+      const overlaps=[],crossings=[];
+      for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){
+        const a=boxes[i].r,b=boxes[j].r;if(Math.min(a.right,b.right)-Math.max(a.left,b.left)>1&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1)overlaps.push([boxes[i].uid,boxes[j].uid]);
+      }
+      for(const node of nodes){const path=node.querySelector('.nautilus-log-record-leader'),matrix=path.getScreenCTM(),length=path.getTotalLength();
+        for(let i=0;i<=64;i++){const p=path.getPointAtLength(length*i/64);const q=new DOMPoint(p.x,p.y).matrixTransform(matrix);
+          for(const box of boxes){if(box.uid===node.dataset.taskUid)continue;const r=box.r;
+            if(q.x>r.left+.5&&q.x<r.right-.5&&q.y>r.top+.5&&q.y<r.bottom-.5)crossings.push({from:node.dataset.taskUid,to:box.uid,point:{x:q.x,y:q.y},box:{x:r.x,y:r.y,width:r.width,height:r.height}});}
+        }
+      }
+      return {frame:__chartHarness.scene().frame.viewBox,overlaps,crossings:crossings.slice(0,12)};
     }''')
+    assert not result['overlaps'] and not result['crossings'], result
+    return result
 
 
-NORMAL_CLOCKS = [
-    ('0801', '2026-10-29T08:01:00'), ('1030', '2026-10-29T10:30:00'),
-    ('1200', '2026-10-29T12:00:00'), ('1500', '2026-10-29T15:00:00'),
-    ('1759', '2026-10-29T17:59:00'), ('2059', '2026-10-29T20:59:00'),
-    ('end-2100', '2026-10-29T21:00:00'), ('after-end', '2026-10-29T21:01:00'),
-    ('next-day', '2026-10-30T01:00:00'),
-]
-NIGHT_CLOCKS = [
-    ('start', '2026-10-29T21:00:00'), ('2344', '2026-10-29T23:44:00'),
-    ('2359', '2026-10-29T23:59:00'), ('midnight', '2026-10-30T00:00:00'),
-    ('0159', '2026-10-30T01:59:00'), ('end-0200', '2026-10-30T02:00:00'),
-    ('after-end', '2026-10-30T02:01:00'),
-]
-
-
-def rect_series(page, screenshots, page_errors, http_requests, prefix='baseline', clocks=None):
-    observations = []
-    for label, iso in (clocks or NORMAL_CLOCKS):
-        page.evaluate('(iso) => window.__chartHarness.setClock(iso)', iso)
-        state = wait_for_clock(page, iso)
-        state['clock'] = iso
-        observations.append(state)
-        assert_guards(page, page_errors, http_requests, f'clock {label}')
-        page.screenshot(path=str(screenshots / f'{prefix}-{label}.png'), full_page=True)
-    return observations
-
-
-def varies(observations, key):
-    values = [json.dumps(item.get(key), sort_keys=True) for item in observations]
-    return len(set(values)) > 1
-
-
-def assert_label_bounds(state, label):
-    svg = state['svg']
-    for index, bounds in enumerate(state['labels']):
-        if (bounds['x'] < svg['x'] - 0.5 or bounds['bottom'] > svg['bottom'] + 0.5
-                or bounds['x'] + bounds['width'] > svg['x'] + svg['width'] + 0.5
-                or bounds['y'] < svg['y'] - 0.5):
-            raise RuntimeError(f'{label} label {index} escaped the SVG frame: {bounds} / {svg}')
-
-
-def composite(foreground, background):
-    alpha = foreground[3] if len(foreground) > 3 else 1
-    return [alpha * foreground[i] + (1 - alpha) * background[i] for i in range(3)]
-
-
-def contrast_ratio(rgb_a, rgb_b):
-    rgb_b = composite(rgb_b, [255, 255, 255])
-    rgb_a = composite(rgb_a, rgb_b)
+def ratio(fg, bg):
+    alpha = fg[3] if len(fg) > 3 else 1
+    fg = [alpha * a + (1 - alpha) * b for a, b in zip(fg[:3], bg[:3])]
     def luminance(rgb):
-        channels = []
-        for channel in rgb[:3]:
-            normalized = channel / 255
-            channels.append(normalized / 12.92 if normalized <= 0.04045 else ((normalized + 0.055) / 1.055) ** 2.4)
-        return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
-    lighter, darker = sorted((luminance(rgb_a), luminance(rgb_b)), reverse=True)
-    return (lighter + 0.05) / (darker + 0.05)
+        values = [v / 255 / 12.92 if v / 255 <= .04045 else ((v / 255 + .055) / 1.055) ** 2.4 for v in rgb[:3]]
+        return sum(v * w for v, w in zip(values, [.2126, .7152, .0722]))
+    lo, hi = sorted([luminance(fg), luminance(bg)])
+    return (hi + .05) / (lo + .05)
 
 
-def semantic_contrast(page):
-    slot = page.locator('.nautilus-log-available-slot').first
-    slot.focus()
-    page.wait_for_function('''() => {
-      const slot = document.querySelector('.nautilus-log-available-slot');
-      const hit = slot?.querySelector('.nautilus-log-available-slot-hit');
-      const control = document.querySelector('.nautilus-log-toggle-btn');
-      return slot?.matches(':focus') && hit && hit.getAnimations().every(a => a.playState === 'finished')
-        && control && control.getAnimations().every(a => a.playState === 'finished');
-    }''')
-    settle_renderer(page)
-    return page.evaluate('''() => {
-      const rgb = value => {
-        if (!/^rgba?\\(/.test(value)) throw Error('Expected actual RGB paint: ' + value);
-        return value.match(/[\\d.]+/g).map(Number);
-      };
-      const blend = (fg, bg) => fg.slice(0, 3).map((c, i) => c * (fg[3] ?? 1) + bg[i] * (1 - (fg[3] ?? 1)));
-      const stage = document.querySelector('.nautilus-log-chart-stage');
-      const ancestors = []; for (let el = stage; el; el = el.parentElement) ancestors.unshift(el);
-      const background = ancestors.reduce((bg, el) => blend(rgb(getComputedStyle(el).backgroundColor), bg), [255, 255, 255]);
-      const slot = document.querySelector('.nautilus-log-available-slot');
-      const hit = slot.querySelector('.nautilus-log-available-slot-hit');
-      if (!slot.matches(':focus')) throw Error('Available slot lost focus before paint measurement');
-      const paint = (el, property) => {
-        if (!el) throw Error('Missing rendered semantic element: ' + property);
-        const style = getComputedStyle(el), color = rgb(style[property]);
-        let opacity = property === 'color' ? 1 : Number(style[property === 'stroke' ? 'strokeOpacity' : 'fillOpacity']);
-        for (let node = el; node; node = node.parentElement) opacity *= Number(getComputedStyle(node).opacity);
-        color[3] = (color[3] ?? 1) * opacity; return color;
-      };
-      return {
-        task: paint(document.querySelector('.nautilus-log-event-slice-group[aria-label*="Draft the project brief"] .nautilus-log-slice-group text'), 'fill'),
-        event: paint(document.querySelector('.nautilus-log-event-slice-group[aria-label*="Stand-up"] .nautilus-log-slice-group text'), 'fill'),
-        completed: paint(document.querySelector('.nautilus-log-untimed-title'), 'color'),
-        focus: paint(hit, 'stroke'),
-        now: paint(document.querySelector('.nautilus-log-now-needle-line'), 'stroke'),
-        control: paint(document.querySelector('.nautilus-log-toggle-btn svg'), 'stroke'),
-        background,
-        focused: document.activeElement === slot,
-      };
-    }''')
-
-
-def assert_semantic_contrast(page, theme):
-    colors = semantic_contrast(page)
-    text_ratios = {name: contrast_ratio(colors[name], colors['background']) for name in ('task', 'event', 'completed')}
-    graphic_ratios = {name: contrast_ratio(colors[name], colors['background'])
-                      for name in ('focus', 'now', 'control')}
-    if not colors['focused'] or colors['focus'][3] <= 0:
-        raise RuntimeError(f'{theme} focus paint is absent/transparent: {colors}')
-    if min(text_ratios.values()) < 4.5:
-        raise RuntimeError(f'{theme} semantic text contrast is below 4.5:1: {text_ratios} ({colors})')
-    if min(graphic_ratios.values()) < 3:
-        raise RuntimeError(f'{theme} computed chart graphic contrast is below 3:1: {graphic_ratios} ({colors})')
-    return {'colors': colors, 'textRatios': text_ratios, 'graphicRatios': graphic_ratios}
-
-
-def assert_stable(observations, label):
-    assert len(observations) > 1, label
-    for state in observations[1:]:
-        assert_rect_equal(observations[0], state, label)
-    return {key: False for key in ('viewBox', 'svg', 'workspace', 'stage', 'detail', 'status', 'desk', 'following')}
-
-
-def load_context(page, context, scenario='mixed', window_mode='normal'):
-    page.goto((OUT / 'index.html').as_uri() + '?' + urlencode({'context': context, 'scenario': scenario, 'window': window_mode}))
-    page.wait_for_load_state('networkidle')
-    page.wait_for_function('window.__chartEvaluator && (window.__chartEvaluator.completed || window.__chartEvaluator.error)', timeout=15000)
-    runtime = page.evaluate('() => window.__chartEvaluator')
-    if runtime.get('error'):
-        raise RuntimeError(f'{context} evaluator error: {runtime["error"]}')
-    page.wait_for_selector('svg.nautilus-log-svg', timeout=15000)
-    return wait_for_clock(page, '2026-10-29T08:01:00')
-
-
-def assert_rect_equal(before, after, label):
-    if before['viewBox'] != after['viewBox']:
-        raise RuntimeError(f'{label} changed viewBox')
-    for key in ('svg', 'workspace', 'stage', 'detail', 'history', 'status', 'desk', 'following'):
-        a, b = before.get(key), after.get(key)
-        if not a or not b or any(abs(a[field] - b[field]) > 0.5 for field in ('x', 'y', 'width', 'height')):
-            raise RuntimeError(f'{label} changed {key} bounds: {a} / {b}')
-
-
-def set_width(page, width):
-    page.evaluate('(width) => window.__chartHarness.setWidth(width)', width)
-    page.wait_for_function('''(width) => {
-      const s = window.__chartHarness.state(), f = s.presentation;
-      return Math.abs(s.observedShell.width - width) < 0.5
-        && Math.abs((s.lastPresentationObservation?.width ?? -1) - width) < 0.5
-        && s.viewBox === `0 0 ${f.viewBox.width} ${f.viewBox.height}`
-        && s.workspaceClass.includes(`nautilus-log-workspace--${f.inspector}`);
-    }''', arg=width)
-    settle_renderer(page)
-
-
-def compact_context_matrix(page, screenshots, page_errors, http_requests):
-    results = {}
-    # Keep the browser viewport fixed and resize only the production-context
-    # shell.  Both disclosure states are exercised at every compact width.
-    for context in ('main', 'sidebar'):
-        load_context(page, context)
-        for width in (280, 320, 360, 480, 520):
-            set_width(page, width)
-            for open_state in (False, True):
-                details = page.locator('.nautilus-log-compact-details')
-                if details.evaluate('el => el.open') != open_state:
-                    details.locator('.nautilus-log-compact-summary').click()
-                wait_for_clock(page, '2026-10-29T08:01:00')
-                before = page.evaluate('() => window.__chartHarness.state()')
-                if before['shellClientWidth'] <= 0 or before['shell']['width'] <= 0:
-                    raise RuntimeError(f'{context}/{width} did not record local shell dimensions: {before}')
-                if before['scheduleOpen'] != open_state:
-                    raise RuntimeError(f'{context}/{width} Schedule state did not converge: {before}')
-                key = f'{context}-{width}-{"open" if open_state else "folded"}'
-                states = rect_series(page, screenshots, page_errors, http_requests, key)
-                for state in states:
-                    assert_rect_equal(before, state, key)
-                results[key] = {'before': before, 'after': states[-1], 'observations': states}
-                page.screenshot(path=str(screenshots / f'{key}.png'), full_page=True)
-                page.evaluate("() => window.__chartHarness.setClock('2026-10-29T08:01:00')")
-    return results
-
-
-def responsive_matrix(page, screenshots, page_errors, http_requests):
-    results = {}
-    for width in (280, 320, 360, 480, 520, 521, 839, 840, 960):
-        set_width(page, width)
-        expected = 'nautilus-log-workspace--rail'
-        state = page.evaluate('() => window.__chartHarness.state()')
-        if expected not in state['workspaceClass']:
-            raise RuntimeError(f'Width {width} did not select {expected}: {state}')
-        if state['documentOverflow'] > 1:
-            raise RuntimeError(f'Width {width} produced horizontal overflow: {state}')
-        if width <= 520 and state['externalLabelCount'] != 0:
-            raise RuntimeError(f'Width {width} retained external labels: {state}')
-        if state['detail']['height'] != (40 if width <= 520 else 32):
-            raise RuntimeError(f'Width {width} detail region lost its fixed height: {state}')
-        if width <= 520 and state['compactList'] and state['compactList']['height'] != 168:
-            raise RuntimeError(f'Width {width} compact Schedule viewport is not fixed: {state}')
-        if state['detailIdleLayout']['idle'] and state['detailIdleLayout']['idle']['x'] != state['detailIdleLayout']['eyebrow']['x']:
-            raise RuntimeError(f'Width {width} placed idle Details in an implicit grid column: {state}')
-        assert_guards(page, page_errors, http_requests, f'width {width}')
-        results[str(width)] = state
-        page.screenshot(path=str(screenshots / f'width-{width}.png'), full_page=True)
-    return results
-
-
-def setting_boundaries(page, screenshots, page_errors, http_requests):
-    results = {}
-    for mode, scenario, clocks, limits in [
-            ('normal', 'dense', NORMAL_CLOCKS, (300, 1260)),
-            ('overnight', 'overnight', NIGHT_CLOCKS, (1260, 1560))]:
-        for context, width, opened in [('main', 960, False), ('main', 320, True),
-                                        ('sidebar', 320, False), ('embed', 840, False)]:
-            load_context(page, context, scenario, mode)
-            set_width(page, width)
-            if width <= 520:
-                disclosure = page.locator('.nautilus-log-compact-details')
-                if disclosure.evaluate('el => el.open') != opened:
-                    disclosure.locator('summary').click()
-            key = f'{mode}-{context}-{width}'
-            states = rect_series(page, screenshots, page_errors, http_requests, key, clocks)
-            for state in states:
-                inputs = state['lastTimeline']['input']
-                assert (inputs['startMinutes'], inputs['endMinutes']) == limits, (key, inputs)
-            assert any(state['overflowCount'] == 0 for state in states), key
-            assert any(state['overflowCount'] > 0 for state in states), key
-            end = next(state for state in states if state['clock'].endswith('02:00:00' if mode == 'overnight' else '21:00:00'))
-            assert end['lastTimeline']['result']['showNow'] is False, key
-            if mode == 'overnight':
-                carry = next(state for state in states if state['clock'] == '2026-10-30T01:59:00')
-                assert carry['lastTimeline']['result']['showNow'] is True and carry['nowLabel'] == '01:59', key
-            results[key] = {'observations': states, 'dynamic': assert_stable(states, key)}
-    return results
-
-
-def long_detail_contract(page, screenshots, page_errors, http_requests):
-    results = {}
-    for context, width in [('main', 960), ('sidebar', 280), ('embed', 840)]:
-        load_context(page, context, 'long')
-        set_width(page, width)
-        expected = page.evaluate('() => window.__chartHarness.longTitles()')
-        records = []
-        for uid, title in expected.items():
-            page.mouse.move(1180, 880)
-            before = page.evaluate('() => window.__chartHarness.state()')
-            # Source labels may be truncated; the full accessible name is not.
-            target = page.locator('.nautilus-log-event-slice-group').evaluate_all(
-                '(nodes, title) => nodes.findIndex(n => n.getAttribute("aria-label").startsWith(title))', title)
-            assert target >= 0, (context, uid)
-            page.locator('.nautilus-log-event-slice-group').nth(target).focus()
-            page.wait_for_function('(title) => document.querySelector(".nautilus-log-detail-title")?.textContent === title', arg=title)
-            settle_renderer(page)
-            active = page.evaluate('() => window.__chartHarness.state()')
-            assert_rect_equal(before, active, f'{context}/{uid} active Details')
-            detail = page.locator('.nautilus-log-detail-region')
-            detail.focus()
-            detail.press('ArrowRight')
-            page.wait_for_function('document.querySelector(".nautilus-log-detail-region").scrollLeft > 0')
-            # Chromium's native key-scroll animation can suppress a wheel
-            # arriving mid-scroll. Wait for actual settled offsets, not a sleep.
-            detail.evaluate('''el => new Promise((resolve, reject) => {
-              let last = el.scrollLeft, stable = 0, frames = 0;
-              const step = () => {
-                const value = el.scrollLeft;
-                stable = Math.abs(value - last) < 0.1 ? stable + 1 : 0; last = value;
-                if (stable >= 3) resolve();
-                else if (++frames > 120) reject(Error('Native key scroll did not settle'));
-                else requestAnimationFrame(step);
-              }; requestAnimationFrame(step);
-            })''')
-            detail.hover()
-            page.mouse.wheel(detail.evaluate('el => el.scrollWidth + 100'), 0)
-            page.wait_for_function('''() => {
-              const el = document.querySelector('.nautilus-log-detail-region');
-              return el.scrollWidth > el.clientWidth && el.scrollLeft > 0 && el.scrollWidth - el.clientWidth - el.scrollLeft <= 2;
-            }''')
-            tail = detail.evaluate('''el => {
-              const title = el.querySelector('.nautilus-log-detail-title');
-              const text = title.firstChild, range = document.createRange();
-              range.setStart(text, Math.max(0, text.length - 5)); range.setEnd(text, text.length);
-              const r = range.getBoundingClientRect(), box = el.getBoundingClientRect();
-              return {bottom:r.bottom, top:r.top, left:r.left, right:r.right,
-                viewportTop:box.top, viewportBottom:box.bottom, viewportLeft:box.left, viewportRight:box.right,
-                scrollLeft:el.scrollLeft, scrollWidth:el.scrollWidth, clientWidth:el.clientWidth};
-            }''')
-            assert tail['left'] >= tail['viewportLeft'] - 1 and tail['right'] <= tail['viewportRight'] + 1, (uid, tail)
-            assert tail['top'] >= tail['viewportTop'] - 1 and tail['bottom'] <= tail['viewportBottom'] + 1, (uid, tail)
-            assert_rect_equal(before, page.evaluate('() => window.__chartHarness.state()'), f'{context}/{uid} scroll')
-            page.screenshot(path=str(screenshots / f'long-{context}-{uid}.png'), full_page=True)
-            if uid == 'long-latin':
-                next_title = expected['long-cjk']
-                next_index = page.locator('.nautilus-log-event-slice-group').evaluate_all(
-                    '(nodes, title) => nodes.findIndex(n => n.getAttribute("aria-label").startsWith(title))', next_title)
-                page.locator('.nautilus-log-event-slice-group').nth(next_index).focus()
-                page.wait_for_function('''title => document.querySelector('.nautilus-log-detail-title')?.textContent === title
-                  && document.querySelector('.nautilus-log-detail-region').scrollLeft === 0''', arg=next_title)
-                page.locator('.nautilus-log-event-slice-group').nth(target).focus()
-                page.wait_for_function('''title => document.querySelector('.nautilus-log-detail-title')?.textContent === title
-                  && document.querySelector('.nautilus-log-detail-region').scrollLeft === 0''', arg=title)
-            # Changing a selected record without changing its UID cannot keep old Details.
-            page.evaluate('({uid}) => window.__chartHarness.updateChild(uid, "{{TODO}} Updated project brief 30m")', {'uid': uid})
-            page.wait_for_function('''() => {
-              const el = document.querySelector('.nautilus-log-detail-region');
-              return el.dataset.nautilusDetail === 'idle' || el.querySelector('.nautilus-log-detail-title')?.textContent === 'Updated project brief';
-            }''')
-            assert_rect_equal(before, page.evaluate('() => window.__chartHarness.state()'), f'{context}/{uid} update')
-            assert_guards(page, page_errors, http_requests, f'{context}/{uid}')
-            records.append({'uid': uid, 'titleLength': len(title), 'tail': tail, 'before': before, 'active': active})
-        results[context] = records
-    load_context(page, 'main', 'completed')
-    completed = page.locator('.nautilus-log-event-slice-group[aria-label*="Completed milestone"]')
-    completed.focus()
-    page.wait_for_function('document.querySelector(".nautilus-log-detail-title")?.textContent === "Completed milestone"')
-    completed_state = page.evaluate('() => window.__chartHarness.state()')
-    assert_guards(page, page_errors, http_requests, 'completed detail')
-    results['completed'] = completed_state
-    load_context(page, 'main')
+def contrast(page):
+    page.mouse.move(1180, 980)
     page.locator('.nautilus-log-available-slot').first.focus()
-    page.wait_for_function('document.querySelector(".nautilus-log-detail-region")?.dataset.nautilusDetail === "active"')
-    page.evaluate('() => window.__chartHarness.updateChild("task-reference", "{{TODO}} Changed estimate 60m")')
-    page.wait_for_function('document.querySelector(".nautilus-log-detail-region")?.dataset.nautilusDetail === "idle"')
-    assert_guards(page, page_errors, http_requests, 'available slot plan update')
-    results['availableUpdate'] = page.evaluate('() => window.__chartHarness.state()')
-    return results
+    page.wait_for_function('''()=>[...document.querySelectorAll('.nautilus-log-toggle-btn,.nautilus-log-available-slot-hit')].every(e=>e.getAnimations().every(a=>a.playState==='finished'))''')
+    paints = page.evaluate('''()=>{
+      const rgb=s=>s.match(/[\\d.]+/g).map(Number),blend=(f,b)=>f.slice(0,3).map((c,i)=>c*(f[3]??1)+b[i]*(1-(f[3]??1)));
+      let ancestry=[];for(let n=document.querySelector('.nautilus-log-chart-stage');n;n=n.parentElement)ancestry.unshift(n);
+      const background=ancestry.reduce((b,n)=>blend(rgb(getComputedStyle(n).backgroundColor),b),[255,255,255]);
+      const paint=(selector,prop)=>{const e=document.querySelector(selector);if(!e)throw Error('Missing paint '+selector);
+        const s=getComputedStyle(e),c=rgb(s[prop]);let a=Number(s[prop==='stroke'?'strokeOpacity':'fillOpacity']);
+        for(let n=e;n;n=n.parentElement)a*=Number(getComputedStyle(n).opacity);c[3]=(c[3]??1)*a;return c};
+      return {background,
+        task:paint('[data-task-uid="task-reference"] .nautilus-log-record-title','fill'),
+        event:paint('[data-task-uid="event-standup"] .nautilus-log-record-title','fill'),
+        completed:paint('[data-task-uid="task-completed"] .nautilus-log-record-title','fill'),
+        index:paint('.nautilus-log-index-segment','stroke'),
+        focus:paint('.nautilus-log-available-slot:focus .nautilus-log-available-slot-hit','stroke'),
+        now:paint('.nautilus-log-now-needle-line','stroke'),
+        control:paint('.nautilus-log-toggle-btn svg','stroke')};
+    }''')
+    scores = {k: ratio(v, paints['background']) for k, v in paints.items() if k != 'background'}
+    assert min(scores[k] for k in ('task', 'event', 'completed')) >= 4.5, scores
+    assert min(scores[k] for k in ('index', 'focus', 'now', 'control')) >= 3, scores
+    return {'paint': paints, 'ratios': scores}
 
 
-def untimed_history_contract(page, screenshots, page_errors, http_requests):
-    results = {}
-    expected = ['untimed-local', 'untimed-reference', 'running-only', 'other-day']
-    for context, width in [('main', 960), ('main', 640), ('sidebar', 280), ('sidebar', 320), ('embed', 520)]:
-        load_context(page, context, 'untimed')
-        set_width(page, width)
-        before = page.evaluate('() => __chartHarness.state()')
-        assert [item['uid'] for item in before['historyItems']] == expected, (context, before['historyItems'])
-        assert all('No completion time recorded' in item['aria'] for item in before['historyItems'])
-        assert 'Completion status from reference' in before['historyItems'][1]['aria']
-        assert not page.locator('.nautilus-log-untimed-history time').count()
-        box, workspace = before['detail'], before['workspace']
-        assert abs(box['width'] - min(400, workspace['width'] - 32)) <= 1, (context, box, workspace)
-        assert abs(box['x'] + box['width'] / 2 - workspace['x'] - workspace['width'] / 2) <= 1
-        row = page.locator('[data-task-uid="untimed-reference"]')
-        row.focus()
-        page.wait_for_function('document.querySelector(".nautilus-log-detail-title")?.textContent === "Completed synthetic task"')
-        assert '07:40' not in page.locator('.nautilus-log-detail-region').inner_text()
-        row.press('Shift+Enter')
-        assert page.evaluate('() => __chartHarness.traces().filter(x=>x.kind==="locate").at(-1)') == {
-            'kind': 'locate', 'uid': 'untimed-reference', 'sidebar': True}
-        row.focus()
-        page.mouse.move(1180, 880)
-        header = page.locator('.nautilus-log-header-copy').inner_text()
-        page.get_by_role('button', name='Hide completed on chart', exact=True).click()
-        page.wait_for_function('document.querySelector(".nautilus-log-untimed-history")?.getAttribute("aria-hidden") === "true"')
-        hidden = page.evaluate('() => __chartHarness.state()')
-        assert hidden['historyItems'] == [] and hidden['sliceCount'] == 1, hidden
-        assert page.locator('.nautilus-log-header-copy').inner_text() == header
-        assert_rect_equal(before, hidden, 'completion visibility is presentation-only')
-        page.get_by_role('button', name='Show completed on chart', exact=True).click()
-        page.wait_for_function('document.querySelectorAll(".nautilus-log-untimed-item").length === 4')
-        page.evaluate('() => __chartHarness.updateChild("pending-next", "{{[[DONE]]}} Draft next chapter 30m")')
-        page.wait_for_function('document.querySelectorAll(".nautilus-log-untimed-item").length === 5')
-        finished = page.evaluate('() => __chartHarness.state()')
-        assert finished['historyItems'][-1]['uid'] == 'pending-next'
-        assert_rect_equal(before, finished, 'completion must not resize chart or following content')
-        page.evaluate("() => __chartHarness.setClock('2026-10-29T21:01:00')")
-        ended = wait_for_clock(page, '2026-10-29T21:01:00')
-        assert [i['uid'] for i in ended['historyItems']] == expected + ['pending-next']
-        assert_rect_equal(before, ended, 'untimed history after END')
-        page.screenshot(path=str(screenshots / f'untimed-{context}-{width}.png'), full_page=True)
-        assert_guards(page, page_errors, http_requests, 'untimed history')
-        results[f'{context}-{width}'] = {'before': before, 'hidden': hidden, 'finished': finished, 'ended': ended}
-    load_context(page, 'main', 'completed')
-    before = page.evaluate('() => __chartHarness.state()')
-    page.evaluate('() => __chartHarness.updateChild("completed-direct", "{{[[DONE]]}} Completed milestone 20m")')
-    page.wait_for_function('document.querySelectorAll(".nautilus-log-untimed-item").length === 1')
-    after = page.evaluate('() => __chartHarness.state()')
-    assert after['sliceCount'] == 0 and after['historyItems'][0]['uid'] == 'completed-direct'
-    assert_rect_equal(before, after, 'first untimed record must not resize the frame')
-    page.locator('.nautilus-log-untimed-item').focus()
+def select(page, uid):
+    page.mouse.move(1180, 980)
+    page.locator(f'[data-task-uid="{uid}"]').focus()
     page.wait_for_function('document.querySelector(".nautilus-log-detail-region").dataset.nautilusDetail === "active"')
-    page.evaluate('() => __chartHarness.setClockEntries([{taskUid:"completed-direct",start:"2026-10-29T07:20:00",end:"2026-10-29T07:35:00",running:false}])')
-    page.wait_for_function('document.querySelectorAll(".nautilus-log-untimed-item").length === 0 && document.querySelectorAll(".nautilus-log-event-slice-group").length === 1')
-    actual = page.evaluate('() => __chartHarness.state()')
-    assert '07:20–07:35' in page.locator('.nautilus-log-event-slice-group').get_attribute('aria-label')
     settle_renderer(page)
-    detail_after_clock = page.locator('.nautilus-log-detail-region')
-    assert detail_after_clock.get_attribute('data-nautilus-detail') == 'idle', {
-        'detail': detail_after_clock.inner_text(),
-        'focus': page.evaluate('() => document.activeElement?.outerHTML.slice(0, 500)'),
-    }
-    assert_rect_equal(before, actual, 'CLOCK evidence relocates history without changing the frame')
-    results['timeEvidence'] = {'timed': before, 'untimed': after, 'actual': actual}
-    load_context(page, 'main', 'untimed')
-    page.evaluate('() => __chartHarness.setClockEntries([{taskUid:"untimed-reference",start:"2026-10-29T07:00:00",end:"2026-10-29T07:10:00",running:false}])')
-    page.wait_for_function('!document.querySelector("[data-task-uid=untimed-reference]")')
-    inherited = page.locator('.nautilus-log-event-slice-group[aria-label^="Completed synthetic task."]')
-    assert '07:00–07:10' in inherited.get_attribute('aria-label')
-    results['referenceActual'] = inherited.get_attribute('aria-label')
-    for context, width in [('main', 960), ('sidebar', 280)]:
-        load_context(page, context, 'untimed-many')
-        set_width(page, width)
-        assert page.locator('.nautilus-log-untimed-item').count() == 12
-        last = page.locator('.nautilus-log-untimed-item').last
-        last.focus()
-        page.wait_for_function('document.querySelector(".nautilus-log-detail-title")?.textContent.includes("末尾标记")')
-        scroll = page.locator('.nautilus-log-untimed-list').evaluate('''el => {
-          const row=el.lastElementChild.getBoundingClientRect(),box=el.getBoundingClientRect();
-          return {scroll:el.scrollTop,height:el.clientHeight,total:el.scrollHeight,rowBottom:row.bottom,bottom:box.bottom};
-        }''')
-        assert scroll['height'] <= 48 and scroll['total'] > scroll['height'] and scroll['scroll'] > 0
-        assert scroll['rowBottom'] <= scroll['bottom'] + 1
-        page.screenshot(path=str(screenshots / f'untimed-many-{context}.png'), full_page=True)
-        page.evaluate('() => __chartHarness.removeChild("untimed-11")')
-        page.wait_for_function('document.querySelector(".nautilus-log-detail-region").dataset.nautilusDetail === "idle"')
-        assert_guards(page, page_errors, http_requests, 'bounded named history')
-        results[f'many-{context}'] = scroll
-    load_context(page, 'main')
-    return results
 
 
-def routine_label_contract(page, screenshots, page_errors, http_requests):
-    results = {}
-    for context, width in [('main', 560), ('main', 640), ('main', 960), ('embed', 720)]:
-        load_context(page, context, 'routine')
-        set_width(page, width)
-        page.evaluate("() => __chartHarness.setClock('2026-10-29T19:31:00')")
-        state = wait_for_clock(page, '2026-10-29T19:31:00')
-        labels = page.evaluate('''() => __chartHarness.routineTitles().map(title => {
-          const group = [...document.querySelectorAll('.nautilus-log-event-slice-group')]
-            .find(el => el.getAttribute('aria-label').startsWith(title + '.'));
-          return {title, shown:group?.querySelector('.nautilus-log-slice-group text')?.textContent || null};
-        })''')
-        assert all(row['title'] == row['shown'] for row in labels), (context, width, labels)
-        assert_label_bounds(state, f'routine/{context}/{width}')
-        assert_guards(page, page_errors, http_requests, 'routine idle')
-        page.screenshot(path=str(screenshots / f'routine-{context}-{width}-idle.png'), full_page=True)
-        page.locator('.nautilus-log-event-slice-group[aria-label^="Nap."]').focus()
-        page.wait_for_function('document.querySelector(".nautilus-log-detail-title")?.textContent === "Nap"')
-        settle_renderer(page)
-        active = page.evaluate('() => __chartHarness.state()')
-        assert_rect_equal(state, active, 'thin rail selection')
-        assert_label_bounds(active, 'routine focused labels')
-        assert_guards(page, page_errors, http_requests, 'routine active')
-        page.screenshot(path=str(screenshots / f'routine-{context}-{width}-active.png'), full_page=True)
-        results[f'{context}-{width}'] = {'labels': labels, 'idle': state, 'active': active}
-    return results
+def lifecycle(page):
+    load(page, 'untimed')
+    start = coverage(page)
+    kinds = {r['uid']: r['kind'] for r in start['records']}
+    assert all(kinds[k] == 'untimed-completed' for k in ['untimed-local', 'untimed-reference', 'running-only', 'other-day'])
+    select(page, 'untimed-reference')
+    aria = page.locator('[data-task-uid="untimed-reference"]').get_attribute('aria-label')
+    assert 'Completion status from reference' in aria and not re.search(r'\d\d:\d\d', aria)
+    page.locator('[data-task-uid="untimed-reference"]').press('Shift+Enter')
+    assert page.evaluate('()=>__chartHarness.traces().filter(t=>t.kind==="locate").at(-1)') == {'kind': 'locate', 'uid': 'untimed-reference', 'sidebar': True}
+    header = page.locator('.nautilus-log-header-copy').inner_text()
+    page.get_by_role('button', name='Hide completed on chart', exact=True).click()
+    settle_renderer(page); hidden = coverage(page, True)
+    assert [r['uid'] for r in hidden['records'] if r['visible']] == ['pending-next']
+    assert page.locator('.nautilus-log-header-copy').inner_text() == header
+    assert_rect_equal(start, hidden, 'eye toggle')
+    page.get_by_role('button', name='Show completed on chart', exact=True).click(); settle_renderer(page)
+    page.evaluate('()=>__chartHarness.updateChild("pending-next","{{[[DONE]]}} Draft next chapter 30m")')
+    page.wait_for_function('document.querySelector("[data-task-uid=pending-next]").dataset.chartKind === "untimed-completed"')
+    settle_renderer(page); done = coverage(page); assert_rect_equal(start, done, 'TODO to untimed DONE')
+    select(page, 'untimed-reference')
+    page.evaluate('()=>__chartHarness.setClockEntries([{taskUid:"untimed-reference",start:"2026-10-29T07:00:00",end:"2026-10-29T07:10:00",running:false}])')
+    page.wait_for_function('document.querySelector("[data-task-uid=untimed-reference]").dataset.timeClaim === "actual"')
+    settle_renderer(page); actual = coverage(page); assert_rect_equal(start, actual, 'local CLOCK evidence')
+    assert '07:00–07:10' in page.locator('[data-task-uid="untimed-reference"]').get_attribute('aria-label')
+    assert page.locator('.nautilus-log-detail-region').get_attribute('data-nautilus-detail') == 'idle'
+    select(page, 'untimed-local')
+    page.evaluate('()=>__chartHarness.removeChild("untimed-local")')
+    page.wait_for_function('!document.querySelector("[data-task-uid=untimed-local]")')
+    settle_renderer(page)
+    assert page.locator('.nautilus-log-detail-region').get_attribute('data-nautilus-detail') == 'idle'
+    load(page, 'mixed')
+    select(page, 'task-reference')
+    page.locator('[data-task-uid="event-standup"] .nautilus-log-record-title').hover()
+    assert 'Stand-up' in page.locator('.nautilus-log-detail-title').inner_text()
+    page.mouse.move(1180, 980); settle_renderer(page)
+    assert 'Draft the project brief' == page.locator('.nautilus-log-detail-title').inner_text()
+    page.get_by_role('button', name='Collapse Nautilus Log', exact=True).focus()
+    page.get_by_role('button', name='Collapse Nautilus Log', exact=True).press('Enter')
+    page.wait_for_function('document.querySelectorAll("svg.nautilus-log-svg").length===0')
+    page.mouse.move(1180, 980)
+    page.get_by_role('button', name='Expand Nautilus Log', exact=True).press('Enter')
+    page.wait_for_selector('svg.nautilus-log-svg'); settle_renderer(page)
+    assert page.locator('.nautilus-log-detail-region').get_attribute('data-nautilus-detail') == 'idle'
+    select(page, 'task-reference'); page.evaluate('()=>__chartHarness.unload()'); settle_renderer(page)
+    assert page.locator('.nautilus-log-detail-region').get_attribute('data-nautilus-detail') == 'idle'
+    page.evaluate('()=>__chartHarness.unmount()'); settle_renderer(page)
+    assert state(page)['activeClockIntervals'] == 0 and not page.locator('svg.nautilus-log-svg').count()
+    return {'before': compact_record(start), 'hidden': compact_record(hidden), 'done': compact_record(done), 'actual': compact_record(actual), 'navigation': True, 'foldAndUnload': True}
+
+
+def full_text(page, context, width):
+    load(page, 'stress', context, width)
+    select(page, 'overflow-3')
+    before = coverage(page)
+    scroll_before = page.evaluate('() => scrollY')
+    page.get_by_role('button', name='Full text', exact=True).click(); settle_renderer(page)
+    expanded = coverage(page)
+    assert 'END_LONG' in page.locator('.nautilus-log-detail-title').inner_text()
+    assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).webkitLineClamp') == 'none'
+    assert expanded['detail']['height'] > before['detail']['height']
+    assert all(abs(expanded['svg'][key] - before['svg'][key]) < .5 for key in ('x', 'width', 'height')), 'explicit expansion must not resize the SVG'
+    assert abs(expanded['svg']['y'] + page.evaluate('() => scrollY') - before['svg']['y'] - scroll_before) < .5, 'the diagram must keep its document-flow position'
+    page.locator('[data-task-uid="overflow-1"] .nautilus-log-record-title').hover(); settle_renderer(page)
+    assert 'END_LONG' in page.locator('.nautilus-log-detail-title').inner_text(), 'expanded reading must be pinned'
+    page.get_by_role('button', name='Collapse text', exact=True).click(); page.mouse.move(1180, 980); settle_renderer(page)
+    assert abs(state(page)['detail']['height'] - 64) < .5
+    page.screenshot(path=str(OUT / 'screenshots' / f'fulltext-{context}-{width}.png'), full_page=True)
+    return {'closed': compact_record(before), 'expandedHeight': expanded['detail']['height'], 'pinned': True, 'noInternalScroll': True}
 
 
 def main():
-    assert contrast_ratio([0, 0, 0, 0], [250, 250, 250]) == 1
-    assert contrast_ratio([0, 0, 0, 0.1], [250, 250, 250]) < 3
-    (OUT / 'bundle').mkdir()
-    (OUT / 'screenshots').mkdir()
-    component_source = COMPONENT.read_text()
-    component_sha = sha256(COMPONENT)
+    (OUT / 'bundle').mkdir(); (OUT / 'screenshots').mkdir()
     subprocess.check_call(['node', 'test/chart-renderer-bundle.cjs', str(OUT / 'bundle')], cwd=ROOT,
                           env={**os.environ, 'NODE_PATH': str(NODE_MODULES)})
-    write_page(component_source)
-
-    report = {
-        'artifactDirectory': str(OUT),
-        'componentSha256': component_sha,
-        'componentBytes': len(COMPONENT.read_bytes()),
-        'evaluator': {
-            'call': "scittle.core.eval_script_tags(document.querySelectorAll('script[type=application/x-scittle][data-chart-eval]'))",
-            'namespace': 'nautilus-log-v1',
-            'sourceMode': 'raw current src/component.cljs as the component evaluator input',
-        },
-        'assets': {
-            'scittle': 'node_modules/scittle/dist/scittle.js',
-            'reagent': 'node_modules/scittle/dist/scittle.reagent.js',
-            'pprint': 'node_modules/scittle/dist/scittle.pprint.js',
-            'react': 'node_modules/react/umd/react.development.js',
-            'reactDom': 'node_modules/react-dom/umd/react-dom.development.js',
-            'logCore': 'webpack bundle imports ../src/log-core.js directly',
-            'timingCore': 'webpack bundle imports ../src/timing-core.js directly',
-        },
-    }
-    page_errors, http_requests, resource_failures, console = [], [], [], []
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+    source = COMPONENT.read_text(); write_page(source)
+    report = {'artifactDirectory': str(OUT), 'componentSha256': sha(source), 'componentBytes': len(source.encode()),
+              'acceptance': 'All source records have diagram marks and labels; no footer inventory or nested scroll reading.'}
+    errors, requests, resources, console_errors = [], [], [], []
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
         try:
-            page = browser.new_page(viewport={'width': 1200, 'height': 900})
-            page.on('pageerror', lambda error: page_errors.append(str(error)))
-            page.on('requestfailed', lambda request: resource_failures.append({'url': request.url, 'failure': request.failure}))
-            page.on('request', lambda request: http_requests.append(request.url)
-                    if request.url.startswith(('http:', 'https:')) else None)
-            page.on('console', lambda message: console.append({'type': message.type, 'text': message.text}))
-            page.goto((OUT / 'index.html').as_uri())
-            page.wait_for_load_state('networkidle')
-            page.wait_for_function('window.__chartEvaluator && (window.__chartEvaluator.completed || window.__chartEvaluator.error)', timeout=15000)
-            report['evaluatorRuntime'] = page.evaluate('() => window.__chartEvaluator')
-            if report['evaluatorRuntime'].get('error'):
-                raise RuntimeError(report['evaluatorRuntime']['error'])
-            page.wait_for_selector('svg.nautilus-log-svg', timeout=15000)
-            exact_evaluator_input = page.evaluate('''() => document.querySelector(
-              'script[data-chart-eval="component-cljs-exact"]').textContent''')
-            evaluator_input_sha = sha256_bytes(exact_evaluator_input.encode())
-            report['evaluatorInput'] = {
-                'sha256': evaluator_input_sha,
-                'bytes': len(exact_evaluator_input.encode()),
-                'equalsProductionSource': exact_evaluator_input == component_source,
-                'productionSha256': component_sha,
-            }
-            if exact_evaluator_input != component_source:
-                raise RuntimeError('Actual component evaluator input differs from src/component.cljs')
-            # SCI evaluates ns declarations, while the host can pre-read forms
-            # without a current namespace. Exercise the actual initializer with
-            # a namespace-free reader as well as the full SCI rendering below.
-            reader_check = page.evaluate('''source => {
-              const initializer = /last-detail\\s+(\\(atom\\s+[^)]+\\))/.exec(source)?.[1];
-              if (!initializer) throw Error('Missing context-rail initializer for reader check');
-              const read = text => scittle.core.eval_string('(clojure.edn/read-string ' + JSON.stringify(text) + ')');
-              const negativeError = scittle.core.eval_string(
-                '(try (clojure.edn/read-string "(atom ::unseen)") (catch :default error (.-message error)))');
-              if (typeof negativeError !== 'string' || !negativeError.includes('::unseen'))
-                throw Error('Reader negative control unexpectedly accepted ::unseen');
-              read(initializer);
-              return {initializer, namespaceFreeRead:true, autoResolvedNegativeError:negativeError,
-                scope:'Initializer reader compatibility, not a live-host parser invocation'};
-            }''', component_source)
-            report['readerCompatibility'] = reader_check
-            initial = wait_for_clock(page, '2026-10-29T08:01:00')
-            report['stylesheetOrder'] = page.evaluate('() => [...document.querySelectorAll("link[rel=stylesheet]")].map(el => el.href)')
-            report['loadedFonts'] = page.evaluate('() => [...document.fonts].filter(f => f.status === "loaded").map(f => ({family:f.family,weight:f.weight,style:f.style}))')
-            if initial['sliceCount'] < 1:
-                raise RuntimeError(f'Expected actual chart slices, got {initial}')
-            assert_guards(page, page_errors, http_requests, 'initial mount')
-
-            # Available range IDs come from the same vector that is rendered.
-            # Advancing the clock invalidates the focused range and must clear it.
-            available = page.locator('.nautilus-log-available-slot').first
-            available.focus()
-            page.wait_for_function("""() => document.querySelector('.nautilus-log-detail-region')
-              ?.dataset.nautilusDetail === 'active'""", timeout=5000)
-            page.evaluate("() => window.__chartHarness.setClock('2026-10-29T10:30:00')")
-            page.wait_for_function("""() => document.querySelector('.nautilus-log-detail-region')
-              ?.dataset.nautilusDetail === 'idle'""", timeout=5000)
-            assert_guards(page, page_errors, http_requests, 'available-slot clock reconciliation')
-            page.evaluate("() => window.__chartHarness.setClock('2026-10-29T08:01:00')")
-            wait_for_clock(page, '2026-10-29T08:01:00')
-
-            target = page.locator('.nautilus-log-event-slice-group[aria-label*="Draft the project brief"]')
-            target.focus()
-            page.wait_for_function('''() => document.querySelector('.nautilus-log-detail-region')
-              ?.textContent.includes('Draft the project brief')''', timeout=5000)
-            settle_renderer(page)
-            detail = detail_measurement(page)
-            assert_guards(page, page_errors, http_requests, 'first detail')
-            page.screenshot(path=str(OUT / 'screenshots' / 'detail-task.png'), full_page=True)
-
-            # A pointer detail may temporarily supersede focus, but leaving the
-            # workspace restores the focused segment instead of keeping stale hover text.
-            page.locator('.nautilus-log-event-slice-group').nth(1).hover()
-            page.wait_for_function("""() => document.querySelector('.nautilus-log-detail-region')
-              ?.textContent.includes('Stand-up')""", timeout=5000)
-            # Restore keyboard focus while the pointer still owns B, then prove
-            # that leaving B reveals A rather than stale pointer data.
-            target.focus()
-            page.locator('.nautilus-log-workspace').evaluate(
-                "el => el.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }))")
-            page.wait_for_timeout(100)
-            mixed_after_leave = page.evaluate('() => ({ state: window.__chartHarness.state(), active: document.activeElement?.className || null })')
-            if 'Draft the project brief' not in mixed_after_leave['state']['detailText']:
-                raise RuntimeError(f'Pointer exit did not restore focused Details: {mixed_after_leave}')
-
-            page.locator('.nautilus-log-event-slice-group').nth(1).focus()
-            page.wait_for_function('''() => document.querySelector('.nautilus-log-detail-region')
-              ?.textContent.includes('Stand-up')''', timeout=5000)
-            settle_renderer(page)
-            second_detail = detail_measurement(page)
-            if any(abs(detail[key] - second_detail[key]) > 0.5 for key in ('x', 'y', 'width', 'height')):
-                raise RuntimeError(f'Focus changed fixed detail bounds: {detail} / {second_detail}')
-            # Actual task routing remains current-surface by default and uses the
-            # existing Shift path for the right sidebar; Space remains inert.
-            target.evaluate("el => el.dispatchEvent(new MouseEvent('click', { bubbles: true }))")
-            target.focus()
-            target.press('Enter')
-            target.press('Shift+Enter')
-            before_space = page.evaluate("() => window.__chartHarness.traces().filter(x => x.kind === 'locate').length")
-            page.keyboard.press('Space')
-            after_space = page.evaluate("() => window.__chartHarness.traces().filter(x => x.kind === 'locate').length")
-            locations = [entry for entry in page.evaluate('() => window.__chartHarness.traces()') if entry['kind'] == 'locate']
-            if [item['sidebar'] for item in locations[-3:]] != [False, False, True] or before_space != after_space:
-                raise RuntimeError(f'Task routing or Space behavior changed: {locations}')
-            page.locator('.nautilus-log-event-slice-group').nth(1).evaluate("el => el.dispatchEvent(new MouseEvent('click', { bubbles: true }))")
-            if len([entry for entry in page.evaluate('() => window.__chartHarness.traces()') if entry['kind'] == 'locate']) != after_space:
-                raise RuntimeError('Non-task chart interaction unexpectedly navigated')
-            assert_guards(page, page_errors, http_requests, 'mixed pointer/keyboard detail')
-            page.screenshot(path=str(OUT / 'screenshots' / 'detail-event.png'), full_page=True)
-
-            # Unload, source removal, and folding all leave the local Details region idle.
-            page.evaluate('() => window.__chartHarness.unload()')
-            page.wait_for_function("""() => document.querySelector('.nautilus-log-detail-region')
-              ?.dataset.nautilusDetail === 'idle'""", timeout=5000)
-            page.locator('.nautilus-log-event-slice-group').nth(1).focus()
-            target.focus()
-            page.wait_for_function("""() => document.querySelector('.nautilus-log-detail-region')
-              ?.textContent.includes('Draft the project brief')""", timeout=5000)
-            page.evaluate('() => window.__chartHarness.unload()')
-            page.wait_for_function("""() => document.querySelector('.nautilus-log-detail-region')
-              ?.dataset.nautilusDetail === 'idle'""", timeout=5000)
-            page.locator('.nautilus-log-event-slice-group').nth(1).focus()
-            target.focus()
-            page.wait_for_function("""() => document.querySelector('.nautilus-log-detail-region')
-              ?.textContent.includes('Draft the project brief')""", timeout=5000)
-            page.evaluate("() => window.__chartHarness.removeChild('task-reference')")
-            page.wait_for_timeout(150)
-            removal_state = page.evaluate('() => window.__chartHarness.state()')
-            if 'Draft the project brief' in removal_state['detailText']:
-                raise RuntimeError(f'Selected item removal retained stale Details: {removal_state}')
-            page.locator('.nautilus-log-collapse-btn').click()
-            page.wait_for_selector('.nautilus-log-workspace', state='detached', timeout=5000)
-            page.locator('.nautilus-log-collapse-btn').click()
-            page.wait_for_selector('.nautilus-log-workspace', timeout=5000)
-            if page.evaluate('() => window.__chartHarness.state().detailText'):
-                raise RuntimeError('Fold/re-expand retained stale context-rail content')
-            assert_guards(page, page_errors, http_requests, 'detail lifecycle cleanup')
-
-            observations = rect_series(page, OUT / 'screenshots', page_errors, http_requests)
-            baseline_traces = page.evaluate('() => window.__chartHarness.traces()')
-            resolved = [entry['result'] for entry in baseline_traces if entry['kind'] == 'resolve-task-instance']
-            if not any(item['sourceUid'] == 'source-todo' and item['kind'] == 'task' for item in resolved):
-                raise RuntimeError(f'Real timing-core reference resolution was not observed: {resolved}')
-            if not any(item['sourceUid'] == 'source-done' and item['status'] == 'DONE' for item in resolved):
-                raise RuntimeError(f'Real timing-core completion resolution was not observed: {resolved}')
-            if not any(item['kind'] == 'event' for item in resolved):
-                raise RuntimeError(f'Real timing-core event resolution was not observed: {resolved}')
-
-            compact_clock = {}
-            for width in (280, 320, 360, 480, 520):
-                set_width(page, width)
-                compact_state = page.evaluate('() => window.__chartHarness.state()')
-                if compact_state['compactList'] is None or compact_state['compactList']['height'] != 168:
-                    raise RuntimeError(f'Open compact Schedule is not a fixed 168px viewport at {width}: {compact_state}')
-                compact_observations = rect_series(page, OUT / 'screenshots', page_errors, http_requests, f'compact-{width}')[:-1]
-                compact_clock[str(width)] = {
-                    'dynamic': assert_stable(compact_observations, f'compact width {width}'),
-                    'observations': compact_observations,
-                }
-
-            responsive = responsive_matrix(page, OUT / 'screenshots', page_errors, http_requests)
-            compact_contexts = compact_context_matrix(page, OUT / 'screenshots', page_errors, http_requests)
-            load_context(page, 'main')
-            light_contrast = assert_semantic_contrast(page, 'light')
-
-            context_matrix = {}
-            for context, width in (('sidebar', 320), ('embed', 320), ('embed', 840)):
-                load_context(page, context)
-                set_width(page, width)
-                context_state = page.evaluate('() => window.__chartHarness.state()')
-                if context_state['context'] != context:
-                    raise RuntimeError(f'{context} context did not mount its actual ancestor: {context_state}')
-                if context == 'sidebar' and context_state['scheduleOpen'] is not False:
-                    raise RuntimeError(f'Right sidebar did not default its Schedule to folded: {context_state}')
-                if context == 'sidebar':
-                    page.locator('.nautilus-log-compact-details > .nautilus-log-compact-summary').click()
-                    context_state = page.evaluate('() => window.__chartHarness.state()')
-                    if context_state['compactList']['height'] != 168:
-                        raise RuntimeError(f'Right sidebar Schedule lost its fixed viewport: {context_state}')
-                context_target = page.locator('.nautilus-log-event-slice-group').first
-                context_target.focus()
-                page.wait_for_function("""() => document.querySelector('.nautilus-log-detail-region')
-                  ?.dataset.nautilusDetail === 'active'""", timeout=5000)
-                page.evaluate('() => window.__chartHarness.unload()')
-                page.wait_for_function("""() => document.querySelector('.nautilus-log-detail-region')
-                  ?.dataset.nautilusDetail === 'idle'""", timeout=5000)
-                context_observations = rect_series(page, OUT / 'screenshots', page_errors, http_requests, f'{context}-{width}')[:-1]
-                context_matrix[f'{context}-{width}'] = {
-                    'dynamic': assert_stable(context_observations, f'{context} width {width}'),
-                    'state': page.evaluate('() => window.__chartHarness.state()'),
-                }
-                assert_guards(page, page_errors, http_requests, f'{context} context')
-                page.screenshot(path=str(OUT / 'screenshots' / f'{context}-{width}.png'), full_page=True)
-
-            # Restore the main context for visual contrast and unmount cleanup.
-            load_context(page, 'main')
-            page.locator('body').evaluate("body => { body.classList.add('bp3-dark'); body.style.background = '#1d1e21'; body.style.color = '#ecedef'; }")
-            page.emulate_media(reduced_motion='reduce')
-            settle_renderer(page)
-            dark_state = page.evaluate('() => window.__chartHarness.state()')
-            dark_contrast = assert_semantic_contrast(page, 'dark')
-            assert_guards(page, page_errors, http_requests, 'dark reduced-motion')
-            page.screenshot(path=str(OUT / 'screenshots' / 'dark-reduced-motion.png'), full_page=True)
+            page = browser.new_page(viewport={'width': 1200, 'height': 1000})
+            page.on('pageerror', lambda e: errors.append(str(e)))
+            page.on('request', lambda r: requests.append(r.url) if r.url.startswith(('http:', 'https:')) else None)
+            page.on('requestfailed', lambda r: resources.append({'url': r.url, 'failure': r.failure}))
+            page.on('console', lambda m: console_errors.append(m.text) if m.type == 'error' and not any(w in m.text for w in EXPECTED_WARNINGS) else None)
+            load(page)
+            evaluated = page.locator('script[data-chart-eval="component-cljs-exact"]').text_content()
+            assert evaluated == source
+            report['evaluatorInput'] = {'sha256': sha(evaluated), 'equalsProductionSource': True, 'productionSha256': sha(source)}
+            report['evaluatorRuntime'] = page.evaluate('()=>__chartEvaluator')
+            initializer = re.search(r'hover-info-state\s+(\(r/atom\s+\{[^}]+\}\))', source).group(1)
+            report['readerCompatibility'] = page.evaluate('''initializer=>{
+              const negative=scittle.core.eval_string('(try (clojure.edn/read-string "(atom ::unseen)") (catch :default e (.-message e)))');
+              if(typeof negative!=='string'||!negative.includes('::unseen'))throw Error('Reader negative control failed');
+              scittle.core.eval_string('(clojure.edn/read-string '+JSON.stringify(initializer)+')');
+              return {initializer,namespaceFreeRead:true,negative,scope:'Initializer compatibility, not the private host reader'};
+            }''', initializer)
+            report['stylesheetOrder'] = page.locator('link[rel=stylesheet]').evaluate_all('els=>els.map(e=>e.href)')
+            report['loadedFonts'] = page.evaluate('()=>[...document.fonts].filter(f=>f.status==="loaded").map(f=>({family:f.family,weight:f.weight,status:f.status}))')
+            report['contrast'] = {'light': contrast(page)}
+            page.locator('body').evaluate("e=>{e.classList.add('bp3-dark');e.style.background='#1d1e21';e.style.color='#ecedef'}")
+            page.emulate_media(reduced_motion='reduce'); settle_renderer(page)
+            report['contrast']['nativeDark'] = contrast(page)
+            coverage(page); page.screenshot(path=str(OUT / 'screenshots/dark.png'), full_page=True)
             page.emulate_media(reduced_motion='no-preference')
-            page.locator('body').evaluate("body => { body.classList.remove('bp3-dark'); body.style.background = ''; body.style.color = ''; }")
-
-            scenario_smoke = {}
-            for scenario in ('sparse', 'dense', 'cjk', 'empty'):
-                page.goto((OUT / 'index.html').as_uri() + f'?scenario={scenario}')
-                page.wait_for_load_state('networkidle')
-                page.wait_for_function('window.__chartEvaluator && (window.__chartEvaluator.completed || window.__chartEvaluator.error)', timeout=15000)
-                runtime = page.evaluate('() => window.__chartEvaluator')
-                if runtime.get('error'):
-                    raise RuntimeError(f'{scenario} evaluator error: {runtime["error"]}')
-                page.wait_for_selector('svg.nautilus-log-svg', timeout=15000)
-                scenario_state = wait_for_clock(page, '2026-10-29T08:01:00')
-                expected_slices = 0 if scenario == 'empty' else 1
-                if scenario_state['sliceCount'] < expected_slices:
-                    raise RuntimeError(f'{scenario} did not produce expected real chart DOM: {scenario_state}')
-                assert_label_bounds(scenario_state, scenario)
-                assert_guards(page, page_errors, http_requests, f'{scenario} scenario')
-                scenario_smoke[scenario] = scenario_state
-                page.screenshot(path=str(OUT / 'screenshots' / f'scenario-{scenario}.png'), full_page=True)
-
-            boundaries = setting_boundaries(page, OUT / 'screenshots', page_errors, http_requests)
-            long_details = long_detail_contract(page, OUT / 'screenshots', page_errors, http_requests)
-            routine_labels = routine_label_contract(page, OUT / 'screenshots', page_errors, http_requests)
-            untimed_history = untimed_history_contract(page, OUT / 'screenshots', page_errors, http_requests)
-            page.evaluate('() => window.__chartHarness.unmount()')
-            page.wait_for_function('window.__chartHarness.state().svgCount === 0', timeout=5000)
-            unmount_state = page.evaluate('() => window.__chartHarness.state()')
-            if unmount_state['activeClockIntervals'] != 0:
-                raise RuntimeError(f'Unmount leaked chart clock intervals: {unmount_state}')
-            if not any(entry['kind'] == 'session-destroy' for entry in page.evaluate('() => window.__chartHarness.traces()')):
-                raise RuntimeError('Unmount did not destroy the renderer plan session')
-
-            expected_console = [entry for entry in console if any(marker in entry['text'] for marker in EXPECTED_CONSOLE_WARNINGS)]
-            unexpected_console = [entry for entry in console if entry['type'] == 'error'
-                                  and not any(marker in entry['text'] for marker in EXPECTED_CONSOLE_WARNINGS)]
-            if unexpected_console or resource_failures:
-                raise RuntimeError(f'Unexpected console/resource errors: {unexpected_console}; {resource_failures}')
-            assert_guards(page, page_errors, http_requests, 'complete run')
-            within_day = observations[:-1]
-            dynamic = {
-                'viewBox': varies(within_day, 'viewBox'),
-                'svg': varies(within_day, 'svg'),
-                'workspace': varies(within_day, 'workspace'),
-                'stage': varies(within_day, 'stage'),
-                'detail': varies(within_day, 'detail'),
-                'desk': varies(within_day, 'desk'),
-                'following': varies(within_day, 'following'),
-            }
-            report.update({
-                'initial': initial,
-                'detail': detail,
-                'detailSecondTarget': second_detail,
-                'observations': observations,
-                'scenarioSmoke': scenario_smoke,
-                'untimedHistory': untimed_history,
-                'settingBoundaries': boundaries,
-                'longDetails': long_details,
-                'routineLabels': routine_labels,
-                'responsive': responsive,
-                'compactContexts': compact_contexts,
-                'compactClock': compact_clock,
-                'contexts': context_matrix,
-                'semanticContrast': {'light': light_contrast, 'dark': dark_contrast},
-                'darkReducedMotion': dark_state,
-                'unmount': unmount_state,
-                'traces': baseline_traces,
-                'console': console,
-                'expectedConsoleWarnings': expected_console,
-                'pageErrors': page_errors,
-                'httpRequests': http_requests,
-                'resourceFailures': resource_failures,
-                'baselineDiagnostic': {
-                    'withinDayDynamicMeasurements': dynamic,
-                    'dateBoundaryObservation': observations[-1],
-                    'fixedLocalDetail': detail['parentIsWorkspace'] and not detail['parentIsBody'],
-                    'stableInvarianceAssertion': {
-                        'expected': 'within-day SVG, workspace, stage, detail, Desk, and following-sibling rectangles and viewBox remain equal',
-                        'actual': dynamic,
-                        'result': 'passed' if not any(dynamic.values()) else 'failed',
-                    },
-                },
-            })
-            if not report['baselineDiagnostic']['fixedLocalDetail']:
-                raise RuntimeError(f'Detail region is not local: {detail}')
-            if page.locator('[role="tooltip"]').count() != 0:
-                raise RuntimeError('Timeline detail unexpectedly created a body tooltip')
-            if any(dynamic.values()):
-                raise RuntimeError(f'Clock changed stable chart geometry: {dynamic}')
+            report['matrix'] = {}
+            for context in ['main', 'sidebar', 'embed']:
+                for width in [280, 320, 520, 640, 960]:
+                    before = load(page, 'realistic', context, width)
+                    coverage(page); geometry = geometry_audit(page)
+                    if before['presentation']['plotScale'] < .9:
+                        date_rows = page.locator('.nautilus-log-center-date > text:not(.nautilus-log-center-now)').all_text_contents()
+                        assert date_rows == ['October', '29th'], date_rows
+                    for label in page.locator('[data-record-title^="Commute"] .nautilus-log-record-title').all():
+                        lines = label.locator('tspan').all_text_contents()
+                        assert not any(line.rstrip().endswith(('Commu', 'Commut')) for line in lines), lines
+                    observations = []
+                    for iso in CLOCKS:
+                        current = set_clock(page, iso); coverage(page)
+                        assert_rect_equal(before, current, f'{context}/{width}/{iso}')
+                        observations.append(compact_record(current))
+                    select(page, 'unknown-2'); active = coverage(page)
+                    assert_rect_equal(before, active, 'hover/focus frame')
+                    if context == 'main' or width == 280:
+                        page.screenshot(path=str(OUT / 'screenshots' / f'realistic-{context}-{width}.png'), full_page=True)
+                    report['matrix'][f'{context}-{width}'] = {'observations': observations, 'geometry': geometry,
+                        'hostBaseline': page.evaluate('() => __chartHostBaseline')}
+            report['stress'] = {}
+            for context, width in [('main', 960), ('main', 520), ('sidebar', 320), ('sidebar', 280), ('embed', 640)]:
+                before = load(page, 'stress', context, width); coverage(page); geometry = geometry_audit(page)
+                cjk = next(r for r in before['records'] if r['uid'] == 'overflow-0')
+                assert cjk['label'].replace(' ', '') == cjk['title'].replace(' ', ''), cjk
+                late = set_clock(page, '2026-10-29T21:01:00'); coverage(page)
+                assert_rect_equal(before, late, 'END cannot drop overflow or resize frame')
+                for uid in ['overflow-0', 'overflow-1', 'overflow-2', 'overflow-3']:
+                    a = next(r for r in before['records'] if r['uid'] == uid); b = next(r for r in late['records'] if r['uid'] == uid)
+                    assert a['kind'] == b['kind'] == 'unplaced' and a['indexPath'] == b['indexPath']
+                page.screenshot(path=str(OUT / 'screenshots' / f'stress-{context}-{width}.png'), full_page=True)
+                report['stress'][f'{context}-{width}'] = {'before': compact_record(before), 'after': compact_record(late), 'geometry': geometry}
+            report['scenarios'] = {}
+            for scenario in ['untimed-many', 'outside', 'sparse', 'dense', 'cjk', 'empty', 'completed', 'routine']:
+                load(page, scenario); s = coverage(page); geometry_audit(page)
+                if scenario == 'untimed-many': assert s['recordCount'] == 12 and s['sliceCount'] == 0
+                if scenario == 'outside':
+                    assert all(r['kind'] == 'outside-window' and r['timeClaim'] == 'none' for r in s['records'])
+                    assert '01:00–01:30' in s['records'][0]['aria']
+                    assert '23:40–00:00' in s['records'][2]['aria'] and 'Completed' in s['records'][2]['aria']
+                report['scenarios'][scenario] = compact_record(s)
+            report['overnight'] = {}
+            for context, width in [('main', 960), ('sidebar', 280), ('embed', 520)]:
+                before = load(page, 'overnight', context, width, window='overnight')
+                observations = []
+                for iso in NIGHT:
+                    current = set_clock(page, iso); coverage(page); assert_rect_equal(before, current, 'overnight frame')
+                    observations.append(compact_record(current))
+                assert observations[3]['nowLabel'] == '01:59' and observations[4]['nowLabel'] is None
+                report['overnight'][f'{context}-{width}'] = observations
+            report['fullText'] = {f'{c}-{w}': full_text(page, c, w) for c, w in [('main', 960), ('sidebar', 280), ('embed', 520)]}
+            load(page, 'untimed', 'sidebar', 280, lang='zh'); select(page, 'untimed-reference'); coverage(page)
+            assert '分段不按时间定位' in page.locator('.nautilus-log-index-caption').text_content()
+            assert page.get_by_role('button', name='全文', exact=True).count() == 1
+            report['chinese'] = compact_record(state(page))
+            report['lifecycle'] = lifecycle(page)
+            assert not errors and not requests and not resources and not console_errors, (errors, requests, resources, console_errors)
+            report.update({'pageErrors': errors, 'httpRequests': requests, 'resourceFailures': resources, 'consoleErrors': console_errors,
+                           'result': 'PASS', 'graphWrites': 0})
         finally:
             browser.close()
-    (OUT / 'results.json').write_text(json.dumps(report, indent=2) + '\n')
-    print(json.dumps({
-        'result': 'stable-workspace-passed',
-        'artifactDirectory': str(OUT),
-        'componentSha256': component_sha,
-        'evaluatorInputSha256': report['evaluatorInput']['sha256'],
-        'dynamic': report['baselineDiagnostic']['withinDayDynamicMeasurements'],
-        'detail': report['detail'],
-    }, indent=2))
+    (OUT / 'results.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
+    print(json.dumps({'result': 'PASS', 'artifactDirectory': str(OUT), 'componentSha256': sha(source),
+                      'matrixCases': len(report['matrix']), 'stressCases': len(report['stress']), 'sourceOnlySupported': True}, indent=2))
 
 
 if __name__ == '__main__':
     try:
         main()
     except Exception as error:
-        OUT.mkdir(parents=True, exist_ok=True)
-        failure = {'result': 'blocked-or-not-reproduced', 'artifactDirectory': str(OUT), 'error': str(error)}
-        (OUT / 'failure.json').write_text(json.dumps(failure, indent=2) + '\n')
-        print(json.dumps(failure, indent=2), file=sys.stderr)
+        (OUT / 'failure.json').write_text(json.dumps({'result': 'FAIL', 'error': str(error)}, ensure_ascii=False, indent=2))
         raise

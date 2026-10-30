@@ -25,6 +25,7 @@ const todayPlanLauncher = fs.readFileSync(path.join(__dirname, '..', 'src', 'tod
 const todayPlanCommands = fs.readFileSync(path.join(__dirname, '..', 'src', 'today-plan-commands.js'), 'utf8');
 const tidyPlan = fs.readFileSync(path.join(__dirname, '..', 'src', 'tidy-plan.js'), 'utf8');
 const logCore = fs.readFileSync(path.join(__dirname, '..', 'src', 'log-core.js'), 'utf8');
+const sceneCore = fs.readFileSync(path.join(__dirname, '..', 'src', 'chart-scene.js'), 'utf8');
 
 function parenDepthBefore(source, targetIndex) {
   let depth = 0;
@@ -180,9 +181,9 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested L
   assert.match(component, /nautilus-log:clock-changed/);
   assert.match(timingRuntime, /entryTaskUids/);
   assert.match(timingRuntime, /Only a scoped graph read certifies complete history/);
-  assert.match(component, /log-core-call "chartLabelMetrics"/);
-  assert.match(component, /log-core-call "placeExternalLabels"/);
-  assert.match(component, /log-core-call "chartPresentationFrame"/);
+  assert.match(sceneCore, /function wrapTitle/);
+  assert.match(sceneCore, /function labelLayout/);
+  assert.match(component, /log-core-call "chartScene"/);
   assert.doesNotMatch(component, /log-core-call "translateLabelRects"/);
   assert.match(component, /log-core-call "resolveRendererSettings"/);
   assert.match(component, /log-core-call "hourlyGridSegments"/);
@@ -205,28 +206,21 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested L
   assert.doesNotMatch(component, /\(abs \(- done-at duration\)\)/);
 });
 
-test('SVG label layout consumes a fixed presentation frame and bounds labels; this is not SCI execution', () => {
-  const getLegendStart = component.indexOf('(defn get-legend-rect');
-  const getLegendEnd = component.indexOf(';; --------------- Log core bridge');
-  assert.ok(getLegendStart >= 0 && getLegendEnd > getLegendStart);
-  const getLegend = component.slice(getLegendStart, getLegendEnd);
-  assert.match(getLegend, /log-core-call "chartLabelMetrics"/);
-  assert.match(getLegend, /:maxWidth 170/);
-  assert.match(getLegend, /:label-text \(:text label\)/);
-  assert.match(getLegend, /:maxVerticalOffset 158/);
-  assert.match(getLegend, /inside-frame\?/);
-  assert.doesNotMatch(getLegend, /iterate-rect-place/);
-
-  const showEventsStart = component.indexOf('(defn show-events');
-  const showEvents = component.slice(showEventsStart, component.indexOf('(defn add-start-after', showEventsStart));
-  assert.match(showEvents, /log-core-call "chartPresentationFrame"/);
-  assert.match(showEvents, /:viewBox \{:width 720 :height 420\}/);
-  assert.match(showEvents, /nautilus-log-workspace/);
-  assert.match(component, /nautilus-log-detail-region/);
-  assert.doesNotMatch(showEvents, /events->new-dimensions|prepared-rects|translateLabelRects/);
-
-  assert.match(logCore, /function chartPresentationFrame/);
-  assert.match(logCore, /chartPresentationFrame,/);
+test('the production scene uses the full source collection and never drops labels to a footer', () => {
+  const start = component.indexOf('(defn show-events');
+  const show = component.slice(start, component.indexOf('(defn add-start-after', start));
+  assert.match(show, /log-core-call "chartScene"/);
+  assert.match(show, /:items source-events/);
+  assert.match(show, /map-indexed vector records/);
+  assert.doesNotMatch(show, /events->new-dimensions|events->slices|compact-event-list|untimed-completion-list/);
+  assert.match(component, /:data-task-uid uid :data-record-title/);
+  assert.match(component, /:data-chart-kind \(:kind record\) :data-time-claim/);
+  assert.match(component, /chart-record-label/);
+  assert.match(logCore, /require\('\.\/chart-scene'\)/);
+  assert.match(sceneCore, /function chartPresentationFrame/);
+  assert.match(sceneCore, /sourceItems\(items\)/);
+  assert.match(sceneCore, /Math\.min\(32, step \* 0\.82\)/);
+  assert.match(sceneCore, /'time-claim': !timed \? 'none'/);
   assert.match(entry, /window\.nautilusLogCore = logCore/);
 });
 
@@ -310,9 +304,11 @@ test('the spiral uses a local fixed detail region above an inert grid', () => {
   assert.match(component, /:on-mouse-enter/);
   assert.match(component, /:on-focus/);
   assert.doesNotMatch(component, /createPortal|getScreenCTM|placeFloatingTooltip|radialTooltipGeometry/);
-  assert.match(css, /\.nautilus-log-detail-region\s*\{[^}]*height:\s*32px;[^}]*overflow-x:\s*auto;/s);
+  assert.match(css, /\.nautilus-log-detail-region\s*\{[^}]*height:\s*64px;/s);
+  assert.doesNotMatch(css, /\.nautilus-log-detail-region\s*\{[^}]*overflow[^;]*auto/s);
   assert.doesNotMatch(css, /\.nautilus-log-workspace--side/);
-  assert.match(css, /@container \(max-width:\s*520px\)[\s\S]*\.nautilus-log-detail-region\s*\{[^}]*height:\s*40px;/);
+  assert.match(component, /:expanded \(if expanded\? nil info\)/);
+  assert.match(css, /\.nautilus-log-detail-region\.is-expanded\s*\{[^}]*height:\s*auto;/s);
   assert.match(css, /\.nautilus-log-grid\s*\{[^}]*pointer-events:\s*none;/s);
   assert.match(css, /\.nautilus-log-available-slot-hit/);
   assert.doesNotMatch(css, /nautilus-log-hover-tooltip|nautilus-log-compact-hover-context/);
@@ -323,7 +319,8 @@ test('the spiral uses a local fixed detail region above an inert grid', () => {
   assert.match(component, /"unload" unload-listener/);
   assert.match(observer, /if-not node[\s\S]*clear-detail-state! hover-info-state/);
   assert.match(observer, /when \(not= @presentation-width-state next-width\)[\s\S]*clear-detail-state! hover-info-state/);
-  assert.match(css, /\.nautilus-log-compact-list\s*\{[^}]*height:\s*168px;[^}]*max-height:\s*none;/s);
+  assert.doesNotMatch(css, /\.nautilus-log-compact-list\s*\{[^}]*overflow:\s*auto;/s);
+  assert.doesNotMatch(component, /defn untimed-completion-list/);
   assert.match(css, /\.nautilus-log-detail-region\[data-nautilus-detail="idle"\]\s*\{\s*visibility:\s*hidden;/s);
   assert.doesNotMatch(component, /nautilus-log-detail-eyebrow|nautilus-log-detail-idle/);
 });
@@ -1071,7 +1068,7 @@ test('Log replaces the center year with an in-range 24-hour now value', () => {
   assert.match(component, /nautilus-log-now-needle/);
   assert.match(component, /nautilus-log-center-now/);
   assert.match(component, /center-now-label/);
-  assert.match(component, /\(defn central-label-component \[\[first-row _\] center center-now-label\]/);
+  assert.match(component, /\(defn central-label-component \[\[first-row _\] center center-now-label & \[plot-scale\]\]/);
   assert.match(component, /center-now-label \(when now-visible\? \(minutes->time timeline-minute\)\)/);
   assert.match(component, /:workday-start settings/);
   assert.match(component, /:workday-end settings/);
@@ -1079,7 +1076,7 @@ test('Log replaces the center year with an in-range 24-hour now value', () => {
   assert.doesNotMatch(component, /needle-label-radius/);
   assert.doesNotMatch(css, /nautilus-log-now-label/);
   assert.doesNotMatch(css, /--nautilus-log-now-label-bg:/);
-  assert.match(component, /:font-size \(str \(\* font-size 0\.82\)\)/);
+  assert.match(component, /:font-size \(str \(\/ 10 scale\)\)/);
   assert.match(css, /--nautilus-log-now:/);
   assert.match(css, /\.nautilus-log-center-now\s*\{[^}]*fill:\s*var\(--nautilus-log-now\);[^}]*font-variant-numeric:\s*tabular-nums;/s);
 });
@@ -1089,7 +1086,7 @@ test('Log shades elapsed time continuously behind slices and through the current
   assert.match(component, /nautilus-log-past-overlay/);
   assert.match(component, /log-core-call "pastTimelineSegments"/);
   assert.match(component, /create-arc-path/);
-  assert.match(component, /\[past-time-overlay-component[^\n]+\]\)\s*\(when [\s\S]+\[past-unplanned-overlay-component[^\n]+\]\)\s*\(when @show-done-atom\?/s);
+  assert.match(component, /\[past-time-overlay-component[^\n]+\]\)\s*\(when [\s\S]+\[past-unplanned-overlay-component timed-events[^\n]+\]\)/s);
   assert.match(css, /--nautilus-log-past-overlay:/);
   assert.match(css, /\.nautilus-log-past-overlay\s*\{[^}]*fill:\s*var\(--nautilus-log-past-overlay\);[^}]*pointer-events:\s*none;/s);
 });
@@ -1119,12 +1116,13 @@ test('Log clips paired morning and evening hours into independent spiral cells',
   assert.match(component, /event-slice-component[\s\S]*spiral-cell-inner-radius s settings inner-radius/);
 });
 
-test('Log gives normal fixed events one semantic yellow and marks real conflicts separately', () => {
+test('Log retains a semantic event material and marks real conflicts separately', () => {
   assert.doesNotMatch(component, /meeting-color-palette/);
   assert.match(component, /meeting-fill-color "var\(--nautilus-log-event-fill\)"/);
   assert.match(component, /log-core-call "overlappingFixedEventUids"/);
   assert.match(component, /nautilus-log-event-conflict/);
-  assert.match(component, /\(when @show-done-atom\? done-slice-components\)\s*all-slice-components[^\n]*\n\s*\[snail-blueprint-component/s);
+  assert.match(component, /hidden\? \(and \(:done event\) \(not show-done\?\)\)/);
+  assert.match(component, /:visibility \(when hidden\? "hidden"\) :aria-hidden hidden\?/);
   assert.match(css, /--nautilus-log-event-fill:\s*#[0-9a-f]{6};/i);
   assert.match(css, /\.nautilus-log-event-conflict \.nautilus-log-slice\s*\{[^}]*stroke:\s*var\(--nautilus-log-warning\);[^}]*stroke-dasharray:/s);
 });
@@ -1134,28 +1132,22 @@ test('Log feature-detects ResizeObserver with syntax supported by Roam SCI', () 
   assert.match(component, /\(\.-ResizeObserver js\/window\)/);
 });
 
-test('Log prefers horizontal label rails and keeps past leader lines legible', () => {
-  assert.match(component, /:layout "side-rails"/);
-  assert.match(component, /:maxVerticalOffset 158/);
-  assert.match(component, /:rowGap 22/);
-  assert.match(component, /legend-color \(update-opacity-str bg-color "1"\)/);
-  assert.match(component, /:anchorY anchor-y/);
-  assert.match(component, /:sortKey order-key/);
-  assert.match(component, /:connector-knee-x/);
-  assert.match(component, /:connector-rail-x/);
+test('current diagram labels have individually routed leaders without track-budget omission', () => {
+  assert.match(sceneCore, /function labelLayout/);
+  assert.match(sceneCore, /record\.label =/);
+  assert.match(sceneCore, /const shortX =/);
+  assert.doesNotMatch(sceneCore, /maxTracks|records\.slice/);
+  assert.match(component, /:d \(:connector label\)/);
+  assert.match(css, /\.nautilus-log-record-leader/);
   assert.doesNotMatch(css, /\.nautilus-log-event-slice-group\s*\{[^}]*opacity:/s);
-  assert.match(css, /\.nautilus-log-past--completed \.nautilus-log-link-line\s*\{[^}]*opacity:\s*0\.[4-9]/s);
 });
 
-test('flexible task labels and connectors use one semantic blue', () => {
-  assert.match(component, /def task-legend-color "var\(--nautilus-log-task\)"/);
+test('the chart uses indigo materials and neutral readable record titles', () => {
   assert.match(component, /def task-fill-color "var\(--nautilus-log-task-fill\)"/);
   assert.doesNotMatch(component, /todo-color-palette/);
-  assert.match(component, /\(and \(:todo event\) \(not done\) \(nil\? \(:bg-color event\)\)\) task-legend-color/);
-  assert.match(component, /:legend-color legend-color/);
-  assert.match(component, /:fill \(if-not done\? legend-color/);
-  assert.match(css, /--nautilus-log-task:\s*#0899c8/);
-  assert.match(css, /--nautilus-log-task-fill:\s*rgba\(8,\s*153,\s*200,/);
+  assert.match(css, /--nautilus-log-task:\s*#5d6ad3/);
+  assert.match(css, /--nautilus-log-task-fill:\s*#dfe5fb/);
+  assert.match(css, /\.nautilus-log-record-title\s*\{[^}]*fill:\s*var\(--nautilus-log-chart-ink\)/s);
   assert.match(css, /\.nautilus-log-legend-dot--task\s*\{\s*background:\s*var\(--nautilus-log-task\);\s*\}/);
 });
 
@@ -1163,8 +1155,8 @@ test('the current planned task is outlined and its label receives stronger empha
   assert.match(component, /log-core-call "isCurrentPlannedTask"/);
   assert.match(component, /nautilus-log-current-task/);
   assert.match(component, /:aria-current \(when current\? "true"\)/);
-  assert.match(css, /\.nautilus-log-current-task \.nautilus-log-slice\s*\{[^}]*stroke:\s*var\(--nautilus-log-task\);[^}]*stroke-width:\s*2px;/s);
-  assert.match(css, /\.nautilus-log-current-task \.nautilus-log-slice-group text\s*\{[^}]*font-weight:\s*600;/s);
+  assert.match(css, /\.nautilus-log-event-slice-group\.nautilus-log-current-task \.nautilus-log-slice\s*\{[^}]*stroke:\s*var\(--nautilus-log-task\);[^}]*stroke-width:\s*1\.6px;/s);
+  assert.match(css, /\.nautilus-log-current-task \.nautilus-log-record-title\s*\{[^}]*font-weight:\s*600;/s);
   assert.match(component, /:font-weight "500"/);
 });
 

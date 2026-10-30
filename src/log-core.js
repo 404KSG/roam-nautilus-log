@@ -7,6 +7,8 @@
  * validating settings before they become render arguments.
  */
 
+const { chartScene, chartPresentationFrame } = require('./chart-scene');
+
 const START_HOURS = Object.freeze(Array.from({ length: 24 }, (_value, hour) => hour));
 const END_HOURS = Object.freeze(Array.from({ length: 24 }, (_value, index) => index + 1));
 const DURATION_TOKEN_RE = /(?:^|\s)(\d+h(?:\d+(?:min|m))?|\d+(?:min|m))(?=\s|$)/i;
@@ -937,6 +939,9 @@ const UI_COPY = {
       schedule: 'Schedule',
       untimedCompleted: 'Completed · No time recorded',
       details: 'Details',
+      indexTrack: 'Not time-scaled',
+      expandDetails: 'Full text',
+      collapseDetails: 'Collapse text',
       detailIdle: 'Hover or focus a segment to inspect it.',
       item: 'item',
       items: 'items',
@@ -947,6 +952,14 @@ const UI_COPY = {
       completed: 'Completed',
       noCompletionTime: 'No completion time recorded',
       inheritedCompletion: 'Completion status from reference',
+      inheritedDone: 'Inherited completion',
+      noTime: 'No time recorded',
+      notTimeScaled: 'Segment angle is not a clock time',
+      unplaced: 'Unscheduled',
+      estimated: 'Estimate',
+      outsideWindow: 'Outside chart hours',
+      actual: 'Actual',
+      completionEstimate: 'Estimated interval',
       available: 'Available slot',
       availableNow: 'Available now',
       locateTask: 'Click to locate · ⇧ Sidebar',
@@ -1021,6 +1034,9 @@ const UI_COPY = {
       schedule: '时间安排',
       untimedCompleted: '已完成 · 未记录时间',
       details: '详情',
+      indexTrack: '分段不按时间定位',
+      expandDetails: '全文',
+      collapseDetails: '收起全文',
       detailIdle: '悬停或聚焦一个切片以查看详情。',
       item: '项',
       items: '项',
@@ -1031,6 +1047,14 @@ const UI_COPY = {
       completed: '已完成',
       noCompletionTime: '未记录完成时间',
       inheritedCompletion: '完成状态来自引用',
+      inheritedDone: '来源完成',
+      noTime: '未记时',
+      notTimeScaled: '分段角度不表示钟点',
+      unplaced: '未排入',
+      estimated: '估计',
+      outsideWindow: '显示时段外',
+      actual: '实际记录',
+      completionEstimate: '估计区间',
       available: '可用空档',
       availableNow: '当前可用',
       locateTask: '单击定位 · ⇧ 侧边栏',
@@ -1577,38 +1601,6 @@ function isCompactChartWidth(width, threshold = 520) {
 }
 
 /**
- * A presentation-only frame for the Nautilus spiral. Its small interface
- * deliberately excludes events, titles, clock state, and pointer state so
- * routine scheduling updates cannot alter the SVG's flow geometry.
- */
-function chartPresentationFrame({ containerWidth } = {}) {
-  const width = asNumber(containerWidth);
-  const usableWidth = Number.isFinite(width) && width > 0 ? width : 0;
-  const narrow = usableWidth > 0 && usableWidth <= 360;
-  const compact = usableWidth > 360 && usableWidth <= 520;
-  // A smaller viewBox keeps the spiral and its center text legible in the
-  // narrow right sidebar instead of shrinking the desktop canvas to a sliver.
-  const viewBox = narrow ? { width: 330, height: 300 }
-    : compact ? { width: 560, height: 400 }
-      : { width: 720, height: 420 };
-  return {
-    viewBox,
-    center: { x: viewBox.width / 2, y: viewBox.height / 2 },
-    density: narrow ? 'narrow' : compact ? 'compact' : 'regular',
-    inspector: 'rail',
-    compactHeader: usableWidth <= 640,
-    labels: {
-      visible: !(narrow || compact),
-      maxWidth: 170,
-      minX: 24,
-      maxX: 696,
-      minY: 42,
-      maxY: 378,
-    },
-  };
-}
-
-/**
  * Return the real SVG center and a radial point just outside an interval.
  * Keeping both points in the same `{ x, y }` coordinate contract prevents the
  * screen-space direction test from silently treating the center as (0, 0).
@@ -1784,5 +1776,6 @@ module.exports = {
   childOrderMoves,
   isCompactChartWidth,
   chartPresentationFrame,
+  chartScene,
   chartLabelMetrics,
 };

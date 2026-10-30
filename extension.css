@@ -289,7 +289,7 @@
 }
 
 .nautilus-log-legend-dot--urgent { background: #ea0f0f; }
-.nautilus-log-legend-dot--event { background: #fcc200; }
+.nautilus-log-legend-dot--event { background: var(--nautilus-log-event); }
 .nautilus-log-legend-dot--task { background: var(--nautilus-log-task); }
 
 .nautilus-log-svg {
@@ -588,7 +588,7 @@
 }
 
 .nautilus-log-hour-label {
-  font-size: 11px;
+  font-size: var(--nautilus-hour-size, 11px);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1052,28 +1052,29 @@
  * Chart-owned materials intentionally stop at this workspace so Desk and the
  * optional execution layer retain their native/independent visual contracts. */
 .nautilus-log-container {
-  --nautilus-log-chart-paper: #fafaf9;
-  --nautilus-log-chart-panel: #f6f6f5;
-  --nautilus-log-chart-ink: #24262b;
-  --nautilus-log-chart-muted: #61656d;
+  --nautilus-log-chart-paper: #fff;
+  --nautilus-log-chart-panel: #f7f8fa;
+  --nautilus-log-chart-ink: #222326;
+  --nautilus-log-chart-muted: #666b78;
   --nautilus-log-text-main: var(--nautilus-log-chart-ink);
   --nautilus-log-text-sub: var(--nautilus-log-chart-muted);
   --nautilus-log-control-icon: var(--nautilus-log-chart-muted);
-  --nautilus-log-chart-hairline: #e2e3e5;
-  --nautilus-log-chart-focus: #3e6d84;
-  /* Quiet chrome must not make completed content look disabled. */
-  --nautilus-log-task: #3e6d84;
+  --nautilus-log-chart-hairline: #e3e5eb;
+  --nautilus-log-chart-focus: #5d6ad3;
+  --nautilus-log-chart-leader: #aeb6ca;
+  --nautilus-log-index-fill: rgba(93, 106, 211, 0.045);
+  --nautilus-log-task: #5d6ad3;
   --nautilus-log-positive: #277a59;
-  --nautilus-log-completed: #5e636b;
-  --nautilus-log-completed-fill: #e4e8ea;
-  --nautilus-log-past-event-fill: #efe8dc;
-  --nautilus-log-unplanned-fill: #f0f1f2;
-  --nautilus-log-now: #b24747;
-  --nautilus-log-spiral: #737983;
-  --nautilus-log-slot-stroke: #3e6d84;
-  --nautilus-log-task-fill: #dce8ee;
-  --nautilus-log-event: #7a5e2e;
-  --nautilus-log-event-fill: #f2e9d4;
+  --nautilus-log-completed: #5d6ad3;
+  --nautilus-log-completed-fill: #b7c3f2;
+  --nautilus-log-past-event-fill: #edf0f4;
+  --nautilus-log-unplanned-fill: #f7f8fa;
+  --nautilus-log-now: #c84c59;
+  --nautilus-log-spiral: #8992a4;
+  --nautilus-log-slot-stroke: #5d6ad3;
+  --nautilus-log-task-fill: #dfe5fb;
+  --nautilus-log-event: #566783;
+  --nautilus-log-event-fill: #e9eef5;
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
@@ -1102,11 +1103,8 @@
 
 .nautilus-log-chart-stage {
   min-width: 0;
-  aspect-ratio: 12 / 7;
+  /* The inline ratio comes from the full source-sized frame, never the clock. */
 }
-/* These ratios match chartPresentationFrame's compact viewBoxes. */
-.nautilus-log-chart-stage--compact { aspect-ratio: 7 / 5; }
-.nautilus-log-chart-stage--narrow { aspect-ratio: 11 / 10; }
 
 .nautilus-log-svg {
   display: block;
@@ -1119,128 +1117,89 @@
 .nautilus-log-detail-region {
   box-sizing: border-box;
   width: min(400px, calc(100% - 32px));
-  margin-inline: auto;
+  margin: 8px auto 0;
   min-width: 0;
-  height: 32px;
-  padding: 3px 8px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  white-space: nowrap;
-  scrollbar-width: thin;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  background: transparent;
+  height: 64px;
   color: var(--nautilus-log-chart-ink);
-  outline: none;
 }
-
 .nautilus-log-detail-region[data-nautilus-detail="idle"] { visibility: hidden; }
-.nautilus-log-detail-region[data-nautilus-detail="active"] {
-  border-color: var(--nautilus-log-chart-hairline);
+.nautilus-log-detail-region.is-expanded { height: auto; min-height: 64px; }
+.nautilus-log-detail-content {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr) auto;
+  column-gap: 7px;
+  row-gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--nautilus-log-chart-hairline);
+  border-radius: 5px;
   background: var(--nautilus-log-chart-panel);
 }
-.nautilus-log-detail-region::-webkit-scrollbar { height: 3px; }
-
-.nautilus-log-detail-region:focus-visible {
-  outline: 2px solid var(--nautilus-log-chart-focus);
-  outline-offset: -2px;
-}
-
-.nautilus-log-detail-content {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: max-content;
-  min-width: 100%;
-  height: 18px;
-}
-.nautilus-log-detail-content > * { flex: none; }
-
-@container (max-width: 520px) {
-  .nautilus-log-detail-region { height: 40px; padding-block: 2px; }
-  .nautilus-log-detail-content {
-    display: grid;
-    grid-template-columns: 6px max-content;
-    grid-template-rows: 16px 14px;
-    column-gap: 7px;
-    row-gap: 0;
-    height: 30px;
-  }
-  .nautilus-log-detail-tone { grid-column: 1; grid-row: 1; }
-  .nautilus-log-detail-title { grid-column: 2; grid-row: 1; }
-  .nautilus-log-detail-meta { grid-column: 2; grid-row: 2; }
-}
-
-.nautilus-log-detail-tone {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--nautilus-log-text-sub);
-}
+.nautilus-log-detail-tone { width: 6px; height: 6px; border-radius: 50%; margin-top: 5px; background: var(--nautilus-log-chart-muted); }
 .nautilus-log-detail-tone--task { background: var(--nautilus-log-task); }
 .nautilus-log-detail-tone--event { background: var(--nautilus-log-event); }
 .nautilus-log-detail-tone--available { background: var(--nautilus-log-positive); }
 .nautilus-log-detail-tone--completed { background: var(--nautilus-log-completed); }
-
-.nautilus-log-detail-title { font-size: 12px; line-height: 16px; font-weight: 500; }
-.nautilus-log-detail-meta { color: var(--nautilus-log-chart-muted); font-size: 11px; line-height: 14px; }
-
-/* A small named history list, not a new Details panel. Reserve two rows so
-   completing a task or receiving CLOCK evidence cannot move following content. */
-.nautilus-log-untimed-history {
-  box-sizing: border-box;
-  width: min(400px, calc(100% - 32px));
+.nautilus-log-detail-title {
   min-width: 0;
-  height: 64px;
-  margin: 4px auto 0;
-  color: var(--nautilus-log-chart-ink);
-}
-.nautilus-log-untimed-history[data-history-visible="false"] { visibility: hidden; }
-.nautilus-log-untimed-heading {
-  height: 16px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--nautilus-log-chart-muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 16px;
   font-weight: 500;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
-.nautilus-log-untimed-count { font-variant-numeric: tabular-nums; }
-.nautilus-log-untimed-list {
-  box-sizing: border-box;
-  height: 48px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-gutter: stable;
-}
-.nautilus-log-untimed-list::-webkit-scrollbar { width: 4px; }
-.nautilus-log-untimed-list::-webkit-scrollbar-thumb { background: var(--nautilus-log-chart-muted); border-radius: 3px; }
-.nautilus-log-untimed-item {
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 24px;
+.nautilus-log-detail-meta {
+  grid-column: 2 / -1;
   min-width: 0;
-  margin: 0;
-  padding: 0 3px;
+  color: var(--nautilus-log-chart-muted);
+  font-size: 11px;
+  line-height: 14px;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
+}
+.nautilus-log-detail-region.is-expanded .nautilus-log-detail-title,
+.nautilus-log-detail-region.is-expanded .nautilus-log-detail-meta { display: block; overflow: visible; -webkit-line-clamp: unset; }
+.nautilus-log-container .nautilus-log-detail-expand {
+  align-self: start;
+  border: 0;
+  padding: 0 2px;
+  min-height: 24px;
   border-radius: 3px;
+  color: var(--nautilus-log-chart-focus);
+  background: transparent;
+  font: inherit;
+  font-size: 10px;
+  line-height: 16px;
   cursor: pointer;
-  font-size: 12px;
-  line-height: 24px;
 }
-.nautilus-log-untimed-item:hover { background: var(--nautilus-log-hover); }
-.nautilus-log-untimed-item:focus-visible {
-  outline: 2px solid var(--nautilus-log-chart-focus);
-  outline-offset: -2px;
+.nautilus-log-detail-expand:focus-visible { outline: 2px solid var(--nautilus-log-chart-focus); outline-offset: 1px; }
+.nautilus-log-record-title { fill: var(--nautilus-log-chart-ink); font-size: 13px; font-weight: 500; }
+.nautilus-log-current-task .nautilus-log-record-title { fill: var(--nautilus-log-chart-focus); font-weight: 600; }
+.nautilus-log-record-leader { stroke: var(--nautilus-log-chart-leader); stroke-width: 0.75px; }
+.nautilus-log-index-record .nautilus-log-record-leader { stroke: var(--nautilus-log-chart-focus); stroke-opacity: 0.5; stroke-dasharray: 2 3; }
+.nautilus-log-index-segment { fill: var(--nautilus-log-index-fill); stroke: var(--nautilus-log-chart-focus); stroke-width: 1px; }
+.nautilus-log-index-record--unplaced .nautilus-log-index-segment { fill: transparent; stroke-dasharray: 3 2; }
+.nautilus-log-event-slice-group .nautilus-log-slice { stroke: var(--nautilus-log-chart-paper); stroke-width: 0.8px; }
+.nautilus-log-event-slice-group.nautilus-log-current-task .nautilus-log-slice { stroke: var(--nautilus-log-task); stroke-width: 1.6px; }
+.nautilus-log-event-slice-group.nautilus-log-event-conflict .nautilus-log-slice { stroke: var(--nautilus-log-warning); stroke-width: 1.5px; stroke-dasharray: 4 2; }
+.nautilus-log-event-slice-group--interactive:hover .nautilus-log-record-title,
+.nautilus-log-event-slice-group--interactive:focus .nautilus-log-record-title { fill: var(--nautilus-log-chart-focus); font-weight: 600; }
+.nautilus-log-event-slice-group--interactive:hover .nautilus-log-record-leader,
+.nautilus-log-event-slice-group--interactive:focus .nautilus-log-record-leader { stroke: var(--nautilus-log-chart-focus); stroke-opacity: 1; stroke-width: 1.2px; stroke-dasharray: none; }
+.nautilus-log-event-slice-group--interactive:hover .nautilus-log-index-segment,
+.nautilus-log-event-slice-group--interactive:focus .nautilus-log-index-segment { stroke-width: 2px; }
+.nautilus-log-index-caption { fill: var(--nautilus-log-chart-muted); font-size: 10px; }
+@container (max-width: 520px) {
+  .nautilus-log-workspace .nautilus-log-record-leader { stroke-opacity: 0.28; }
+  .nautilus-log-workspace .nautilus-log-event-slice-group:hover .nautilus-log-record-leader,
+  .nautilus-log-workspace .nautilus-log-event-slice-group:focus .nautilus-log-record-leader { stroke-opacity: 1; }
 }
-.nautilus-log-untimed-check { flex: none; color: var(--nautilus-log-completed); }
-.nautilus-log-untimed-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nautilus-log-now-needle-line { filter: none; stroke: var(--nautilus-log-now); stroke-width: 1.5px; }
 
 .nautilus-log-status-rail {
@@ -1276,8 +1235,6 @@
 .nautilus-log-status-slot:has(details[open]) > details { height: auto; overflow: visible; }
 .nautilus-log-status-slot:empty::after { content: ""; display: block; height: 32px; }
 
-.nautilus-log-compact-list { box-sizing: border-box; height: 168px; max-height: none; overflow: auto; scrollbar-gutter: stable; }
-
 @container (max-width: 520px) {
   .nautilus-log-status-rail { grid-template-columns: minmax(0, 1fr); height: 64px; min-height: 64px; }
   .nautilus-log-status-rail:has(details[open]) { height: auto; }
@@ -1286,24 +1243,26 @@
 .bp3-dark .nautilus-log-container,
 .roam-app.rm-dark-theme .nautilus-log-container,
 .dark .nautilus-log-container {
-  --nautilus-log-chart-paper: #1c1d20;
-  --nautilus-log-chart-panel: #242528;
-  --nautilus-log-chart-ink: #ecedee;
-  --nautilus-log-chart-muted: #c2c6cc;
-  --nautilus-log-chart-hairline: #34363b;
-  --nautilus-log-chart-focus: #a9c9d8;
-  --nautilus-log-task: #a9c9d8;
+  --nautilus-log-chart-paper: #101113;
+  --nautilus-log-chart-panel: #181a20;
+  --nautilus-log-chart-ink: #ebecef;
+  --nautilus-log-chart-muted: #b8bdca;
+  --nautilus-log-chart-hairline: #303440;
+  --nautilus-log-chart-focus: #9aa4f2;
+  --nautilus-log-chart-leader: #65718a;
+  --nautilus-log-index-fill: rgba(154, 164, 242, 0.045);
+  --nautilus-log-task: #9aa4f2;
   --nautilus-log-positive: #77d7ab;
-  --nautilus-log-completed: #c2c6cc;
-  --nautilus-log-completed-fill: #2a3338;
-  --nautilus-log-past-event-fill: #3a3428;
-  --nautilus-log-unplanned-fill: #26272a;
-  --nautilus-log-now: #ff9b8c;
-  --nautilus-log-spiral: #c5cbd1;
-  --nautilus-log-slot-stroke: #a9c9d8;
-  --nautilus-log-task-fill: #2b414c;
-  --nautilus-log-event: #e0c48a;
-  --nautilus-log-event-fill: #453a25;
+  --nautilus-log-completed: #9aa4f2;
+  --nautilus-log-completed-fill: #404c85;
+  --nautilus-log-past-event-fill: #252b39;
+  --nautilus-log-unplanned-fill: #1a1d25;
+  --nautilus-log-now: #ec8790;
+  --nautilus-log-spiral: #a7b2c7;
+  --nautilus-log-slot-stroke: #9aa4f2;
+  --nautilus-log-task-fill: #293456;
+  --nautilus-log-event: #a3b4cf;
+  --nautilus-log-event-fill: #2d3545;
 }
 
 /* Shared topbar / optional execution layer ---------------------------------

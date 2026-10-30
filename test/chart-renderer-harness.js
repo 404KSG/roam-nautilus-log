@@ -69,6 +69,10 @@ const routineChildren = routineTitles.map((title, order) => {
 const scenario = parameters.get('scenario') || 'mixed';
 const context = parameters.get('context') || 'main';
 const windowMode = parameters.get('window') || 'normal';
+const realisticUnknown = ['核对项目周报与月报需求', '整理自动化排版方案与测试记录', '复核本周设计任务的交付清单', '完成新版本的界面验收', '修订英文文档并核对表达', '整理参考资料和实施笔记', '检查日历同步与任务引用', '完成数据导出与归档核验'];
+const realisticChildren = routineChildren.slice(0, 14).map((row, i) => ({ ...row,
+  'block/string': (i % 3 === 0 ? '{{[[DONE]]}} ' : '') + row['block/string'],
+})).concat(realisticUnknown.map((title, i) => ({ 'block/uid': `unknown-${i}`, 'block/string': `{{[[DONE]]}} ${title} 30m`, 'block/order': 14 + i, 'block/refs': [] })));
 const longTitles = {
   'long-latin': `Project brief ${'complete readable detail '.repeat(100)}END_LATIN`,
   'long-cjk': `项目简报${'完整内容必须可以阅读与滚动。'.repeat(160)}结束标记`,
@@ -77,6 +81,18 @@ const longTitles = {
 let children = clone({
   mixed: mixedChildren,
   routine: routineChildren,
+  realistic: realisticChildren,
+  stress: realisticChildren.slice(0, 18).concat([
+    { 'block/uid': 'overflow-0', 'block/string': '{{[[TODO]]}} 核对跨团队项目的全部需求并逐项检查设计内容与交付材料确保每个任务都能正常阅读 900m', 'block/order': 18, 'block/refs': [] },
+    { 'block/uid': 'overflow-1', 'block/string': '{{[[TODO]]}} Overflow beta 900m', 'block/order': 19, 'block/refs': [] },
+    { 'block/uid': 'overflow-2', 'block/string': '{{[[TODO]]}} Overflow gamma 900m', 'block/order': 20, 'block/refs': [] },
+    { 'block/uid': 'overflow-3', 'block/string': `{{[[TODO]]}} ${'Long title '.repeat(260)}END_LONG 900m`, 'block/order': 21, 'block/refs': [] },
+  ]),
+  outside: [
+    { 'block/uid': 'outside-event', 'block/string': '01:00-01:30 Earlier appointment', 'block/order': 0, 'block/refs': [] },
+    { 'block/uid': 'outside-done', 'block/string': '{{[[DONE]]}} Earlier completion 20m d2', 'block/order': 1, 'block/refs': [] },
+    { 'block/uid': 'midnight-done', 'block/string': '{{[[DONE]]}} Midnight completion 20m d0', 'block/order': 2, 'block/refs': [] },
+  ],
   sparse: mixedChildren.slice(0, 2),
   dense: denseChildren,
   cjk: [
@@ -177,8 +193,15 @@ function dateToPageTitle(date) {
   return `${dateValue.toLocaleString('en-US', { month: 'long' })} ${day}${suffix}, ${dateValue.getFullYear()}`;
 }
 
+let lastScene = null;
 window.nautilusLogCore = {
   ...logCore,
+  chartScene(input) {
+    const result = logCore.chartScene(input);
+    lastScene = result;
+    trace('chart-scene', { sourceUids: input.items.map(item => item.uid), kinds: result.records.map(record => record.kind) });
+    return result;
+  },
   timelineDayState(input) {
     const result = logCore.timelineDayState(input);
     trace('timeline-day-state', { input: clone(input), result: clone(result) });
@@ -196,7 +219,7 @@ window.roamAlphaAPI = {
 };
 window.nautilusLogExtensionData = {
   running: true,
-  settings: { language: 'en', ...(windowMode === 'overnight' ? { 'workday-start': 21, 'workday-end': 2 } : {}) },
+  settings: { language: parameters.get('lang') || 'en', ...(windowMode === 'overnight' ? { 'workday-start': 21, 'workday-end': 2 } : {}) },
   shouldSuppressRenderContext: () => false,
   isRightSidebarRenderContext,
   createRendererPlanSession,
@@ -229,6 +252,12 @@ window.__chartHarness = {
     shell.style.width = `${outer + Number(width) - inner}px`;
     trace('resize', { requested: Number(width), outerBefore: outer, innerBefore: inner });
   },
+  scene: () => clone(lastScene),
+  sourceRows: () => clone(children),
+  expectedSourceUids: () => children.filter(row => {
+    const item = resolveTaskInstance({ uid: row['block/uid'], localString: row['block/string'], references: row['block/refs'], fallbackMinutes: 15 });
+    return item.kind !== 'structure' && item.title && item.title !== '(untitled)';
+  }).map(row => row['block/uid']),
   longTitles: () => clone(longTitles),
   routineTitles: () => [...routineTitles],
   updateChild(uid, string) {
@@ -286,7 +315,7 @@ window.__chartHarness = {
       shellClientWidth: shell?.clientWidth || 0,
       observedShell: rect(document.querySelector('.nautilus-log-shell')),
       observedClientWidth: document.querySelector('.nautilus-log-shell')?.clientWidth || 0,
-      presentation: logCore.chartPresentationFrame({ containerWidth: document.querySelector('.nautilus-log-shell')?.clientWidth || 0 }),
+      presentation: lastScene?.frame || null,
       statusText: document.querySelector('.nautilus-log-status-rail')?.textContent || '',
       overflowCount: document.querySelectorAll('.nautilus-log-overflow-panel').length,
       svg: rect(svg),
@@ -301,10 +330,20 @@ window.__chartHarness = {
       compactList: rect(compactList),
       viewBox: svg?.getAttribute('viewBox') || null,
       workspaceClass: workspace?.className || '',
-      externalLabelCount: document.querySelectorAll('.nautilus-log-slice-group').length,
+      externalLabelCount: document.querySelectorAll('.nautilus-log-record-label').length,
+      records: [...document.querySelectorAll('svg.nautilus-log-svg [data-task-uid]')].map(el => ({
+        uid: el.dataset.taskUid, kind: el.dataset.chartKind, timeClaim: el.dataset.timeClaim,
+        title: el.dataset.recordTitle, label: el.querySelector('.nautilus-log-record-title')?.textContent,
+        aria: el.getAttribute('aria-label'), visible: getComputedStyle(el).visibility === 'visible',
+        marks: el.querySelectorAll('.nautilus-log-slice,.nautilus-log-index-segment').length,
+        indexPath: el.querySelector('.nautilus-log-index-segment')?.getAttribute('d') || null,
+        leader: el.querySelector('.nautilus-log-record-leader')?.getAttribute('d'),
+      })),
+      sourceUids: lastScene?.records.map(r => r.uid) || [],
       documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       svgCount: document.querySelectorAll('svg.nautilus-log-svg').length,
-      sliceCount: document.querySelectorAll('.nautilus-log-event-slice-group').length,
+      sliceCount: document.querySelectorAll('.nautilus-log-event-slice-group[data-chart-kind="timed"]').length,
+      recordCount: document.querySelectorAll('svg.nautilus-log-svg [data-task-uid]').length,
       detailText: detail?.textContent || null,
       bodyTooltipCount: document.body.querySelectorAll('[role="tooltip"]').length,
       writes: traces.filter((entry) => entry.kind === 'write').length,
@@ -314,7 +353,7 @@ window.__chartHarness = {
       context,
       scheduleOpen: document.querySelector('.nautilus-log-compact-details')?.open ?? null,
       activeClockIntervals: [...fakeIntervals.values()].filter((entry) => entry.delay === 60000).length,
-      labels: [...document.querySelectorAll('.nautilus-log-slice-group text')].map((label) => rect(label)),
+      labels: [...document.querySelectorAll('.nautilus-log-record-title')].filter(label => getComputedStyle(label).visibility === 'visible').map(label => rect(label)),
       detailIdleLayout: { eyebrow: rect(eyebrow), idle: rect(idle) },
       overview: overview ? { rect: rect(overview), content: rect(overviewContent),
         chevron: rect(overview.querySelector('.nautilus-log-overview-chevron')),

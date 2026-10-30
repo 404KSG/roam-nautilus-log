@@ -56,10 +56,12 @@ small flame marks whether the current minute is consuming Available or Event tim
 ## Visual language
 
 - Red: urgent task
-- Muted gold: fixed event
-- Blue-gray: flexible task
-- Red needle: current time
-- Neutral completed slices and warm elapsed-event slices: recorded past, with readable labels
+- Cool neutral fill: fixed event
+- Light indigo fill: planned flexible task
+- Stronger indigo fill: timed completion, with readable labels
+- Indigo outline outside the hour grid: a record without a position on this time axis
+- Dashed outline: pending work that has not been scheduled
+- Red needle: current time, confined to the time spiral
 - Pale, solid past fill: elapsed time without a recorded interval
 
 Past gaps are factual schedule data, not a judgment that time was wasted.
@@ -67,7 +69,7 @@ Past gaps are factual schedule data, not a judgment that time was wasted.
 ## Chart controls
 
 - **Desk (four-square icon):** expand or collapse unfinished-task cards below the chart, then click a card to focus and edit it.
-- **Eye:** show or hide completed items on the chart, including its untimed history list.
+- **Eye:** show or hide completed diagram records and their connected labels.
   It defaults to showing them and does not affect Desk, which only shows unfinished tasks.
 - **Calendar:** after Google Calendar reports Connected in Settings, import
   timed busy events and dated Google Tasks for this chart's Daily Note.
@@ -82,27 +84,30 @@ Past gaps are factual schedule data, not a judgment that time was wasted.
   saved Desk preference is unchanged. Expand restores the spiral and, when Desk
   was selected, its cards.
 
-Hover or keyboard-focus a task, event, or future blank slot to show its title, exact range
-and duration in a slim, centered context rail below the chart. It is at most 400px wide,
-with at least 16px on each side in narrower containers. It is 32px tall, or 40px in narrow
-containers and sidebars. When idle, it has no visible box, heading or instruction text;
-the small reserved slot prevents hover from shifting content. Long text stays complete
-and can be scrolled horizontally with the wheel or keyboard. Short chart labels use
-actual font measurements rather than character-count estimates. The rail never follows
-the pointer or covers the chart. Click a flexible
-task slice or its compact Schedule row to scroll to that block without changing the graph;
-Shift-click or Shift-Enter opens it in the right sidebar. If a collapsed target is not
-rendered, Nautilus Log falls back to Roam's official block navigation. Narrow charts omit
-external overview labels and keep the Schedule section folded by default in the sidebar.
+Every titled source task or event has a visible diagram mark and a connected label.
+Ordinary titles wrap inside the SVG rather than disappearing when a label budget is full.
+At narrow widths the labels use two connected columns within the same diagram. The frame
+uses the full source titles and local container width: source edits may change its height,
+but clock updates, completion visibility and hover do not resize it.
 
-Completed tasks without a usable time interval remain in the named **Completed · No time
-recorded** list below the chart. Two rows are visible at a time; scroll to read more.
-Hover or focus a row to read its full title and completion context in the rail. Click or
-Enter locates the same block; Shift opens it in the sidebar. Inherited completion is
-identified as coming from a reference, not as proof of completion on this date. These
-items never claim a time slot, re-enter the pending queue, or add capacity demand. The
-list uses a small fixed slot so completing a task or receiving CLOCK evidence does not
-move the chart or following content. It has no empty box or placeholder when inactive.
+Completed tasks without a usable interval, pending tasks that do not fit, and fixed ranges
+outside the displayed hours remain in a separate **Not time-scaled** track around the
+spiral. Each mark has its own label. Its angle and area are not clock time or duration;
+a single record never becomes a full progress ring. Slots are reserved from the stable
+source collection, so END does not redistribute existing untimed records. The original
+time intervals, pending scheduler, capacity and Actual calculations remain separate.
+Inherited completion is identified as coming from its reference; source time is not
+borrowed for today's wrapper. There is no task inventory or scrolling Schedule below the plot.
+
+Hover or keyboard-focus a record or available slot to read its context in a centered
+area capped at 400px, inset by 16px in narrower workspaces. It wraps rather than scrolling.
+The closed area reserves 64px and is invisible when idle. **Full text** explicitly expands
+long content in the page, without a nested scrollbar, and pins it while you read. Collapse
+it to resume the compact view. Changed or removed records invalidate the pinned text.
+The area does not follow the pointer or cover the plot. Click or Enter on a flexible task's
+mark or label locates its original block; Shift opens it in the sidebar. These actions
+never rewrite the task or its time. If the block is folded, navigation uses Roam's official
+block API.
 
 ## Desk task view
 
@@ -448,7 +453,7 @@ Recent or the forgotten-timer warning.
 - Without Actual, Planned history requires an explicit completion anchor such as
   `d18:21`.
 - Without an Actual end or completion anchor, Nautilus Log does not invent a history
-  interval. The item remains visible by name in **Completed · No time recorded**.
+  interval. The item remains visible as its own labeled, non-time-scaled diagram mark.
 - For an overnight chart window, next-day CLOCK time remains part of the owning
   Daily Note until that window ends.
 
