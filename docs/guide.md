@@ -59,25 +59,31 @@ small flame marks whether the current minute is consuming Available or Event tim
 
 ## Visual language
 
-- Blue: flexible tasks; the current task has a stronger fill and outline
+- Vivid indigo-blue: flexible tasks; the current task has a stronger fill and outline
 - Gold: fixed events; elapsed events fade to pale gold
 - Solid gray: completion history with a usable time interval
 - Pale hatching: elapsed time without a recorded interval, not future availability
 - Red needle: current time and the starting boundary for pending work
 - Red task color: an explicit urgency override
 
-Small marks beside titles retain records without a position on this clock: a dot for
-completion without a local time, a hollow diamond for unscheduled work, and a square for
-a known range outside the displayed hours. They have no time angle or duration area.
-Hover or focus the title for its explanation; clicking a task still locates its block.
+Completed tasks without a usable local time connect to one **Completed / No timestamp**
+node above the time spiral, within the same diagram. Their lines express completion status,
+not a clock position. Each original title remains visible; the node is not a count-only
+replacement. Unscheduled work keeps its hollow diamond, and a known range outside the
+chart hours keeps its square. Neither connects to the completion node.
+
+Hover or focus a title to emphasize its whole connection and its slice or status node.
+Completed titles retain their neutral color without a deletion line; other titles stay
+readable. Clicking a task still locates its block.
 
 Past gaps are factual schedule data, not a judgment that time was wasted.
 
 ## Chart controls
 
 - **Desk (four-square icon):** expand or collapse unfinished-task cards below the chart, then click a card to focus and edit it.
-- **Eye:** show or hide completed diagram records and their connected labels.
-  It defaults to showing them and does not affect Desk, which only shows unfinished tasks.
+- **Eye:** show or hide completed diagram records, their connections and the untimed
+  completion node. It defaults to showing them and does not affect Desk, which only
+  shows unfinished tasks.
 - **Calendar:** after Google Calendar reports Connected in Settings, import
   timed busy events and dated Google Tasks for this chart's Daily Note.
   Option/Alt-click force-refreshes only the Google-managed strings.
@@ -96,20 +102,22 @@ Ordinary titles wrap inside the SVG rather than disappearing when a label budget
 Labels stay on both sides of the spiral, including in narrow containers. Narrow views keep
 major hour labels and a compact center date so the task titles remain readable. Timed
 labels never switch to the opposite side to fill space. The frame budgets for all source
-titles, fixed source ranges and local width; source edits may change its height, but the
-clock, completion visibility and hover do not resize it.
+titles, source status/ranges and local width. Editing a task's status or adding local CLOCK
+evidence may change its region and page flow; clock-only updates, completion visibility
+and hover do not resize the frame.
 
-The spiral is the only time geometry. Records without a usable position remain in the
-same side columns, grouped in source order at the column ends. Their small marks connect
-only to their own titles, never to a guessed clock position. There is no outer track,
-below-chart task inventory, scrolling Schedule or repeated overflow counter. The header
+The spiral is the only time geometry. Untimed completion links occupy a separate upper
+connection band, so they never cross the time grid or connect to the date. Other
+non-scheduled endpoints remain separate from that node. There is no outer track,
+below-chart inventory, scrolling Schedule or repeated overflow counter. The header
 still reports remaining capacity and overload.
 
 CLOCK is optional. A local completion stamp such as `d14:30` and an estimate are enough
 for a completed historical slice. Without a usable stamp, the completed title remains
 visible without inventing a slice. Inherited completion is identified as coming from its
-reference; source time is not borrowed for today's wrapper. Scheduling, capacity and
-Actual calculations are unchanged.
+reference; source time is not borrowed for today's wrapper. Missing completion times
+are not inferred from last-edit metadata. Scheduling, capacity and Actual calculations
+are unchanged.
 
 Hover or keyboard-focus a record or available slot to read its context in a centered
 tip that fits its content, capped at 280px and inset by 16px in narrower workspaces.

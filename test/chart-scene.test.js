@@ -28,10 +28,11 @@ test('clock-driven scheduling and END cannot change frame or non-time source sid
   assert.ok(a.records.slice(0, 14).every(r => r.kind === 'timed'));
 });
 
-test('one non-time record is a small title mark, never a progress ring', () => {
+test('one untimed completion connects to a status node, never a progress ring', () => {
   const s = scene({ items: [items[20]] });
   assert.ok(s.records[0].marker.size <= 6);
   assert.equal(s.records[0].marker.shape, 'dot');
+  assert.equal(s.records[0].connectionTarget, s.completionNode.key);
   assert.equal(s.records[0].anchor, undefined);
   assert.equal(s.records[0].indexPath, undefined);
   assert.equal(s.records[0].event['time-claim'], 'none');
@@ -81,7 +82,8 @@ for (const width of [280, 320, 520, 640, 960]) {
       assert.ok(r.marker.size <= 6);
       assert.ok(!r.anchor && !r.slot && !r.indexPath);
       assert.ok(r.marker.x >= 3 && r.marker.x <= s.frame.viewBox.width - 3);
-      assert.doesNotMatch(r.label.connector, /[AC]/, 'non-time leaders are short straight label connections');
+      assert.equal(r.connectionTarget, 'untimed-completed');
+      assert.ok(r.label.y + r.label.height <= s.frame.timedTop - 12);
     }
     for (let i = 0; i < s.records.length; i += 1) for (let j = i + 1; j < s.records.length; j += 1) {
       const a = s.records[i].label, b = s.records[j].label;

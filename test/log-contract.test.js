@@ -1156,12 +1156,15 @@ test('current diagram labels have individually routed leaders without track-budg
   assert.doesNotMatch(css, /\.nautilus-log-event-slice-group\s*\{[^}]*opacity:/s);
 });
 
-test('the chart restores blue tasks, gold events and neutral completion history', () => {
+test('the chart uses vivid indigo and gold without crossing out completed titles', () => {
   assert.match(component, /def task-fill-color "var\(--nautilus-log-task-fill\)"/);
   assert.doesNotMatch(component, /todo-color-palette/);
-  assert.match(css, /--nautilus-log-task:\s*#246e99/);
-  assert.match(css, /--nautilus-log-event:\s*#8a6318/);
-  assert.match(css, /--nautilus-log-completed-fill:\s*#d1d6dd/);
+  assert.match(css, /--nautilus-log-task:\s*#4f46c6/);
+  assert.match(css, /--nautilus-log-event:\s*#8a5a00/);
+  assert.match(css, /--nautilus-log-completed-fill:\s*#c7d0e1/);
+  assert.match(css, /\.nautilus-log-record--done \.nautilus-log-record-title[^}]*text-decoration:\s*none/s);
+  assert.match(component, /data-connection-target/);
+  assert.match(component, /data-status-node "untimed-completed"/);
   assert.match(css, /\.nautilus-log-record-title\s*\{[^}]*fill:\s*var\(--nautilus-log-task\)/s);
   assert.match(css, /\.nautilus-log-legend-dot--task\s*\{\s*background:\s*var\(--nautilus-log-task\);\s*\}/);
 });

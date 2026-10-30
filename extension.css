@@ -503,10 +503,9 @@
   cursor: pointer;
 }
 
-.nautilus-log-event-slice-group--interactive:hover .nautilus-log-slice,
-.nautilus-log-event-slice-group--interactive:focus .nautilus-log-slice {
+.nautilus-log-event-slice-group[data-connection-active="true"] .nautilus-log-slice {
   filter: none;
-  stroke: var(--nautilus-log-chart-focus);
+  stroke: var(--nautilus-log-record-accent);
   stroke-width: 2px;
 }
 
@@ -1056,28 +1055,31 @@
   --nautilus-log-text-sub: var(--nautilus-log-chart-muted);
   --nautilus-log-control-icon: var(--nautilus-log-chart-muted);
   --nautilus-log-chart-hairline: #e3e5eb;
-  --nautilus-log-chart-focus: #356fa8;
-  --nautilus-log-chart-leader: #a0aab8;
-  --nautilus-log-task: #246e99;
+  --nautilus-log-chart-focus: #5e6ad2;
+  --nautilus-log-chart-leader: #7785a3;
+  --nautilus-log-task: #4f46c6;
   --nautilus-log-positive: #277a59;
-  --nautilus-log-completed: #68717f;
-  --nautilus-log-completed-fill: #d1d6dd;
-  --nautilus-log-past-event-fill: #ece3ca;
-  --nautilus-log-unplanned-fill: #f7f8fa;
-  --nautilus-log-unplanned-stripe: #c7ced8;
-  --nautilus-log-now: #d2444b;
+  --nautilus-log-completed: #5d677b;
+  --nautilus-log-completed-fill: #c7d0e1;
+  --nautilus-log-completion-node-bg: #f5f5fc;
+  --nautilus-log-completion-node-border: #cbd0e2;
+  --nautilus-log-record-hover: rgba(94, 106, 210, 0.07);
+  --nautilus-log-past-event-fill: #eecf88;
+  --nautilus-log-unplanned-fill: #f8f9fc;
+  --nautilus-log-unplanned-stripe: #d9dfea;
+  --nautilus-log-now: #df4357;
   --nautilus-log-spiral: #8992a4;
-  --nautilus-log-slot-stroke: #356fa8;
-  --nautilus-log-task-fill: #bddbe9;
-  --nautilus-log-event: #8a6318;
-  --nautilus-log-event-fill: #f4df9f;
+  --nautilus-log-slot-stroke: #5e6ad2;
+  --nautilus-log-task-fill: #c5cafa;
+  --nautilus-log-event: #8a5a00;
+  --nautilus-log-event-fill: #f6d56a;
   --nautilus-log-task-future-fill: var(--nautilus-log-task-fill);
-  --nautilus-log-task-current-fill: #8ac4df;
+  --nautilus-log-task-current-fill: #9faff5;
   --nautilus-log-task-completed-fill: var(--nautilus-log-completed-fill);
-  --nautilus-log-task-elapsed-fill: #dbe0e5;
+  --nautilus-log-task-elapsed-fill: #d6dded;
   --nautilus-log-event-future-fill: var(--nautilus-log-event-fill);
-  --nautilus-log-event-current-fill: #edc865;
-  --nautilus-log-event-completed-fill: #ddd8cd;
+  --nautilus-log-event-current-fill: #efb936;
+  --nautilus-log-event-completed-fill: #d2d5df;
   --nautilus-log-event-elapsed-fill: var(--nautilus-log-past-event-fill);
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
@@ -1177,12 +1179,20 @@
 }
 .nautilus-log-detail-region.is-expanded .nautilus-log-detail-expand { grid-row: 1; align-self: start; }
 .nautilus-log-detail-expand:focus-visible { outline: 2px solid var(--nautilus-log-chart-focus); outline-offset: 1px; }
+.nautilus-log-event-slice-group { --nautilus-log-record-accent: var(--nautilus-log-task); }
+.nautilus-log-record--event { --nautilus-log-record-accent: var(--nautilus-log-event); }
+.nautilus-log-record--done { --nautilus-log-record-accent: var(--nautilus-log-completed); }
 .nautilus-log-record-title { fill: var(--nautilus-log-task); font-weight: 500; }
 .nautilus-log-record--event .nautilus-log-record-title { fill: var(--nautilus-log-event); }
-.nautilus-log-record--done .nautilus-log-record-title { fill: var(--nautilus-log-completed); text-decoration: line-through; }
+.nautilus-log-record--done .nautilus-log-record-title { fill: var(--nautilus-log-completed); text-decoration: none; }
 .nautilus-log-current-task .nautilus-log-record-title { fill: var(--nautilus-log-task); font-weight: 600; }
-.nautilus-log-record-leader { stroke: var(--nautilus-log-chart-leader); stroke-width: 0.75px; }
-.nautilus-log-loose-record .nautilus-log-record-leader { stroke: var(--nautilus-log-completed); }
+.nautilus-log-record-leader { stroke: var(--nautilus-log-chart-leader); stroke-width: 1.05px; stroke-opacity: 0.9; }
+.nautilus-log-record--done .nautilus-log-record-leader { stroke: var(--nautilus-log-completed); }
+.nautilus-log-loose-record--unplaced .nautilus-log-record-leader { stroke-dasharray: 3 2; }
+.nautilus-log-completion-node-box { fill: var(--nautilus-log-completion-node-bg); stroke: var(--nautilus-log-completion-node-border); stroke-width: 1px; }
+.nautilus-log-completion-node-title { fill: var(--nautilus-log-completed); }
+.nautilus-log-completion-node-subtitle { fill: var(--nautilus-log-chart-muted); }
+.nautilus-log-completion-node.is-active .nautilus-log-completion-node-box { stroke: var(--nautilus-log-completed); stroke-width: 1.5px; }
 .nautilus-log-record-marker { fill: none; stroke: var(--nautilus-log-completed); stroke-width: 1px; stroke-linecap: round; stroke-linejoin: round; }
 .nautilus-log-record-marker[data-marker-shape="dot"] { fill: var(--nautilus-log-completed); }
 .nautilus-log-event-slice-group .nautilus-log-slice { stroke: var(--nautilus-log-chart-paper); stroke-width: 0.8px; }
@@ -1190,18 +1200,11 @@
 .nautilus-log-event-slice-group.nautilus-log-current-event .nautilus-log-slice { stroke: var(--nautilus-log-event); stroke-width: 2px; }
 .nautilus-log-current-event .nautilus-log-record-title { fill: var(--nautilus-log-event); font-weight: 600; }
 .nautilus-log-event-slice-group.nautilus-log-event-conflict .nautilus-log-slice { stroke: var(--nautilus-log-warning); stroke-width: 1.5px; stroke-dasharray: 4 2; }
-.nautilus-log-event-slice-group--interactive:hover .nautilus-log-record-title,
-.nautilus-log-event-slice-group--interactive:focus .nautilus-log-record-title { fill: var(--nautilus-log-chart-focus); }
-.nautilus-log-loose-record .nautilus-log-record-title { font-weight: 500; }
-.nautilus-log-event-slice-group--interactive:hover .nautilus-log-record-leader,
-.nautilus-log-event-slice-group--interactive:focus .nautilus-log-record-leader { stroke: var(--nautilus-log-chart-focus); stroke-opacity: 1; stroke-width: 1.2px; stroke-dasharray: none; }
-.nautilus-log-event-slice-group--interactive:hover .nautilus-log-record-marker,
-.nautilus-log-event-slice-group--interactive:focus .nautilus-log-record-marker { stroke-width: 1.5px; }
-@container (max-width: 520px) {
-  .nautilus-log-workspace .nautilus-log-record-leader { stroke-opacity: 0.7; }
-  .nautilus-log-workspace .nautilus-log-event-slice-group:hover .nautilus-log-record-leader,
-  .nautilus-log-workspace .nautilus-log-event-slice-group:focus .nautilus-log-record-leader { stroke-opacity: 1; }
-}
+.nautilus-log-event-slice-group[data-connection-active="true"] .nautilus-log-record-title { fill: var(--nautilus-log-record-accent); font-weight: 600; }
+.nautilus-log-workspace[data-active-connection="true"] .nautilus-log-record-leader { stroke-opacity: 0.5; }
+.nautilus-log-workspace .nautilus-log-event-slice-group[data-connection-active="true"] .nautilus-log-record-leader { stroke: var(--nautilus-log-record-accent); stroke-opacity: 1; stroke-width: 1.6px; }
+.nautilus-log-event-slice-group[data-connection-active="true"] .nautilus-log-record-marker { stroke: var(--nautilus-log-record-accent); stroke-width: 1.5px; }
+.nautilus-log-event-slice-group[data-connection-active="true"] .nautilus-log-label-hit { fill: var(--nautilus-log-record-hover); rx: 3px; }
 .nautilus-log-now-needle-line { filter: none; stroke: var(--nautilus-log-now); stroke-width: 1.5px; }
 
 .nautilus-log-status-rail {
@@ -1242,25 +1245,28 @@
   --nautilus-log-chart-ink: #ebecef;
   --nautilus-log-chart-muted: #b8bdca;
   --nautilus-log-chart-hairline: #303440;
-  --nautilus-log-chart-focus: #8fc4ec;
-  --nautilus-log-chart-leader: #8390a3;
-  --nautilus-log-task: #8fc4ec;
+  --nautilus-log-chart-focus: #b5b4ff;
+  --nautilus-log-chart-leader: #8c99b5;
+  --nautilus-log-task: #b5b4ff;
   --nautilus-log-positive: #77d7ab;
-  --nautilus-log-completed: #b1b8c3;
-  --nautilus-log-completed-fill: #444c59;
-  --nautilus-log-past-event-fill: #46402e;
+  --nautilus-log-completed: #b9c3d6;
+  --nautilus-log-completed-fill: #48546c;
+  --nautilus-log-completion-node-bg: #202331;
+  --nautilus-log-completion-node-border: #464e64;
+  --nautilus-log-record-hover: rgba(181, 180, 255, 0.1);
+  --nautilus-log-past-event-fill: #655228;
   --nautilus-log-unplanned-fill: #1c1f25;
-  --nautilus-log-unplanned-stripe: #414854;
+  --nautilus-log-unplanned-stripe: #3a4354;
   --nautilus-log-now: #ed8790;
   --nautilus-log-spiral: #a7b2c7;
-  --nautilus-log-slot-stroke: #8fc4ec;
-  --nautilus-log-task-fill: #28485f;
-  --nautilus-log-event: #e8c57c;
-  --nautilus-log-event-fill: #675321;
-  --nautilus-log-task-current-fill: #356b91;
-  --nautilus-log-task-elapsed-fill: #323e4d;
-  --nautilus-log-event-current-fill: #947329;
-  --nautilus-log-event-completed-fill: #4e493f;
+  --nautilus-log-slot-stroke: #b5b4ff;
+  --nautilus-log-task-fill: #454b88;
+  --nautilus-log-event: #f0cc79;
+  --nautilus-log-event-fill: #846625;
+  --nautilus-log-task-current-fill: #636ec0;
+  --nautilus-log-task-elapsed-fill: #394662;
+  --nautilus-log-event-current-fill: #ad822d;
+  --nautilus-log-event-completed-fill: #56566a;
 }
 
 /* Shared topbar / optional execution layer ---------------------------------

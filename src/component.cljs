@@ -1288,7 +1288,23 @@
        ^{:key index}
        [:tspan {:x (:textX label) :y (+ (:textY label) (* index (:lineHeight label)))} line])]]])
 
-(defn chart-scene-record [record index frame settings timeline-state show-done? hover-info-state copy conflicts]
+(defn completion-node-component [node shown? active? copy]
+  (when node
+    (let [x (:x node) y (:y node) width (:width node) height (:height node)
+          middle (+ x (/ width 2))
+          title (get-in copy [:panels :untimedNodeTitle])
+          subtitle (get-in copy [:panels :untimedNodeSubtitle])]
+      [:g {:class (str "nautilus-log-completion-node" (when active? " is-active"))
+           :data-status-node "untimed-completed" :role "img"
+           :aria-label (str title " · " subtitle) :aria-hidden (not shown?)
+           :visibility (when-not shown? "hidden") :pointer-events "none"}
+       [:rect {:class "nautilus-log-completion-node-box" :x x :y y :width width :height height :rx 6}]
+       [:text {:class "nautilus-log-completion-node-title" :x middle :y (+ y 17)
+               :text-anchor "middle" :style {:font-size "11px"} :font-weight "600"} title]
+       [:text {:class "nautilus-log-completion-node-subtitle" :x middle :y (+ y 31)
+               :text-anchor "middle" :style {:font-size "9.5px"}} subtitle]])))
+
+(defn chart-scene-record [record index frame settings timeline-state show-done? hover-info-state copy conflicts active-uid]
   (let [event (:event record)
         timed? (= "timed" (:kind record))
         uid (:uid event)
@@ -1314,6 +1330,8 @@
                             (when (:current-event? params) " nautilus-log-current-event"))
                 :data-task-uid uid :data-record-title (:description event)
                 :data-chart-kind (:kind record) :data-time-claim (:time-claim event)
+                :data-connection-target (:connectionTarget record)
+                :data-connection-active (when (= uid active-uid) "true")
                 :data-past-status (:past-status params)
                 :data-visual-phase (:visual-phase params)
                 :data-category (if (:meeting event) "event" "task")
@@ -1371,10 +1389,14 @@
         _detail-reconciled (reconcile-detail-state! hover-info-state
                                                    (set (map (juxt :uid event-detail-signature) all-events))
                                                    (set (map :key available-slots)))
+        active-uid (:uid (active-detail hover-info-state))
+        completion-node (:completionNode scene)
+        node-active? (and active-uid (some #(= active-uid %) (:uids completion-node)))
         conflicts (set (log-core-call "overlappingFixedEventUids" {:events timed-events}))
         now-visible? (:showNow timeline-state)
         center-now-label (when now-visible? (minutes->time timeline-minute))]
     [:div {:class (str "nautilus-log-workspace nautilus-log-workspace--" (:inspector frame))
+           :data-active-connection (when active-uid "true")
            :on-mouse-leave #(clear-detail-on-workspace-exit! hover-info-state %)
            :on-mouse-out #(clear-detail-on-workspace-exit! hover-info-state %)
            :on-blur #(clear-detail-on-workspace-exit! hover-info-state %)}
@@ -1386,9 +1408,10 @@
        [:g {:transform transform}
         (when elapsed-page? [past-time-overlay-component snail-inner-radius center settings timeline-minute])
         (when elapsed-page? [past-unplanned-overlay-component timed-events snail-inner-radius center settings timeline-minute scale])]
+       [completion-node-component completion-node @show-done-atom? node-active? copy]
        (for [[index record] (map-indexed vector records)]
          ^{:key (:uid record)}
-         [chart-scene-record record index frame settings timeline-state @show-done-atom? hover-info-state copy conflicts])
+         [chart-scene-record record index frame settings timeline-state @show-done-atom? hover-info-state copy conflicts active-uid])
        [:g {:transform transform}
         [snail-blueprint-component snail-template-color snail-inner-radius center settings elapsed-page? timeline-minute (:hourStep frame) scale]
         (when (:showAvailableSlots timeline-state)

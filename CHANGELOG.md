@@ -4,6 +4,15 @@
 
 ### Added
 
+- Untimed completions now connect to one explicit Completed / No timestamp node
+  inside the diagram. The prior four-unit stubs are replaced by traceable links;
+  known timed history still connects to its own slices. Eye visibility hides the
+  node and its links together, without changing the frame.
+- A more vivid indigo/gold palette, readable neutral completion text without
+  strike-through, and whole-connection focus replace the disconnected, faded
+  presentation. Other text is not dimmed. No completion time is inferred from
+  last edits or borrowed from a reference source.
+
 - The minute clock now resynchronizes on foreground focus, visible-page return,
   page show and CLOCK updates, including a same-minute next-day resume. The new
   integration gate verifies scheduler intervals and actual SVG path movement;
@@ -17,10 +26,10 @@
   can still explicitly expand in page flow, without internal scrollbars or overlays.
 
 - Every titled source task or event retains a diagram mark and connected label.
-  Untimed completion, unscheduled work and out-of-window ranges use small marks beside
-  their titles in the existing side columns, never invented time positions or a footer
-  inventory. Timed labels stay on the same side as their slices. Desk retains its
-  independent unfinished-task projection.
+  Untimed completion uses the named status node; unscheduled work and out-of-window
+  ranges retain separate diamond/square endpoints. None receives an invented time
+  position or a footer inventory. Timed labels stay on their slice's side. Desk
+  retains its independent unfinished-task projection.
 - Source-sized frames replace the rejected finite label budget. Ordinary titles wrap,
   including CJK, and narrow views retain connected diagram labels instead of a scrolling
   Schedule. Frame height follows the full source titles and local width, not the clock,

@@ -138,6 +138,15 @@ def coverage(page, hidden=False):
             assert record['marker']['size'] <= 6 and record['label']['side'] == record['label']['sourceSide']
         else:
             assert record['label']['side'] == ('left' if record['anchor']['x'] < scene['frame']['center']['x'] else 'right'), record
+        if record['kind'] == 'untimed-completed':
+            assert record['connectionTarget'] == 'untimed-completed'
+            assert record['label']['y'] + record['label']['height'] <= scene['frame']['timedTop'] - 12
+        else:
+            assert record.get('connectionTarget') != 'untimed-completed'
+    untimed = [r['uid'] for r in scene['records'] if r['kind'] == 'untimed-completed']
+    assert bool(scene['completionNode']) == bool(untimed)
+    if untimed: assert set(scene['completionNode']['uids']) == set(untimed)
+    assert page.locator('.nautilus-log-completion-node').count() == (1 if untimed else 0)
     assert not page.locator('.nautilus-log-untimed-history,.nautilus-log-untimed-item,.nautilus-log-compact-details,.nautilus-log-index-segment,.nautilus-log-index-caption,.nautilus-log-overflow-panel').count()
     scrollers = page.locator('.nautilus-log-content').evaluate('''root=>[...root.querySelectorAll('*')].filter(e=>{
       const s=getComputedStyle(e);return (['auto','scroll'].includes(s.overflowX)&&e.scrollWidth>e.clientWidth+1)
@@ -179,6 +188,12 @@ def geometry_audit(page):
       const nodes=[...document.querySelectorAll('.nautilus-log-event-slice-group')].filter(e=>getComputedStyle(e).visibility==='visible');
       const boxes=nodes.map(e=>({uid:e.dataset.taskUid,r:e.querySelector('.nautilus-log-record-title').getBoundingClientRect()}));
       const overlaps=[],crossings=[],markerCollisions=[];
+      const statusNode=document.querySelector('.nautilus-log-completion-node');
+      if(statusNode&&getComputedStyle(statusNode).visibility==='visible'){
+        const a=statusNode.querySelector('rect').getBoundingClientRect();
+        for(const box of boxes){const b=box.r;if(Math.min(a.right,b.right)-Math.max(a.left,b.left)>.5&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>.5)overlaps.push(['completion-node',box.uid]);}
+        for(const text of statusNode.querySelectorAll('text')){const b=text.getBoundingClientRect();if(b.left<a.left+3||b.right>a.right-3||b.top<a.top||b.bottom>a.bottom)overlaps.push(['node-caption-clipped',text.textContent]);}
+      }
       for(const node of nodes){const marker=node.querySelector('.nautilus-log-record-marker');if(!marker)continue;const a=marker.getBoundingClientRect();
         for(const box of boxes){const b=box.r;if(Math.min(a.right,b.right)-Math.max(a.left,b.left)>.5&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>.5)markerCollisions.push([node.dataset.taskUid,box.uid]);}
       }
@@ -227,10 +242,13 @@ def contrast(page):
         marker:paint('.nautilus-log-record-marker','stroke'),
         focus:paint('.nautilus-log-available-slot:focus .nautilus-log-available-slot-hit','stroke'),
         now:paint('.nautilus-log-now-needle-line','stroke'),
-        control:paint('.nautilus-log-toggle-btn svg','stroke')};
+        control:paint('.nautilus-log-toggle-btn svg','stroke'),
+        nodeBackground:paint('.nautilus-log-completion-node-box','fill'),
+        nodeTitle:paint('.nautilus-log-completion-node-title','fill'),
+        nodeSubtitle:paint('.nautilus-log-completion-node-subtitle','fill')};
     }''')
-    scores = {k: ratio(v, paints['background']) for k, v in paints.items() if k != 'background'}
-    assert min(scores[k] for k in ('task', 'event', 'completed')) >= 4.5, scores
+    scores = {k: ratio(v, paints['nodeBackground'] if k in ('nodeTitle', 'nodeSubtitle') else paints['background']) for k, v in paints.items() if k not in ('background', 'nodeBackground')}
+    assert min(scores[k] for k in ('task', 'event', 'completed', 'nodeTitle', 'nodeSubtitle')) >= 4.5, scores
     assert min(scores[k] for k in ('marker', 'focus', 'now', 'control')) >= 3, scores
     return {'paint': paints, 'ratios': scores}
 
@@ -255,6 +273,56 @@ def pattern_contract(page):
     assert len(ids) == len(set(ids)) == 3, ids
     set_clock(page, '2026-10-29T08:01:00')
     return {'stableDuringTick': True, 'distinctMountedPatternIds': ids}
+
+
+def completion_connections_contract(page):
+    reports = {}
+    for context, width, language in [('main', 720, 'en'), ('sidebar', 280, 'en'), ('sidebar', 280, 'zh'), ('embed', 520, 'en')]:
+        before = load(page, 'connections', context, width, window='flow', lang=language)
+        before_node = page.evaluate('()=>__chartHarness.scene().completionNode')
+        for iso in ['2026-10-29T08:01:00', '2026-10-29T13:30:00', '2026-10-29T20:30:00']:
+            current = set_clock(page, iso); coverage(page); geometry_audit(page)
+            assert_rect_equal(before, current, 'completion node and source-reserved frame')
+            assert page.evaluate('()=>__chartHarness.scene().completionNode') == before_node
+        proof = page.evaluate('''()=>{
+          const scene=__chartHarness.scene(),node=scene.completionNode;
+          return scene.records.filter(r=>r.kind==='untimed-completed').map(r=>{
+            const g=document.querySelector(`[data-task-uid="${r.uid}"]`),p=g.querySelector('.nautilus-log-record-leader'),length=p.getTotalLength(),end=p.getPointAtLength(length);
+            const ys=Array.from({length:65},(_,i)=>p.getPointAtLength(length*i/64).y);
+            return {uid:r.uid,target:g.dataset.connectionTarget,pixels:length*Math.abs(p.getScreenCTM().a),end:{x:end.x,y:end.y},side:r.label.side,maxY:Math.max(...ys),node,band:scene.frame.timedTop};
+          });
+        }''')
+        assert len(proof) == 7
+        for row in proof:
+            assert row['target'] == 'untimed-completed' and row['pixels'] >= 16, row
+            edge = row['node']['x'] if row['side'] == 'left' else row['node']['x'] + row['node']['width']
+            assert abs(row['end']['x'] - edge) < .01 and row['maxY'] <= row['band'] - 12, row
+        uid = 'connection-done-2'
+        title = page.locator(f'[data-task-uid="{uid}"] .nautilus-log-record-title')
+        idle_fill = title.evaluate('e=>getComputedStyle(e).fill')
+        page.locator(f'[data-task-uid="{uid}"] .nautilus-log-record-label').hover()
+        page.wait_for_function('document.querySelector(".nautilus-log-completion-node").classList.contains("is-active")')
+        assert title.evaluate('e=>getComputedStyle(e).fill') == idle_fill
+        assert title.evaluate('e=>getComputedStyle(e).textDecorationLine') == 'none'
+        assert page.locator('[data-task-uid][data-connection-active="true"]').count() == 1
+        assert page.locator('[data-task-uid="connection-event-0"] .nautilus-log-record-title').evaluate('e=>getComputedStyle(e).opacity') == '1'
+        assert_rect_equal(before, state(page), 'node hover cannot resize the frame')
+        page.screenshot(path=str(OUT/'screenshots'/f'connections-{context}-{width}-{language}.png'), full_page=True)
+        hide = 'Hide completed on chart' if language == 'en' else '在海螺中隐藏已完成'
+        show = 'Show completed on chart' if language == 'en' else '在海螺中显示已完成'
+        page.get_by_role('button', name=hide, exact=True).click(); settle_renderer(page)
+        assert not page.locator('.nautilus-log-completion-node').is_visible()
+        assert not page.locator('[data-chart-kind="untimed-completed"]').first.is_visible()
+        assert_rect_equal(before, state(page), 'eye visibility preserves the source frame')
+        page.get_by_role('button', name=show, exact=True).click(); settle_renderer(page)
+        assert page.locator('.nautilus-log-completion-node').is_visible()
+        page.evaluate('''()=>{for(let i=0;i<7;i++)__chartHarness.updateChild(`connection-done-${i}`,`{{[[DONE]]}} Recorded task ${i} 30m d8`)}''')
+        page.wait_for_function('__chartHarness.scene().completionNode===null')
+        assert not page.locator('.nautilus-log-completion-node').count()
+        assert not page.locator('[data-connection-target="untimed-completed"]').count()
+        coverage(page)
+        reports[f'{context}-{width}-{language}'] = {'connections': proof, 'eyeHidesNodeAndEdges': True, 'lastStampRemovesNode': True}
+    return reports
 
 
 def native_minute_contract(page):
@@ -425,11 +493,21 @@ def lifecycle(page):
     page.get_by_role('button', name='Show completed on chart', exact=True).click(); settle_renderer(page)
     page.evaluate('()=>__chartHarness.updateChild("pending-next","{{[[DONE]]}} Draft next chapter 30m")')
     page.wait_for_function('document.querySelector("[data-task-uid=pending-next]").dataset.chartKind === "untimed-completed"')
-    settle_renderer(page); done = coverage(page); assert_rect_equal(start, done, 'TODO to untimed DONE')
+    settle_renderer(page); done = coverage(page)
+    # These are explicit source-data edits, not clock ticks. Moving a title
+    # into/out of the approved status-node region may change page flow.
+    assert done['sourceUids'] == start['sourceUids']
+    assert 'pending-next' in page.evaluate('()=>__chartHarness.scene().completionNode.uids')
+    after_tick = set_clock(page, '2026-10-29T08:02:00')
+    assert_rect_equal(done, after_tick, 'minute-only update after source status edit')
     select(page, 'untimed-reference')
     page.evaluate('()=>__chartHarness.setClockEntries([{taskUid:"untimed-reference",start:"2026-10-29T07:00:00",end:"2026-10-29T07:10:00",running:false}])')
     page.wait_for_function('document.querySelector("[data-task-uid=untimed-reference]").dataset.timeClaim === "actual"')
-    settle_renderer(page); actual = coverage(page); assert_rect_equal(start, actual, 'local CLOCK evidence')
+    settle_renderer(page); actual = coverage(page)
+    assert actual['sourceUids'] == start['sourceUids']
+    assert 'untimed-reference' not in page.evaluate('()=>__chartHarness.scene().completionNode.uids')
+    after_tick = set_clock(page, '2026-10-29T08:03:00')
+    assert_rect_equal(actual, after_tick, 'minute-only update after local CLOCK edit')
     assert '07:00–07:10' in page.locator('[data-task-uid="untimed-reference"]').get_attribute('aria-label')
     assert page.locator('.nautilus-log-detail-region').get_attribute('data-nautilus-detail') == 'idle'
     select(page, 'untimed-local')
@@ -454,7 +532,7 @@ def lifecycle(page):
     assert page.locator('.nautilus-log-detail-region').get_attribute('data-nautilus-detail') == 'idle'
     page.evaluate('()=>__chartHarness.unmount()'); settle_renderer(page)
     assert state(page)['activeClockIntervals'] == 0 and not page.locator('svg.nautilus-log-svg').count()
-    return {'before': compact_record(start), 'hidden': compact_record(hidden), 'done': compact_record(done), 'actual': compact_record(actual), 'navigation': True, 'foldAndUnload': True}
+    return {'before': compact_record(start), 'hidden': compact_record(hidden), 'done': compact_record(done), 'actual': compact_record(actual), 'navigation': True, 'foldAndUnload': True, 'explicitSourceEditsMayReflow': True}
 
 
 def full_text(page, context, width):
@@ -576,6 +654,7 @@ def main():
             assert '未记录完成时刻' in page.locator('.nautilus-log-detail-region').text_content()
             assert page.get_by_role('button', name='全文', exact=True).count() == 1
             report['chinese'] = compact_record(state(page))
+            report['completionConnections'] = completion_connections_contract(page)
             report['afternoonFlow'] = afternoon_flow_contract(page)
             report['materialsAndTips'] = material_and_tip_contract(page)
             report['timeflowRecovery'] = timeflow_recovery(page)

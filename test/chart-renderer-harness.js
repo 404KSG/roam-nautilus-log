@@ -65,6 +65,7 @@ function clone(value) {
 const syntheticStrings = new Map([
   ['source-todo', '{{[[TODO]]}} Draft the project brief 30m'],
   ['source-done', '{{[[DONE]]}} Completed synthetic task 20m d8'],
+  ['connection-source', '{{[[DONE]]}} 完成参考资料对照 30m d8'],
 ]);
 const mixedChildren = [
   { 'block/uid': 'event-standup', 'block/string': '09:00-09:30 Stand-up', 'block/order': 0, 'block/refs': [] },
@@ -103,6 +104,24 @@ let children = clone({
   mixed: mixedChildren,
   routine: routineChildren,
   realistic: realisticChildren,
+  connections: [
+    ['connection-event-0','06:00-08:00 Exercise'], ['connection-event-1','08:00-08:30 Breakfast'],
+    ['connection-event-2','08:30-09:00 Travel'], ['connection-event-3','11:30-12:00 Return'],
+    ['connection-event-4','12:00-12:30 Lunch'], ['connection-event-5','12:30-13:00 Break'],
+    ['connection-event-6','13:00-13:30 Travel'], ['connection-event-7','17:00-17:30 Return'],
+    ['connection-event-8','18:45-19:00 Review'], ['connection-event-9','19:15-20:00 Wind down'],
+    ['connection-timed-0','{{[[DONE]]}} Editorial work 45m d11:10'],
+    ['connection-timed-1','{{[[DONE]]}} Flashcards 30m d16:30'],
+    ['connection-timed-2','{{[[DONE]]}} Read 25m d17'],
+    ['connection-done-0','{{[[DONE]]}} 核对项目资料与交付清单 30m'],
+    ['connection-done-1','{{[[DONE]]}} 整理产品结构和设计说明 30m'],
+    ['connection-done-2','((connection-source))'],
+    ['connection-done-3','{{[[DONE]]}} 检查界面细节与任务状态 30m'],
+    ['connection-done-4','{{[[DONE]]}} 完成文档示例与文字修订 30m'],
+    ['connection-done-5','{{[[DONE]]}} 复核数据导出与归档记录 30m'],
+    ['connection-done-6','{{[[DONE]]}} 对照测试结果和发布清单 30m'],
+    ['connection-pending-0','{{[[TODO]]}} Write 45m'], ['connection-pending-1','{{[[TODO]]}} Ship 45m'],
+  ].map(([uid,string],order)=>({'block/uid':uid,'block/string':string,'block/order':order,'block/refs':[]})),
   flow: [
     ['flow-event-0','06:00-07:35 Morning event'], ['flow-event-1','08:00-08:30 Breakfast'],
     ['flow-event-2','08:30-09:00 Travel'], ['flow-event-3','11:30-12:00 Return'],
@@ -226,10 +245,11 @@ function dateToPageTitle(date) {
   return `${dateValue.toLocaleString('en-US', { month: 'long' })} ${day}${suffix}, ${dateValue.getFullYear()}`;
 }
 
-let lastScene = null;
+let lastScene = null, lastSceneInput = null;
 window.nautilusLogCore = {
   ...logCore,
   chartScene(input) {
+    lastSceneInput = clone(input);
     const result = logCore.chartScene(input);
     lastScene = result;
     trace('chart-scene', { sourceUids: input.items.map(item => item.uid), kinds: result.records.map(record => record.kind) });
@@ -292,6 +312,7 @@ window.__chartHarness = {
   },
   activeClockListeners: () => clockListenerRecords.map(row => ({ target: row.target === window ? 'window' : 'document', type: row.type })),
   scene: () => clone(lastScene),
+  sceneInput: () => clone(lastSceneInput),
   sourceRows: () => clone(children),
   expectedSourceUids: () => children.filter(row => {
     const item = resolveTaskInstance({ uid: row['block/uid'], localString: row['block/string'], references: row['block/refs'], fallbackMinutes: 15 });

@@ -2,8 +2,10 @@
 
 ## Current decision
 
-Revised October 30, 2026. The outer non-temporal track, footer inventory and scrolling
-context rail were rejected. Their earlier acceptance does not govern this version.
+Revised October 30, 2026. The user explicitly chose option A: connect untimed completions
+to a named completed-status node, without guessing a time. Last-edit estimates were not
+authorized. This supersedes the disconnected four-unit stubs, outer track, footer inventory
+and experimental date-root wiring.
 
 Nautilus is a changing time budget, not a status dashboard. The original unequal-radius
 spiral is its only time geometry. The red needle is now; fixed events stay anchored;
@@ -17,21 +19,24 @@ or claiming an official Linear palette. No downloaded artwork or font is shipped
 
 ## Presentation seam
 
-`src/chart-scene.js` owns `chartScene`, `chartPresentationFrame`, `labelLayout`,
-`chartRecordAppearance` and `chartTipLayout`, re-exported through `src/log-core.js`.
-This seam has no graph, scheduler, clock, storage or mutation authority.
+`src/chart-scene.js` exports `chartScene`, `chartPresentationFrame`,
+`chartRecordAppearance` and `chartTipLayout` through `src/log-core.js`; `labelLayout`
+is an internal helper. This seam has no graph, scheduler, clock, storage or mutation authority.
 
-- Source titles, source-defined ranges and local width determine the frame. Fixed ranges
-  reserve their own sides; flexible pending titles are budgeted for movement on either
-  side. The changing scheduled subset cannot resize the frame.
+- Source titles, source status/ranges and local width determine three regions: an upper
+  untimed-completion connection band, the real time spiral, and separate non-scheduled
+  endpoints. Fixed ranges reserve their sides; pending titles reserve both timed and
+  potentially unplaced space. The changing scheduled subset cannot resize the frame.
 - Timed records alone have a spiral anchor. Their labels stay on the same side, ordered
   by angular position. Same-side curves share their horizontal routing coordinates;
   no label flips across the clock or follows an outer circular route to fill space.
-- Untimed completion, unplaced work and out-of-window ranges have no angle or spiral
-  anchor. A six-unit dot, diamond or square sits beside the title's outer edge, joined
-  only by a short line. Their sides follow the full source order, not clock positions.
-- These records share the existing side columns, grouped at the column ends with a
-  gap from timed labels. There is no below-chart ledger or second track.
+- Untimed completions have no angle or spiral anchor. All their original titles remain
+  in the upper left/right columns and connect to the boundaries of one named node:
+  Completed / No timestamp, or 已完成 / 未记时. Its labels contain no count, date or hour.
+  Each curve has a visible source-to-node path rather than a four-unit title stub.
+- Only `untimed-completed` records enter this node. Known off-hours ranges and unplaced
+  work retain separate square/diamond endpoints. No relation points to a guessed slice,
+  date bead or clock axis. There is no below-chart inventory or outer track.
 - Ordinary titles wrap in full. Balanced wrapping avoids unnecessary Latin word splits
   and isolated CJK final characters. Pathological titles retain their complete accessible
   text and explicit full-text action.
@@ -42,9 +47,10 @@ This seam has no graph, scheduler, clock, storage or mutation authority.
   that the SCI/Reagent rendering path fails to emit. The current-time needle retains
   a readable, non-scaling stroke.
 
-Source edits and explicit text expansion may change page flow. Clock updates, hover and
-completion visibility may not. The eye control hides records without re-running layout
-for a reduced source collection.
+Explicit source edits, including status changes or new local CLOCK evidence, may move a
+record between regions and change page flow. Clock-only updates, hover and completion
+visibility may not. Eye visibility hides the completion node and its records together,
+without re-running layout for a reduced collection. No untimed completions means no node.
 
 ## Truthful record projection
 
@@ -67,15 +73,17 @@ counter is removed. Parsing warnings retain their separate disclosure.
 
 ## Materials and wall-clock recovery
 
-Tasks use blue, fixed events gold, and timed completion history solid gray. Elapsed fixed
-events fade to pale gold. A light diagonal pattern identifies unrecorded past time;
+Tasks use vivid indigo-blue, fixed events saturated gold, and timed completion history
+solid neutral gray-blue. Elapsed fixed events use a quieter gold. A light diagonal pattern identifies unrecorded past time;
 this is not a claim that the time was wasted. Patterns have mounted-instance IDs so
 multiple charts cannot share an unintended SVG definition. Only actual past gaps receive
 hatching, beneath recorded slices.
 
 Current tasks and events use stronger fills and outlines. Explicit urgency overrides
-ordinary slice materials. The header legend keeps three category dots. Small title
-marks explain their state in the existing context tip, not in a new legend or orbit.
+ordinary slice materials. The header legend keeps three category dots. Completed titles
+have no deletion line. The existing detail owner identifies the active title, connection
+and slice or completion node, preserving completion color. Inactive connectors may recede;
+other text is never dimmed into unreadability. No orbit or new navigation is introduced.
 
 Clock recovery remains unchanged: minute ticks, foreground focus, visible-page return,
 page show and owned CLOCK notifications share one refresh. An epoch-minute stamp handles
@@ -102,8 +110,9 @@ is introduced.
 ## Required verification and limits
 
 The actual-source SCI/Reagent gate checks source hashes, visible mark/title coverage,
-real time claims, same-side routing, label and marker collisions, narrow hour sizes,
-unique pattern IDs, frame stability through END and overnight windows, reference/CLOCK
+real time claims, same-side routing, source-to-status-node endpoints, node/text bounds,
+whole-connection highlight, eye visibility and node removal, label and marker collisions,
+narrow hour sizes, unique pattern IDs, frame stability through END and overnight windows, reference/CLOCK
 updates, full-text ownership, pointer/focus cleanup, main/sidebar/embed contexts, Chinese,
 default/native styles and computed light/dark contrast. Graph writes, unexpected HTTP(S),
 resource failures and page/console errors remain failures.

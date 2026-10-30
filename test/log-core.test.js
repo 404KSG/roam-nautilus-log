@@ -627,6 +627,8 @@ test('English UI settings localize all extension-owned status labels', () => {
     warnings: 'Schedule warnings',
     schedule: 'Schedule',
     untimedCompleted: 'Completed · No time recorded',
+    untimedNodeTitle: 'Completed',
+    untimedNodeSubtitle: 'No timestamp',
     details: 'Details',
     expandDetails: 'Full text',
     collapseDetails: 'Collapse text',

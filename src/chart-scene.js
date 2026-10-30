@@ -74,7 +74,7 @@ function wrapTitle(text, width, measure) {
   return { lines, truncated };
 }
 
-/** Only full source titles and local container geometry size the frame. */
+/** Only source data and local geometry size the frame, never the moving clock. */
 function chartPresentationFrame({ containerWidth, items = [], timeRadius = 150,
   startMinutes = 300, endMinutes = 1260, font = '500 13px Inter, system-ui, sans-serif', measure } = {}) {
   const rawWidth = finite(containerWidth, 720), width = rawWidth > 0 ? rawWidth : 720;
@@ -109,29 +109,44 @@ function chartPresentationFrame({ containerWidth, items = [], timeRadius = 150,
     return { uid: item.uid, order, ...wrapped, width: labelWidth, height,
       inkWidth: Math.max(0, ...wrapped.lines.map(measured)), sourceSide, fontSize, lineHeight };
   });
-  // Fixed ranges and completed history have source-defined sides. Every
-  // flexible pending title is budgeted on either side: future movement cannot
-  // force a label across the clock or resize the frame.
-  const fixed = { left: 0, right: 0 }; let flexible = 0;
+  // Three source-budgeted regions: completed-without-time connections above,
+  // real time geometry in the middle, and non-scheduled endpoints below.
+  // Pending titles reserve space in both possible regions so END cannot resize.
+  const fixed = { left: 0, right: 0 }, completed = { left: 0, right: 0 }, loose = { left: 0, right: 0 };
+  const completionUids = []; let flexible = 0;
   source.forEach((item, index) => {
     const label = labels[index];
-    if ((item.meeting || item.done) && validRange(item) && item.end > startMinutes && item.start < endMinutes) {
+    if (item.done === true && !validRange(item)) {
+      completed[label.sourceSide] += label.height; completionUids.push(item.uid);
+    } else if ((item.meeting || item.done) && validRange(item) && item.end > startMinutes && item.start < endMinutes) {
       const minute = (Math.max(startMinutes, item.start) + Math.min(endMinutes, item.end)) / 2;
       const angle = (180 - (((minute - 540) / 2 % 360 + 360) % 360)) * Math.PI / 180;
       fixed[Math.cos(angle) < 0 ? 'left' : 'right'] += label.height;
-    } else if (item.done || validRange(item)) fixed[label.sourceSide] += label.height;
-    else flexible += label.height;
+    } else {
+      loose[label.sourceSide] += label.height;
+      if (!item.done && !validRange(item)) flexible += label.height;
+    }
   });
-  const capacity = flexible + Math.max(fixed.left, fixed.right);
-  const height = Math.max(plotDiameter + 48, capacity + 64);
-  return { viewBox: { width: viewWidth, height }, center: { x: viewWidth / 2, y: height / 2 },
+  const completionHeight = completionUids.length ? Math.max(44, completed.left, completed.right) : 0;
+  const nodeWidth = Math.max(44, Math.min(168, viewWidth - 2 * (16 + labelWidth) - 44));
+  const completionNode = completionUids.length ? { key: 'untimed-completed',
+    x: (viewWidth - nodeWidth) / 2, y: 16 + (completionHeight - 44) / 2,
+    width: nodeWidth, height: 44, uids: completionUids } : null;
+  const timedTop = 16 + (completionHeight ? completionHeight + 24 : 0);
+  const timedHeight = Math.max(plotDiameter + 16, flexible + Math.max(fixed.left, fixed.right));
+  const timedBottom = timedTop + timedHeight;
+  const looseHeight = Math.max(loose.left, loose.right);
+  const looseTop = timedBottom + (looseHeight ? 24 : 0);
+  const height = looseTop + looseHeight + 16;
+  return { viewBox: { width: viewWidth, height }, center: { x: viewWidth / 2, y: timedTop + timedHeight / 2 },
     timeRadius: radius, plotScale: scale, compact, density: compact ? 'compact' : 'regular',
-    inspector: 'wrapped', compactHeader: width <= 640, columnCapacity: height - 64,
+    inspector: 'wrapped', compactHeader: width <= 640, columnCapacity: timedHeight,
+    completionNode, completionHeight, timedTop, timedBottom, looseTop,
     labelWidth, fontSize, lineHeight, hourStep: compact && plotDiameter < 180 ? 3 : 1, labels };
 }
 
 function labelLayout(frame, records) {
-  const sides = { left: { timed: [], loose: [] }, right: { timed: [], loose: [] } };
+  const sides = { left: { timed: [], completed: [], loose: [] }, right: { timed: [], completed: [], loose: [] } };
   const metrics = new Map(frame.labels.map(label => [label.uid, label]));
   const routeY = record => {
     const angle = Math.atan2(record.anchor.y - frame.center.y, record.anchor.x - frame.center.x);
@@ -139,29 +154,40 @@ function labelLayout(frame, records) {
   };
   for (const record of records) {
     record.label = { ...metrics.get(record.uid) };
-    if (record.kind !== 'timed') sides[record.label.sourceSide].loose.push(record);
+    if (record.kind !== 'timed') sides[record.label.sourceSide][record.kind === 'untimed-completed' ? 'completed' : 'loose'].push(record);
   }
   for (const record of records.filter(r => r.kind === 'timed').sort((a, b) => routeY(a) - routeY(b) || a.event.start - b.event.start || a.order - b.order)) {
     const side = record.anchor.x < frame.center.x ? 'left' : 'right';
     sides[side].timed.push(record);
   }
-  function position(record, side, y) {
+  function position(record, side, y, index = 0, count = 1) {
     const label = record.label, left = side === 'left';
     const x = left ? 16 : frame.viewBox.width - 16 - label.width;
     const textX = left ? x + label.width : x, middle = y + label.height / 2;
     Object.assign(label, { x, y, side, textX, align: left ? 'end' : 'start',
       textY: y + (label.height - label.lines.length * label.lineHeight) / 2 + label.fontSize });
     if (record.kind !== 'timed') {
-      const edge = left ? textX - label.inkWidth : textX + label.inkWidth;
-      const markerX = edge + (left ? -9 : 9);
-      record.marker = { x: markerX, y: middle, size: 6,
-        shape: record.kind === 'untimed-completed' ? 'dot' : record.kind === 'unplaced' ? 'diamond' : 'square' };
-      label.connector = `M${round(markerX + (left ? 3 : -3))} ${round(middle)}L${round(edge + (left ? -2 : 2))} ${round(middle)}`;
-      record.markerPath = record.marker.shape === 'dot'
-        ? `M${round(markerX - 2.5)},${round(middle)}a2.5,2.5 0 1 0 5,0a2.5,2.5 0 1 0 -5,0`
-        : record.marker.shape === 'diamond'
+      const startX = left ? x + label.width + 5 : x - 5;
+      if (record.kind === 'untimed-completed') {
+        const node = frame.completionNode;
+        const portX = left ? node.x : node.x + node.width;
+        const step = Math.min(6, (node.height - 12) / Math.max(1, count - 1));
+        const portY = node.y + node.height / 2 + (index - (count - 1) / 2) * step;
+        const controlX = (startX + portX) / 2;
+        record.connectionTarget = node.key;
+        record.marker = { x: portX, y: portY, size: 4, shape: 'dot' };
+        label.connector = `M${round(startX)} ${round(middle)}C${round(controlX)} ${round(middle)} ${round(controlX)} ${round(portY)} ${round(portX)} ${round(portY)}`;
+        record.markerPath = `M${round(portX - 1.5)},${round(portY)}a1.5,1.5 0 1 0 3,0a1.5,1.5 0 1 0 -3,0`;
+      } else {
+        // These endpoints are explicitly outside the time band; a known
+        // off-hours range must not be relabeled as missing completion time.
+        const markerX = startX + (left ? 1 : -1) * Math.min(32, (frame.viewBox.width / 2 - Math.abs(frame.center.x - startX)) / 2);
+        record.marker = { x: markerX, y: middle, size: 6, shape: record.kind === 'unplaced' ? 'diamond' : 'square' };
+        label.connector = `M${round(startX)} ${round(middle)}L${round(markerX)} ${round(middle)}`;
+        record.markerPath = record.marker.shape === 'diamond'
           ? `M${round(markerX)},${round(middle - 3)}l3,3 -3,3 -3,-3Z`
           : `M${round(markerX - 3)},${round(middle - 3)}h6v6h-6Z`;
+      }
       return;
     }
     const a = record.anchor, { x: cx, y: cy } = frame.center;
@@ -177,14 +203,12 @@ function labelLayout(frame, records) {
       + `C${round(controlX)} ${round(p.y)} ${round(controlX)} ${round(middle)} ${round(endX)} ${round(middle)}`;
   }
   for (const side of ['left', 'right']) {
-    const { timed, loose } = sides[side];
-    const split = Math.ceil(loose.length / 2), top = loose.slice(0, split), bottom = loose.slice(split);
-    let cursor = 16;
-    for (const record of top) { position(record, side, cursor); cursor += record.label.height; }
-    const low = cursor + (top.length ? 16 : 0);
-    let bottomY = frame.viewBox.height - 16 - bottom.reduce((sum, r) => sum + r.label.height, 0);
-    const high = bottomY - (bottom.length ? 16 : 0);
-    for (const record of bottom) { position(record, side, bottomY); bottomY += record.label.height; }
+    const { timed, completed, loose } = sides[side];
+    let cursor = 16 + (frame.completionHeight - completed.reduce((sum, r) => sum + r.label.height, 0)) / 2;
+    completed.forEach((record, index) => { position(record, side, cursor, index, completed.length); cursor += record.label.height; });
+    cursor = frame.looseTop;
+    for (const record of loose) { position(record, side, cursor); cursor += record.label.height; }
+    const low = frame.timedTop, high = frame.timedBottom;
     const ys = []; cursor = low;
     for (const record of timed) {
       const y = Math.max(cursor, Math.min(high - record.label.height, record.anchor.y - record.label.height / 2));
@@ -196,7 +220,7 @@ function labelLayout(frame, records) {
   }
 }
 
-/** The spiral is the only time geometry. Loose records stay beside their titles. */
+/** The spiral is the only time geometry; untimed completions connect to a named status node. */
 function chartScene({ items = [], events = [], containerWidth, startMinutes = 300, endMinutes = 1260,
   timeRadius = 150, radiusForMinute, font, measure } = {}) {
   const source = sourceItems(items);
@@ -228,7 +252,7 @@ function chartScene({ items = [], events = [], containerWidth, startMinutes = 30
     return record;
   });
   labelLayout(frame, records);
-  return { frame, records };
+  return { frame, records, completionNode: frame.completionNode };
 }
 
 /** Category/state paint is separate from scheduling and record placement. */
