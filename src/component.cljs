@@ -451,7 +451,7 @@
 
 (defn event-detail-signature [event]
   (select-keys event [:description :start :end :meeting :todo :done :done-at :bg-color :status-origin
-                      :chart-kind :time-claim :full-start :full-end :duration]))
+                      :chart-kind :time-claim :full-start :full-end :duration :planned-duration :estimate-unplaced-reason]))
 
 (defn reconcile-detail-state! [detail-state event-signatures available-slot-keys]
   (swap! detail-state
@@ -490,18 +490,26 @@
                       (duration-label (or (:planned-duration event) (:duration event) 0)))
         range-text (when (and (number? (:full-start event)) (number? (:full-end event)))
                      (str (minutes->time (:full-start event)) "–" (minutes->time (:full-end event))))
-        summary (case kind
-                  "untimed-completed" (str (get-in copy [:tooltips (if source? :inheritedDone :completed)])
-                                           " · " (get-in copy [:tooltips :noTime]))
-                  "unplaced" (str (get-in copy [:tooltips :unplaced]) " · " estimate)
-                  "outside-window" (str (when (:done event) (str completed " · "))
-                                        (get-in copy [:tooltips :outsideWindow]) " · " range-text)
-                  (str (when (:done event) (str completed " · "))
-                       (get-in copy [:tooltips (if (:meeting event) :event :task)]) " · " range-text
-                       " · " (duration-label (- (:full-end event) (:full-start event)))))
+        allocation? (= "estimated-allocation" (:time-claim event))
+        summary (if allocation?
+                  (str completed " · " estimate)
+                  (case kind
+                    "completed-estimate-overflow" (str completed " · " estimate " · "
+                                                       (get-in copy [:tooltips (case (:estimate-unplaced-reason event)
+                                                                                "zero-duration" :zeroDuration
+                                                                                "invalid-window" :invalidEstimateWindow
+                                                                                :estimateOverflow)]))
+                    "unplaced" (str (get-in copy [:tooltips :unplaced]) " · " estimate)
+                    "outside-window" (str (when (:done event) (str completed " · "))
+                                          (get-in copy [:tooltips :outsideWindow]) " · " range-text)
+                    (str (when (:done event) (str completed " · "))
+                         (get-in copy [:tooltips (if (:meeting event) :event :task)]) " · " range-text
+                         " · " (duration-label (- (:full-end event) (:full-start event))))))
         meta (str summary
+                  (when allocation? (str " · " (get-in copy [:tooltips :estimatedAllocation]) " " range-text
+                                         " · " (get-in copy [:tooltips :notRecordedCompletion])))
                   (when (not= kind "timed") (str " · " (get-in copy [:tooltips :notTimeScaled])))
-                  (when (and (= kind "untimed-completed") source?)
+                  (when (and (:done event) source?)
                     (str " · " (get-in copy [:tooltips :inheritedCompletion])))
                   (when (= "actual" (:time-claim event)) (str " · " (get-in copy [:tooltips :actual])))
                   (when (= "completion-estimate" (:time-claim event))
@@ -1288,21 +1296,22 @@
        ^{:key index}
        [:tspan {:x (:textX label) :y (+ (:textY label) (* index (:lineHeight label)))} line])]]])
 
-(defn completion-node-component [node shown? active? copy]
-  (when node
-    (let [x (:x node) y (:y node) width (:width node) height (:height node)
-          middle (+ x (/ width 2))
-          title (get-in copy [:panels :untimedNodeTitle])
-          subtitle (get-in copy [:panels :untimedNodeSubtitle])]
-      [:g {:class (str "nautilus-log-completion-node" (when active? " is-active"))
-           :data-status-node "untimed-completed" :role "img"
-           :aria-label (str title " · " subtitle) :aria-hidden (not shown?)
-           :visibility (when-not shown? "hidden") :pointer-events "none"}
-       [:rect {:class "nautilus-log-completion-node-box" :x x :y y :width width :height height :rx 6}]
-       [:text {:class "nautilus-log-completion-node-title" :x middle :y (+ y 17)
-               :text-anchor "middle" :style {:font-size "11px"} :font-weight "600"} title]
-       [:text {:class "nautilus-log-completion-node-subtitle" :x middle :y (+ y 31)
-               :text-anchor "middle" :style {:font-size "9.5px"}} subtitle]])))
+(defn estimated-outline-component [records center settings active-uid show-done?]
+  [:g {:class "nautilus-log-estimated-outlines" :aria-hidden "true" :pointer-events "none"
+       :visibility (when-not show-done? "hidden")}
+   (for [record records
+         :when (= "estimated-allocation" (get-in record [:event :time-claim]))]
+     (let [event (:event record)
+           cuts (concat [(:start event)] (get-hour-boundaries (:start event) (:end event)) [(:end event)])]
+       ^{:key (:uid record)}
+       [:g {:data-estimate-outline-for (:uid record)
+            :class (str "nautilus-log-estimated-outline" (when (= active-uid (:uid record)) " is-active"))}
+        (for [[start end] (partition 2 1 cuts)]
+          ^{:key (str start ":" end)}
+          [:path {:d (create-arc-path (min->angle start) (min->angle end)
+                                     (spiral-cell-inner-radius start settings snail-inner-radius)
+                                     (spiral-outer-radius start settings) center)
+                  :vector-effect "non-scaling-stroke"}])]))])
 
 (defn chart-scene-record [record index frame settings timeline-state show-done? hover-info-state copy conflicts active-uid]
   (let [event (:event record)
@@ -1323,6 +1332,8 @@
                             (when actionable? " nautilus-log-event-slice-group--actionable")
                             (when (:done event) " nautilus-log-record--done")
                             (when (:meeting event) " nautilus-log-record--event")
+                            (when (= "estimated-allocation" (:time-claim event)) " nautilus-log-record--estimated")
+                            (when (:overlaps-planned event) " nautilus-log-record--estimate-overlap")
                             (when (not timed?) " nautilus-log-loose-record")
                             (when (= "unplaced" (:kind record)) " nautilus-log-loose-record--unplaced")
                             (when (contains? conflicts uid) " nautilus-log-event-conflict")
@@ -1330,7 +1341,6 @@
                             (when (:current-event? params) " nautilus-log-current-event"))
                 :data-task-uid uid :data-record-title (:description event)
                 :data-chart-kind (:kind record) :data-time-claim (:time-claim event)
-                :data-connection-target (:connectionTarget record)
                 :data-connection-active (when (= uid active-uid) "true")
                 :data-past-status (:past-status params)
                 :data-visual-phase (:visual-phase params)
@@ -1364,6 +1374,7 @@
         scene (log-core-call "chartScene"
                             {:items source-events :events (vec (concat events done-todos))
                              :containerWidth container-width :timeRadius time-radius
+                             :defaultDuration (:default-duration settings)
                              :font (str "500 13px " font-family)
                              :radiusForMinute (fn [minute] (spiral-outer-radius minute settings))
                              :startMinutes (:workday-start settings) :endMinutes (:workday-end settings)})
@@ -1390,8 +1401,6 @@
                                                    (set (map (juxt :uid event-detail-signature) all-events))
                                                    (set (map :key available-slots)))
         active-uid (:uid (active-detail hover-info-state))
-        completion-node (:completionNode scene)
-        node-active? (and active-uid (some #(= active-uid %) (:uids completion-node)))
         conflicts (set (log-core-call "overlappingFixedEventUids" {:events timed-events}))
         now-visible? (:showNow timeline-state)
         center-now-label (when now-visible? (minutes->time timeline-minute))]
@@ -1408,11 +1417,11 @@
        [:g {:transform transform}
         (when elapsed-page? [past-time-overlay-component snail-inner-radius center settings timeline-minute])
         (when elapsed-page? [past-unplanned-overlay-component timed-events snail-inner-radius center settings timeline-minute scale])]
-       [completion-node-component completion-node @show-done-atom? node-active? copy]
        (for [[index record] (map-indexed vector records)]
          ^{:key (:uid record)}
          [chart-scene-record record index frame settings timeline-state @show-done-atom? hover-info-state copy conflicts active-uid])
        [:g {:transform transform}
+        [estimated-outline-component records center settings active-uid @show-done-atom?]
         [snail-blueprint-component snail-template-color snail-inner-radius center settings elapsed-page? timeline-minute (:hourStep frame) scale]
         (when (:showAvailableSlots timeline-state)
           [available-slot-component available-slots snail-inner-radius center settings hover-info-state copy])
@@ -2084,8 +2093,8 @@
                                      parsed (mapv #(parse-row-params % settings clock-context) mapped)
                                      filtered (filterv #(not= "" (:description %)) parsed)]
                                  (let [history (log-core-call "partitionChartEvents" filtered)]
-                                   ;; Keep untimed completion visible without sending it to
-                                   ;; scheduling or borrowing a source block's timestamp.
+                                   ;; Keep unanchored completion for the estimate projection,
+                                   ;; separate from live pending scheduling and source timestamps.
                                    ;; Tidy still receives every locally settled wrapper UID.
                                    [(add-start-after (:pendingEvents history))
                                     (:timedDoneEvents history) (:untimedDoneEvents history)

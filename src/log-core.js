@@ -7,7 +7,7 @@
  * validating settings before they become render arguments.
  */
 
-const { chartScene, chartPresentationFrame, chartRecordAppearance, chartTipLayout } = require('./chart-scene');
+const { chartScene: renderChartScene, chartPresentationFrame, chartRecordAppearance, chartTipLayout } = require('./chart-scene');
 
 const START_HOURS = Object.freeze(Array.from({ length: 24 }, (_value, hour) => hour));
 const END_HOURS = Object.freeze(Array.from({ length: 24 }, (_value, index) => index + 1));
@@ -804,6 +804,47 @@ function partitionChartEvents(events = []) {
   return result;
 }
 
+/**
+ * Give completed tasks without an observed interval their planned allocation.
+ * This is a read-only estimate, not a reconstructed completion timestamp.
+ * The cursor is START, never now/edit time, and pending scheduling is separate.
+ */
+function projectCompletedEstimates({ items = [], startMinutes = 300, endMinutes = 1260, defaultDuration = 15 } = {}) {
+  const source = Array.isArray(items) ? items : [];
+  const hasRange = item => Number.isFinite(item?.start) && Number.isFinite(item?.end) && item.end > item.start;
+  const needsEstimate = item => item?.done === true && item.todo === true && !item.meeting
+    && (!hasRange(item) || item['estimated-allocation'] === true || Boolean(item['estimate-unplaced-reason']));
+  const estimates = source.filter(needsEstimate).map(item => {
+    const values = [item['planned-duration'], item.duration, defaultDuration, 15].map(asNumber);
+    const duration = Math.round(values.find(value => Number.isFinite(value) && value >= 0));
+    return { ...item, duration, done: false };
+  });
+  const obstacles = source.filter(item => hasRange(item) && (item.meeting || item.done) && !needsEstimate(item))
+    .map(item => ({ start: item.start, end: item.end, meeting: true, done: false }));
+  const plan = scheduleTasks({ startMinutes, endMinutes, nowMinutes: startMinutes, tasks: estimates, fixedEvents: obstacles });
+  const placed = new Map(plan.scheduledTasks.map(item => [item.uid, item]));
+  const durations = new Map(estimates.map(item => [item.uid, item.duration]));
+  const validWindow = Number.isFinite(startMinutes) && Number.isFinite(endMinutes) && endMinutes > startMinutes;
+  const projected = source.map(item => {
+    if (!needsEstimate(item)) return item;
+    const next = { ...item, duration: durations.get(item.uid) };
+    delete next.start; delete next.end;
+    delete next['estimated-allocation']; delete next['estimate-unplaced-reason'];
+    const slot = placed.get(item.uid);
+    if (slot) Object.assign(next, { start: slot.start, end: slot.end, 'estimated-allocation': true });
+    else next['estimate-unplaced-reason'] = next.duration === 0 ? 'zero-duration' : validWindow ? 'capacity' : 'invalid-window';
+    return next;
+  });
+  return { items: projected, estimatedUids: plan.scheduledTasks.map(item => item.uid),
+    overflowUids: projected.filter(item => item?.['estimate-unplaced-reason'] === 'capacity').map(item => item.uid) };
+}
+
+/** Production presentation entry: missing CLOCK/finish stamps never erase estimates. */
+function chartScene(input = {}) {
+  const projection = projectCompletedEstimates(input);
+  return renderChartScene({ ...input, items: projection.items });
+}
+
 function calculateCapacity({
   startMinutes,
   endMinutes,
@@ -938,8 +979,6 @@ const UI_COPY = {
       warnings: 'Schedule warnings',
       schedule: 'Schedule',
       untimedCompleted: 'Completed · No time recorded',
-      untimedNodeTitle: 'Completed',
-      untimedNodeSubtitle: 'No timestamp',
       details: 'Details',
       expandDetails: 'Full text',
       collapseDetails: 'Collapse text',
@@ -963,6 +1002,11 @@ const UI_COPY = {
       outsideWindow: 'Outside chart hours',
       actual: 'Actual',
       completionEstimate: 'Estimated interval',
+      estimatedAllocation: 'Estimated allocation',
+      notRecordedCompletion: 'Not a recorded completion time',
+      estimateOverflow: 'No room for this estimate',
+      zeroDuration: 'Zero duration',
+      invalidEstimateWindow: 'Invalid chart window',
       available: 'Available slot',
       availableNow: 'Available now',
       locateTask: 'Click to locate · ⇧ Sidebar',
@@ -1036,8 +1080,6 @@ const UI_COPY = {
       warnings: '时间范围提醒',
       schedule: '时间安排',
       untimedCompleted: '已完成 · 未记录时间',
-      untimedNodeTitle: '已完成',
-      untimedNodeSubtitle: '未记时',
       details: '详情',
       expandDetails: '全文',
       collapseDetails: '收起全文',
@@ -1061,6 +1103,11 @@ const UI_COPY = {
       outsideWindow: '显示时段外',
       actual: '实际记录',
       completionEstimate: '估计区间',
+      estimatedAllocation: '估时排布',
+      notRecordedCompletion: '不是记录的完成时刻',
+      estimateOverflow: '窗口放不下这段估时',
+      zeroDuration: '估时为零',
+      invalidEstimateWindow: '图表时段无效',
       available: '可用空档',
       availableNow: '当前可用',
       locateTask: '单击定位 · ⇧ 侧边栏',
@@ -1765,6 +1812,7 @@ module.exports = {
   completedTaskClockSummary,
   historicalDoneSlice,
   partitionChartEvents,
+  projectCompletedEstimates,
   calculateCapacity,
   burningCapacityBucket,
   formatDuration,

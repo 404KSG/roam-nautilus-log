@@ -4,10 +4,13 @@
 
 ### Added
 
-- Untimed completions now connect to one explicit Completed / No timestamp node
-  inside the diagram. The prior four-unit stubs are replaced by traceable links;
-  known timed history still connects to its own slices. Eye visibility hides the
-  node and its links together, without changing the frame.
+- Completed tasks without actual timing now receive spiral slices using their explicit
+  estimate or Default Todo Duration (15 minutes by default). CLOCK and completion stamps
+  are optional. Unanchored estimates are allocated from START in outline order around
+  fixed events and anchored history, without changing pending scheduling or Actual.
+  Dashed gray outlines identify estimated placement and remain visible over pending
+  forecasts. Genuine capacity overflow retains the title and duration. The rejected
+  Completed / No timestamp node and its upper connection band are removed.
 - A more vivid indigo/gold palette, readable neutral completion text without
   strike-through, and whole-connection focus replace the disconnected, faded
   presentation. Other text is not dimmed. No completion time is inferred from
@@ -26,10 +29,10 @@
   can still explicitly expand in page flow, without internal scrollbars or overlays.
 
 - Every titled source task or event retains a diagram mark and connected label.
-  Untimed completion uses the named status node; unscheduled work and out-of-window
-  ranges retain separate diamond/square endpoints. None receives an invented time
-  position or a footer inventory. Timed labels stay on their slice's side. Desk
-  retains its independent unfinished-task projection.
+  Completed estimates connect to their slices; unscheduled work, capacity overflow and
+  out-of-window ranges retain separate endpoints. Estimated positions are never presented
+  as recorded completion times. There is no footer inventory. Timed labels stay on their
+  slice's side. Desk retains its independent unfinished-task projection.
 - Source-sized frames replace the rejected finite label budget. Ordinary titles wrap,
   including CJK, and narrow views retain connected diagram labels instead of a scrolling
   Schedule. Frame height follows the full source titles and local width, not the clock,
@@ -91,9 +94,10 @@
 
 ### Fixed
 
-- Untimed DONE rows no longer fall between the completed-history and pending-task
-  collections. Timestamped, fixed-event and CLOCK-backed history keep their existing
-  interval rules; untimed completion stays visible without taking a time slot.
+- Removed the timestamp gate that suppressed completed estimates even when their
+  durations were already known. Timestamped, fixed-event and CLOCK-backed history keep
+  their existing interval rules. The fallback is a read-only display allocation: no
+  timestamp writes, reference-source time borrowing, edit-time inference or Actual credit.
 - Roam's namespace-free pre-reader compatibility remains guarded: no `::unseen`
   or other auto-resolved keyword is required. The actual detail-state initializer
   is checked independently of standalone SCI evaluation.

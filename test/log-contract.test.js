@@ -1163,8 +1163,9 @@ test('the chart uses vivid indigo and gold without crossing out completed titles
   assert.match(css, /--nautilus-log-event:\s*#8a5a00/);
   assert.match(css, /--nautilus-log-completed-fill:\s*#c7d0e1/);
   assert.match(css, /\.nautilus-log-record--done \.nautilus-log-record-title[^}]*text-decoration:\s*none/s);
-  assert.match(component, /data-connection-target/);
-  assert.match(component, /data-status-node "untimed-completed"/);
+  assert.doesNotMatch(component, /completion-node-component|data-status-node "untimed-completed"/);
+  assert.match(component, /data-estimate-outline-for/);
+  assert.match(css, /\.nautilus-log-estimated-outline path[^}]*stroke-dasharray:\s*3 2/s);
   assert.match(css, /\.nautilus-log-record-title\s*\{[^}]*fill:\s*var\(--nautilus-log-task\)/s);
   assert.match(css, /\.nautilus-log-legend-dot--task\s*\{\s*background:\s*var\(--nautilus-log-task\);\s*\}/);
 });

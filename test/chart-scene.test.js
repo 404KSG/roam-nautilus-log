@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { chartScene, chartPresentationFrame } = require('../src/chart-scene');
+const { chartScene, chartPresentationFrame, projectCompletedEstimates } = require('../src/log-core');
 const measure = text => [...text].reduce((sum, char) => sum + (/[^\x00-\xff]/.test(char) ? 13 : 7), 0);
 const items = Array.from({ length: 22 }, (_, i) => ({ uid: `item-${i}`, description: `Record ${i + 1}`, todo: true, done: i >= 14, duration: 30 }));
 function scene(input = {}) {
@@ -10,32 +10,36 @@ function scene(input = {}) {
 test('every source record gets an in-diagram record and label, not a footer fallback', () => {
   const s = scene();
   assert.deepEqual(s.records.map(r => r.uid), items.map(r => r.uid));
-  assert.ok(s.records.every(r => r.label.lines.length && r.markerPath && !r.anchor && r.event['time-claim'] === 'none'));
-  assert.equal(s.records.filter(r => r.kind === 'untimed-completed').length, 8);
-  assert.equal(s.records.filter(r => r.kind === 'unplaced').length, 14);
-  assert.ok(s.records.every(r => !Number.isFinite(r.event.start) && !Number.isFinite(r.event.end)));
+  assert.ok(s.records.every(r => r.label.lines.length && r.label.connector));
+  const estimates = s.records.filter(r => r.event['time-claim'] === 'estimated-allocation');
+  assert.equal(estimates.length, 8);
+  assert.ok(estimates.every(r => r.anchor && r.event.end - r.event.start === 30));
+  const unplaced = s.records.filter(r => r.kind === 'unplaced');
+  assert.equal(unplaced.length, 14);
+  assert.ok(unplaced.every(r => r.markerPath && !Number.isFinite(r.event.start) && !Number.isFinite(r.event.end)));
 });
 
-test('clock-driven scheduling and END cannot change frame or non-time source sides', () => {
+test('clock-driven scheduling and END cannot change the frame or estimated completion positions', () => {
   const a = scene({ events: items.slice(0, 14).map((r, i) => ({ ...r, start: 480 + i * 30, end: 510 + i * 30 })) });
   const b = scene({ events: [] });
   assert.deepEqual(a.frame, b.frame);
   for (const item of items.slice(14)) {
     const one = a.records.find(r => r.uid === item.uid), two = b.records.find(r => r.uid === item.uid);
     assert.equal(one.label.side, two.label.side);
-    assert.equal(one.marker.shape, two.marker.shape);
+    assert.deepEqual(one.anchor, two.anchor);
+    assert.deepEqual([one.event.start, one.event.end], [two.event.start, two.event.end]);
   }
   assert.ok(a.records.slice(0, 14).every(r => r.kind === 'timed'));
 });
 
-test('one untimed completion connects to a status node, never a progress ring', () => {
+test('one completed estimate connects to a time-scaled slice, not a node or progress ring', () => {
   const s = scene({ items: [items[20]] });
-  assert.ok(s.records[0].marker.size <= 6);
-  assert.equal(s.records[0].marker.shape, 'dot');
-  assert.equal(s.records[0].connectionTarget, s.completionNode.key);
-  assert.equal(s.records[0].anchor, undefined);
+  assert.ok(s.records[0].anchor);
+  assert.equal(s.records[0].marker, undefined);
+  assert.equal(s.completionNode, undefined);
   assert.equal(s.records[0].indexPath, undefined);
-  assert.equal(s.records[0].event['time-claim'], 'none');
+  assert.equal(s.records[0].event['time-claim'], 'estimated-allocation');
+  assert.equal(s.records[0].event.end - s.records[0].event.start, 30);
 });
 
 test('out-of-window fixed ranges stay visible without a false visible clock position', () => {
@@ -79,16 +83,16 @@ for (const width of [280, 320, 520, 640, 960]) {
     for (const r of s.records) {
       const box = r.label;
       assert.ok(box.x >= 0 && box.y >= 0 && box.x + box.width <= s.frame.viewBox.width && box.y + box.height <= s.frame.viewBox.height);
-      assert.ok(r.marker.size <= 6);
-      assert.ok(!r.anchor && !r.slot && !r.indexPath);
-      assert.ok(r.marker.x >= 3 && r.marker.x <= s.frame.viewBox.width - 3);
-      assert.equal(r.connectionTarget, 'untimed-completed');
-      assert.ok(r.label.y + r.label.height <= s.frame.timedTop - 12);
+      assert.ok(r.anchor && !r.slot && !r.indexPath);
+      assert.equal(r.connectionTarget, undefined);
+      assert.equal(r.event.end - r.event.start, 15);
+      assert.ok(r.label.y >= s.frame.timedTop && r.label.y + r.label.height <= s.frame.timedBottom);
     }
     for (let i = 0; i < s.records.length; i += 1) for (let j = i + 1; j < s.records.length; j += 1) {
       const a = s.records[i].label, b = s.records[j].label;
       assert.ok(a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y);
     }
-    assert.deepEqual(s.frame, chartPresentationFrame({ items: source, containerWidth: width, measure }));
+    const projected = projectCompletedEstimates({ items: source, startMinutes: 300, endMinutes: 1260 }).items;
+    assert.deepEqual(s.frame, chartPresentationFrame({ items: projected, containerWidth: width, measure }));
   });
 }

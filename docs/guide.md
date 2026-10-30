@@ -61,29 +61,36 @@ small flame marks whether the current minute is consuming Available or Event tim
 
 - Vivid indigo-blue: flexible tasks; the current task has a stronger fill and outline
 - Gold: fixed events; elapsed events fade to pale gold
-- Solid gray: completion history with a usable time interval
-- Pale hatching: elapsed time without a recorded interval, not future availability
+- Solid gray: completion history with a local time anchor
+- Gray with dashed outlines: completed tasks placed by estimate, not recorded completion times
+- Pale hatching: past gaps not covered by a task or event interval, not future availability
 - Red needle: current time and the starting boundary for pending work
 - Red task color: an explicit urgency override
 
-Completed tasks without a usable local time connect to one **Completed / No timestamp**
-node above the time spiral, within the same diagram. Their lines express completion status,
-not a clock position. Each original title remains visible; the node is not a count-only
-replacement. Unscheduled work keeps its hollow diamond, and a known range outside the
-chart hours keeps its square. Neither connects to the completion node.
+Completed tasks without actual timing use their explicit estimate, or Default Todo Duration
+(15 minutes by default). They receive spiral slices and connected labels without requiring
+CLOCK or a completion stamp. When no local time anchor exists, Nautilus places those estimates
+in outline order from START, around fixed events and anchored completion intervals. The tip
+identifies this as **Estimated allocation**, not a recorded completion time.
 
-Hover or focus a title to emphasize its whole connection and its slice or status node.
+Estimated allocations do not move with the clock or change pending-task scheduling. They can
+extend past now and overlap a pending forecast; dashed gray outlines distinguish them while
+the pending task keeps its indigo fill. If the configured window cannot hold a whole estimate,
+its title and duration remain visible with a capacity-overflow endpoint. No task is split,
+no later short task overtakes it, and no extra time is added beyond END. Unscheduled pending
+work keeps its hollow diamond; known ranges outside chart hours keep their square.
+
+Hover or focus a title to emphasize its whole connection and slice.
 Completed titles retain their neutral color without a deletion line; other titles stay
 readable. Clicking a task still locates its block.
 
-Past gaps are factual schedule data, not a judgment that time was wasted.
+Past gaps describe the chart allocation, not proof that time was idle or wasted.
 
 ## Chart controls
 
 - **Desk (four-square icon):** expand or collapse unfinished-task cards below the chart, then click a card to focus and edit it.
-- **Eye:** show or hide completed diagram records, their connections and the untimed
-  completion node. It defaults to showing them and does not affect Desk, which only
-  shows unfinished tasks.
+- **Eye:** show or hide completed slices, estimate outlines and their connected titles.
+  It defaults to showing them and does not affect Desk, which only shows unfinished tasks.
 - **Calendar:** after Google Calendar reports Connected in Settings, import
   timed busy events and dated Google Tasks for this chart's Daily Note.
   Option/Alt-click force-refreshes only the Google-managed strings.
@@ -106,18 +113,15 @@ titles, source status/ranges and local width. Editing a task's status or adding 
 evidence may change its region and page flow; clock-only updates, completion visibility
 and hover do not resize the frame.
 
-The spiral is the only time geometry. Untimed completion links occupy a separate upper
-connection band, so they never cross the time grid or connect to the date. Other
-non-scheduled endpoints remain separate from that node. There is no outer track,
-below-chart inventory, scrolling Schedule or repeated overflow counter. The header
+The spiral is the only time geometry. There is no completion-status node, separate upper
+connection band, outer track, below-chart inventory or scrolling Schedule. The header
 still reports remaining capacity and overload.
 
-CLOCK is optional. A local completion stamp such as `d14:30` and an estimate are enough
-for a completed historical slice. Without a usable stamp, the completed title remains
-visible without inventing a slice. Inherited completion is identified as coming from its
-reference; source time is not borrowed for today's wrapper. Missing completion times
-are not inferred from last-edit metadata. Scheduling, capacity and Actual calculations
-are unchanged.
+CLOCK and completion stamps are optional. A local stamp such as `d14:30` anchors an estimate;
+without it, the estimate still receives a slice through the allocation described above.
+Inherited completion is identified as coming from its reference. Source timestamps and
+last-edit metadata are never used as today's wrapper completion time. Estimated allocations
+write no timestamps, add no Actual, and leave pending scheduling and capacity unchanged.
 
 Hover or keyboard-focus a record or available slot to read its context in a centered
 tip that fits its content, capped at 280px and inset by 16px in narrower workspaces.
@@ -472,10 +476,12 @@ Recent or the forgotten-timer warning.
 - Multiple CLOCK sessions remain separate in `LOGBOOK::`, while the spiral combines
   their total into one historical slice.
 - Actual time is never capped at Planned time.
-- Without Actual, Planned history requires an explicit completion anchor such as
-  `d18:21`.
-- Without an Actual end or completion anchor, Nautilus Log does not invent a history
-  interval. The item remains visible as its own labeled, non-time-scaled diagram mark.
+- Without Actual, completed tasks use their explicit estimate or Default Todo Duration
+  (15 minutes by default). A local `d18:21` stamp anchors that duration when present.
+- Without either local anchor, the estimate is allocated from START in outline order,
+  around fixed events and anchored history. Dashed outlines and the tip distinguish
+  estimated placement from recorded completion times. Genuine capacity overflow retains
+  the task's title and duration; missing CLOCK or stamps never erase the estimate.
 - For an overnight chart window, next-day CLOCK time remains part of the owning
   Daily Note until that window ends.
 
