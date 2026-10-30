@@ -584,8 +584,9 @@ test('English UI settings localize all extension-owned status labels', () => {
   assert.equal(uiCopy('zh').capacity.burningEvents, '事件时间正在流逝');
   assert.deepEqual(copy.legend, { urgent: 'Urgent', event: 'Event', task: 'Task' });
   assert.deepEqual(copy.controls, {
-    hideDone: 'Hide completed items',
-    showDone: 'Show completed items',
+    hideDone: 'Hide completed on chart',
+    showDone: 'Show completed on chart',
+    doneScope: 'Chart only. Desk shows unfinished tasks.',
     calendar: 'Sync Google Calendar',
     calendarForce: '⌥ Click to restore Google-managed items',
     calendarSetup: 'Connect Google Calendar in Nautilus Log settings',
@@ -625,6 +626,7 @@ test('English UI settings localize all extension-owned status labels', () => {
     overflow: 'Unscheduled today',
     warnings: 'Schedule warnings',
     schedule: 'Schedule',
+    untimedCompleted: 'Completed · No time recorded',
     details: 'Details',
     detailIdle: 'Hover or focus a segment to inspect it.',
     item: 'item',
@@ -633,6 +635,9 @@ test('English UI settings localize all extension-owned status labels', () => {
   assert.deepEqual(copy.tooltips, {
     task: 'Task',
     event: 'Event',
+    completed: 'Completed',
+    noCompletionTime: 'No completion time recorded',
+    inheritedCompletion: 'Completion status from reference',
     available: 'Available slot',
     availableNow: 'Available now',
     locateTask: 'Click to locate · ⇧ Sidebar',
@@ -640,6 +645,9 @@ test('English UI settings localize all extension-owned status labels', () => {
   assert.deepEqual(uiCopy('zh').tooltips, {
     task: '任务',
     event: '事件',
+    completed: '已完成',
+    noCompletionTime: '未记录完成时间',
+    inheritedCompletion: '完成状态来自引用',
     available: '可用空档',
     availableNow: '当前可用',
     locateTask: '单击定位 · ⇧ 侧边栏',

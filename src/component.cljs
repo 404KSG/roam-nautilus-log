@@ -450,7 +450,7 @@
         (clear-detail-state! detail-state)))))
 
 (defn event-detail-signature [event]
-  (select-keys event [:description :start :end :meeting :todo :done :done-at :bg-color]))
+  (select-keys event [:description :start :end :meeting :todo :done :done-at :bg-color :status-origin]))
 
 (defn reconcile-detail-state! [detail-state event-signatures available-slot-keys]
   (swap! detail-state
@@ -501,6 +501,39 @@
                 :aria-hidden "true"}]
         [:strong {:class "nautilus-log-detail-title"} title]
         [:span {:class "nautilus-log-detail-meta"} meta]])])))
+
+(defn untimed-completion-list [events copy hover-info-state]
+  (let [visible? (boolean (seq events))
+        label (get-in copy [:panels :untimedCompleted])]
+    [:section {:class "nautilus-log-untimed-history"
+               :aria-label label
+               :aria-hidden (not visible?)
+               :data-history-visible (str visible?)}
+     (when visible?
+       [:div {:class "nautilus-log-untimed-body"}
+        [:div {:class "nautilus-log-untimed-heading"}
+         label [:span {:class "nautilus-log-untimed-count"} (str " · " (count events))]]
+        [:ul {:class "nautilus-log-untimed-list"}
+         (for [event events
+               :let [uid (:uid event)
+                     title (:description event)
+                     meta (str (get-in copy [:tooltips :completed]) " · "
+                               (get-in copy [:tooltips :noCompletionTime])
+                               (when (= "source" (:status-origin event))
+                                 (str " · " (get-in copy [:tooltips :inheritedCompletion]))))
+                     info {:title title :meta meta :uid uid :tone "completed"
+                           :detail-kind :event :detail-signature (event-detail-signature event)}]]
+           ^{:key uid}
+           [:li {:class "nautilus-log-untimed-item"
+                 :data-task-uid uid
+                 :role "link" :tab-index 0
+                 :aria-label (str title ". " meta ". " (get-in copy [:tooltips :locateTask]))
+                 :on-mouse-enter #(show-hover-tooltip! hover-info-state :pointer info %)
+                 :on-focus #(show-hover-tooltip! hover-info-state :focus info %)
+                 :on-click #(locate-plan-task! uid hover-info-state %)
+                 :on-key-down #(task-keydown! uid hover-info-state %)}
+            [:span {:class "nautilus-log-untimed-check" :aria-hidden "true"} "✓"]
+            [:span {:class "nautilus-log-untimed-title"} title]])]])]))
 
 ;; ---------------- helpers ----------------------
 
@@ -790,7 +823,7 @@
         time-text-x (+ center-x (* (cos start-radians) (- outer-radius 10)))
         time-text-y (- center-y (* (sin start-radians) (- outer-radius 10)))
         border-color (if (= border-color nil) "none" border-color)
-        stroke-dasharray (if (= stroke-dasharray nil) "2,2" stroke-dasharray)
+        stroke-dasharray (if (= stroke-dasharray nil) "none" stroke-dasharray)
         bg-color (if (= bg-color nil) "rgba(255,255,255,0)" bg-color)
         legend-color (or legend-color (update-opacity-str bg-color "1"))
         font-weight (if font-weight font-weight "normal")
@@ -823,25 +856,16 @@
                                (if on-left? "end" "start"))
                 :alignment-baseline "baseline"
                 :font-weight font-weight
-                :text-decoration (if done? "line-through" "none")
+                :text-decoration "none"
                 :fill (if-not done? legend-color "var(--nautilus-log-completed)")}
          (if debug? (str dbg-radians-txt)
              (or (:label-text legend-rect) text))
          ]])     
      (when (seq timestamp)
        ;; ⤵ adds a clock label for the snail template
-       [:text  {:x time-text-x :y time-text-y :font-size (- font-size 3) :font-family font-family :color border-color :fill border-color
-                :transform (str "rotate(" (if
-                                           (or (>= start-angle 270)
-                                               (<= start-angle 90))
-                                            start-angle
-                                            (- start-angle 180)) " " time-text-x "," time-text-y ")")
-                :text-anchor "middle"
-                :alignment-baseline (if
-                                     (or (>= start-angle 270)
-                                         (<= start-angle 90))
-                                      "after-edge"
-                                      "before-edge")}
+       [:text  {:x time-text-x :y time-text-y :font-size (- font-size 3) :font-family font-family
+                :class "nautilus-log-hour-label" :fill "var(--nautilus-log-chart-muted)"
+                :text-anchor "middle" :dominant-baseline "central"}
         (if debug? (str (round2 start-radians) " / " start-angle) timestamp)])]))
 
 (defn past-time-overlay-component [inner-radius center settings elapsed-through-minutes]
@@ -860,7 +884,7 @@
                     (spiral-outer-radius start settings)
                     center)}])]))
 
-(defn past-unplanned-overlay-component [occupied-events inner-radius center settings elapsed-through-minutes pattern-id]
+(defn past-unplanned-overlay-component [occupied-events inner-radius center settings elapsed-through-minutes]
   (let [segments (or (log-core-call "pastUnplannedSegments"
                                      {:startMinutes (:workday-start settings)
                                       :endMinutes (:workday-end settings)
@@ -868,15 +892,6 @@
                                       :occupiedEvents occupied-events})
                      [])]
     [:g {:class "nautilus-log-unplanned-overlay" :aria-hidden "true"}
-     [:defs
-      [:pattern {:id pattern-id
-                 :class "nautilus-log-unplanned-pattern"
-                 :width "7"
-                 :height "7"
-                 :patternUnits "userSpaceOnUse"
-                 :patternTransform "rotate(45)"}
-       [:line {:class "nautilus-log-unplanned-stripe"
-               :x1 "0" :y1 "0" :x2 "0" :y2 "7"}]]]
      (for [{:keys [start end]} segments]
        ^{:key (str "unplanned:" start ":" end)}
        [:path {:d (create-arc-path
@@ -885,7 +900,7 @@
                     (spiral-cell-inner-radius start settings inner-radius)
                     (spiral-outer-radius start settings)
                     center)
-               :fill (str "url(#" pattern-id ")")}])]))
+               :fill "var(--nautilus-log-unplanned-fill)"}])]))
 
 
 (defn snail-blueprint-component [color inner-radius center settings show-elapsed? elapsed-through-minutes]
@@ -923,8 +938,8 @@
     [:g {:class "nautilus-log-center-date"}
      [:text (assoc common-attr 
                    :y (- center-y 2) 
-                   :fill "var(--nautilus-log-text-main)"
-                   :font-weight "bold" 
+                   :fill "var(--nautilus-log-chart-ink)"
+                   :font-weight "600"
                    :font-size (str (* font-size 0.85))) 
        first-row]
      (when center-now-label
@@ -958,7 +973,7 @@
     {:start-angle start-angle
      :end-angle end-angle
      :bg-color (cond
-                 (= "completed" past-status) completed-fill-color
+                 done? completed-fill-color
                  (= "event" past-status) past-event-fill-color
                  meeting? meeting-color
                  todo? todo-bg-color
@@ -987,7 +1002,9 @@
         actionable? (= true (:todo event))
         start-min (:start event)
         end-min (:end event)
-        kind-label (when hover-enabled? (get-in copy [:tooltips (if meeting? :event :task)]))
+        kind-label (when hover-enabled?
+                     (str (when done (str (get-in copy [:tooltips :completed]) " · "))
+                          (get-in copy [:tooltips (if meeting? :event :task)])))
         action-hint (when actionable? (get-in copy [:tooltips :locateTask]))
         tooltip-info (when hover-enabled?
                        (assoc (timeline-tooltip-info description kind-label start-min end-min action-hint)
@@ -995,7 +1012,7 @@
                               :detail-kind :event
                               :detail-signature (event-detail-signature event)
                               :tone (cond
-                                      (= "completed" past-status) "completed"
+                                      done "completed"
                                       meeting? "event"
                                       :else "task")))
         boundaries (get-hour-boundaries start-min end-min)
@@ -1177,18 +1194,24 @@
         [:li (merge {:class (str "nautilus-log-compact-item"
                                   (when (:done event) " nautilus-log-compact-item--done")
                                   (when (:todo event) " nautilus-log-compact-item--actionable"))
-                     :title (:description event)}
+                     :title (:description event)
+                     :aria-label (when (:done event)
+                                   (str (:description event) ". " (get-in copy [:tooltips :completed])))}
                     (when (:todo event)
                       {:role "link"
                        :tab-index 0
-                       :aria-label (str (:description event) ". " (get-in copy [:tooltips :locateTask]))
+                       :aria-label (str (:description event) ". "
+                                        (when (:done event) (str (get-in copy [:tooltips :completed]) ". "))
+                                        (get-in copy [:tooltips :locateTask]))
                        :on-click #(locate-plan-task! (:uid event) hover-info-state %)
                        :on-key-down #(task-keydown! (:uid event) hover-info-state %)}))
          [:i {:class (str "nautilus-log-compact-dot nautilus-log-compact-dot--" (compact-item-tone event))
               :aria-hidden "true"}]
          [:time {:class "nautilus-log-compact-time"}
           (str (minutes->time (:start event)) "–" (minutes->time (:end event)))]
-         [:span {:class "nautilus-log-compact-title"} (:description event)]])]]))
+         [:span {:class "nautilus-log-compact-title"}
+          (when (:done event) [:span {:aria-hidden "true"} "✓ "])
+          (:description event)]])]]))
 
 (defn available-slot-tooltip-info [slot copy _center]
   (let [slot-label (get-in copy [:tooltips (if (:availableNow slot) :availableNow :available)])
@@ -1226,8 +1249,8 @@
                   :vector-effect "non-scaling-stroke"}])])])
 
 (defn show-events [events-state show-done-atom? _now-time-atom page-title container-width settings copy compact-open-state hover-info-state block-uid timeline-state]
-  (let [[events done-todos] events-state
-        all-events (vec (if @show-done-atom? (concat events done-todos) events))
+  (let [[events done-todos untimed-dones] events-state
+        all-events (vec (if @show-done-atom? (concat events done-todos untimed-dones) events))
         past-occupied-events (vec (concat events done-todos))
         frame (or (log-core-call "chartPresentationFrame" {:containerWidth container-width})
                   {:viewBox {:width 720 :height 420}
@@ -1237,7 +1260,6 @@
         frame-height (get-in frame [:viewBox :height])
         center {:center-x (get-in frame [:center :x]) :center-y (get-in frame [:center :y])}
         labels-visible? (get-in frame [:labels :visible])
-        unplanned-pattern-id (str "nautilus-log-unplanned-" block-uid)
         hover-enabled? true
         elapsed-page? (:showElapsed timeline-state)
         interactive? (:interactive timeline-state)
@@ -1272,7 +1294,7 @@
              :font-size font-size}
        [:g
         (when elapsed-page? [past-time-overlay-component snail-inner-radius center settings timeline-minute])
-        (when elapsed-page? [past-unplanned-overlay-component past-occupied-events snail-inner-radius center settings timeline-minute unplanned-pattern-id])
+        (when elapsed-page? [past-unplanned-overlay-component past-occupied-events snail-inner-radius center settings timeline-minute])
         (when @show-done-atom? done-slice-components)
         all-slice-components
         [snail-blueprint-component snail-template-color snail-inner-radius center settings elapsed-page? timeline-minute]
@@ -1292,6 +1314,7 @@
         [central-label-component (split-and-trim page-title len-central-legend) center center-now-label]
         (when @debug-state-atom [draw-debug-rects rects])]]]
      [detail-region-component hover-info-state copy]
+     [untimed-completion-list (if @show-done-atom? untimed-dones []) copy hover-info-state]
      [compact-event-list all-events copy compact-open-state hover-info-state]]))
 
 (defn add-start-after
@@ -1353,9 +1376,12 @@
 (defn switch-done-visibility-button [show-done-state copy]
   (let [label (if @show-done-state (:hideDone copy) (:showDone copy))]
     [:button
-     {:on-click #(swap! show-done-state not)
+     {:type "button"
+      :on-click #(swap! show-done-state not)
       :class "nautilus-log-toggle-btn"
       :data-nautilus-tooltip label
+      :aria-pressed @show-done-state
+      :aria-description (:doneScope copy)
       :aria-label label}
      (if @show-done-state
        [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}
@@ -1626,7 +1652,8 @@
                   :burningAvailable "Flexible time is elapsing" :burningEvents "Event time is elapsing" :now "Current time"}
        :allocation {:planned "planned" :free "free" :over "over" :noSlot "no slot" :left "left"}
        :legend {:urgent "Urgent" :event "Event" :task "Task"}
-       :controls {:hideDone "Hide completed items" :showDone "Show completed items"
+       :controls {:hideDone "Hide completed on chart" :showDone "Show completed on chart"
+                  :doneScope "Chart only. Desk shows unfinished tasks."
                   :desk "Open Desk"
                   :calendar "Sync Google Calendar" :calendarForce "⌥ Click to restore Google-managed items"
                   :calendarSetup "Connect Google Calendar and sync this date"
@@ -1643,8 +1670,11 @@
                   :calendarAllDaySkipped "all-day skipped" :calendarTasksPending "reconnect for Tasks"
                   :calendarTasksUnavailable "Tasks unavailable"
                   :collapse "Collapse Nautilus Log" :expand "Expand Nautilus Log"}
-       :panels {:overview "Overview" :overflow "Unscheduled today" :warnings "Schedule warnings" :schedule "Schedule" :item "item" :items "items"}
-       :tooltips {:task "Task" :event "Event" :available "Available slot" :availableNow "Available now"}
+       :panels {:overview "Overview" :overflow "Unscheduled today" :warnings "Schedule warnings" :schedule "Schedule" :item "item" :items "items"
+                :untimedCompleted "Completed · No time recorded"}
+       :tooltips {:task "Task" :event "Event" :available "Available slot" :availableNow "Available now"
+                  :completed "Completed" :noCompletionTime "No completion time recorded"
+                  :inheritedCompletion "Completion status from reference" :locateTask "Click to locate · ⇧ Sidebar"}
        :warnings {:overnight "Continues into the next day"
                   :sameTime "Start and end times cannot be the same"}}))
 
@@ -1944,16 +1974,13 @@
                                                      {:entries []})
                                      parsed (mapv #(parse-row-params % settings clock-context) mapped)
                                      filtered (filterv #(not= "" (:description %)) parsed)]
-                                 (let [dones (filterv #(or (:done-at %) (and (:meeting %) (:done %))) filtered)
-                                       pendings (filterv #(not (or (:done-at %) (and (:meeting %) (:done %)))) filtered)
-                                       completed-uids (->> filtered
-                                                           ;; Tidy reflects the visible outline state, not
-                                                           ;; today's Review ownership. A bare reference to
-                                                           ;; a DONE source is still visibly settled and its
-                                                           ;; local wrapper should move with other DONE rows.
-                                                           (filter :done)
-                                                           (mapv :uid))]
-                                   [(add-start-after pendings) dones completed-uids]))))
+                                 (let [history (log-core-call "partitionChartEvents" filtered)]
+                                   ;; Keep untimed completion visible without sending it to
+                                   ;; scheduling or borrowing a source block's timestamp.
+                                   ;; Tidy still receives every locally settled wrapper UID.
+                                   [(add-start-after (:pendingEvents history))
+                                    (:timedDoneEvents history) (:untimedDoneEvents history)
+                                    (:completedUids history)]))))
                show-done-state (r/atom true)
                tidy-state (r/atom false)
                calendar-state (r/atom {:busy false
@@ -1995,7 +2022,7 @@
                                     :showNow @daily-page-atom?})
                 plan-from-time (:scheduleFromMinutes timeline-state)
                 plan-status @plan-status-state
-                [text-events done-events completed-uids] @*text-events
+                [text-events done-events untimed-done-events completed-uids] @*text-events
                 expired-fixed-uids (->> text-events
                                         (filter :meeting)
                                         (filter (fn [event]
@@ -2025,7 +2052,7 @@
                                                 :nowMinutes (:capacityFromMinutes timeline-state)
                                                 :fixedEvents fixed-events})
                 capacity (assoc capacity-base :burningBucket burning-bucket)
-                events-state [(fill-day text-events (:workday-start settings) (:workday-end settings) plan-from-time) done-events]]
+                events-state [(fill-day text-events (:workday-start settings) (:workday-end settings) plan-from-time) done-events untimed-done-events]]
             [:div {:class (str "nautilus-log-container" (when @collapsed-state " nautilus-log-collapsed"))
                    :data-nautilus-log-block block-uid
                    :data-nautilus-plan-status (or (:status plan-status) "unbound")}

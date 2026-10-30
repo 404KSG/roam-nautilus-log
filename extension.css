@@ -17,7 +17,7 @@
   --nautilus-log-roam-toolbar-icon: #5c7080;
   --nautilus-log-now: #d44b4b;
   --nautilus-log-past-overlay: rgba(86, 101, 116, 0.08);
-  --nautilus-log-unplanned-stripe: rgba(86, 101, 116, 0.34);
+  --nautilus-log-unplanned-fill: #f0f1f2;
   --nautilus-log-completed: #77818c;
   --nautilus-log-completed-fill: rgba(86, 101, 116, 0.22);
   --nautilus-log-past-event-fill: rgba(252, 194, 0, 0.24);
@@ -42,7 +42,7 @@
   --nautilus-log-roam-toolbar-icon: #bfccd6;
   --nautilus-log-now: #ff8b78;
   --nautilus-log-past-overlay: rgba(255, 255, 255, 0.06);
-  --nautilus-log-unplanned-stripe: rgba(255, 255, 255, 0.24);
+  --nautilus-log-unplanned-fill: #26272a;
   --nautilus-log-completed: #aeb8c2;
   --nautilus-log-completed-fill: rgba(199, 207, 214, 0.2);
   --nautilus-log-past-event-fill: rgba(242, 193, 78, 0.23);
@@ -482,8 +482,8 @@
 }
 
 .nautilus-log-compact-item--done {
-  opacity: 0.48;
-  text-decoration: line-through;
+  color: var(--nautilus-log-completed);
+  text-decoration: none;
 }
 
 .nautilus-log-slice {
@@ -505,9 +505,9 @@
 
 .nautilus-log-event-slice-group--interactive:hover .nautilus-log-slice,
 .nautilus-log-event-slice-group--interactive:focus .nautilus-log-slice {
-  filter: brightness(1.08) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.15));
-  stroke: rgba(255, 255, 255, 0.7);
-  stroke-width: 1.5px;
+  filter: none;
+  stroke: var(--nautilus-log-chart-focus);
+  stroke-width: 2px;
 }
 
 .nautilus-log-event-conflict .nautilus-log-slice {
@@ -532,12 +532,13 @@
 .nautilus-log-event-slice-group--interactive:hover .nautilus-log-slice-group text,
 .nautilus-log-event-slice-group--interactive:focus .nautilus-log-slice-group text {
   font-weight: 600;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15));
+  filter: none;
 }
 
 .nautilus-log-link-line {
   opacity: 0.42;
-  stroke-dasharray: 4, 3;
+  stroke-dasharray: none;
+  stroke-width: 0.75px;
   transition: opacity 0.2s ease, stroke-width 0.2s ease;
 }
 
@@ -577,14 +578,18 @@
   pointer-events: none;
 }
 
-.nautilus-log-unplanned-stripe {
-  stroke: var(--nautilus-log-unplanned-stripe);
-  stroke-width: 1.15px;
+.nautilus-log-unplanned-overlay path {
+  fill: var(--nautilus-log-unplanned-fill);
 }
 
-.nautilus-log-grid-past .nautilus-log-slice,
-.nautilus-log-grid-past > text {
-  opacity: 0.52;
+.nautilus-log-grid .nautilus-log-slice {
+  stroke-width: 0.75px;
+  stroke-opacity: 0.5;
+}
+
+.nautilus-log-hour-label {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .nautilus-log-past--completed .nautilus-log-slice {
@@ -592,7 +597,7 @@
 }
 
 .nautilus-log-past--completed .nautilus-log-slice-group text {
-  opacity: 0.58;
+  opacity: 1;
 }
 
 .nautilus-log-past--completed .nautilus-log-link-line {
@@ -604,7 +609,7 @@
 }
 
 .nautilus-log-past--event .nautilus-log-slice-group text {
-  opacity: 0.68;
+  opacity: 1;
 }
 
 .nautilus-log-past--event .nautilus-log-link-line {
@@ -616,7 +621,7 @@
   flex: 0 0 auto;
   display: flex;
   gap: 2px;
-  opacity: 0.38;
+  opacity: 1;
   transition: opacity 0.2s ease;
   z-index: 10;
 }
@@ -626,7 +631,7 @@
   opacity: 1;
 }
 
-.nautilus-log-toggle-btn {
+.nautilus-log-container .nautilus-log-toggle-btn {
   --nautilus-log-control-tooltip-bg: #fff;
   --nautilus-log-control-tooltip-border: rgba(16, 22, 26, 0.2);
   --nautilus-log-control-tooltip-text: #182026;
@@ -720,10 +725,10 @@
   transform: translateY(0);
 }
 
-.nautilus-log-toggle-btn:hover,
-.nautilus-log-toggle-btn:focus-visible {
+.nautilus-log-container .nautilus-log-toggle-btn:hover,
+.nautilus-log-container .nautilus-log-toggle-btn:focus-visible {
   background-color: var(--nautilus-log-hover) !important;
-  color: #333;
+  color: var(--nautilus-log-chart-ink);
   outline: none;
 }
 
@@ -1047,22 +1052,28 @@
  * Chart-owned materials intentionally stop at this workspace so Desk and the
  * optional execution layer retain their native/independent visual contracts. */
 .nautilus-log-container {
-  --nautilus-log-chart-paper: #fafafa;
-  --nautilus-log-chart-panel: #f6f6f7;
-  --nautilus-log-chart-ink: #25262a;
-  --nautilus-log-chart-muted: #686c73;
-  --nautilus-log-chart-hairline: #dfe1e4;
-  --nautilus-log-chart-focus: #075985;
-  /* Chart-only semantic ink is dark enough for normal-size labels. */
-  --nautilus-log-task: #326a91;
+  --nautilus-log-chart-paper: #fafaf9;
+  --nautilus-log-chart-panel: #f6f6f5;
+  --nautilus-log-chart-ink: #24262b;
+  --nautilus-log-chart-muted: #61656d;
+  --nautilus-log-text-main: var(--nautilus-log-chart-ink);
+  --nautilus-log-text-sub: var(--nautilus-log-chart-muted);
+  --nautilus-log-control-icon: var(--nautilus-log-chart-muted);
+  --nautilus-log-chart-hairline: #e2e3e5;
+  --nautilus-log-chart-focus: #3e6d84;
+  /* Quiet chrome must not make completed content look disabled. */
+  --nautilus-log-task: #3e6d84;
   --nautilus-log-positive: #277a59;
-  --nautilus-log-completed: #626d78;
-  --nautilus-log-now: #b23a3a;
-  --nautilus-log-spiral: #5f6670;
-  --nautilus-log-slot-stroke: #486676;
-  --nautilus-log-task-fill: rgba(50, 106, 145, 0.22);
-  --nautilus-log-event: #875d18;
-  --nautilus-log-event-fill: #f1e6d2;
+  --nautilus-log-completed: #5e636b;
+  --nautilus-log-completed-fill: #e4e8ea;
+  --nautilus-log-past-event-fill: #efe8dc;
+  --nautilus-log-unplanned-fill: #f0f1f2;
+  --nautilus-log-now: #b24747;
+  --nautilus-log-spiral: #737983;
+  --nautilus-log-slot-stroke: #3e6d84;
+  --nautilus-log-task-fill: #dce8ee;
+  --nautilus-log-event: #7a5e2e;
+  --nautilus-log-event-fill: #f2e9d4;
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
@@ -1107,6 +1118,8 @@
 
 .nautilus-log-detail-region {
   box-sizing: border-box;
+  width: min(400px, calc(100% - 32px));
+  margin-inline: auto;
   min-width: 0;
   height: 32px;
   padding: 3px 8px;
@@ -1172,13 +1185,62 @@
 .nautilus-log-detail-title { font-size: 12px; line-height: 16px; font-weight: 500; }
 .nautilus-log-detail-meta { color: var(--nautilus-log-chart-muted); font-size: 11px; line-height: 14px; }
 
-.nautilus-log-link-line { stroke-dasharray: 3 3; opacity: .45; stroke-width: 1px; }
-.nautilus-log-event-slice-group--interactive:hover .nautilus-log-slice,
-.nautilus-log-event-slice-group--interactive:focus .nautilus-log-slice {
-  filter: none;
-  stroke: var(--nautilus-log-chart-focus);
-  stroke-width: 2px;
+/* A small named history list, not a new Details panel. Reserve two rows so
+   completing a task or receiving CLOCK evidence cannot move following content. */
+.nautilus-log-untimed-history {
+  box-sizing: border-box;
+  width: min(400px, calc(100% - 32px));
+  min-width: 0;
+  height: 64px;
+  margin: 4px auto 0;
+  color: var(--nautilus-log-chart-ink);
 }
+.nautilus-log-untimed-history[data-history-visible="false"] { visibility: hidden; }
+.nautilus-log-untimed-heading {
+  height: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--nautilus-log-chart-muted);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+}
+.nautilus-log-untimed-count { font-variant-numeric: tabular-nums; }
+.nautilus-log-untimed-list {
+  box-sizing: border-box;
+  height: 48px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+}
+.nautilus-log-untimed-list::-webkit-scrollbar { width: 4px; }
+.nautilus-log-untimed-list::-webkit-scrollbar-thumb { background: var(--nautilus-log-chart-muted); border-radius: 3px; }
+.nautilus-log-untimed-item {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  min-width: 0;
+  margin: 0;
+  padding: 0 3px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 24px;
+}
+.nautilus-log-untimed-item:hover { background: var(--nautilus-log-hover); }
+.nautilus-log-untimed-item:focus-visible {
+  outline: 2px solid var(--nautilus-log-chart-focus);
+  outline-offset: -2px;
+}
+.nautilus-log-untimed-check { flex: none; color: var(--nautilus-log-completed); }
+.nautilus-log-untimed-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nautilus-log-now-needle-line { filter: none; stroke: var(--nautilus-log-now); stroke-width: 1.5px; }
 
 .nautilus-log-status-rail {
@@ -1224,21 +1286,24 @@
 .bp3-dark .nautilus-log-container,
 .roam-app.rm-dark-theme .nautilus-log-container,
 .dark .nautilus-log-container {
-  --nautilus-log-chart-paper: #1d1e21;
-  --nautilus-log-chart-panel: #25262a;
-  --nautilus-log-chart-ink: #ecedef;
-  --nautilus-log-chart-muted: #a9adb4;
-  --nautilus-log-chart-hairline: #3a3c42;
-  --nautilus-log-chart-focus: #9dd7f2;
-  --nautilus-log-task: #83b6d4;
+  --nautilus-log-chart-paper: #1c1d20;
+  --nautilus-log-chart-panel: #242528;
+  --nautilus-log-chart-ink: #ecedee;
+  --nautilus-log-chart-muted: #c2c6cc;
+  --nautilus-log-chart-hairline: #34363b;
+  --nautilus-log-chart-focus: #a9c9d8;
+  --nautilus-log-task: #a9c9d8;
   --nautilus-log-positive: #77d7ab;
-  --nautilus-log-completed: #c2ccd5;
+  --nautilus-log-completed: #c2c6cc;
+  --nautilus-log-completed-fill: #2a3338;
+  --nautilus-log-past-event-fill: #3a3428;
+  --nautilus-log-unplanned-fill: #26272a;
   --nautilus-log-now: #ff9b8c;
   --nautilus-log-spiral: #c5cbd1;
-  --nautilus-log-slot-stroke: #c6d3dc;
-  --nautilus-log-task-fill: rgba(131, 182, 212, 0.24);
-  --nautilus-log-event: #d9ad62;
-  --nautilus-log-event-fill: #5f451c;
+  --nautilus-log-slot-stroke: #a9c9d8;
+  --nautilus-log-task-fill: #2b414c;
+  --nautilus-log-event: #e0c48a;
+  --nautilus-log-event-fill: #453a25;
 }
 
 /* Shared topbar / optional execution layer ---------------------------------

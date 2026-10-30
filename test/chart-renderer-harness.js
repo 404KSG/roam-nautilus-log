@@ -87,12 +87,32 @@ let children = clone({
     'block/uid': uid, 'block/string': `{{[[TODO]]}} ${title} 30m`, 'block/order': order, 'block/refs': [],
   })),
   completed: [{ 'block/uid': 'completed-direct', 'block/string': '{{[[DONE]]}} Completed milestone 20m d8', 'block/order': 0, 'block/refs': [] }],
+  untimed: [
+    ['untimed-local', '{{[[DONE]]}} Review project notes 20m'],
+    ['untimed-reference', '((source-done))'],
+    ['timed-done', '{{[[DONE]]}} Publish summary 20m d8'],
+    ['fixed-done', '{{[[DONE]]}} 10:00-10:30 Design review'],
+    ['clock-done', '{{[[DONE]]}} Verify export 15m'],
+    ['running-only', '{{[[DONE]]}} Running-only record 15m'],
+    ['other-day', '{{[[DONE]]}} Earlier-day record 15m'],
+    ['pending-next', '{{[[TODO]]}} Draft next chapter 30m'],
+  ].map(([uid, string], order) => ({ 'block/uid': uid, 'block/string': string, 'block/order': order, 'block/refs': [] })),
+  'untimed-many': Array.from({ length: 12 }, (_, order) => ({
+    'block/uid': `untimed-${order}`, 'block/string': `{{[[DONE]]}} 已完成的合成任务 ${order + 1} ${order === 11 ? '长标题必须可读'.repeat(80) + '末尾标记' : ''} 20m`,
+    'block/order': order, 'block/refs': [],
+  })),
   overnight: [
     { 'block/uid': 'night-event', 'block/string': '23:45-00:15 Night handover', 'block/order': 0, 'block/refs': [] },
     { 'block/uid': 'night-task', 'block/string': '{{[[TODO]]}} Night project brief 90m', 'block/order': 1, 'block/refs': [] },
   ],
   empty: [],
 }[scenario] || mixedChildren);
+
+let clockEntries = scenario === 'untimed' ? [
+  { taskUid: 'clock-done', start: '2026-10-29T07:20:00', end: '2026-10-29T07:35:00', running: false },
+  { taskUid: 'running-only', start: '2026-10-29T07:40:00', running: true },
+  { taskUid: 'other-day', start: '2026-10-28T07:00:00', end: '2026-10-28T07:20:00', running: false },
+] : [];
 
 function q(query, ...args) {
   const source = String(query);
@@ -181,7 +201,11 @@ window.nautilusLogExtensionData = {
   isRightSidebarRenderContext,
   createRendererPlanSession,
   resolveTaskInstance,
-  getClockRenderContext: () => ({ entries: [] }),
+  getClockRenderContext: (_pageTitle, _uids, logicalEndMinutes) => ({
+    entries: clone(clockEntries),
+    dayStartMs: new RealDate('2026-10-29T00:00:00').getTime(),
+    dayEndMs: new RealDate('2026-10-29T00:00:00').getTime() + Math.max(1440, Number(logicalEndMinutes) || 1440) * 60000,
+  }),
   locatePlanTask: (uid, _target, sidebar) => {
     trace('locate', { uid, sidebar: Boolean(sidebar) });
     return Promise.resolve();
@@ -212,6 +236,10 @@ window.__chartHarness = {
     if (!item) throw new Error('Unknown synthetic fixture UID');
     item['block/string'] = string;
     trace('session-update-child', { uid }); publishSession();
+  },
+  setClockEntries(entries) {
+    clockEntries = clone(entries);
+    window.dispatchEvent(new CustomEvent('nautilus-log:clock-changed'));
   },
   setClock(iso) {
     fakeNow = new RealDate(iso);
@@ -265,6 +293,8 @@ window.__chartHarness = {
       workspace: rect(workspace),
       stage: rect(stage),
       detail: rect(detail),
+      history: rect(document.querySelector('.nautilus-log-untimed-history')),
+      historyItems: [...document.querySelectorAll('.nautilus-log-untimed-item')].map(el => ({uid:el.dataset.taskUid, title:el.textContent, aria:el.getAttribute('aria-label')})),
       desk: rect(desk),
       status: rect(document.querySelector('.nautilus-log-status-rail')),
       following: rect(following),

@@ -4,6 +4,16 @@
 
 ### Added
 
+- Completed tasks without a usable time interval remain visible by name below the
+  spiral. A bounded two-row list preserves outline order and exposes full titles and
+  reference provenance in the context rail. It does not manufacture time, restart
+  pending work, or add capacity demand. The chart's eye control has an explicit scope;
+  Desk keeps its separate unfinished-task projection.
+- The context rail is centered, capped at 400px and inset from narrow containers.
+  The spiral retains its geometry with quiet solid past fills, finer outlines,
+  horizontal hour labels and readable completion labels without strikethrough.
+  No new dependency, font, shortcut or graph-write behavior is introduced.
+
 - The Nautilus spiral now uses stable, container-keyed presentation frames:
   `330 × 300` through 360px, `560 × 400` through 520px, and `720 × 420` above 520px,
   with a slim local context rail below it: 32px normally and 40px in narrow/sidebar views.
@@ -63,6 +73,9 @@
 
 ### Fixed
 
+- Untimed DONE rows no longer fall between the completed-history and pending-task
+  collections. Timestamped, fixed-event and CLOCK-backed history keep their existing
+  interval rules; untimed completion stays visible without taking a time slot.
 - The context-rail sentinel uses an ordinary keyword instead of `::unseen`.
   Roam can pre-read component forms without a current namespace, even when
   standalone SCI evaluation succeeds. A namespace-free initializer check and

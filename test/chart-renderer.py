@@ -253,7 +253,9 @@ def semantic_contrast(page):
     page.wait_for_function('''() => {
       const slot = document.querySelector('.nautilus-log-available-slot');
       const hit = slot?.querySelector('.nautilus-log-available-slot-hit');
-      return slot?.matches(':focus') && hit && hit.getAnimations().every(a => a.playState === 'finished');
+      const control = document.querySelector('.nautilus-log-toggle-btn');
+      return slot?.matches(':focus') && hit && hit.getAnimations().every(a => a.playState === 'finished')
+        && control && control.getAnimations().every(a => a.playState === 'finished');
     }''')
     settle_renderer(page)
     return page.evaluate('''() => {
@@ -271,15 +273,17 @@ def semantic_contrast(page):
       const paint = (el, property) => {
         if (!el) throw Error('Missing rendered semantic element: ' + property);
         const style = getComputedStyle(el), color = rgb(style[property]);
-        let opacity = Number(style[property === 'stroke' ? 'strokeOpacity' : 'fillOpacity']);
+        let opacity = property === 'color' ? 1 : Number(style[property === 'stroke' ? 'strokeOpacity' : 'fillOpacity']);
         for (let node = el; node; node = node.parentElement) opacity *= Number(getComputedStyle(node).opacity);
         color[3] = (color[3] ?? 1) * opacity; return color;
       };
       return {
         task: paint(document.querySelector('.nautilus-log-event-slice-group[aria-label*="Draft the project brief"] .nautilus-log-slice-group text'), 'fill'),
         event: paint(document.querySelector('.nautilus-log-event-slice-group[aria-label*="Stand-up"] .nautilus-log-slice-group text'), 'fill'),
+        completed: paint(document.querySelector('.nautilus-log-untimed-title'), 'color'),
         focus: paint(hit, 'stroke'),
         now: paint(document.querySelector('.nautilus-log-now-needle-line'), 'stroke'),
+        control: paint(document.querySelector('.nautilus-log-toggle-btn svg'), 'stroke'),
         background,
         focused: document.activeElement === slot,
       };
@@ -288,9 +292,9 @@ def semantic_contrast(page):
 
 def assert_semantic_contrast(page, theme):
     colors = semantic_contrast(page)
-    text_ratios = {name: contrast_ratio(colors[name], colors['background']) for name in ('task', 'event')}
+    text_ratios = {name: contrast_ratio(colors[name], colors['background']) for name in ('task', 'event', 'completed')}
     graphic_ratios = {name: contrast_ratio(colors[name], colors['background'])
-                      for name in ('focus', 'now')}
+                      for name in ('focus', 'now', 'control')}
     if not colors['focused'] or colors['focus'][3] <= 0:
         raise RuntimeError(f'{theme} focus paint is absent/transparent: {colors}')
     if min(text_ratios.values()) < 4.5:
@@ -321,7 +325,7 @@ def load_context(page, context, scenario='mixed', window_mode='normal'):
 def assert_rect_equal(before, after, label):
     if before['viewBox'] != after['viewBox']:
         raise RuntimeError(f'{label} changed viewBox')
-    for key in ('svg', 'workspace', 'stage', 'detail', 'status', 'desk', 'following'):
+    for key in ('svg', 'workspace', 'stage', 'detail', 'history', 'status', 'desk', 'following'):
         a, b = before.get(key), after.get(key)
         if not a or not b or any(abs(a[field] - b[field]) > 0.5 for field in ('x', 'y', 'width', 'height')):
             raise RuntimeError(f'{label} changed {key} bounds: {a} / {b}')
@@ -508,6 +512,99 @@ def long_detail_contract(page, screenshots, page_errors, http_requests):
     page.wait_for_function('document.querySelector(".nautilus-log-detail-region")?.dataset.nautilusDetail === "idle"')
     assert_guards(page, page_errors, http_requests, 'available slot plan update')
     results['availableUpdate'] = page.evaluate('() => window.__chartHarness.state()')
+    return results
+
+
+def untimed_history_contract(page, screenshots, page_errors, http_requests):
+    results = {}
+    expected = ['untimed-local', 'untimed-reference', 'running-only', 'other-day']
+    for context, width in [('main', 960), ('main', 640), ('sidebar', 280), ('sidebar', 320), ('embed', 520)]:
+        load_context(page, context, 'untimed')
+        set_width(page, width)
+        before = page.evaluate('() => __chartHarness.state()')
+        assert [item['uid'] for item in before['historyItems']] == expected, (context, before['historyItems'])
+        assert all('No completion time recorded' in item['aria'] for item in before['historyItems'])
+        assert 'Completion status from reference' in before['historyItems'][1]['aria']
+        assert not page.locator('.nautilus-log-untimed-history time').count()
+        box, workspace = before['detail'], before['workspace']
+        assert abs(box['width'] - min(400, workspace['width'] - 32)) <= 1, (context, box, workspace)
+        assert abs(box['x'] + box['width'] / 2 - workspace['x'] - workspace['width'] / 2) <= 1
+        row = page.locator('[data-task-uid="untimed-reference"]')
+        row.focus()
+        page.wait_for_function('document.querySelector(".nautilus-log-detail-title")?.textContent === "Completed synthetic task"')
+        assert '07:40' not in page.locator('.nautilus-log-detail-region').inner_text()
+        row.press('Shift+Enter')
+        assert page.evaluate('() => __chartHarness.traces().filter(x=>x.kind==="locate").at(-1)') == {
+            'kind': 'locate', 'uid': 'untimed-reference', 'sidebar': True}
+        row.focus()
+        page.mouse.move(1180, 880)
+        header = page.locator('.nautilus-log-header-copy').inner_text()
+        page.get_by_role('button', name='Hide completed on chart', exact=True).click()
+        page.wait_for_function('document.querySelector(".nautilus-log-untimed-history")?.getAttribute("aria-hidden") === "true"')
+        hidden = page.evaluate('() => __chartHarness.state()')
+        assert hidden['historyItems'] == [] and hidden['sliceCount'] == 1, hidden
+        assert page.locator('.nautilus-log-header-copy').inner_text() == header
+        assert_rect_equal(before, hidden, 'completion visibility is presentation-only')
+        page.get_by_role('button', name='Show completed on chart', exact=True).click()
+        page.wait_for_function('document.querySelectorAll(".nautilus-log-untimed-item").length === 4')
+        page.evaluate('() => __chartHarness.updateChild("pending-next", "{{[[DONE]]}} Draft next chapter 30m")')
+        page.wait_for_function('document.querySelectorAll(".nautilus-log-untimed-item").length === 5')
+        finished = page.evaluate('() => __chartHarness.state()')
+        assert finished['historyItems'][-1]['uid'] == 'pending-next'
+        assert_rect_equal(before, finished, 'completion must not resize chart or following content')
+        page.evaluate("() => __chartHarness.setClock('2026-10-29T21:01:00')")
+        ended = wait_for_clock(page, '2026-10-29T21:01:00')
+        assert [i['uid'] for i in ended['historyItems']] == expected + ['pending-next']
+        assert_rect_equal(before, ended, 'untimed history after END')
+        page.screenshot(path=str(screenshots / f'untimed-{context}-{width}.png'), full_page=True)
+        assert_guards(page, page_errors, http_requests, 'untimed history')
+        results[f'{context}-{width}'] = {'before': before, 'hidden': hidden, 'finished': finished, 'ended': ended}
+    load_context(page, 'main', 'completed')
+    before = page.evaluate('() => __chartHarness.state()')
+    page.evaluate('() => __chartHarness.updateChild("completed-direct", "{{[[DONE]]}} Completed milestone 20m")')
+    page.wait_for_function('document.querySelectorAll(".nautilus-log-untimed-item").length === 1')
+    after = page.evaluate('() => __chartHarness.state()')
+    assert after['sliceCount'] == 0 and after['historyItems'][0]['uid'] == 'completed-direct'
+    assert_rect_equal(before, after, 'first untimed record must not resize the frame')
+    page.locator('.nautilus-log-untimed-item').focus()
+    page.wait_for_function('document.querySelector(".nautilus-log-detail-region").dataset.nautilusDetail === "active"')
+    page.evaluate('() => __chartHarness.setClockEntries([{taskUid:"completed-direct",start:"2026-10-29T07:20:00",end:"2026-10-29T07:35:00",running:false}])')
+    page.wait_for_function('document.querySelectorAll(".nautilus-log-untimed-item").length === 0 && document.querySelectorAll(".nautilus-log-event-slice-group").length === 1')
+    actual = page.evaluate('() => __chartHarness.state()')
+    assert '07:20–07:35' in page.locator('.nautilus-log-event-slice-group').get_attribute('aria-label')
+    settle_renderer(page)
+    detail_after_clock = page.locator('.nautilus-log-detail-region')
+    assert detail_after_clock.get_attribute('data-nautilus-detail') == 'idle', {
+        'detail': detail_after_clock.inner_text(),
+        'focus': page.evaluate('() => document.activeElement?.outerHTML.slice(0, 500)'),
+    }
+    assert_rect_equal(before, actual, 'CLOCK evidence relocates history without changing the frame')
+    results['timeEvidence'] = {'timed': before, 'untimed': after, 'actual': actual}
+    load_context(page, 'main', 'untimed')
+    page.evaluate('() => __chartHarness.setClockEntries([{taskUid:"untimed-reference",start:"2026-10-29T07:00:00",end:"2026-10-29T07:10:00",running:false}])')
+    page.wait_for_function('!document.querySelector("[data-task-uid=untimed-reference]")')
+    inherited = page.locator('.nautilus-log-event-slice-group[aria-label^="Completed synthetic task."]')
+    assert '07:00–07:10' in inherited.get_attribute('aria-label')
+    results['referenceActual'] = inherited.get_attribute('aria-label')
+    for context, width in [('main', 960), ('sidebar', 280)]:
+        load_context(page, context, 'untimed-many')
+        set_width(page, width)
+        assert page.locator('.nautilus-log-untimed-item').count() == 12
+        last = page.locator('.nautilus-log-untimed-item').last
+        last.focus()
+        page.wait_for_function('document.querySelector(".nautilus-log-detail-title")?.textContent.includes("末尾标记")')
+        scroll = page.locator('.nautilus-log-untimed-list').evaluate('''el => {
+          const row=el.lastElementChild.getBoundingClientRect(),box=el.getBoundingClientRect();
+          return {scroll:el.scrollTop,height:el.clientHeight,total:el.scrollHeight,rowBottom:row.bottom,bottom:box.bottom};
+        }''')
+        assert scroll['height'] <= 48 and scroll['total'] > scroll['height'] and scroll['scroll'] > 0
+        assert scroll['rowBottom'] <= scroll['bottom'] + 1
+        page.screenshot(path=str(screenshots / f'untimed-many-{context}.png'), full_page=True)
+        page.evaluate('() => __chartHarness.removeChild("untimed-11")')
+        page.wait_for_function('document.querySelector(".nautilus-log-detail-region").dataset.nautilusDetail === "idle"')
+        assert_guards(page, page_errors, http_requests, 'bounded named history')
+        results[f'many-{context}'] = scroll
+    load_context(page, 'main')
     return results
 
 
@@ -799,6 +896,7 @@ def main():
             boundaries = setting_boundaries(page, OUT / 'screenshots', page_errors, http_requests)
             long_details = long_detail_contract(page, OUT / 'screenshots', page_errors, http_requests)
             routine_labels = routine_label_contract(page, OUT / 'screenshots', page_errors, http_requests)
+            untimed_history = untimed_history_contract(page, OUT / 'screenshots', page_errors, http_requests)
             page.evaluate('() => window.__chartHarness.unmount()')
             page.wait_for_function('window.__chartHarness.state().svgCount === 0', timeout=5000)
             unmount_state = page.evaluate('() => window.__chartHarness.state()')
@@ -829,6 +927,7 @@ def main():
                 'detailSecondTarget': second_detail,
                 'observations': observations,
                 'scenarioSmoke': scenario_smoke,
+                'untimedHistory': untimed_history,
                 'settingBoundaries': boundaries,
                 'longDetails': long_details,
                 'routineLabels': routine_labels,

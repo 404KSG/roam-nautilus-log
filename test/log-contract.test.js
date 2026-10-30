@@ -914,7 +914,10 @@ test('Tidy is a stable, reversible direct-child action that does not rewrite sch
   assert.doesNotMatch(collapseSource, /:width "16" :height "16"/);
   assert.match(collapseSource, /:width "18" :height "18"/);
   assert.match(component, /:settledUids settled-uids/);
-  assert.match(component, /\(filter :done\)/);
+  assert.match(component, /log-core-call "partitionChartEvents" filtered/);
+  assert.match(component, /\(:completedUids history\)/);
+  assert.match(logCore, /event\.done !== true/);
+  assert.match(logCore, /result\.completedUids\.push\(event\.uid\)/);
   assert.doesNotMatch(component, /not= "source" \(:status-origin %\)/);
   assert.match(component, /<= \(:end event\) \(:elapsedThroughMinutes timeline-state\)/);
   assert.match(entry, /tidyPlan: planTidy\.run/);
@@ -1093,12 +1096,13 @@ test('Log shades elapsed time continuously behind slices and through the current
 
 test('Log separates recorded and unplanned past time without a missed-task category', () => {
   assert.match(component, /past-unplanned-overlay-component/);
-  assert.match(component, /nautilus-log-unplanned-pattern/);
+  assert.match(component, /:fill "var\(--nautilus-log-unplanned-fill\)"/);
+  assert.doesNotMatch(component, /nautilus-log-unplanned-pattern|nautilus-log-unplanned-stripe/);
   assert.match(component, /nautilus-log-past--completed/);
   assert.match(component, /nautilus-log-past--event/);
   assert.match(component, /:data-past-status past-status/);
-  assert.match(css, /--nautilus-log-unplanned-stripe:/);
-  assert.match(css, /\.nautilus-log-unplanned-stripe\s*\{[^}]*stroke:\s*var\(--nautilus-log-unplanned-stripe\);/s);
+  assert.match(css, /--nautilus-log-unplanned-fill:/);
+  assert.match(css, /\.nautilus-log-unplanned-overlay path\s*\{[^}]*fill:\s*var\(--nautilus-log-unplanned-fill\);/s);
   assert.match(css, /\.nautilus-log-past--completed \.nautilus-log-slice\s*\{[^}]*fill:\s*var\(--nautilus-log-completed-fill\);/s);
   assert.match(css, /\.nautilus-log-past--event \.nautilus-log-slice\s*\{[^}]*fill:\s*var\(--nautilus-log-past-event-fill\);/s);
   assert.doesNotMatch(component, /nautilus-log-past--missed/);

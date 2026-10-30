@@ -782,6 +782,26 @@ function completedTaskClockSummary({ taskUid, entries = [], dayStartMs, dayEndMs
   };
 }
 
+/**
+ * Keep every parsed completion in the chart without inventing a time interval.
+ * Untimed history is a presentation collection, never a scheduler/capacity input.
+ * Preserve row identity and outline order; Desk continues to use projectPlan.
+ */
+function partitionChartEvents(events = []) {
+  const result = { pendingEvents: [], timedDoneEvents: [], untimedDoneEvents: [], completedUids: [] };
+  for (const event of Array.isArray(events) ? events : []) {
+    if (!event || typeof event !== 'object') continue;
+    if (event.done !== true) {
+      result.pendingEvents.push(event);
+      continue;
+    }
+    if (typeof event.uid === 'string' && event.uid) result.completedUids.push(event.uid);
+    const timed = Number.isFinite(event.start) && Number.isFinite(event.end) && event.end > event.start;
+    (timed ? result.timedDoneEvents : result.untimedDoneEvents).push(event);
+  }
+  return result;
+}
+
 function calculateCapacity({
   startMinutes,
   endMinutes,
@@ -873,8 +893,9 @@ const UI_COPY = {
     },
     legend: { urgent: 'Urgent', event: 'Event', task: 'Task' },
     controls: {
-      hideDone: 'Hide completed items',
-      showDone: 'Show completed items',
+      hideDone: 'Hide completed on chart',
+      showDone: 'Show completed on chart',
+      doneScope: 'Chart only. Desk shows unfinished tasks.',
       calendar: 'Sync Google Calendar',
       calendarForce: '⌥ Click to restore Google-managed items',
       calendarSetup: 'Connect Google Calendar in Nautilus Log settings',
@@ -914,6 +935,7 @@ const UI_COPY = {
       overflow: 'Unscheduled today',
       warnings: 'Schedule warnings',
       schedule: 'Schedule',
+      untimedCompleted: 'Completed · No time recorded',
       details: 'Details',
       detailIdle: 'Hover or focus a segment to inspect it.',
       item: 'item',
@@ -922,6 +944,9 @@ const UI_COPY = {
     tooltips: {
       task: 'Task',
       event: 'Event',
+      completed: 'Completed',
+      noCompletionTime: 'No completion time recorded',
+      inheritedCompletion: 'Completion status from reference',
       available: 'Available slot',
       availableNow: 'Available now',
       locateTask: 'Click to locate · ⇧ Sidebar',
@@ -952,8 +977,9 @@ const UI_COPY = {
     },
     legend: { urgent: '紧急', event: '事件', task: '任务' },
     controls: {
-      hideDone: '隐藏已完成事项',
-      showDone: '显示已完成事项',
+      hideDone: '在海螺中隐藏已完成',
+      showDone: '在海螺中显示已完成',
+      doneScope: '仅影响海螺图。Desk 只显示未完成任务。',
       calendar: '同步 Google Calendar',
       calendarForce: '⌥ 点击可恢复 Google 管理的内容',
       calendarSetup: '请先在 Nautilus Log 设置中连接 Google Calendar',
@@ -993,6 +1019,7 @@ const UI_COPY = {
       overflow: '今日放不下',
       warnings: '时间范围提醒',
       schedule: '时间安排',
+      untimedCompleted: '已完成 · 未记录时间',
       details: '详情',
       detailIdle: '悬停或聚焦一个切片以查看详情。',
       item: '项',
@@ -1001,6 +1028,9 @@ const UI_COPY = {
     tooltips: {
       task: '任务',
       event: '事件',
+      completed: '已完成',
+      noCompletionTime: '未记录完成时间',
+      inheritedCompletion: '完成状态来自引用',
       available: '可用空档',
       availableNow: '当前可用',
       locateTask: '单击定位 · ⇧ 侧边栏',
@@ -1736,6 +1766,7 @@ module.exports = {
   scheduleTasks,
   completedTaskClockSummary,
   historicalDoneSlice,
+  partitionChartEvents,
   calculateCapacity,
   burningCapacityBucket,
   formatDuration,
