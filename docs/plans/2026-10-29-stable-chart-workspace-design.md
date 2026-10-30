@@ -8,7 +8,7 @@ source task or event must have its own visible diagram mark and connected SVG la
 A count, hidden accessibility node, footer row or label-budget omission is not a substitute.
 
 The original time spiral remains the signature. The current visual direction uses crisp
-neutral ink, indigo emphasis, readable completion states and restrained outlines, informed
+neutral ink, indigo tasks, teal events, readable time/completion states and restrained outlines, informed
 by Linear's published product imagery and design principles. No Linear logo, artwork,
 downloaded font or endorsement is part of the product.
 
@@ -56,13 +56,33 @@ The red current-time needle remains inside the temporal spiral. The center shows
 original date and in-range current time, never a misleading global “completed” caption.
 Narrow plots wrap the date when needed rather than shrinking it to illegible text.
 
+## Wall-clock recovery and state materials
+
+The scheduler and END policy do not change. A minute tick, foreground focus, visible-page
+notification, page return and owned CLOCK notification resynchronize minute-of-day and an
+epoch-minute stamp. The stamp wakes the renderer even when a page returns at the same
+minute on a different date. Listeners and the one minute timer are removed on unmount.
+Integration checks observe the real callback through scheduler results and rendered paths,
+not just unchanged function bodies or fixed chart dimensions.
+
+`chartRecordAppearance` separates task/event category from future/current/elapsed/completed
+state. Tasks remain indigo; events use teal rather than near-white gray. Both current tasks
+and current events have stronger fills and outlines, only while the in-range time needle
+is shown. Explicit urgency overrides the state material. A UID-derived fill-opacity variation
+is stable and bounded to four percent; it never shuffles with the clock or outline order.
+Only elapsed, unrecorded time uses the gray region fill, with an explicit legend key.
+The outer heading and short segment badges identify waiting, no-time and off-hours records.
+
 ## Details and interactions
 
-The local context area is centered, capped at 400px and inset by 16px in narrow containers.
-Its closed 64px slot supports a two-line title and compact metadata; idle has no visible
-box, heading or instructions. There is no horizontal or vertical internal scroller.
+`chartTipLayout` measures title and metadata, including tabular-digit advances. The local
+context box fits its content, is centered, and is capped at 280px with narrow-container
+insets. Short records use one row and no redundant More action. Truncated text or additional
+metadata exposes explicit expansion. The invisible closed slot is 44px rather than 64px;
+status slots are also tightened. There is no horizontal or vertical internal scroller.
+We do not remove spacing by absolutely positioning an expanding panel over following blocks.
 
-Full text is an explicit operation. It expands content in normal page flow and pins that
+Full text is an explicit operation, shown only when needed. It expands content in normal page flow and pins that
 record while reading; hover cannot replace the expanded text. Closing returns to the
 fixed slot. Status, time, provenance, removal, eye-toggle, folding and unload invalidate
 stale ownership. Pointer, focus and explicit expansion are separate owners of one detail

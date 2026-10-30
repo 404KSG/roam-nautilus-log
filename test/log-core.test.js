@@ -582,7 +582,7 @@ test('English UI settings localize all extension-owned status labels', () => {
   assert.equal(copy.capacity.burningEvents, 'Event time is elapsing');
   assert.equal(uiCopy('zh').capacity.burningAvailable, '可安排时间正在流逝');
   assert.equal(uiCopy('zh').capacity.burningEvents, '事件时间正在流逝');
-  assert.deepEqual(copy.legend, { urgent: 'Urgent', event: 'Event', task: 'Task' });
+  assert.deepEqual(copy.legend, { urgent: 'Urgent', event: 'Event', task: 'Task', unrecorded: 'Past, no record' });
   assert.deepEqual(copy.controls, {
     hideDone: 'Hide completed on chart',
     showDone: 'Show completed on chart',
@@ -628,9 +628,14 @@ test('English UI settings localize all extension-owned status labels', () => {
     schedule: 'Schedule',
     untimedCompleted: 'Completed · No time recorded',
     details: 'Details',
-    indexTrack: 'Not time-scaled',
+    indexTrack: 'Outside the timeline',
+    indexUnplaced: 'Unscheduled',
+    indexCompleted: 'Done, no time',
+    indexOutside: 'Outside hours',
     expandDetails: 'Full text',
     collapseDetails: 'Collapse text',
+    more: 'More',
+    less: 'Less',
     detailIdle: 'Hover or focus a segment to inspect it.',
     item: 'item',
     items: 'items',
@@ -649,6 +654,9 @@ test('English UI settings localize all extension-owned status labels', () => {
     outsideWindow: 'Outside chart hours',
     actual: 'Actual',
     completionEstimate: 'Estimated interval',
+    unplacedBadge: 'Wait',
+    noTimeBadge: 'No time',
+    outsideBadge: 'Off-hours',
     available: 'Available slot',
     availableNow: 'Available now',
     locateTask: 'Click to locate · ⇧ Sidebar',
@@ -667,6 +675,9 @@ test('English UI settings localize all extension-owned status labels', () => {
     outsideWindow: '显示时段外',
     actual: '实际记录',
     completionEstimate: '估计区间',
+    unplacedBadge: '待排',
+    noTimeBadge: '未记时',
+    outsideBadge: '时段外',
     available: '可用空档',
     availableNow: '当前可用',
     locateTask: '单击定位 · ⇧ 侧边栏',

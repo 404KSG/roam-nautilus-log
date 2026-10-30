@@ -291,6 +291,7 @@
 .nautilus-log-legend-dot--urgent { background: #ea0f0f; }
 .nautilus-log-legend-dot--event { background: var(--nautilus-log-event); }
 .nautilus-log-legend-dot--task { background: var(--nautilus-log-task); }
+.nautilus-log-legend-dot--unrecorded { width: 9px; border-radius: 1px; background: var(--nautilus-log-unplanned-fill); border: 1px solid var(--nautilus-log-chart-leader); }
 
 .nautilus-log-svg {
   display: block;
@@ -1067,14 +1068,22 @@
   --nautilus-log-positive: #277a59;
   --nautilus-log-completed: #5d6ad3;
   --nautilus-log-completed-fill: #b7c3f2;
-  --nautilus-log-past-event-fill: #edf0f4;
-  --nautilus-log-unplanned-fill: #f7f8fa;
+  --nautilus-log-past-event-fill: #c9dfda;
+  --nautilus-log-unplanned-fill: #e6e8ec;
   --nautilus-log-now: #c84c59;
   --nautilus-log-spiral: #8992a4;
   --nautilus-log-slot-stroke: #5d6ad3;
   --nautilus-log-task-fill: #dfe5fb;
-  --nautilus-log-event: #566783;
-  --nautilus-log-event-fill: #e9eef5;
+  --nautilus-log-event: #2f6f7a;
+  --nautilus-log-event-fill: #d7ebe8;
+  --nautilus-log-task-future-fill: var(--nautilus-log-task-fill);
+  --nautilus-log-task-current-fill: #bbc9f2;
+  --nautilus-log-task-completed-fill: var(--nautilus-log-completed-fill);
+  --nautilus-log-task-elapsed-fill: #dee4f3;
+  --nautilus-log-event-future-fill: var(--nautilus-log-event-fill);
+  --nautilus-log-event-current-fill: #aad6d0;
+  --nautilus-log-event-completed-fill: #b5d5cf;
+  --nautilus-log-event-elapsed-fill: var(--nautilus-log-past-event-fill);
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
@@ -1116,59 +1125,52 @@
 
 .nautilus-log-detail-region {
   box-sizing: border-box;
-  width: min(400px, calc(100% - 32px));
-  margin: 8px auto 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  width: 100%;
+  margin: 2px 0 0;
   min-width: 0;
-  height: 64px;
+  height: 44px;
   color: var(--nautilus-log-chart-ink);
 }
 .nautilus-log-detail-region[data-nautilus-detail="idle"] { visibility: hidden; }
-.nautilus-log-detail-region.is-expanded { height: auto; min-height: 64px; }
+.nautilus-log-detail-region.is-expanded { height: auto; min-height: 44px; }
 .nautilus-log-detail-content {
   box-sizing: border-box;
   display: grid;
-  grid-template-columns: 6px minmax(0, 1fr) auto;
-  column-gap: 7px;
+  grid-template-columns: 5px minmax(0, 1fr);
+  column-gap: 6px;
   row-gap: 2px;
-  padding: 6px 8px;
+  max-width: calc(100% - 32px);
+  min-height: 32px;
+  padding: 5px 7px;
   border: 1px solid var(--nautilus-log-chart-hairline);
-  border-radius: 5px;
+  border-radius: 4px;
   background: var(--nautilus-log-chart-panel);
 }
-.nautilus-log-detail-tone { width: 6px; height: 6px; border-radius: 50%; margin-top: 5px; background: var(--nautilus-log-chart-muted); }
+.nautilus-log-detail-content.has-more { grid-template-columns: 5px minmax(0, 1fr) 32px; }
+.nautilus-log-detail-tone { grid-column: 1; grid-row: 1 / 3; align-self: center; width: 5px; height: 5px; border-radius: 50%; background: var(--nautilus-log-chart-muted); }
 .nautilus-log-detail-tone--task { background: var(--nautilus-log-task); }
 .nautilus-log-detail-tone--event { background: var(--nautilus-log-event); }
 .nautilus-log-detail-tone--available { background: var(--nautilus-log-positive); }
 .nautilus-log-detail-tone--completed { background: var(--nautilus-log-completed); }
-.nautilus-log-detail-title {
-  min-width: 0;
-  font-size: 12px;
-  line-height: 16px;
-  font-weight: 500;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-}
-.nautilus-log-detail-meta {
-  grid-column: 2 / -1;
-  min-width: 0;
-  color: var(--nautilus-log-chart-muted);
-  font-size: 11px;
-  line-height: 14px;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
-  overflow: hidden;
-}
+.nautilus-log-detail-title { grid-column: 2; grid-row: 1; min-width: 0; font-size: 12px; line-height: 16px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nautilus-log-detail-meta { grid-column: 2; grid-row: 2; min-width: 0; color: var(--nautilus-log-chart-muted); font-size: 11px; font-weight: 400; line-height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nautilus-log-detail-content.is-inline { grid-template-columns: 5px max-content minmax(0, 1fr); align-items: center; }
+.nautilus-log-detail-content.is-inline.has-more { grid-template-columns: 5px max-content minmax(0, 1fr) 32px; }
+.nautilus-log-detail-content.is-inline .nautilus-log-detail-tone { grid-row: 1; }
+.nautilus-log-detail-content.is-inline .nautilus-log-detail-meta { grid-column: 3; grid-row: 1; }
+.nautilus-log-detail-content.is-inline .nautilus-log-detail-expand { grid-column: 4; grid-row: 1; }
 .nautilus-log-detail-region.is-expanded .nautilus-log-detail-title,
-.nautilus-log-detail-region.is-expanded .nautilus-log-detail-meta { display: block; overflow: visible; -webkit-line-clamp: unset; }
+.nautilus-log-detail-region.is-expanded .nautilus-log-detail-meta { display: block; overflow: visible; white-space: normal; overflow-wrap: anywhere; }
 .nautilus-log-container .nautilus-log-detail-expand {
-  align-self: start;
+  grid-column: 3;
+  grid-row: 1 / 3;
+  align-self: center;
   border: 0;
-  padding: 0 2px;
+  padding: 0;
+  min-width: 24px;
   min-height: 24px;
   border-radius: 3px;
   color: var(--nautilus-log-chart-focus);
@@ -1178,6 +1180,7 @@
   line-height: 16px;
   cursor: pointer;
 }
+.nautilus-log-detail-region.is-expanded .nautilus-log-detail-expand { grid-row: 1; align-self: start; }
 .nautilus-log-detail-expand:focus-visible { outline: 2px solid var(--nautilus-log-chart-focus); outline-offset: 1px; }
 .nautilus-log-record-title { fill: var(--nautilus-log-chart-ink); font-size: 13px; font-weight: 500; }
 .nautilus-log-current-task .nautilus-log-record-title { fill: var(--nautilus-log-chart-focus); font-weight: 600; }
@@ -1186,7 +1189,9 @@
 .nautilus-log-index-segment { fill: var(--nautilus-log-index-fill); stroke: var(--nautilus-log-chart-focus); stroke-width: 1px; }
 .nautilus-log-index-record--unplaced .nautilus-log-index-segment { fill: transparent; stroke-dasharray: 3 2; }
 .nautilus-log-event-slice-group .nautilus-log-slice { stroke: var(--nautilus-log-chart-paper); stroke-width: 0.8px; }
-.nautilus-log-event-slice-group.nautilus-log-current-task .nautilus-log-slice { stroke: var(--nautilus-log-task); stroke-width: 1.6px; }
+.nautilus-log-event-slice-group.nautilus-log-current-task .nautilus-log-slice { stroke: var(--nautilus-log-task); stroke-width: 2px; }
+.nautilus-log-event-slice-group.nautilus-log-current-event .nautilus-log-slice { stroke: var(--nautilus-log-event); stroke-width: 2px; }
+.nautilus-log-current-event .nautilus-log-record-title { fill: var(--nautilus-log-event); font-weight: 600; }
 .nautilus-log-event-slice-group.nautilus-log-event-conflict .nautilus-log-slice { stroke: var(--nautilus-log-warning); stroke-width: 1.5px; stroke-dasharray: 4 2; }
 .nautilus-log-event-slice-group--interactive:hover .nautilus-log-record-title,
 .nautilus-log-event-slice-group--interactive:focus .nautilus-log-record-title { fill: var(--nautilus-log-chart-focus); font-weight: 600; }
@@ -1195,6 +1200,7 @@
 .nautilus-log-event-slice-group--interactive:hover .nautilus-log-index-segment,
 .nautilus-log-event-slice-group--interactive:focus .nautilus-log-index-segment { stroke-width: 2px; }
 .nautilus-log-index-caption { fill: var(--nautilus-log-chart-muted); font-size: 10px; }
+.nautilus-log-index-status { fill: var(--nautilus-log-chart-ink); font-size: 8.5px; font-weight: 500; pointer-events: none; }
 @container (max-width: 520px) {
   .nautilus-log-workspace .nautilus-log-record-leader { stroke-opacity: 0.28; }
   .nautilus-log-workspace .nautilus-log-event-slice-group:hover .nautilus-log-record-leader,
@@ -1206,18 +1212,18 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   width: 100%;
-  height: 32px;
-  min-height: 32px;
-  margin-top: 4px;
+  height: 20px;
+  min-height: 20px;
+  margin-top: 2px;
 }
-.nautilus-log-status-slot { min-width: 0; height: 32px; overflow: hidden; }
+.nautilus-log-status-slot { min-width: 0; height: 20px; overflow: hidden; }
 .nautilus-log-overflow-panel,
 .nautilus-log-warning-panel {
   box-sizing: border-box;
-  height: 32px;
-  min-height: 32px;
+  height: 20px;
+  min-height: 20px;
   margin: 0;
-  padding: 7px 0 3px;
+  padding: 2px 0;
   overflow: hidden;
   border-top-color: var(--nautilus-log-chart-hairline);
   font-size: 11px;
@@ -1233,10 +1239,10 @@
 .nautilus-log-status-rail:has(details[open]) { height: auto; }
 .nautilus-log-status-slot:has(details[open]),
 .nautilus-log-status-slot:has(details[open]) > details { height: auto; overflow: visible; }
-.nautilus-log-status-slot:empty::after { content: ""; display: block; height: 32px; }
+.nautilus-log-status-slot:empty::after { content: ""; display: block; height: 20px; }
 
 @container (max-width: 520px) {
-  .nautilus-log-status-rail { grid-template-columns: minmax(0, 1fr); height: 64px; min-height: 64px; }
+  .nautilus-log-status-rail { grid-template-columns: minmax(0, 1fr); height: 40px; min-height: 40px; }
   .nautilus-log-status-rail:has(details[open]) { height: auto; }
 }
 
@@ -1255,14 +1261,18 @@
   --nautilus-log-positive: #77d7ab;
   --nautilus-log-completed: #9aa4f2;
   --nautilus-log-completed-fill: #404c85;
-  --nautilus-log-past-event-fill: #252b39;
-  --nautilus-log-unplanned-fill: #1a1d25;
+  --nautilus-log-past-event-fill: #27494e;
+  --nautilus-log-unplanned-fill: #30343d;
   --nautilus-log-now: #ec8790;
   --nautilus-log-spiral: #a7b2c7;
   --nautilus-log-slot-stroke: #9aa4f2;
   --nautilus-log-task-fill: #293456;
-  --nautilus-log-event: #a3b4cf;
-  --nautilus-log-event-fill: #2d3545;
+  --nautilus-log-event: #83c7bf;
+  --nautilus-log-event-fill: #224247;
+  --nautilus-log-task-current-fill: #43578c;
+  --nautilus-log-task-elapsed-fill: #29344f;
+  --nautilus-log-event-current-fill: #28636a;
+  --nautilus-log-event-completed-fill: #285156;
 }
 
 /* Shared topbar / optional execution layer ---------------------------------

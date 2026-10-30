@@ -7,22 +7,43 @@ import { isRightSidebarRenderContext } from '../src/render-context.js';
 const RealDate = window.__chartRealDate || Date;
 const traces = [];
 let fakeNow = new RealDate(window.__chartFakeNowMs || '2026-10-29T08:01:00');
-const nativeClearInterval = window.clearInterval;
+const nativeClearInterval = window.clearInterval.bind(window);
+const nativeSetInterval = window.setInterval.bind(window);
+const realMinuteTimer = new URLSearchParams(window.location.search).get('realClock') === '1';
 const fakeIntervals = new Map();
 let nextIntervalId = 1000;
 window.setInterval = (callback, delay, ...args) => {
   const id = ++nextIntervalId;
-  fakeIntervals.set(id, { callback: () => callback(...args), delay: Number(delay) || 0 });
-  trace('interval-register', { id, delay: Number(delay) || 0 });
+  const record = { callback: () => callback(...args), delay: Number(delay) || 0 };
+  fakeIntervals.set(id, record);
+  if (realMinuteTimer && record.delay === 60000) record.nativeId = nativeSetInterval(() => {
+    trace('native-minute-fired', { id, performanceMs: performance.now() }); record.callback();
+  }, 60000);
+  trace('interval-register', { id, delay: Number(delay) || 0, performanceMs: performance.now() });
   return id;
 };
 window.clearInterval = (id) => {
+  const record = fakeIntervals.get(id);
   fakeIntervals.delete(id);
-  return nativeClearInterval(id);
+  return nativeClearInterval(record?.nativeId ?? id);
 };
 
 function trace(kind, detail = {}) {
   traces.push({ kind, ...detail });
+}
+
+const clockListenerRecords = [];
+for (const target of [window, document]) {
+  const add = target.addEventListener.bind(target), remove = target.removeEventListener.bind(target);
+  target.addEventListener = (type, listener, options) => {
+    if (['focus', 'pageshow', 'visibilitychange'].includes(type)) clockListenerRecords.push({ target, type, listener });
+    return add(type, listener, options);
+  };
+  target.removeEventListener = (type, listener, options) => {
+    const index = clockListenerRecords.findIndex(row => row.target === target && row.type === type && row.listener === listener);
+    if (index >= 0) clockListenerRecords.splice(index, 1);
+    return remove(type, listener, options);
+  };
 }
 
 const NativeResizeObserver = window.ResizeObserver;
@@ -82,6 +103,18 @@ let children = clone({
   mixed: mixedChildren,
   routine: routineChildren,
   realistic: realisticChildren,
+  flow: [
+    ['flow-event-0','06:00-07:35 Morning event'], ['flow-event-1','08:00-08:30 Breakfast'],
+    ['flow-event-2','08:30-09:00 Travel'], ['flow-event-3','11:30-12:00 Return'],
+    ['flow-event-4','12:00-12:30 Lunch'], ['flow-event-5','12:30-13:00 Break'],
+    ['flow-current-event','13:00-13:30 Fixed appointment'], ['flow-event-7','17:00-17:30 Travel'],
+    ['flow-review','18:30-19:00 Review'], ['flow-event-9','19:05-20:00 Evening event'],
+    ['flow-task-0','{{[[TODO]]}} Submit brief 15m'], ['flow-task-1','{{[[TODO]]}} Outline guide 30m'],
+    ['flow-task-2','{{[[TODO]]}} Prepare cover 30m'], ['flow-task-3','{{[[TODO]]}} Draft core 60m'],
+    ['flow-task-4','{{[[TODO]]}} Refine interface 60m'], ['flow-task-5','{{[[TODO]]}} Write notes 40m'],
+    ['flow-task-6','{{[[TODO]]}} Read 30m'], ['flow-task-7','{{[[TODO]]}} Flashcards 45m'],
+    ['flow-done-0','{{[[DONE]]}} Completed sample one 20m'], ['flow-done-1','{{[[DONE]]}} Completed sample two 45m'],
+  ].map(([uid,string],order)=>({'block/uid':uid,'block/string':string,'block/order':order,'block/refs':[]})),
   stress: realisticChildren.slice(0, 18).concat([
     { 'block/uid': 'overflow-0', 'block/string': '{{[[TODO]]}} 核对跨团队项目的全部需求并逐项检查设计内容与交付材料确保每个任务都能正常阅读 900m', 'block/order': 18, 'block/refs': [] },
     { 'block/uid': 'overflow-1', 'block/string': '{{[[TODO]]}} Overflow beta 900m', 'block/order': 19, 'block/refs': [] },
@@ -202,6 +235,11 @@ window.nautilusLogCore = {
     trace('chart-scene', { sourceUids: input.items.map(item => item.uid), kinds: result.records.map(record => record.kind) });
     return result;
   },
+  calculateCapacity(input) {
+    const result = logCore.calculateCapacity(input);
+    trace('capacity', { result: clone(result) });
+    return result;
+  },
   timelineDayState(input) {
     const result = logCore.timelineDayState(input);
     trace('timeline-day-state', { input: clone(input), result: clone(result) });
@@ -219,7 +257,7 @@ window.roamAlphaAPI = {
 };
 window.nautilusLogExtensionData = {
   running: true,
-  settings: { language: parameters.get('lang') || 'en', ...(windowMode === 'overnight' ? { 'workday-start': 21, 'workday-end': 2 } : {}) },
+  settings: { language: parameters.get('lang') || 'en', ...(windowMode === 'overnight' ? { 'workday-start': 21, 'workday-end': 2 } : windowMode === 'flow' ? { 'workday-start': 6, 'workday-end': 20 } : {}) },
   shouldSuppressRenderContext: () => false,
   isRightSidebarRenderContext,
   createRendererPlanSession,
@@ -252,6 +290,7 @@ window.__chartHarness = {
     shell.style.width = `${outer + Number(width) - inner}px`;
     trace('resize', { requested: Number(width), outerBefore: outer, innerBefore: inner });
   },
+  activeClockListeners: () => clockListenerRecords.map(row => ({ target: row.target === window ? 'window' : 'document', type: row.type })),
   scene: () => clone(lastScene),
   sourceRows: () => clone(children),
   expectedSourceUids: () => children.filter(row => {
@@ -270,7 +309,19 @@ window.__chartHarness = {
     clockEntries = clone(entries);
     window.dispatchEvent(new CustomEvent('nautilus-log:clock-changed'));
   },
+  advanceWallClock(iso) {
+    fakeNow = new RealDate(iso);
+    window.__chartFakeNowMs = fakeNow.getTime();
+    trace('wall-clock-without-timer', { iso });
+  },
+  signalFocus() { window.dispatchEvent(new Event('focus')); },
+  signalVisibility(value) {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value });
+    document.dispatchEvent(new Event('visibilitychange'));
+  },
+  signalPageShow() { window.dispatchEvent(new Event('pageshow')); },
   setClock(iso) {
+    if (realMinuteTimer) throw new Error('Manual minute callback is forbidden in the native-timer proof');
     fakeNow = new RealDate(iso);
     window.__chartFakeNowMs = fakeNow.getTime();
     const clockIntervals = [...fakeIntervals.entries()].filter(([, entry]) => entry.delay === 60000);

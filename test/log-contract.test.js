@@ -304,7 +304,7 @@ test('the spiral uses a local fixed detail region above an inert grid', () => {
   assert.match(component, /:on-mouse-enter/);
   assert.match(component, /:on-focus/);
   assert.doesNotMatch(component, /createPortal|getScreenCTM|placeFloatingTooltip|radialTooltipGeometry/);
-  assert.match(css, /\.nautilus-log-detail-region\s*\{[^}]*height:\s*64px;/s);
+  assert.match(css, /\.nautilus-log-detail-region\s*\{[^}]*height:\s*44px;/s);
   assert.doesNotMatch(css, /\.nautilus-log-detail-region\s*\{[^}]*overflow[^;]*auto/s);
   assert.doesNotMatch(css, /\.nautilus-log-workspace--side/);
   assert.match(component, /:expanded \(if expanded\? nil info\)/);
@@ -363,7 +363,12 @@ test('a mounted chart derives historical/today behavior from the shared timeline
   const clockStart = component.indexOf('daily-page-atom? (r/atom (daily-page? block-uid))');
   const clockEnd = component.indexOf('page-title-val', clockStart);
   const clockBody = component.slice(clockStart, clockEnd);
-  assert.match(clockBody, /next-daily-page-state/);
+  assert.match(clockBody, /next-day\?/);
+  assert.match(clockBody, /"focus" focus-listener/);
+  assert.match(clockBody, /"pageshow" focus-listener/);
+  assert.match(clockBody, /"visibilitychange" visibility-listener/);
+  assert.match(component, /:currentDate \(\* 60000 @clock-epoch-state\)/);
+  assert.match(component, /removeEventListener js\/document "visibilitychange" visibility-listener/);
   assert.match(clockBody, /daily-page\? block-uid/);
   assert.match(clockBody, /reset! daily-page-atom\?/);
   assert.match(component, /log-core-call "timelineDayState"/);
@@ -1155,7 +1160,7 @@ test('the current planned task is outlined and its label receives stronger empha
   assert.match(component, /log-core-call "isCurrentPlannedTask"/);
   assert.match(component, /nautilus-log-current-task/);
   assert.match(component, /:aria-current \(when current\? "true"\)/);
-  assert.match(css, /\.nautilus-log-event-slice-group\.nautilus-log-current-task \.nautilus-log-slice\s*\{[^}]*stroke:\s*var\(--nautilus-log-task\);[^}]*stroke-width:\s*1\.6px;/s);
+  assert.match(css, /\.nautilus-log-event-slice-group\.nautilus-log-current-task \.nautilus-log-slice\s*\{[^}]*stroke:\s*var\(--nautilus-log-task\);[^}]*stroke-width:\s*2px;/s);
   assert.match(css, /\.nautilus-log-current-task \.nautilus-log-record-title\s*\{[^}]*font-weight:\s*600;/s);
   assert.match(component, /:font-weight "500"/);
 });

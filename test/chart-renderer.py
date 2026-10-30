@@ -74,8 +74,8 @@ def settle_renderer(page):
     page.evaluate('() => new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
 
 
-def load(page, scenario='mixed', context='main', width=720, window='normal', lang='en'):
-    page.goto((OUT / 'index.html').as_uri() + '?' + urlencode({'scenario': scenario, 'context': context, 'window': window, 'lang': lang}))
+def load(page, scenario='mixed', context='main', width=720, window='normal', lang='en', real_clock=False):
+    page.goto((OUT / 'index.html').as_uri() + '?' + urlencode({'scenario': scenario, 'context': context, 'window': window, 'lang': lang, 'realClock': '1' if real_clock else '0'}))
     page.wait_for_function('window.__chartEvaluator && (__chartEvaluator.completed || __chartEvaluator.error)', timeout=15000)
     runtime = page.evaluate('() => __chartEvaluator')
     assert not runtime.get('error'), runtime
@@ -153,9 +153,17 @@ def coverage(page, hidden=False):
         assert box['x'] + box['width'] <= svg['x'] + svg['width'] + 1 and box['bottom'] <= svg['bottom'] + 1, (box, svg)
     detail = page.locator('.nautilus-log-detail-region')
     if 'is-expanded' not in detail.get_attribute('class'):
-        assert abs(s['detail']['height'] - 64) < .5
-    assert abs(s['detail']['width'] - min(400, s['workspace']['width'] - 32)) <= 1
-    assert abs(s['detail']['x'] + s['detail']['width'] / 2 - s['workspace']['x'] - s['workspace']['width'] / 2) <= 1
+        assert abs(s['detail']['height'] - 44) < .5
+    if detail.get_attribute('data-nautilus-detail') == 'active':
+        tip = page.locator('.nautilus-log-detail-content').bounding_box()
+        assert tip['width'] <= min(280, s['workspace']['width'] - 32) + 1, tip
+        assert abs(tip['x'] + tip['width'] / 2 - s['workspace']['x'] - s['workspace']['width'] / 2) <= 1
+        if 'is-expanded' not in detail.get_attribute('class'):
+            assert tip['height'] <= 44.5, tip
+        if detail.get_attribute('data-tip-more') == 'false':
+            assert not page.locator('.nautilus-log-detail-expand').count()
+            assert page.locator('.nautilus-log-detail-title').evaluate('e=>e.scrollWidth<=e.clientWidth')
+            assert page.locator('.nautilus-log-detail-meta').evaluate('e=>e.scrollWidth<=e.clientWidth')
     if detail.get_attribute('data-nautilus-detail') == 'idle':
         assert not detail.text_content().strip()
         assert detail.evaluate('e=>getComputedStyle(e).visibility') == 'hidden'
@@ -225,6 +233,150 @@ def select(page, uid):
     settle_renderer(page)
 
 
+def native_minute_contract(page):
+    load(page, 'mixed', real_clock=True)
+    before = state(page)
+    before_path = page.locator('[data-task-uid="task-reference"] .nautilus-log-slice').first.get_attribute('d')
+    page.evaluate('()=>__chartHarness.advanceWallClock("2026-10-29T13:30:00")')
+    # The 60-second browser timer itself must fire. No manual clock callback,
+    # focus/visibility signal or reduced interval is used in this proof.
+    page.wait_for_function('__chartHarness.traces().some(t=>t.kind==="native-minute-fired")', timeout=90000)
+    page.wait_for_function('__chartHarness.state().nowLabel==="13:30"', timeout=4000)
+    settle_renderer(page);after=coverage(page)
+    proof=page.evaluate('''()=>{const t=__chartHarness.traces(),wall=t.findIndex(x=>x.kind==='wall-clock-without-timer'),fired=t.findIndex(x=>x.kind==='native-minute-fired'),registration=t.find(x=>x.kind==='interval-register'&&x.delay===60000),updated=t.findIndex((x,i)=>i>wall&&x.kind==='timeline-day-state'&&x.input.nowMinutes===810);return {wall,fired,updated,elapsedNativeMs:t[fired].performanceMs-registration.performanceMs,record:__chartHarness.scene().records.find(r=>r.uid==='task-reference').event}}''')
+    assert proof['wall'] < proof['fired'] < proof['updated'] and proof['elapsedNativeMs'] >= 59000, proof
+    assert proof['record']['start']==810 and proof['record']['end']==840
+    assert before_path != page.locator('[data-task-uid="task-reference"] .nautilus-log-slice').first.get_attribute('d')
+    assert_rect_equal(before,after,'native minute callback')
+    page.evaluate('()=>__chartHarness.unmount()');settle_renderer(page)
+    assert state(page)['activeClockIntervals']==0 and page.evaluate('()=>__chartHarness.activeClockListeners()')==[]
+    return proof
+
+
+def timeflow_recovery(page):
+    load(page, 'mixed')
+    set_clock(page, '2026-10-29T04:59:00')
+    assert not page.locator('svg [aria-current="true"]').count(), 'before START there is no current time slice'
+    def snapshot():
+        return page.evaluate('''()=>({now:__chartHarness.state().nowLabel,timeline:__chartHarness.state().lastTimeline,
+          records:__chartHarness.scene().records.map(r=>({uid:r.uid,start:r.event.start,end:r.event.end,kind:r.kind,
+            paths:[...document.querySelector(`[data-task-uid="${r.uid}"]`).querySelectorAll('.nautilus-log-slice')].map(p=>p.getAttribute('d'))})),
+          scheduler:__chartHarness.traces().filter(t=>t.kind==='schedule-tasks').at(-1)})''')
+    def resume(iso, signal):
+        page.evaluate('iso=>__chartHarness.advanceWallClock(iso)', iso)
+        page.evaluate(signal)
+        epoch = page.evaluate('iso=>Math.floor(new __chartRealDate(iso).getTime()/60000)*60000', iso)
+        page.wait_for_function('epoch=>__chartHarness.state().lastTimeline.input.currentDate===epoch', arg=epoch, timeout=4000)
+        settle_renderer(page)
+        return snapshot()
+    records = []
+    for iso in ['2026-10-29T13:29:00', '2026-10-29T13:30:00']:
+        records.append(resume(iso, '()=>__chartHarness.signalFocus()'))
+    first = [{r['uid']: r for r in item['records']} for item in records]
+    assert first[0]['task-reference']['start'] == 809 and first[1]['task-reference']['start'] == 810
+    assert first[0]['task-reference']['paths'] != first[1]['task-reference']['paths']
+    assert first[0]['event-standup']['paths'] == first[1]['event-standup']['paths']
+    for item in records:
+        drawn = {r['uid']: r for r in item['records']}
+        for scheduled in item['scheduler']['result']['scheduledTasks']:
+            assert drawn[scheduled['uid']]['start'] == scheduled['start'] and drawn[scheduled['uid']]['end'] == scheduled['end']
+            assert scheduled['end'] - scheduled['start'] == scheduled['duration']
+    blocked = resume('2026-10-29T09:00:00', '()=>__chartHarness.signalPageShow()')
+    assert next(r for r in blocked['records'] if r['uid']=='task-reference')['start'] == 570
+    assert page.locator('[data-task-uid="event-standup"]').get_attribute('aria-current') == 'true'
+    page.evaluate('()=>__chartHarness.signalVisibility("hidden")')
+    page.evaluate('()=>__chartHarness.advanceWallClock("2026-10-29T10:00:00")')
+    page.evaluate('()=>__chartHarness.signalVisibility("hidden")')
+    assert state(page)['nowLabel'] == '09:00'
+    visible = resume('2026-10-29T10:00:00', '()=>__chartHarness.signalVisibility("visible")')
+    assert next(r for r in visible['records'] if r['uid']=='task-reference')['start'] == 600
+    clock_change = resume('2026-10-29T10:01:00', '()=>__chartHarness.setClockEntries([])')
+    assert next(r for r in clock_change['records'] if r['uid']=='task-reference')['start'] == 601
+    resume('2026-10-29T08:01:00', '()=>__chartHarness.signalFocus()')
+    next_day = resume('2026-10-30T08:01:00', '()=>__chartHarness.signalFocus()')
+    assert next_day['timeline']['result']['relation'] == 'past' and next_day['now'] is None
+    assert next_day['timeline']['result']['scheduleFromMinutes'] == 300
+    set_clock(page, '2026-10-29T20:59:00'); ended = snapshot()
+    assert all(r['kind']=='unplaced' for r in ended['records'] if r['uid'] in ['task-reference','task-long','task-unbroken'])
+    assert len(page.evaluate('()=>__chartHarness.activeClockListeners()')) == 3
+    page.evaluate('()=>__chartHarness.unmount()')
+    assert page.evaluate('()=>__chartHarness.activeClockListeners()') == []
+    assert state(page)['activeClockIntervals'] == 0
+    return {'minuteAdvance':records,'blockedByEvent':blocked,'visibleResume':visible,'clockNotification':clock_change,'sameMinuteNextDay':next_day,'end':ended,'cleanup':True}
+
+
+def afternoon_flow_contract(page):
+    load(page,'flow','main',640,window='flow')
+    observations=[]
+    for iso in ['2026-10-29T13:29:00','2026-10-29T13:30:00','2026-10-29T13:31:00']:
+        set_clock(page,iso);coverage(page)
+        data=page.evaluate('''()=>({clock:__chartHarness.state().nowLabel,
+          capacity:__chartHarness.traces().filter(t=>t.kind==='capacity').at(-1).result,
+          scheduler:__chartHarness.traces().filter(t=>t.kind==='schedule-tasks').at(-1).result,
+          first:__chartHarness.scene().records.find(r=>r.uid==='flow-task-0').event,
+          firstPath:document.querySelector('[data-task-uid="flow-task-0"] .nautilus-log-slice').getAttribute('d'),
+          fixedPath:document.querySelector('[data-task-uid="flow-current-event"] .nautilus-log-slice').getAttribute('d'),
+          fixedPhase:document.querySelector('[data-task-uid="flow-current-event"]').dataset.visualPhase,
+          caption:document.querySelector('.nautilus-log-index-caption').textContent})''')
+        observations.append(data)
+        if data['clock']=='13:29':
+            select(page,'flow-review');coverage(page)
+            assert not page.locator('.nautilus-log-detail-expand').count()
+            page.screenshot(path=str(OUT/'screenshots'/'afternoon-flow-1329.png'),full_page=True)
+    a,b,c=observations
+    assert (a['capacity']['demandMinutes'],a['capacity']['availableMinutes'],a['capacity']['overloadMinutes'],a['capacity']['unplacedMinutes'])==(310,275,35,75)
+    assert [t['uid'] for t in a['scheduler']['overflowTasks']]==['flow-task-6','flow-task-7']
+    assert a['first']['start']==b['first']['start']==810 and c['first']['start']==811
+    assert a['firstPath']==b['firstPath'] and b['firstPath']!=c['firstPath']
+    assert a['fixedPath']==b['fixedPath']==c['fixedPath']
+    assert a['fixedPhase']=='current' and b['fixedPhase']=='elapsed'
+    assert 'Wait 2' in a['caption'] and 'No time 2' in a['caption']
+    return observations
+
+
+def material_and_tip_contract(page):
+    load(page, 'mixed')
+    def paint(uid):
+        page.wait_for_function('''uid=>[...document.querySelector(`[data-task-uid="${uid}"]`).querySelectorAll('.nautilus-log-slice')].every(e=>e.getAnimations().every(a=>a.playState==='finished'))''', arg=uid)
+        return page.locator(f'[data-task-uid="{uid}"]').evaluate('''e=>({phase:e.dataset.visualPhase,category:e.dataset.category,current:e.getAttribute('aria-current'),fill:getComputedStyle(e.querySelector('.nautilus-log-slice')).fill,opacity:getComputedStyle(e.querySelector('.nautilus-log-slice')).fillOpacity})''')
+    at_start = {'task': paint('task-reference'), 'event': paint('event-standup')}
+    assert at_start['task']['phase']=='current' and at_start['event']['phase']=='future'
+    assert at_start['task']['fill'] != at_start['event']['fill']
+    set_clock(page, '2026-10-29T09:00:00')
+    during = {'task': paint('task-reference'), 'event': paint('event-standup')}
+    assert during['event']['phase']=='current' and during['event']['current']=='true' and during['task']['phase']=='future'
+    set_clock(page, '2026-10-29T09:30:00')
+    after = {'task': paint('task-reference'), 'event': paint('event-standup')}
+    assert after['event']['phase']=='elapsed' and after['task']['phase']=='current'
+    assert len({at_start['event']['fill'],during['event']['fill'],after['event']['fill']})==3
+    assert at_start['task']['opacity']==during['task']['opacity']==after['task']['opacity']
+    assert 'Past, no record' in page.locator('.nautilus-log-html-legend').first.text_content()
+    result={'materials':{'start':at_start,'duringEvent':during,'afterEvent':after},'tips':{}}
+    for context,width in [('main',960),('sidebar',280),('embed',520)]:
+        load(page,'routine',context,width)
+        page.evaluate('()=>__chartHarness.updateChild("routine-0","18:30-19:00 Review")')
+        page.wait_for_function('document.querySelector("[data-task-uid=routine-0]").dataset.recordTitle==="Review"')
+        select(page,'routine-0');coverage(page)
+        short=page.locator('.nautilus-log-detail-content').bounding_box()
+        assert short['width'] < 250 and short['height'] <= 36, short
+        assert not page.locator('.nautilus-log-detail-expand').count()
+        before=state(page)
+        page.evaluate('()=>__chartHarness.updateChild("routine-0","18:30-19:00 核对项目全部材料并完成交付内容的逐项检查和验收确认工作")')
+        page.wait_for_function('document.querySelector("[data-task-uid=routine-0]").dataset.recordTitle.includes("验收")')
+        settle_renderer(page)
+        assert page.locator('.nautilus-log-detail-region').get_attribute('data-nautilus-detail') == 'idle'
+        # focus() on the already-focused SVG node emits no new event. Model a
+        # real re-entry rather than weakening stale-detail invalidation.
+        page.locator('[data-task-uid="routine-0"]').evaluate('e=>e.blur()')
+        select(page,'routine-0');coverage(page)
+        long=page.locator('.nautilus-log-detail-content').bounding_box()
+        assert long['width'] <= min(280,width-32)+1 and long['height'] <= 44.5
+        assert page.get_by_role('button',name='Full text',exact=True).count()==1
+        page.screenshot(path=str(OUT/'screenshots'/f'compact-tip-{context}-{width}.png'),full_page=True)
+        result['tips'][f'{context}-{width}']={'short':short,'long':long}
+    return result
+
+
 def lifecycle(page):
     load(page, 'untimed')
     start = coverage(page)
@@ -291,7 +443,7 @@ def full_text(page, context, width):
     page.locator('[data-task-uid="overflow-1"] .nautilus-log-record-title').hover(); settle_renderer(page)
     assert 'END_LONG' in page.locator('.nautilus-log-detail-title').inner_text(), 'expanded reading must be pinned'
     page.get_by_role('button', name='Collapse text', exact=True).click(); page.mouse.move(1180, 980); settle_renderer(page)
-    assert abs(state(page)['detail']['height'] - 64) < .5
+    assert abs(state(page)['detail']['height'] - 44) < .5
     page.screenshot(path=str(OUT / 'screenshots' / f'fulltext-{context}-{width}.png'), full_page=True)
     return {'closed': compact_record(before), 'expandedHeight': expanded['detail']['height'], 'pinned': True, 'noInternalScroll': True}
 
@@ -386,10 +538,15 @@ def main():
                 report['overnight'][f'{context}-{width}'] = observations
             report['fullText'] = {f'{c}-{w}': full_text(page, c, w) for c, w in [('main', 960), ('sidebar', 280), ('embed', 520)]}
             load(page, 'untimed', 'sidebar', 280, lang='zh'); select(page, 'untimed-reference'); coverage(page)
-            assert '分段不按时间定位' in page.locator('.nautilus-log-index-caption').text_content()
+            assert '非排程位置' in page.locator('.nautilus-log-index-caption').text_content()
+            assert '未记时' in page.locator('.nautilus-log-index-caption').text_content()
             assert page.get_by_role('button', name='全文', exact=True).count() == 1
             report['chinese'] = compact_record(state(page))
+            report['afternoonFlow'] = afternoon_flow_contract(page)
+            report['materialsAndTips'] = material_and_tip_contract(page)
+            report['timeflowRecovery'] = timeflow_recovery(page)
             report['lifecycle'] = lifecycle(page)
+            report['nativeMinuteTimer'] = native_minute_contract(page)
             assert not errors and not requests and not resources and not console_errors, (errors, requests, resources, console_errors)
             report.update({'pageErrors': errors, 'httpRequests': requests, 'resourceFailures': resources, 'consoleErrors': console_errors,
                            'result': 'PASS', 'graphWrites': 0})

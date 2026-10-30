@@ -200,6 +200,10 @@ function chartScene({ items = [], events = [], containerWidth, startMinutes = 30
       const angle = (actualSlot.startDegrees + actualSlot.endDegrees) / 2 * Math.PI / 180;
       const inner = (frame.timeRadius + 8) * frame.plotScale, outer = frame.outerRadius * frame.plotScale;
       record.indexPath = arcPath(frame.center.x, frame.center.y, inner, outer, actualSlot.startDegrees, actualSlot.endDegrees);
+      const statusRadius = (inner + outer) / 2;
+      record.statusPoint = { x: frame.center.x + Math.cos(angle) * statusRadius,
+        y: frame.center.y - Math.sin(angle) * statusRadius,
+        room: actualSlot.spanDegrees * Math.PI / 180 * statusRadius };
       record.anchor = { x: frame.center.x + Math.cos(angle) * (outer + 2), y: frame.center.y - Math.sin(angle) * (outer + 2) };
     }
     return record;
@@ -208,4 +212,44 @@ function chartScene({ items = [], events = [], containerWidth, startMinutes = 30
   return { frame, records };
 }
 
-module.exports = { chartScene, chartPresentationFrame };
+/** Category/state paint is separate from scheduling and record placement. */
+function chartRecordAppearance({ event = {}, nowMinutes, interactive = false, showElapsed = false } = {}) {
+  const category = event.meeting === true ? 'event' : 'task';
+  const done = event.done === true;
+  const current = !done && interactive === true && validRange(event)
+    && Number.isFinite(nowMinutes) && event.start <= nowMinutes && nowMinutes < event.end;
+  const elapsed = showElapsed === true && validRange(event) && Number.isFinite(nowMinutes) && event.end <= nowMinutes;
+  const phase = done ? 'completed' : current ? 'current' : elapsed ? 'elapsed' : 'future';
+  let hash = 2166136261;
+  for (const char of String(event.uid || '')) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619) >>> 0;
+  const variation = hash % 5;
+  const override = typeof event['bg-color'] === 'string' && event['bg-color'];
+  return { category, phase, current, currentEvent: current && category === 'event', variation,
+    fill: override || `var(--nautilus-log-${category}-${phase}-fill)`,
+    stroke: `var(--nautilus-log-${category})`, fillOpacity: override ? 1 : .96 + variation / 100 };
+}
+
+/** Closed tips fit content, but always remain within the local workspace. */
+function chartTipLayout({ title = '', summary = '', meta = summary, containerWidth = 720,
+  fontFamily = 'Inter, system-ui, sans-serif', measureTitle, measureMeta } = {}) {
+  const maxWidth = Math.min(280, Math.max(96, finite(containerWidth, 720) - 32));
+  // CSS uses tabular numerals; Canvas defaults to proportional digits. The
+  // zero advance gives the tabular width and avoids clipping short time ranges.
+  const titleWidth = textMeasure(`600 12px ${fontFamily}`, measureTitle)(String(title).replace(/[0-9]/g, '0'));
+  const metaDigits = (String(summary).match(/[0-9]/g) || []).length;
+  // Inter's tnum zero can itself be wider than its proportional zero. Include
+  // the measured native-font allowance plus subpixel grid rounding, not a
+  // tolerance that lets a supposedly complete short tip paint an ellipsis.
+  const metaWidth = textMeasure(`400 11px ${fontFamily}`, measureMeta)(String(summary).replace(/[0-9]/g, '0'))
+    + 2 + metaDigits * .4;
+  let more = String(meta) !== String(summary) || titleWidth > maxWidth - 27 || metaWidth > maxWidth - 27;
+  const extra = more ? 38 : 0;
+  const inlineWidth = titleWidth + metaWidth + 33 + extra;
+  const mode = inlineWidth <= maxWidth ? 'inline' : 'stacked';
+  const width = Math.min(maxWidth, Math.ceil(mode === 'inline' ? inlineWidth : Math.max(titleWidth, metaWidth) + 27 + extra));
+  if (mode === 'stacked' && (titleWidth > width - 27 - extra || metaWidth > width - 27 - extra)) more = true;
+  return { mode, width: Math.max(60, more && mode === 'stacked' ? maxWidth : width), maxWidth,
+    expandedWidth: maxWidth, more, slotHeight: 44 };
+}
+
+module.exports = { chartScene, chartPresentationFrame, chartRecordAppearance, chartTipLayout };

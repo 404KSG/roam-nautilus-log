@@ -38,6 +38,10 @@ Their Roam block order is the task priority.
 
 The scheduler is deterministic and does not generate estimates. A task remains atomic:
 if it cannot fit one gap, it moves to the next suitable gap instead of being split.
+While the current time is inside a fixed event, the next task can correctly keep the same
+start at that event's end. A task that no longer fits before END is unscheduled, not frozen
+at an earlier hour. The minute timer and foreground/visibility/page-return synchronization
+use the same wall-clock snapshot, including its calendar day.
 
 ## Header metrics
 
@@ -56,13 +60,13 @@ small flame marks whether the current minute is consuming Available or Event tim
 ## Visual language
 
 - Red: urgent task
-- Cool neutral fill: fixed event
-- Light indigo fill: planned flexible task
-- Stronger indigo fill: timed completion, with readable labels
+- Teal family: fixed event; future, current, elapsed and completed states have distinct fills
+- Indigo family: flexible task; current work has a stronger fill and outline
+- Completed records retain their category color and readable labels
 - Indigo outline outside the hour grid: a record without a position on this time axis
 - Dashed outline: pending work that has not been scheduled
 - Red needle: current time, confined to the time spiral
-- Pale, solid past fill: elapsed time without a recorded interval
+- Gray, labeled **Past, no record**: elapsed time without a recorded interval; not completion or future availability
 
 Past gaps are factual schedule data, not a judgment that time was wasted.
 
@@ -91,8 +95,9 @@ uses the full source titles and local container width: source edits may change i
 but clock updates, completion visibility and hover do not resize it.
 
 Completed tasks without a usable interval, pending tasks that do not fit, and fixed ranges
-outside the displayed hours remain in a separate **Not time-scaled** track around the
-spiral. Each mark has its own label. Its angle and area are not clock time or duration;
+outside the displayed hours remain in a separate **Outside the timeline** track around the
+spiral. The heading and short segment badges distinguish **Wait**, **No time** and
+**Off-hours** records. Each mark has its own task label. Its angle and area are not clock time or duration;
 a single record never becomes a full progress ring. Slots are reserved from the stable
 source collection, so END does not redistribute existing untimed records. The original
 time intervals, pending scheduler, capacity and Actual calculations remain separate.
@@ -100,9 +105,11 @@ Inherited completion is identified as coming from its reference; source time is 
 borrowed for today's wrapper. There is no task inventory or scrolling Schedule below the plot.
 
 Hover or keyboard-focus a record or available slot to read its context in a centered
-area capped at 400px, inset by 16px in narrower workspaces. It wraps rather than scrolling.
-The closed area reserves 64px and is invisible when idle. **Full text** explicitly expands
-long content in the page, without a nested scrollbar, and pins it while you read. Collapse
+tip that fits its content, capped at 280px and inset by 16px in narrower workspaces.
+Short records use one compact row; longer ones use two rows, never an internal scrollbar.
+The closed slot is 44px and invisible when idle. **More** appears only when text is clipped
+or additional metadata exists; it explicitly expands that content in page flow and pins
+it while you read. Collapse
 it to resume the compact view. Changed or removed records invalidate the pinned text.
 The area does not follow the pointer or cover the plot. Click or Enter on a flexible task's
 mark or label locates its original block; Shift opens it in the sidebar. These actions

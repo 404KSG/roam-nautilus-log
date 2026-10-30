@@ -507,29 +507,37 @@
                   (when (= "completion-estimate" (:time-claim event))
                     (str " · " (get-in copy [:tooltips :completionEstimate]))))]
     {:title title :meta meta :summary-meta summary :uid (:uid event)
-     :tone (cond (:done event) "completed" (:meeting event) "event" :else "task")
+     :tone (cond (:meeting event) "event" (:done event) "completed" :else "task")
      :detail-kind :event :detail-signature (event-detail-signature event)
      :aria-label (str title ". " meta (when (:todo event) (str ". " (get-in copy [:tooltips :locateTask]))))}))
 
-(defn detail-region-component [detail-state copy]
+(defn detail-region-component [detail-state copy container-width]
   (let [info (active-detail detail-state)
         {:keys [title meta summary-meta tone]} info
         active? (boolean (and (seq title) (seq meta)))
-        expanded? (boolean (:expanded @detail-state))]
+        expanded? (boolean (:expanded @detail-state))
+        layout (or (log-core-call "chartTipLayout"
+                                   {:title (or title "") :summary (or summary-meta meta "") :meta (or meta "")
+                                    :containerWidth container-width :fontFamily font-family})
+                   {:mode "stacked" :width 280 :expandedWidth 280 :more true})]
     [:aside {:class (str "nautilus-log-detail-region" (when expanded? " is-expanded"))
-             :aria-label (get-in copy [:panels :details])
-             :aria-hidden (not active?)
-             :aria-live "polite"
+             :aria-label (get-in copy [:panels :details]) :aria-hidden (not active?) :aria-live "polite"
+             :data-tip-mode (:mode layout) :data-tip-more (str (:more layout))
              :data-nautilus-detail (if active? "active" "idle")}
      (when active?
-       [:div {:class "nautilus-log-detail-content"}
+       [:div {:class (str "nautilus-log-detail-content"
+                         (when (and (= "inline" (:mode layout)) (not expanded?)) " is-inline")
+                         (when (:more layout) " has-more"))
+              :style {:width (str (if expanded? (:expandedWidth layout) (:width layout)) "px")}}
         [:span {:class (str "nautilus-log-detail-tone nautilus-log-detail-tone--" tone) :aria-hidden "true"}]
         [:strong {:class "nautilus-log-detail-title"} title]
-        [:button {:type "button" :class "nautilus-log-detail-expand" :aria-expanded expanded?
-                  :on-click (fn [event]
-                              (.stopPropagation event)
-                              (swap! detail-state assoc :expanded (if expanded? nil info)))}
-         (get-in copy [:panels (if expanded? :collapseDetails :expandDetails)])]
+        (when (or (:more layout) expanded?)
+          [:button {:type "button" :class "nautilus-log-detail-expand" :aria-expanded expanded?
+                    :aria-label (get-in copy [:panels (if expanded? :collapseDetails :expandDetails)])
+                    :on-click (fn [event]
+                                (.stopPropagation event)
+                                (swap! detail-state assoc :expanded (if expanded? nil info)))}
+           (get-in copy [:panels (if expanded? :less :more)])])
         [:span {:class "nautilus-log-detail-meta"} (if expanded? meta (or summary-meta meta))]])]))
 
 ;; ---------------- helpers ----------------------
@@ -791,7 +799,7 @@
 (defn slice
   "Draws and colors the slice section according to the specified parameters"
   [[start-angle end-angle inner-radius outer-radius center settings]
-   & {:keys [bg-color border-color legend-color legend-rect text timestamp stroke-dasharray font-weight shaky done? task-start-min task-end-min past?]}]
+   & {:keys [bg-color fill-opacity border-color legend-color legend-rect text timestamp stroke-dasharray font-weight shaky done? task-start-min task-end-min past?]}]
   (let [start-radians (angle->rad (+ start-angle (shake-if shaky)))
         end-radians (angle->rad (+ end-angle (shake-if shaky)))
         mid-radians (if (and task-start-min task-end-min)
@@ -839,6 +847,7 @@
        :style {:--pb-delay (str (* (/ (or task-start-min 0) 1440.0) 6.0) "s")}
        :stroke-dasharray stroke-dasharray
        :fill bg-color
+       :fill-opacity (or fill-opacity 1)
        :stroke border-color}]
      ;; ⤵ adds an event legend
      (when text
@@ -963,15 +972,18 @@
                                     :nowMinutes timeline-minute
                                     :dailyPage elapsed-page?})
         todo-bg-color (or (:bg-color event) task-fill-color)
-        meeting-color (or (:bg-color event) meeting-fill-color)]
+        meeting-color (or (:bg-color event) meeting-fill-color)
+        appearance (log-core-call "chartRecordAppearance"
+                                  {:event event :nowMinutes timeline-minute :interactive interactive? :showElapsed elapsed-page?})]
     {:start-angle start-angle
      :end-angle end-angle
-     :bg-color (cond
-                 done? completed-fill-color
-                 (= "event" past-status) past-event-fill-color
-                 meeting? meeting-color
-                 todo? todo-bg-color
-                 :else nil)
+     :bg-color (or (:fill appearance)
+                   (cond done? completed-fill-color
+                         (= "event" past-status) past-event-fill-color
+                         meeting? meeting-color todo? todo-bg-color :else nil))
+     :fill-opacity (or (:fillOpacity appearance) 1)
+     :visual-phase (:phase appearance)
+     :current-event? (:currentEvent appearance)
      :done done?
      :outer-radius outer-radius
      :meeting? meeting?
@@ -1263,7 +1275,8 @@
         transform (str "translate(" (:center-x center) " " (:center-y center) ") scale(" scale
                        ") translate(" (- (:center-x center)) " " (- (:center-y center)) ")")
         params (when timed? (calculate-slice-params event index (:showElapsed timeline-state)
-                                                   (:interactive timeline-state) (:elapsedThroughMinutes timeline-state) settings))
+                                                   (and (:interactive timeline-state) (:showNow timeline-state))
+                                                   (:elapsedThroughMinutes timeline-state) settings))
         cuts (when timed? (concat [(:start event)] (get-hour-boundaries (:start event) (:end event)) [(:end event)]))]
     [:g (merge {:class (str "nautilus-log-event-slice-group nautilus-log-event-slice-group--interactive"
                             (when actionable? " nautilus-log-event-slice-group--actionable")
@@ -1272,12 +1285,15 @@
                             (when (not timed?) " nautilus-log-index-record")
                             (when (= "unplaced" (:kind record)) " nautilus-log-index-record--unplaced")
                             (when (contains? conflicts uid) " nautilus-log-event-conflict")
-                            (when (:current? params) " nautilus-log-current-task"))
+                            (when (:current? params) " nautilus-log-current-task")
+                            (when (:current-event? params) " nautilus-log-current-event"))
                 :data-task-uid uid :data-record-title (:description event)
                 :data-chart-kind (:kind record) :data-time-claim (:time-claim event)
                 :data-past-status (:past-status params)
+                :data-visual-phase (:visual-phase params)
+                :data-category (if (:meeting event) "event" "task")
                 :visibility (when hidden? "hidden") :aria-hidden hidden?
-                :aria-current (when (:current? params) "true")
+                :aria-current (when (or (:current? params) (:current-event? params)) "true")
                 :role (if actionable? "link" "img") :tab-index (if hidden? -1 0) :focusable "true"
                 :aria-label (:aria-label info)
                 :on-mouse-enter #(show-hover-tooltip! hover-info-state :pointer info %)
@@ -1291,9 +1307,16 @@
           ^{:key (str start ":" end)}
           [slice [(min->angle start) (min->angle end) (spiral-cell-inner-radius start settings snail-inner-radius)
                   (spiral-outer-radius start settings) center settings]
-           :bg-color (:bg-color params) :task-start-min (:start event) :task-end-min (:end event)])]
-       [:path {:class "nautilus-log-index-segment" :d (:indexPath record)
-               :style (when (:bg-color event) {:stroke (update-opacity-str (:bg-color event) "1")})}])
+           :bg-color (:bg-color params) :fill-opacity (:fill-opacity params)
+           :task-start-min (:start event) :task-end-min (:end event)])]
+       [:g
+        [:path {:class "nautilus-log-index-segment" :d (:indexPath record)
+                :style (when (:bg-color event) {:stroke (update-opacity-str (:bg-color event) "1")})}]
+        (when (>= (get-in record [:statusPoint :room]) 42)
+          [:text {:class "nautilus-log-index-status" :text-anchor "middle" :dominant-baseline "central"
+                  :x (get-in record [:statusPoint :x]) :y (get-in record [:statusPoint :y])}
+           (get-in copy [:tooltips (case (:kind record) "unplaced" :unplacedBadge
+                                    "outside-window" :outsideBadge :noTimeBadge)])])])
      [chart-record-label (:label record)]]))
 
 (defn show-events [events-state show-done-atom? _now-time-atom page-title container-width settings copy _compact-open-state hover-info-state _block-uid timeline-state]
@@ -1314,6 +1337,11 @@
                        ") translate(" (- (:center-x center)) " " (- (:center-y center)) ")")
         records (:records scene)
         shown-records (filter #(or @show-done-atom? (not (get-in % [:event :done]))) records)
+        index-summary (str/join " · "
+                         (keep (fn [[kind key]]
+                                 (let [n (count (filter #(= kind (:kind %)) shown-records))]
+                                   (when (pos? n) (str (get-in copy [:tooltips key]) " " n))))
+                               [["unplaced" :unplacedBadge] ["untimed-completed" :noTimeBadge] ["outside-window" :outsideBadge]]))
         all-events (mapv :event shown-records)
         timed-events (mapv :event (filter #(= "timed" (:kind %)) records))
         elapsed-page? (:showElapsed timeline-state)
@@ -1362,10 +1390,11 @@
                      :stroke-linecap "round" :class "nautilus-log-now-needle-line"}]]))
         [central-label-component (split-and-trim page-title len-central-legend) center center-now-label scale]]
        (when (some #(not= "timed" (:kind %)) shown-records)
-         [:text {:class "nautilus-log-index-caption" :text-anchor "middle"
-                 :x (:center-x center) :y (- (:center-y center) (* (:outerRadius frame) scale) 16)}
-          (get-in copy [:panels :indexTrack])])]]
-     [detail-region-component hover-info-state copy]]))
+         [:text {:class "nautilus-log-index-caption" :text-anchor "middle"}
+          [:tspan {:x (:center-x center) :y (- (:center-y center) (* (:outerRadius frame) scale) 24)}
+           (get-in copy [:panels :indexTrack])]
+          [:tspan {:x (:center-x center) :dy 12} index-summary]])]]
+     [detail-region-component hover-info-state copy (min 720 container-width)]]))
 
 (defn add-start-after
   "Adds an end time to events so that tasks placed after the meeting cannot start before it"
@@ -1417,11 +1446,12 @@
         (.sync session)
         (catch :default _e nil)))))
 
-(defn reset-now-time-atom [now-time-atom]
-  (reset! now-time-atom
-          (let [now (new js/Date (.now js/Date))
-                minutes (+ (* (.getHours now) 60) (.getMinutes now))]
-            minutes)))
+(defn reset-now-time-atom [now-time-atom & [epoch-state]]
+  (let [now (new js/Date (.now js/Date))
+        minutes (+ (* (.getHours now) 60) (.getMinutes now))]
+    (reset! now-time-atom minutes)
+    ;; Minute-of-day alone cannot wake a chart resumed at the same time tomorrow.
+    (when epoch-state (reset! epoch-state (js/Math.floor (/ (.getTime now) 60000))))))
 
 (defn switch-done-visibility-button [show-done-state copy]
   (let [label (if @show-done-state (:hideDone copy) (:showDone copy))]
@@ -1808,7 +1838,10 @@
     (get-in copy [:legend :event])]
    [:span {:class "nautilus-log-legend-item"}
     [:i {:class "nautilus-log-legend-dot nautilus-log-legend-dot--task" :aria-hidden "true"}]
-    (get-in copy [:legend :task])]])
+    (get-in copy [:legend :task])]
+   [:span {:class "nautilus-log-legend-item"}
+    [:i {:class "nautilus-log-legend-dot nautilus-log-legend-dot--unrecorded" :aria-hidden "true"}]
+    (get-in copy [:legend :unrecorded])]])
 
 (defn compact-overview-component [capacity settings copy compact-open-state]
   (let [metrics (capacity-metrics capacity settings)
@@ -1957,9 +1990,8 @@
                                    (sync-plan-session! plan-session plan-session-alive? block-uid watched-children-state plan-status-state))
                _settings-listener (.addEventListener js/window settings-event-name settings-listener)
                now-time-atom (r/atom (now-minutes))
+               clock-epoch-state (r/atom (js/Math.floor (/ (.now js/Date) 60000)))
                clock-version-state (r/atom 0)
-               clock-listener (fn [_event] (swap! clock-version-state inc))
-               _clock-listener (.addEventListener js/window "nautilus-log:clock-changed" clock-listener)
                collapsed-state (r/atom false)
                render-context-state (r/atom :pending)
                compact-list-open-state (r/atom nil)
@@ -1990,13 +2022,24 @@
                                                                     (.closest ".nautilus-log-container")
                                                                     (.querySelector ".nautilus-log-desk-btn"))})))))
                daily-page-atom? (r/atom (daily-page? block-uid))
-               clock-interval (js/setInterval
-                               (fn []
-                                 (reset-now-time-atom now-time-atom)
-                                 (let [next-daily-page-state (daily-page? block-uid)]
-                                   (when (not= @daily-page-atom? next-daily-page-state)
-                                     (reset! daily-page-atom? next-daily-page-state))))
-                               60000)
+               refresh-clock! (fn []
+                                (when @plan-session-alive?
+                                  (reset-now-time-atom now-time-atom clock-epoch-state)
+                                  (let [next-day? (daily-page? block-uid)]
+                                    (when (not= @daily-page-atom? next-day?)
+                                      (reset! daily-page-atom? next-day?)))))
+               clock-listener (fn [_event]
+                                (when @plan-session-alive?
+                                  (refresh-clock!)
+                                  (swap! clock-version-state inc)))
+               focus-listener (fn [_event] (refresh-clock!))
+               visibility-listener (fn [_event]
+                                     (when (= "visible" (.-visibilityState js/document)) (refresh-clock!)))
+               _clock-listener (.addEventListener js/window "nautilus-log:clock-changed" clock-listener)
+               _focus-listener (.addEventListener js/window "focus" focus-listener)
+               _pageshow-listener (.addEventListener js/window "pageshow" focus-listener)
+               _visibility-listener (.addEventListener js/document "visibilitychange" visibility-listener)
+               clock-interval (js/setInterval refresh-clock! 60000)
                _plan-session (sync-plan-session! plan-session plan-session-alive? block-uid watched-children-state plan-status-state)
                *text-events (r/track
                              (fn []
@@ -2045,13 +2088,13 @@
 
         :else
         (do
-          (reset-now-time-atom now-time-atom)
+          (reset-now-time-atom now-time-atom clock-epoch-state)
           (let [settings @settings-state
                 copy (ui-copy settings)
                 show-debug-button? (= :debug (first args))
                 timeline-state (or (log-core-call "timelineDayState"
                                                    {:displayDate page-title-val
-                                                    :currentDate (.now js/Date)
+                                                    :currentDate (* 60000 @clock-epoch-state)
                                                     :startMinutes (:workday-start settings)
                                                     :endMinutes (:workday-end settings)
                                                     :nowMinutes @now-time-atom})
@@ -2130,6 +2173,9 @@
       (js/clearInterval clock-interval)
       (.removeEventListener js/window settings-event-name settings-listener)
       (.removeEventListener js/window "nautilus-log:clock-changed" clock-listener)
+      (.removeEventListener js/window "focus" focus-listener)
+      (.removeEventListener js/window "pageshow" focus-listener)
+      (.removeEventListener js/document "visibilitychange" visibility-listener)
       (.removeEventListener js/window "unload" unload-listener)
       (clear-detail-state! hover-info-state)
       (when-let [node @desk-host-node]

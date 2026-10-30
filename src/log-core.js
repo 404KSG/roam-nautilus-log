@@ -7,7 +7,7 @@
  * validating settings before they become render arguments.
  */
 
-const { chartScene, chartPresentationFrame } = require('./chart-scene');
+const { chartScene, chartPresentationFrame, chartRecordAppearance, chartTipLayout } = require('./chart-scene');
 
 const START_HOURS = Object.freeze(Array.from({ length: 24 }, (_value, hour) => hour));
 const END_HOURS = Object.freeze(Array.from({ length: 24 }, (_value, index) => index + 1));
@@ -893,7 +893,7 @@ const UI_COPY = {
       noSlot: 'no slot',
       left: 'left',
     },
-    legend: { urgent: 'Urgent', event: 'Event', task: 'Task' },
+    legend: { urgent: 'Urgent', event: 'Event', task: 'Task', unrecorded: 'Past, no record' },
     controls: {
       hideDone: 'Hide completed on chart',
       showDone: 'Show completed on chart',
@@ -939,9 +939,14 @@ const UI_COPY = {
       schedule: 'Schedule',
       untimedCompleted: 'Completed · No time recorded',
       details: 'Details',
-      indexTrack: 'Not time-scaled',
+      indexTrack: 'Outside the timeline',
+      indexUnplaced: 'Unscheduled',
+      indexCompleted: 'Done, no time',
+      indexOutside: 'Outside hours',
       expandDetails: 'Full text',
       collapseDetails: 'Collapse text',
+      more: 'More',
+      less: 'Less',
       detailIdle: 'Hover or focus a segment to inspect it.',
       item: 'item',
       items: 'items',
@@ -960,6 +965,9 @@ const UI_COPY = {
       outsideWindow: 'Outside chart hours',
       actual: 'Actual',
       completionEstimate: 'Estimated interval',
+      unplacedBadge: 'Wait',
+      noTimeBadge: 'No time',
+      outsideBadge: 'Off-hours',
       available: 'Available slot',
       availableNow: 'Available now',
       locateTask: 'Click to locate · ⇧ Sidebar',
@@ -988,7 +996,7 @@ const UI_COPY = {
       noSlot: '无合适空档',
       left: '剩余',
     },
-    legend: { urgent: '紧急', event: '事件', task: '任务' },
+    legend: { urgent: '紧急', event: '事件', task: '任务', unrecorded: '已过无记录' },
     controls: {
       hideDone: '在海螺中隐藏已完成',
       showDone: '在海螺中显示已完成',
@@ -1034,9 +1042,14 @@ const UI_COPY = {
       schedule: '时间安排',
       untimedCompleted: '已完成 · 未记录时间',
       details: '详情',
-      indexTrack: '分段不按时间定位',
+      indexTrack: '非排程位置',
+      indexUnplaced: '未排入',
+      indexCompleted: '完成未记时',
+      indexOutside: '时段外',
       expandDetails: '全文',
       collapseDetails: '收起全文',
+      more: '展开',
+      less: '收起',
       detailIdle: '悬停或聚焦一个切片以查看详情。',
       item: '项',
       items: '项',
@@ -1055,6 +1068,9 @@ const UI_COPY = {
       outsideWindow: '显示时段外',
       actual: '实际记录',
       completionEstimate: '估计区间',
+      unplacedBadge: '待排',
+      noTimeBadge: '未记时',
+      outsideBadge: '时段外',
       available: '可用空档',
       availableNow: '当前可用',
       locateTask: '单击定位 · ⇧ 侧边栏',
@@ -1777,5 +1793,7 @@ module.exports = {
   isCompactChartWidth,
   chartPresentationFrame,
   chartScene,
+  chartRecordAppearance,
+  chartTipLayout,
   chartLabelMetrics,
 };
