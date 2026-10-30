@@ -88,7 +88,7 @@ Past gaps describe the chart allocation, not proof that time was idle or wasted.
 
 ## Chart controls
 
-- **Desk (four-square icon):** expand or collapse unfinished-task cards below the chart, then click a card to focus and edit it.
+- **Desk switch:** show or hide unfinished-task cards below the chart. The thumb slides right and the track turns indigo when open. Click, Space or Enter toggles it; the state also follows Hide Desk, fold/expand restoration and saved preferences.
 - **Eye:** show or hide completed slices, estimate outlines and their connected titles.
   It defaults to showing them and does not affect Desk, which only shows unfinished tasks.
 - **Calendar:** after Google Calendar reports Connected in Settings, import
@@ -111,7 +111,9 @@ major hour labels and a compact center date so the task titles remain readable. 
 labels never switch to the opposite side to fill space. The frame budgets for all source
 titles, source status/ranges and local width. Editing a task's status or adding local CLOCK
 evidence may change its region and page flow; clock-only updates, completion visibility
-and hover do not resize the frame.
+and hover do not resize the frame. Timed and unplaced labels share one source-sized column
+budget instead of reserving an empty second band. Non-time glyphs sit beyond the title's
+outer edge, away from the spiral's time leaders.
 
 The spiral is the only time geometry. There is no completion-status node, separate upper
 connection band, outer track, below-chart inventory or scrolling Schedule. The header
@@ -125,8 +127,9 @@ write no timestamps, add no Actual, and leave pending scheduling and capacity un
 
 Hover or keyboard-focus a record or available slot to read its context in a centered
 tip that fits its content, capped at 280px and inset by 16px in narrower workspaces.
-Short records use one compact row; longer ones use two rows, never an internal scrollbar.
-The closed slot is 44px and invisible when idle. **More** appears only when text is clipped
+Closed tips use a single 28px row in a stable 32px slot, invisible when idle. Long titles
+can shorten in this tip, but their diagram labels remain visible. No internal scrollbar
+is used. **More** appears only when text is clipped
 or additional metadata exists; it explicitly expands that content in page flow and pins
 it while you read. Collapse
 it to resume the compact view. Changed or removed records invalidate the pinned text.
@@ -137,8 +140,8 @@ block API.
 
 ## Desk task view
 
-Click the chart's **Desk** button to expand cards below it; click again to hide
-Desk. The view uses Roam's `rm-desk-*` and Blueprint styles rather than a separate
+Turn on the chart's **Desk** switch to expand cards below it; turn it off to hide
+Desk. The switch reflects the actual view, including after a reload or control remount. The view uses Roam's `rm-desk-*` and Blueprint styles rather than a separate
 font, size, or card theme. Desk stays within the same local renderer width as the
 chart above, including centered Daily Notes, sidebars, and embeds. It does not
 expand to the article wrapper or use a compensating negative margin.

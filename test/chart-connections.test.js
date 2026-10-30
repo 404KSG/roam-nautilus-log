@@ -16,7 +16,7 @@ for (const width of [280, 320, 520, 640, 720, 960]) {
   test(`completed estimates connect to spiral slices at ${width}px without a timestamp gate`, () => {
     const s = build({ containerWidth: width });
     assert.equal(s.completionNode, undefined);
-    assert.equal(s.frame.timedTop, 16, 'no separate completion connection band');
+    assert.equal(s.frame.timedTop, 12, 'only the compact source-frame inset, no connection band');
     const estimates = s.records.filter(r => r.event['time-claim'] === 'estimated-allocation');
     assert.equal(estimates.length, 7);
     for (const r of estimates) {

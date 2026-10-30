@@ -61,7 +61,7 @@ test('dense timed labels never flip across the spiral to fill a column', () => {
   assert.equal(timed.length, pending.length);
   for (const r of timed) {
     assert.equal(r.label.side, r.anchor.x < scene.frame.center.x ? 'left' : 'right');
-    assert.ok(r.label.y >= 16 && r.label.y + r.label.height <= scene.frame.viewBox.height - 16);
+    assert.ok(r.label.y >= scene.frame.timedTop && r.label.y + r.label.height <= scene.frame.timedBottom);
   }
   const ordered = [...timed].sort((a, b) => a.label.y - b.label.y);
   for (let i = 1; i < ordered.length; i++) assert.ok(ordered[i - 1].label.y + ordered[i - 1].label.height <= ordered[i].label.y);

@@ -109,8 +109,8 @@ function chartPresentationFrame({ containerWidth, items = [], timeRadius = 150,
     return { uid: item.uid, order, ...wrapped, width: labelWidth, height,
       inkWidth: Math.max(0, ...wrapped.lines.map(measured)), sourceSide, fontSize, lineHeight };
   });
-  // Projected completed estimates share the spiral with anchored records.
-  // Pending titles reserve both timed and overflow space so END cannot resize.
+  // One source-sized column budget covers both timed and unplaced states.
+  // Flexible titles may all move to either side, but never need two copies of space.
   const fixed = { left: 0, right: 0 }, loose = { left: 0, right: 0 };
   let flexible = 0;
   source.forEach((item, index) => {
@@ -119,21 +119,17 @@ function chartPresentationFrame({ containerWidth, items = [], timeRadius = 150,
       const minute = (Math.max(startMinutes, item.start) + Math.min(endMinutes, item.end)) / 2;
       const angle = (180 - (((minute - 540) / 2 % 360 + 360) % 360)) * Math.PI / 180;
       fixed[Math.cos(angle) < 0 ? 'left' : 'right'] += label.height;
-    } else {
-      loose[label.sourceSide] += label.height;
-      if (!item.done && !validRange(item)) flexible += label.height;
-    }
+    } else if (!item.done && !item.meeting) flexible += label.height;
+    else loose[label.sourceSide] += label.height;
   });
-  const timedTop = 16;
-  const timedHeight = Math.max(plotDiameter + 16, flexible + Math.max(fixed.left, fixed.right));
+  const timedTop = 12;
+  const timedHeight = Math.max(plotDiameter + 16, flexible + Math.max(fixed.left + loose.left, fixed.right + loose.right));
   const timedBottom = timedTop + timedHeight;
-  const looseHeight = Math.max(loose.left, loose.right);
-  const looseTop = timedBottom + (looseHeight ? 24 : 0);
-  const height = looseTop + looseHeight + 16;
+  const height = timedBottom + 8;
   return { viewBox: { width: viewWidth, height }, center: { x: viewWidth / 2, y: timedTop + timedHeight / 2 },
     timeRadius: radius, plotScale: scale, compact, density: compact ? 'compact' : 'regular',
     inspector: 'wrapped', compactHeader: width <= 640, columnCapacity: timedHeight,
-    timedTop, timedBottom, looseTop,
+    timedTop, timedBottom,
     labelWidth, fontSize, lineHeight, hourStep: compact && plotDiameter < 180 ? 3 : 1, labels };
 }
 
@@ -159,9 +155,11 @@ function labelLayout(frame, records) {
     Object.assign(label, { x, y, side, textX, align: left ? 'end' : 'start',
       textY: y + (label.height - label.lines.length * label.lineHeight) / 2 + label.fontSize });
     if (record.kind !== 'timed') {
-      const startX = left ? x + label.width + 5 : x - 5;
-      // A marker is only a capacity/off-hours endpoint, never a missing-clock gate.
-      const markerX = startX + (left ? 1 : -1) * Math.min(32, (frame.viewBox.width / 2 - Math.abs(frame.center.x - startX)) / 2);
+      // Non-time glyphs sit beyond the text's outer edge. They neither point
+      // into the clock nor cross the real slice leaders on the inner edge.
+      const textEdge = left ? textX - label.inkWidth : textX + label.inkWidth;
+      const startX = textEdge + (left ? -4 : 4);
+      const markerX = textEdge + (left ? -8 : 8);
       record.marker = { x: markerX, y: middle, size: 6, shape: record.kind === 'unplaced' ? 'diamond' : 'square' };
       label.connector = `M${round(startX)} ${round(middle)}L${round(markerX)} ${round(middle)}`;
       record.markerPath = record.marker.shape === 'diamond'
@@ -183,9 +181,10 @@ function labelLayout(frame, records) {
   }
   for (const side of ['left', 'right']) {
     const { timed, loose } = sides[side];
-    let cursor = frame.looseTop;
+    const low = frame.timedTop;
+    const high = frame.timedBottom - loose.reduce((sum, record) => sum + record.label.height, 0);
+    let cursor = high;
     for (const record of loose) { position(record, side, cursor); cursor += record.label.height; }
-    const low = frame.timedTop, high = frame.timedBottom;
     const ys = []; cursor = low;
     for (const record of timed) {
       const y = Math.max(cursor, Math.min(high - record.label.height, record.anchor.y - record.label.height / 2));
@@ -259,21 +258,17 @@ function chartTipLayout({ title = '', summary = '', meta = summary, containerWid
   const maxWidth = Math.min(280, Math.max(96, finite(containerWidth, 720) - 32));
   // CSS uses tabular numerals; Canvas defaults to proportional digits. The
   // zero advance gives the tabular width and avoids clipping short time ranges.
-  const titleWidth = textMeasure(`600 12px ${fontFamily}`, measureTitle)(String(title).replace(/[0-9]/g, '0'));
+  const titleWidth = Math.max(40, textMeasure(`500 12px ${fontFamily}`, measureTitle)(String(title).replace(/[0-9]/g, '0')));
   const metaDigits = (String(summary).match(/[0-9]/g) || []).length;
   // Inter's tnum zero can itself be wider than its proportional zero. Include
   // the measured native-font allowance plus subpixel grid rounding, not a
   // tolerance that lets a supposedly complete short tip paint an ellipsis.
   const metaWidth = textMeasure(`400 11px ${fontFamily}`, measureMeta)(String(summary).replace(/[0-9]/g, '0'))
     + 2 + metaDigits * .4;
-  let more = String(meta) !== String(summary) || titleWidth > maxWidth - 27 || metaWidth > maxWidth - 27;
-  const extra = more ? 38 : 0;
-  const inlineWidth = titleWidth + metaWidth + 33 + extra;
-  const mode = inlineWidth <= maxWidth ? 'inline' : 'stacked';
-  const width = Math.min(maxWidth, Math.ceil(mode === 'inline' ? inlineWidth : Math.max(titleWidth, metaWidth) + 27 + extra));
-  if (mode === 'stacked' && (titleWidth > width - 27 - extra || metaWidth > width - 27 - extra)) more = true;
-  return { mode, width: Math.max(60, more && mode === 'stacked' ? maxWidth : width), maxWidth,
-    expandedWidth: maxWidth, more, slotHeight: 44 };
+  const more = String(meta) !== String(summary) || titleWidth + metaWidth + 33 > maxWidth;
+  const inlineWidth = titleWidth + metaWidth + 33 + (more ? 30 : 0);
+  return { mode: 'inline', width: Math.max(60, Math.min(maxWidth, Math.ceil(inlineWidth))), maxWidth,
+    expandedWidth: maxWidth, more, slotHeight: 32 };
 }
 
 module.exports = { chartScene, chartPresentationFrame, chartRecordAppearance, chartTipLayout };

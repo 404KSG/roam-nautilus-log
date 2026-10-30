@@ -3,7 +3,7 @@ import { createDeskWheel } from './desk-wheel';
 /** Native Desk affordances: delayed Alt-number hints and one horizontal
  * trackpad step per gesture. Neither handler intercepts text entry or nested
  * horizontal scrollers. No graph data is read or written here. */
-export function createDeskNavigation({ root, grid, body, origin, host = window, isOverview, canNavigate, step, onSwipe = () => {} }) {
+export function createDeskNavigation({ root, grid, body, origin, getOrigin = () => origin, host = window, isOverview, canNavigate, step, onSwipe = () => {} }) {
   const document = root.ownerDocument;
   let hintTimer = null;
   let altHints = false;
@@ -26,7 +26,7 @@ export function createDeskNavigation({ root, grid, body, origin, host = window, 
     updateHints();
   };
   const clear = () => { clearAlt(); gesture.reset(); };
-  const allowed = target => isOverview() && (grid.contains(target) || target === origin)
+  const allowed = target => isOverview() && (grid.contains(target) || target === getOrigin())
     && !target?.closest?.('input,textarea,[contenteditable="true"]');
   const keydown = event => {
     if (event.key !== 'Alt' || event.ctrlKey || event.metaKey || event.shiftKey || event.isComposing || event.defaultPrevented || !allowed(event.target)) return;

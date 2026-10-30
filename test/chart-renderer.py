@@ -77,8 +77,12 @@ def settle_renderer(page):
     page.evaluate('() => new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
 
 
-def load(page, scenario='mixed', context='main', width=720, window='normal', lang='en', real_clock=False):
-    page.goto((OUT / 'index.html').as_uri() + '?' + urlencode({'scenario': scenario, 'context': context, 'window': window, 'lang': lang, 'realClock': '1' if real_clock else '0'}))
+def load(page, scenario='mixed', context='main', width=720, window='normal', lang='en', real_clock=False, real_desk=False):
+    page.goto((OUT / 'index.html').as_uri() + '?' + urlencode({'scenario': scenario, 'context': context, 'window': window, 'lang': lang, 'realClock': '1' if real_clock else '0', 'realDesk': '1' if real_desk else '0'}))
+    if real_desk and not NATIVE_CSS:
+        # Desk deliberately inherits host CSS; a bare browser's default h2
+        # margins are not a native Desk environment. Do not compensate in production.
+        page.add_style_tag(path=str(ROOT / 'test/desk-native-fixture.css'))
     page.wait_for_function('window.__chartEvaluator && (__chartEvaluator.completed || __chartEvaluator.error)', timeout=15000)
     runtime = page.evaluate('() => __chartEvaluator')
     assert not runtime.get('error'), runtime
@@ -169,13 +173,13 @@ def coverage(page, hidden=False):
         assert box['x'] + box['width'] <= svg['x'] + svg['width'] + 1 and box['bottom'] <= svg['bottom'] + 1, (box, svg)
     detail = page.locator('.nautilus-log-detail-region')
     if 'is-expanded' not in detail.get_attribute('class'):
-        assert abs(s['detail']['height'] - 44) < .5
+        assert abs(s['detail']['height'] - 32) < .5
     if detail.get_attribute('data-nautilus-detail') == 'active':
         tip = page.locator('.nautilus-log-detail-content').bounding_box()
         assert tip['width'] <= min(280, s['workspace']['width'] - 32) + 1, tip
         assert abs(tip['x'] + tip['width'] / 2 - s['workspace']['x'] - s['workspace']['width'] / 2) <= 1
         if 'is-expanded' not in detail.get_attribute('class'):
-            assert tip['height'] <= 44.5, tip
+            assert tip['height'] <= 28.5, tip
         if detail.get_attribute('data-tip-more') == 'false':
             assert not page.locator('.nautilus-log-detail-expand').count()
             assert page.locator('.nautilus-log-detail-title').evaluate('e=>e.scrollWidth<=e.clientWidth')
@@ -249,7 +253,7 @@ def contrast(page):
 
 def select(page, uid):
     page.mouse.move(1180, 980)
-    page.locator(f'[data-task-uid="{uid}"]').focus()
+    page.locator(f'svg.nautilus-log-svg [data-task-uid="{uid}"]').focus()
     page.wait_for_function('document.querySelector(".nautilus-log-detail-region").dataset.nautilusDetail === "active"')
     settle_renderer(page)
 
@@ -325,6 +329,77 @@ def completion_connections_contract(page):
         coverage(page)
         reports[f'{context}-{width}-{language}'] = {'allocations': proof, 'overlap': overlap,
             'eyeHidesSlicesAndOutlines': True, 'localStampReplacesEstimatePlacement': True, 'sourceTabOrderPreserved': True}
+    return reports
+
+
+def density_and_control_contract(page):
+    reports = {}
+    for context, width in [('main', 720), ('embed', 520), ('sidebar', 280)]:
+        load(page, 'connections', context, width, window='flow')
+        set_clock(page, '2026-10-30T08:00:00')
+        select(page, 'connection-pending-0'); before = coverage(page); geometry_audit(page)
+        measure = page.evaluate('''()=>{
+          const tip=document.querySelector('.nautilus-log-detail-content').getBoundingClientRect();
+          const host=document.querySelector('.nautilus-log-desk-host').getBoundingClientRect();
+          const ink=Math.max(...[...document.querySelectorAll('.nautilus-log-record-title,.nautilus-log-record-leader,.nautilus-log-slice,.nautilus-log-hour-label,.nautilus-log-record-marker')].map(e=>e.getBoundingClientRect().bottom));
+          return {beforeTip:tip.top-ink,afterTip:host.top-tip.bottom,tipHeight:tip.height};
+        }''')
+        # Compact font/anchor placement can leave a few extra pixels inside
+        # the source-stable frame; it must not reserve another label band.
+        assert 0 <= measure['beforeTip'] <= (18 if width >= 640 else 24), (context, width, measure)
+        assert 0 <= measure['afterTip'] <= 3 and measure['tipHeight'] <= 28.5, measure
+        if width == 720: assert before['presentation']['viewBox']['height'] <= 340
+        for iso in ['2026-10-29T08:01:00', '2026-10-29T13:30:00', '2026-10-29T20:30:00']:
+            after = set_clock(page, iso); coverage(page); geometry_audit(page)
+            assert_rect_equal(before, after, 'shared column frame across time and END')
+        # Time changes correctly invalidate detail without moving DOM focus.
+        # A real re-entry must blur first; focus() on the same node emits nothing.
+        page.locator('[data-task-uid="connection-pending-0"]').evaluate('e=>e.blur()')
+        select(page, 'connection-pending-0'); geometry_audit(page)
+        toggle = page.get_by_role('switch', name='Desk', exact=True)
+        assert toggle.get_attribute('aria-checked') == 'false'
+        assert toggle.get_attribute('aria-expanded') is None
+        assert toggle.locator('svg').count() == 0 and toggle.locator('.nautilus-log-desk-switch-thumb').count() == 1
+        box = toggle.bounding_box(); assert box['width'] == 70 and box['height'] == 32
+        # Verify the production CLJS callback boundary. The real Desk session
+        # state/persistence/remount behavior is exercised by desk-switch.py.
+        page.evaluate('''()=>{window.__deskCalls=[];window.nautilusLogExtensionData.openDesk=o=>__deskCalls.push({uid:o.planUid,origin:o.origin===document.querySelector('.nautilus-log-desk-btn'),host:o.container===document.querySelector('.nautilus-log-desk-host')})}''')
+        toggle.click(); toggle.press('Space'); toggle.press('Enter')
+        calls = page.evaluate('()=>window.__deskCalls')
+        assert calls == [{'uid': 'baseline-plan', 'origin': True, 'host': True}] * 3, calls
+        select(page, 'connection-done-2'); coverage(page)
+        page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/f'density-{context}-{width}.png'))
+        reports[f'{context}-{width}'] = {'spacing': measure, 'switchCallbacks': calls, 'clockStable': True, 'graphWrites': state(page)['writes']}
+    load(page, 'stress', 'main', 720); set_clock(page, '2026-10-29T21:30:00')
+    for uid in ['overflow-0', 'overflow-1', 'overflow-2', 'overflow-3']:
+        select(page, uid); coverage(page); geometry_audit(page)
+    load(page, 'connections', 'main', 720, window='flow', real_desk=True)
+    set_clock(page, '2026-10-30T08:00:00')
+    toggle = page.get_by_role('switch', name='Desk', exact=True)
+    toggle.click()
+    page.wait_for_function('document.querySelector(".nautilus-desk")?.dataset.status==="ready"')
+    assert toggle.get_attribute('aria-checked') == 'true'
+    set_clock(page, '2026-10-30T08:01:00')
+    assert toggle.get_attribute('aria-checked') == 'true'
+    page.get_by_role('button', name='Collapse Nautilus Log', exact=True).click()
+    page.get_by_role('button', name='Expand Nautilus Log', exact=True).click(); settle_renderer(page)
+    toggle = page.get_by_role('switch', name='Desk', exact=True)
+    assert toggle.get_attribute('aria-checked') == 'true'
+    assert page.locator('.nautilus-desk__card').count() == 2
+    page.wait_for_function('()=>[...document.querySelectorAll(".nautilus-desk__card")].every(e=>e.dataset.previewState==="ready")')
+    select(page, 'connection-pending-0'); coverage(page); geometry_audit(page)
+    composed = page.evaluate('''()=>{
+      const tip=document.querySelector('.nautilus-log-detail-content').getBoundingClientRect();
+      const toolbar=document.querySelector('.nautilus-desk .rm-desk-page__toolbar').getBoundingClientRect();
+      return {tipToDesk:toolbar.top-tip.bottom,cardUids:[...document.querySelectorAll('.nautilus-desk__card')].map(e=>e.dataset.taskUid),checked:document.querySelector('[role=switch]').getAttribute('aria-checked')};
+    }''')
+    assert 0 <= composed['tipToDesk'] <= 10, composed
+    assert composed['cardUids'] == ['connection-pending-0', 'connection-pending-1'], composed
+    page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/'density-with-native-desk.png'))
+    page.get_by_role('button', name='Hide Desk', exact=True).click(); settle_renderer(page)
+    assert toggle.get_attribute('aria-checked') == 'false' and not page.locator('.nautilus-desk').count()
+    assert state(page)['writes'] == 0
+    reports['nativeDeskComposition'] = composed
     return reports
 
 
@@ -471,7 +546,7 @@ def material_and_tip_contract(page):
         page.locator('[data-task-uid="routine-0"]').evaluate('e=>e.blur()')
         select(page,'routine-0');coverage(page)
         long=page.locator('.nautilus-log-detail-content').bounding_box()
-        assert long['width'] <= min(280,width-32)+1 and long['height'] <= 44.5
+        assert long['width'] <= min(280,width-32)+1 and long['height'] <= 28.5
         assert page.get_by_role('button',name='Full text',exact=True).count()==1
         page.screenshot(path=str(OUT/'screenshots'/f'compact-tip-{context}-{width}.png'),full_page=True)
         result['tips'][f'{context}-{width}']={'short':short,'long':long}
@@ -560,7 +635,7 @@ def full_text(page, context, width):
     assert hit == 'overflow-1', 'multiline label gaps must belong to their own interactive record'
     assert 'END_LONG' in page.locator('.nautilus-log-detail-title').inner_text(), 'expanded reading must be pinned'
     page.get_by_role('button', name='Collapse text', exact=True).click(); page.mouse.move(1180, 980); settle_renderer(page)
-    assert abs(state(page)['detail']['height'] - 44) < .5
+    assert abs(state(page)['detail']['height'] - 32) < .5
     page.screenshot(path=str(OUT / 'screenshots' / f'fulltext-{context}-{width}.png'), full_page=True)
     return {'closed': compact_record(before), 'expandedHeight': expanded['detail']['height'], 'pinned': True, 'noInternalScroll': True}
 
@@ -664,6 +739,7 @@ def main():
             assert page.get_by_role('button', name='全文', exact=True).count() == 1
             report['chinese'] = compact_record(state(page))
             report['completionConnections'] = completion_connections_contract(page)
+            report['densityAndControl'] = density_and_control_contract(page)
             report['afternoonFlow'] = afternoon_flow_contract(page)
             report['materialsAndTips'] = material_and_tip_contract(page)
             report['timeflowRecovery'] = timeflow_recovery(page)

@@ -1,5 +1,7 @@
 import * as logCore from '../src/log-core.js';
 import * as timingCore from '../src/timing-core.js';
+import { createDeskView } from '../src/desk-view.js';
+import { projectPull } from './pull-projection.cjs';
 // This is the dependency-free module re-exported by src/entry-helpers.js;
 // production and the renderer exercise the same sidebar selector contract.
 import { isRightSidebarRenderContext } from '../src/render-context.js';
@@ -296,6 +298,29 @@ window.nautilusLogExtensionData = {
   registerDeskHost: () => trace('desk-register'),
   closeDeskHost: () => trace('desk-close'),
 };
+
+// Optional read-only composition of the exact chart and real Desk controller.
+// It shares the same synthetic source rows; no real graph or write adapter exists.
+if (parameters.get('realDesk') === '1') {
+  const page = { 'block/uid': '10-29-2026', 'node/title': 'October 29th, 2026' };
+  const entity = uid => {
+    if (uid === page['block/uid']) return page;
+    if (uid === 'baseline-plan') return { 'block/uid': uid, 'block/string': '[[Nautilus Log]] {{[[roam/render]]:((roam-render-Nautilus-Log-cljs))}}',
+      'block/order': 0, 'block/open': true, 'block/page': page,
+      'block/children': children.map(row => ({ 'block/uid': row['block/uid'], 'block/order': row['block/order'] })) };
+    const row = children.find(row => row['block/uid'] === uid);
+    const text = row?.['block/string'] ?? syntheticStrings.get(uid);
+    return typeof text === 'string' ? { 'block/uid': uid, 'block/string': text, 'block/order': row?.['block/order'] ?? 0,
+      'block/open': true, 'block/page': page, 'block/children': [] } : null;
+  };
+  Object.assign(window.roamAlphaAPI, { graph: { name: 'chart-desk-fixture' },
+    data: { pull: (pattern, lookup) => projectPull(pattern, entity(Array.isArray(lookup) ? lookup[1] : lookup)),
+      addPullWatch: () => undefined, removePullWatch: () => undefined } });
+  const desk = createDeskView({ host: window, document, readPlan: () => entity('baseline-plan'), watchPlan: () => () => {},
+    getSettings: () => ({ language: parameters.get('lang') || 'en', 'todo-duration': 15 }), revision: 'synthetic-chart-desk' });
+  Object.assign(window.nautilusLogExtensionData, { openDesk: options => desk.open(options),
+    registerDeskHost: options => desk.registerHost(options), closeDeskHost: container => desk.closeForHost(container) });
+}
 
 window.__chartHarness = {
   q,

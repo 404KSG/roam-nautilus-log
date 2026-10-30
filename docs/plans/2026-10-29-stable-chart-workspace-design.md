@@ -2,7 +2,9 @@
 
 ## Current decision
 
-Revised October 31, 2026. The latest user correction supersedes the earlier A/B decision:
+Revised October 31, 2026. The latest UI request removes excessive chart/tip/Desk spacing
+and replaces the Desk icon with a sliding switch. It does not change the estimate rule.
+The completion correction still supersedes the earlier A/B decision:
 completed tasks without actual timing use their explicit estimate, or Default Todo Duration
 (15 minutes by default). Neither CLOCK nor a completion timestamp is required for a slice.
 The Completed / No timestamp node and its upper connection band are removed. Last-edit
@@ -53,10 +55,16 @@ independent unfinished-task projection. Estimates never become graph records or 
 ## Frame and labels
 
 Source titles, source status/ranges, estimated allocations and local width determine the
-frame. Anchored and estimated intervals share the central time region. Pending titles
-reserve both timed and overflow space, so their changing scheduled subset cannot resize it.
-Unplaced work, genuine completed-estimate overflow and known off-hours ranges retain separate
-endpoints. There is no status node, date-root wiring or outer circular track.
+frame. Each side reserves its fixed labels and static non-time records, plus the full
+flexible-title budget for the worst case where pending work moves to one side. It does not
+add a second lower band for the same flexible titles. Non-time records occupy the bottom
+of their own column; timed labels use the remaining space. This keeps a safe source-sized
+upper bound without resizing for a changing scheduled subset.
+
+Non-time glyphs sit just beyond the text's outer edge, away from the clock and time leaders.
+They represent unplaced work, genuine completed-estimate overflow or known off-hours ranges.
+There is no status node, date-root wiring or outer circular track. The frame retains a 12-unit
+top inset and 8-unit bottom inset; no clipping, negative margin or clock-driven crop is used.
 
 Timed labels stay on the same side as their slice, ordered by anchor position. Same-side
 curves share routing coordinates; labels never flip across the clock to fill space.
@@ -92,17 +100,34 @@ scheduler intervals and SVG paths, rather than relying only on unchanged functio
 
 ## Details and preserved interactions
 
-The centered tip fits its content up to 280px, with 16px narrow-container insets. Its closed
-44px slot is invisible when idle. Explicit expansion stays in page flow, pins the selected
-record and has no internal scrollbar or overlay over following blocks.
+The centered tip fits its content up to 280px, with 16px narrow-container insets. Closed tips
+use one 28px row in a stable 32px slot, invisible when idle. Title and summary stay on one
+line; clipping or extra metadata exposes More. Full diagram titles are not removed. Explicit
+expansion stays in page flow, pins the selected record and has no internal scrollbar or
+overlay over following blocks. The Desk root's top embedding margin is 4px; native toolbar,
+card geometry and typography remain unchanged.
 
 Pointer, focus and expansion remain separate owners. Changes to time, status, duration,
 provenance or presence invalidate stale detail, as do Eye, fold and unload. Existing click,
 Enter and Shift navigation is reused. No shortcut is added.
 
-Desk editing, IME, Escape, drag/import, previews, strict Remove, safe drafts, collapse,
-preferences, calendar integration and the execution layer are outside this change. No global
-Roam padding, overflow or negative-margin compensation is introduced.
+The labeled Desk switch has a 70×32px hit area, 28×16px track and 12px thumb travel. It uses
+`role=switch` and `aria-checked`, with click and native button Space/Enter activation. The
+existing Desk binding owns checked state; there is no separate React boolean. Registration,
+start and close synchronize the current control. Remounted controls replace the binding's
+origin for focus return and existing Alt navigation. Reduced motion suppresses the slide.
+
+Desk editing, IME, Escape, drag/import, previews, strict Remove, safe drafts, calendar
+integration and the execution layer are unchanged. No global Roam padding, overflow or
+negative-margin compensation is introduced.
+
+### Design references
+
+Linear's [2026 refresh](https://linear.app/now/behind-the-latest-design-refresh) emphasizes
+retaining information density while making supporting controls quieter and removing needless
+boundaries. Its [2024 redesign account](https://linear.app/now/how-we-redesigned-the-linear-ui)
+describes alignment, hierarchy and testing across layouts and themes. This change applies
+those principles to Nautilus; the dimensions above are our design choices, not Linear tokens.
 
 ## Verification and limits
 
@@ -114,7 +139,11 @@ overlap paint and pointer behavior; and real capacity overflow without title los
 It also retains source-hash verification, all-title coverage, routing and collision checks,
 Eye visibility, hover emphasis, source tab order, narrow hours, unique patterns, END and
 overnight stability, full-text ownership, lifecycle cleanup, main/sidebar/embed contexts,
-Chinese, default/native styles and computed light/dark contrast. Graph writes, unexpected
+Chinese, default/native styles and computed light/dark contrast. Added checks cover compact
+spacing, long-title hover, source-stable shared columns, switch markup/callbacks, and the exact
+chart composed with the production Desk controller over the same synthetic rows. A separate
+Desk switch gate verifies state, preferences, replacement controls, Alt hints/navigation,
+focus return, host isolation and reduced motion. Graph writes, unexpected
 HTTP(S), missing resources and page/console errors remain failures. Missing configured
 native CSS fails before launching the renderer.
 

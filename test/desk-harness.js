@@ -8,7 +8,7 @@ import { createDeskDiagnosticCommands } from '../src/desk-diagnostics';
 import { projectPull } from './pull-projection.cjs';
 
 let cleanup = () => {};
-function mount({ count = 8, dark = false, editor = true, empty = false, preservePreferences = false, collapsed = false, watchResult = 'undefined' } = {}) {
+function mount({ count = 8, dark = false, editor = true, empty = false, preservePreferences = false, collapsed = false, watchResult = 'undefined', switchControl = false } = {}) {
   cleanup();
   if (!preservePreferences) for (const key of Object.keys(localStorage)) if (key.startsWith('nautilus-log:desk-view:v1:desk-fixture:')) localStorage.removeItem(key);
   document.body.classList.toggle('bp3-dark', dark);
@@ -286,7 +286,12 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     const main = document.createElement('div'); main.className = 'rm-block-main';
     const chart = document.createElement('div'); chart.className = 'nautilus-log-container'; chart.dataset.nautilusLogBlock = uid;
     const shell = document.createElement('div'); shell.className = 'nautilus-log-shell fixture-shell'; shell.textContent = 'Nautilus Log · sea chart placeholder';
-    const launch = document.createElement('button'); launch.className = 'fixture-launch nautilus-log-desk-btn'; launch.textContent = 'Desk'; launch.setAttribute('aria-label', label);
+    let launch = document.createElement('button'); launch.type = 'button'; launch.className = 'fixture-launch nautilus-log-desk-btn'; launch.textContent = 'Desk'; launch.setAttribute('aria-label', label);
+    if (switchControl) {
+      launch.classList.add('nautilus-log-toggle-btn'); launch.setAttribute('role', 'switch'); launch.setAttribute('aria-checked', 'false');
+      launch.setAttribute('aria-label', uid === planUid ? 'Desk' : 'Other Desk');
+      launch.innerHTML = '<span class="nautilus-log-desk-switch-label" aria-hidden="true">Desk</span><span class="nautilus-log-desk-switch-track" aria-hidden="true"><span class="nautilus-log-desk-switch-thumb"></span></span>';
+    }
     const controls = document.createElement('div'); controls.className = 'nautilus-log-controls-top';
     const collapse = document.createElement('button');
     collapse.className = 'nautilus-log-toggle-btn nautilus-log-collapse-btn';
@@ -316,7 +321,14 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     const raw = document.createElement('div'); raw.className = 'rm-block-children fixture-raw'; raw.dataset.rawPlan = uid;
     owner.append(main, raw); document.querySelector('#launchers').append(owner);
     launch.addEventListener('click', () => desk.open(options));
-    hosts.set(key, { uid, slot, owner, raw, launch, setCollapsed }); rawRender();
+    const replaceControl = () => {
+      const next = launch.cloneNode(true); next.setAttribute('aria-checked', 'false');
+      launch.replaceWith(next); launch = next; options.origin = next;
+      next.addEventListener('click', () => desk.open(options));
+      hosts.get(key).launch = next;
+      desk.registerHost(options);
+    };
+    hosts.set(key, { uid, slot, owner, raw, launch, setCollapsed, replaceControl }); rawRender();
     if (initiallyCollapsed) setCollapsed(true);
     desk.registerHost(options);
     return hosts.get(key);
@@ -352,6 +364,7 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     release: () => { releaseRender?.(); releaseMove?.(); releaseCreate?.(); releaseDelete?.(); releaseWatchRegistration?.(); releaseRender = releaseMove = releaseCreate = releaseDelete = releaseWatchRegistration = null; },
     pending: () => Boolean(releaseRender || releaseMove || releaseCreate || releaseDelete || releaseWatchRegistration),
     setCollapsed: (key, value) => hosts.get(key).setCollapsed(value),
+    replaceControl: (key = planUid) => hosts.get(key).replaceControl(),
     openCopy: () => { const h = addHost(planUid, 'Open copy Desk', 'copy', true, false); h.owner.style.width = '280px'; },
     removeHost: key => { const h = hosts.get(key); desk.closeForHost(h.slot); h.owner.remove(); hosts.delete(key); },
     restoreHost: () => addHost(planUid, 'Open Desk'),

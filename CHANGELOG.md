@@ -4,6 +4,16 @@
 
 ### Added
 
+- The chart shares one source-sized label budget instead of reserving a second empty
+  overflow band. The frame remains stable through clock updates, END and hover. Closed
+  tips use a 28px single row in a 32px slot; explicit full text still expands in page flow.
+  Non-time glyphs stay outside their titles, clear of time leaders. The Desk embedding
+  margin is tighter without restyling native cards or typography.
+- Desk now has a labeled sliding switch rather than a four-square icon. Its checked
+  state comes from the actual view and saved preference, including Hide Desk, reload,
+  fold/expand and replacement controls. Click, Space/Enter and existing Alt navigation
+  remain supported; reduced motion suppresses the slide.
+
 - Completed tasks without actual timing now receive spiral slices using their explicit
   estimate or Default Todo Duration (15 minutes by default). CLOCK and completion stamps
   are optional. Unanchored estimates are allocated from START in outline order around
@@ -25,7 +35,7 @@
   tasks and events remain outlined. The spiral is the only time geometry; the rejected
   outer track and its status badges are removed. Explicit urgency remains authoritative.
 - Short tips fit their content up to 280px, without a redundant full-text action.
-  The closed slot is reduced to 44px and status spacing is tighter. Longer content
+  The closed slot is reduced to 32px and status spacing is tighter. Longer content
   can still explicitly expand in page flow, without internal scrollbars or overlays.
 
 - Every titled source task or event retains a diagram mark and connected label.
@@ -40,7 +50,7 @@
   remain intact.
 - Details fit a centered, at-most-280px area. Full text explicitly expands in
   page flow without an internal scrollbar and stays pinned while reading. The closed
-  44px slot is invisible when idle. The rejected below-chart completion list, its reserved
+  32px slot is invisible when idle. The rejected below-chart completion list, its reserved
   gap, and wheel-based text reading are removed.
 - Narrow charts keep side labels, readable major hour ticks and a compact center date.
   Hour sizes are applied directly to SVG text instead of relying on a CSS variable that

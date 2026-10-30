@@ -306,7 +306,7 @@ test('the spiral uses a local fixed detail region above an inert grid', () => {
   assert.match(component, /:on-mouse-enter/);
   assert.match(component, /:on-focus/);
   assert.doesNotMatch(component, /createPortal|getScreenCTM|placeFloatingTooltip|radialTooltipGeometry/);
-  assert.match(css, /\.nautilus-log-detail-region\s*\{[^}]*height:\s*44px;/s);
+  assert.match(css, /\.nautilus-log-detail-region\s*\{[^}]*height:\s*32px;/s);
   assert.doesNotMatch(css, /\.nautilus-log-detail-region\s*\{[^}]*overflow[^;]*auto/s);
   assert.doesNotMatch(css, /\.nautilus-log-workspace--side/);
   assert.match(component, /:expanded \(if expanded\? nil info\)/);
@@ -937,12 +937,15 @@ test('Tidy is a stable, reversible direct-child action that does not rewrite sch
   assert.doesNotMatch(tidyPlan, /deleteGraphBlock|createGraphBlock/);
 });
 
-test('Log keeps five quiet action controls including Desk, with hover help and no playback mode', () => {
+test('Log keeps a labeled Desk switch and four quiet icon controls without playback mode', () => {
   assert.doesNotMatch(component, /\(defn playback-button/);
   assert.doesNotMatch(component, /playback-state-atom|playback-frame-atom|requestAnimationFrame/);
   assert.doesNotMatch(logCore, /playback\s*=/);
   assert.doesNotMatch(css, /nautilus-log-playback-active|nautilus-log-slice-pop-in/);
-  assert.equal((component.match(/:data-nautilus-tooltip/g) || []).length, 5);
+  assert.equal((component.match(/:data-nautilus-tooltip/g) || []).length, 4);
+  assert.match(component, /:role "switch"/);
+  assert.match(component, /nautilus-log-desk-switch-label/);
+  assert.match(css, /\.nautilus-log-desk-btn\[aria-checked="true"\] \.nautilus-log-desk-switch-thumb\s*\{[^}]*translateX\(12px\)/);
   assert.match(css, /\.nautilus-log-toggle-btn\s*\{[\s\S]*?width:\s*32px !important;[\s\S]*?height:\s*32px !important;[\s\S]*?padding:\s*7px !important;/);
   assert.match(css, /\.nautilus-log-toggle-btn\[data-nautilus-tooltip\]::after/);
   assert.match(css, /\.nautilus-log-toggle-btn\[data-nautilus-tooltip\]:hover::after/);

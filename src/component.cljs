@@ -527,7 +527,7 @@
         layout (or (log-core-call "chartTipLayout"
                                    {:title (or title "") :summary (or summary-meta meta "") :meta (or meta "")
                                     :containerWidth container-width :fontFamily font-family})
-                   {:mode "stacked" :width 280 :expandedWidth 280 :more true})]
+                   {:mode "inline" :width 280 :expandedWidth 280 :more true})]
     [:aside {:class (str "nautilus-log-detail-region" (when expanded? " is-expanded"))
              :aria-label (get-in copy [:panels :details]) :aria-hidden (not active?) :aria-live "polite"
              :data-tip-mode (:mode layout) :data-tip-more (str (:more layout))
@@ -1520,27 +1520,26 @@
                   (= (:status status) "ready")))))
 
 (defn desk-button [block-uid page-title-val copy]
-  [:button
-   {:type "button"
-    :class "nautilus-log-toggle-btn nautilus-log-desk-btn"
-    :data-nautilus-tooltip (:desk copy)
-    :aria-label (:desk copy)
-    :aria-expanded "false"
-    :on-click (fn [event]
-                (when-let [open-desk (some-> js/window .-nautilusLogExtensionData .-openDesk)]
-                  (.call open-desk nil
-                         (clj->js {:planUid block-uid
-                                   :pageTitle page-title-val
-                                   :origin (.-currentTarget event)
-                                   :container (some-> (.-currentTarget event)
-                                                      (.closest ".nautilus-log-container")
-                                                      (.querySelector ":scope > .nautilus-log-desk-host"))}))))}
-   [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none"
-          :stroke "currentColor" :stroke-width "1.7" :aria-hidden "true"}
-    [:rect {:x "3" :y "3" :width "7" :height "7" :rx "1.5"}]
-    [:rect {:x "14" :y "3" :width "7" :height "7" :rx "1.5"}]
-    [:rect {:x "3" :y "14" :width "7" :height "7" :rx "1.5"}]
-    [:rect {:x "14" :y "14" :width "7" :height "7" :rx "1.5"}]]])
+  (let [options (fn [node]
+                  (clj->js {:planUid block-uid :pageTitle page-title-val :origin node
+                            :container (some-> node (.closest ".nautilus-log-container")
+                                               (.querySelector ":scope > .nautilus-log-desk-host"))}))]
+    [:button
+     {:type "button" :role "switch"
+      :class "nautilus-log-toggle-btn nautilus-log-desk-btn"
+      :aria-label (:desk copy) :aria-checked "false"
+      ;; The existing Desk owner restores the real session state, including
+      ;; when folding or a renderer update mounts a replacement control.
+      :ref (fn [node]
+             (when node
+               (when-let [register-host (some-> js/window .-nautilusLogExtensionData .-registerDeskHost)]
+                 (.call register-host nil (options node)))))
+      :on-click (fn [event]
+                  (when-let [open-desk (some-> js/window .-nautilusLogExtensionData .-openDesk)]
+                    (.call open-desk nil (options (.-currentTarget event)))))}
+     [:span {:class "nautilus-log-desk-switch-label" :aria-hidden "true"} (:desk copy)]
+     [:span {:class "nautilus-log-desk-switch-track" :aria-hidden "true"}
+      [:span {:class "nautilus-log-desk-switch-thumb"}]]]))
 
 (defn tidy-button [block-uid settled-uids tidy-state settings copy plan-status-state]
   [:button

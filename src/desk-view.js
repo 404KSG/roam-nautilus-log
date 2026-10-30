@@ -84,6 +84,11 @@ export function createDeskView({
   };
   const validHost = (options) => !destroyed && document?.body && options?.planUid
     && options.container?.isConnected && providerApi === host.roamAlphaAPI && providerGraph === graphName(host);
+  const syncControl = (binding) => {
+    const control = binding?.origin;
+    const attribute = control?.getAttribute?.('role') === 'switch' ? 'aria-checked' : 'aria-expanded';
+    control?.setAttribute?.(attribute, String(Boolean(binding?.session)));
+  };
   const registerHost = (options = {}) => {
     if (!validHost(options)) return;
     let binding = hosts.get(options.container);
@@ -94,6 +99,7 @@ export function createDeskView({
     }
     if (options.origin) binding.origin = options.origin;
     if (!binding.session && preferences.read(providerGraph, binding.planUid)) start(binding);
+    syncControl(binding);
     return binding;
   };
   const start = (binding) => {
@@ -297,7 +303,7 @@ export function createDeskView({
 
     const inScope = () => !closed && container.isConnected && roam === host.roamAlphaAPI && graph === graphName(host);
     affordances = createDeskNavigation({
-      root, grid, body, origin, host,
+      root, grid, body, origin, getOrigin: () => binding.origin || origin, host,
       isOverview: () => !closed && mode === 'overview',
       canNavigate: () => inScope() && status === 'ready' && mode !== 'overview' && !busy && !composing,
       step: direction => {
@@ -931,7 +937,7 @@ export function createDeskView({
       renderCards();
     });
     const onKey = (event) => {
-      if ((!root.contains(event.target) && !layer.contains(event.target) && event.target !== origin) || !checkScope() || composing) return;
+      if ((!root.contains(event.target) && !layer.contains(event.target) && event.target !== (binding.origin || origin)) || !checkScope() || composing) return;
       if (mode === 'overview' && event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey
         && !event.target.closest('input,textarea,[contenteditable="true"]') && /^Digit[1-9]$/.test(event.code)) {
         const task = visibleTasks()[Number(event.code.slice(-1)) - 1];
@@ -1016,10 +1022,11 @@ export function createDeskView({
       diagnostics.afterLayout('after-hide');
       if (focusOwner === session) focusOwner = null;
       if (binding.session === session) binding.session = null;
-      origin?.setAttribute?.('aria-expanded', 'false');
+      syncControl(binding);
       if (restoreFocus && graph === graphName(host)) {
-        const target = origin?.isConnected && origin.getClientRects?.()?.length
-          ? origin : chart?.querySelector('.nautilus-log-collapse-btn');
+        const control = binding.origin || origin;
+        const target = control?.isConnected && control.getClientRects?.()?.length
+          ? control : chart?.querySelector('.nautilus-log-collapse-btn');
         if (target?.isConnected) target.focus?.({ preventScroll: true });
       }
     }
@@ -1041,7 +1048,7 @@ export function createDeskView({
         });
       } catch (_error) { removeSurface = null; }
       widthBinding = createDeskWidth({ root, container, host, onResize: masonry.layoutNow });
-      origin?.setAttribute?.('aria-expanded', 'true');
+      syncControl(binding);
       outlineVisibility.setHidden(true);
       document.addEventListener('keydown', onKey);
       document.addEventListener('visibilitychange', onVisible);

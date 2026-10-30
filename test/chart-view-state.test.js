@@ -37,7 +37,7 @@ test('short Review tips fit their content and do not offer redundant full text',
   assert.equal(tip.mode, 'inline');
   assert.equal(tip.more, false);
   assert.ok(tip.width < 240 && tip.width > 180, tip);
-  assert.equal(tip.slotHeight, 44);
+  assert.equal(tip.slotHeight, 32);
   const narrow = chartTipLayout({ ...input, containerWidth: 280 });
   assert.ok(narrow.width <= 248);
 });
@@ -52,11 +52,11 @@ test('tip measurement reserves tabular digit advances used by the painted time t
 });
 
 test('clipped or additional detail can explicitly expand without a scroll model', () => {
-  const tip = chartTipLayout({ title: '中文'.repeat(100), summary: '已完成 · 未记时', meta: '已完成 · 未记时 · 完成状态来自引用', containerWidth: 280,
+  const tip = chartTipLayout({ title: '中文'.repeat(100), summary: '已完成 · 估时 30m', meta: '已完成 · 估时排布 · 完成状态来自引用', containerWidth: 280,
     measureTitle: text => text.length * 12, measureMeta: text => text.length * 6 });
   assert.equal(tip.more, true);
-  assert.equal(tip.mode, 'stacked');
+  assert.equal(tip.mode, 'inline');
   assert.equal(tip.width, 248);
   assert.equal(tip.expandedWidth, 248);
-  assert.equal(tip.slotHeight, 44);
+  assert.equal(tip.slotHeight, 32);
 });
