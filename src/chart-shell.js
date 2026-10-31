@@ -3,7 +3,6 @@ const RADII = Object.freeze([135, 140, 145, 150, 145, 140, 135, 130, 125, 120, 1
   105, 100, 95, 90, 85, 80, 75, 70, 68, 66, 64, 62]);
 const finite = Number.isFinite;
 const round = n => Math.round(n * 1000) / 1000;
-const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 const empty = () => ({ start: null, end: null, path: '', outerPath: '' });
 
 function configuration(input = {}) {
@@ -15,24 +14,25 @@ function configuration(input = {}) {
   return { startMinutes, endMinutes, innerRadius, radiusScale, centerX, centerY };
 }
 
-function slope(index) {
-  if (index === 0) return RADII[1] - RADII[0];
-  if (index === RADII.length - 1) return RADII[index] - RADII[index - 1];
-  const left = RADII[index] - RADII[index - 1], right = RADII[index + 1] - RADII[index];
-  return left * right > 0 ? 2 * left * right / (left + right) : 0;
+function controlRadius(index) {
+  // Continue the initial linear slope; repeat the tail so it settles smoothly.
+  if (index < 0) return RADII[0] + index * (RADII[1] - RADII[0]);
+  return RADII[Math.min(index, RADII.length - 1)];
 }
 
-/** Monotone Hermite interpolation through the old hourly-cell midpoints. */
+/** Convex cubic B-spline: C2 shoulders, no narrow exact-anchor apex or overshoot. */
 function shellRadius({ minute, startMinutes = 300, radiusScale = 1 } = {}) {
   if (![minute, startMinutes, radiusScale].every(finite) || radiusScale <= 0) return null;
   const q = Math.max(-.5, (minute - startMinutes) / 60 - .5);
-  if (q <= 0) return (RADII[0] + q * slope(0)) * radiusScale;
-  if (q >= RADII.length - 1) return RADII.at(-1) * radiusScale;
-  const i = Math.floor(q), t = q - i, a = RADII[i], b = RADII[i + 1];
-  const t2 = t * t, t3 = t2 * t;
-  const value = (2 * t3 - 3 * t2 + 1) * a + (t3 - 2 * t2 + t) * slope(i)
-    + (-2 * t3 + 3 * t2) * b + (t3 - t2) * slope(i + 1);
-  return clamp(value, Math.min(a, b), Math.max(a, b)) * radiusScale;
+  if (q >= RADII.length) return RADII.at(-1) * radiusScale;
+  const i = Math.floor(q), t = q - i, t2 = t * t, t3 = t2 * t;
+  // Nonnegative weights sum to one. Linear stretches are reproduced exactly;
+  // only turns in the control profile are rounded, without changing clock angles.
+  const value = (controlRadius(i - 1) * (1 - t) ** 3
+    + controlRadius(i) * (3 * t3 - 6 * t2 + 4)
+    + controlRadius(i + 1) * (-3 * t3 + 3 * t2 + 3 * t + 1)
+    + controlRadius(i + 2) * t3) / 6;
+  return value * radiusScale;
 }
 
 function radiiAt(minute, config, side) {

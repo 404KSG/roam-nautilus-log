@@ -5,16 +5,27 @@ const { shellRadius, shellRadii, shellInterval, shellGrid, shellNeedle } = requi
 const window = { startMinutes: 360, endMinutes: 1200, centerX: 360, centerY: 180 };
 const close = (a, b, eps = 1e-7) => assert.ok(Math.abs(a - b) < eps, `${a} != ${b}`);
 
-test('continuous shell retains the hourly radius anchors without overshoot', () => {
+test('rounded contour preserves linear slopes and stays within the control-radius envelope', () => {
   const anchors = [135, 140, 145, 150, 145, 140, 135, 130, 125, 120, 115, 110, 105, 100];
-  anchors.forEach((radius, i) => close(shellRadius({ minute: 390 + i * 60, startMinutes: 360 }), radius));
-  for (let i = 0; i < anchors.length - 1; i++) for (let offset = 0; offset <= 60; offset++) {
-    const r = shellRadius({ minute: 390 + i * 60 + offset, startMinutes: 360 });
-    assert.ok(r >= Math.min(anchors[i], anchors[i + 1]) && r <= Math.max(anchors[i], anchors[i + 1]));
+  anchors.forEach((radius, i) => { if (i !== 3) close(shellRadius({ minute: 390 + i * 60, startMinutes: 360 }), radius); });
+  close(shellRadius({ minute: 570, startMinutes: 360 }), 148 + 1 / 3);
+  let previous = shellRadius({ minute: 360, startMinutes: 360 });
+  for (let minute = 360.5; minute <= 1800; minute += .5) {
+    const r = shellRadius({ minute, startMinutes: 360 });
+    assert.ok(r >= 62 && r <= 150, r);
+    assert.ok(minute <= 570 ? r >= previous - 1e-8 : r <= previous + 1e-8, minute);
+    previous = r;
   }
-  for (let minute = 420; minute < 1200; minute += 60) {
-    assert.ok(Math.abs(shellRadius({ minute: minute - .001, startMinutes: 360 }) - shellRadius({ minute: minute + .001, startMinutes: 360 })) < .001);
+});
+
+test('rounded shoulders have continuous curvature rather than Hermite second-derivative jumps', () => {
+  const radius = hour => shellRadius({ minute: hour * 60, startMinutes: 360 });
+  const second = hour => { const h = .0001; return (radius(hour + h) - 2 * radius(hour) + radius(hour - h)) / (h * h); };
+  for (let index = 1; index < 24; index++) {
+    const hour = 6.5 + index;
+    assert.ok(Math.abs(second(hour - .001) - second(hour + .001)) < .05, `curvature jump at ${hour}`);
   }
+  assert.ok(Math.abs(second(9.5)) <= 10.1, 'the left-side apex must not retain the narrow 20-unit curvature peak');
 });
 
 test('radius is relative to configured START, including overnight and shifted windows', () => {

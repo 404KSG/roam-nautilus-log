@@ -13,8 +13,9 @@ colors and native controls remain; completion and hover are part of the same des
   disclosure arrow and readable yellow-family heading.
 - Past unfinished work and genuinely unscheduled work belong in a default-collapsed queue,
   not in arbitrary diagram positions. Native Desk masonry is verified and retained.
-- Every timed record is one continuous surface. Duration and completion metadata occupy a
-  fixed extra label row. Hover/focus emphasizes the surface, leader and colored title together.
+- Every timed record is one continuous surface. Diagram labels are title-only, except for
+  **Current** under a currently active task/event. Duration, Actual and Estimate stay in Tips.
+  Hover/focus emphasizes the surface, leader and colored title together.
 - English remains the default UI language; an explicit stored Chinese preference still works.
   Source task titles are never translated or rewritten.
 
@@ -30,10 +31,13 @@ is authorized by this design.
 
 ## Continuous geometry
 
-`src/chart-shell.js` is the shared, pure geometry owner. It interpolates the original hourly
-radius anchors at their cell midpoints with bounded monotone Hermite interpolation. START,
-END, source interval boundaries and the clock-angle mapping remain authoritative, including
-overnight logical minutes. The curve is not claimed to preserve the old stepped pixel area.
+`src/chart-shell.js` is the shared, pure geometry owner. A convex cubic B-spline rounds the
+existing radius-control profile. Its C2 shoulders avoid the narrow exact-anchor peak and
+second-derivative jumps of the earlier Hermite interpolation. Linear stretches are retained;
+control turns are gently rounded without overshooting the control envelope. START, END,
+source interval boundaries and the clock-angle mapping remain authoritative, including
+overnight logical minutes. This remains an unequal-radius shell, not a circular ring, and
+is not claimed to preserve the old stepped pixel area.
 
 `shellInterval` uses bounded five-minute chords with exact range ends and fold/anchor knots.
 At the 12-hour fold, both one-sided inner edges are retained; the earlier turn cannot occupy
@@ -97,12 +101,13 @@ width. A source-sized column budget handles their possible sides without reservi
 empty lower band. Diagram labels remain on the same side as their time anchors; ordinary
 labels wrap fully, while pathological text retains an explicit full-text route.
 
-Metadata reserves one fixed 14-unit row, independent of the current minute. Title leading is
-16 units in regular charts and 15 in compact charts; metadata uses 10px/9px text. It shows
-duration, Completed/Actual/Estimate status, or the current fixed event where room permits.
-Compact copy is abbreviated without changing the full Tips or accessible record claim.
-The label's entire title/metadata box remains the navigation hit area. Only the title ink
-gets the subtle hover field; a separate anchor joins the label and its continuous surface.
+Only a current task/event renders the small **Current** indicator. Other diagram titles have
+no duration or completion-status sublabel; those details remain complete in Tips and the
+accessible record claim. Potentially current unfinished records keep a fixed 14-unit line
+allowance so a minute transition cannot resize the frame. Completed and out-of-window
+records do not reserve that line. Title leading stays 16/15 units; Current uses 10px/9px text.
+The existing label hit area is retained. Only the title ink gets the subtle hover field;
+a separate anchor joins the label and its continuous surface.
 
 The correct stability boundary is **unchanged diagram membership**. Ordinary minute motion,
 hover and Eye preserve the frame. A task can cease to fit before END: for example, a 45-minute
@@ -226,8 +231,9 @@ completion moving out of the queue, and full long titles after disclosure. Exist
 minute, fixed-event, foreground recovery, same-minute next-day and cleanup gates remain.
 
 Add continuous-shell path equality across paint/hit/estimate layers, unique material IDs,
-actual SVG gradient paint, metadata bounds, hover/focus surface emphasis and source-frame
-stability. Pointer tests must hit a genuine point inside a long folded path: its bounding-box
+actual SVG gradient paint, Current indicator bounds and the absence of other sublabel text,
+hover/focus surface emphasis and source-frame stability. Check smooth shoulder curvature,
+bounded control-envelope rounding and unchanged interval/queue data. Pointer tests must hit a genuine point inside a long folded path: its bounding-box
 center can belong to the other turn. Verify SVG containment and browser hit-testing rather
 than forcing clicks through overlapping bounding boxes.
 

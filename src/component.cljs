@@ -1322,21 +1322,8 @@
                 :d (shell-path (:start slot) (:end slot) inner-radius center settings)
                 :vector-effect "non-scaling-stroke"}]])])
 
-(defn chart-record-meta-text [event copy compact? current-event?]
-  (let [{:keys [duration status]} (or (log-core-call "chartRecordMetadata" event)
-                                    {:duration (duration-label (:duration event))})
-        completed (get-in copy [:tooltips :completed])
-        estimate (get-in copy [:tooltips (if compact? :estimatedShort :estimated)])
-        actual (get-in copy [:tooltips (if compact? :actualShort :actual)])]
-    (cond
-      (= status "actual") (str (when-not compact? (str completed " · ")) actual " " duration)
-      (= status "estimate") (str (when-not compact? (str completed " · ")) estimate " " duration)
-      (= status "completed") (str (get-in copy [:tooltips (if compact? :completedShort :completed)]) " · " duration)
-      (and current-event? (not compact?)) (str duration " · " (get-in copy [:tooltips :currentEvent]))
-      :else duration)))
-
-(defn chart-record-label [record copy compact? params]
-  (let [label (:label record) event (:event record) anchor (:anchor record)
+(defn chart-record-label [record copy params]
+  (let [label (:label record) anchor (:anchor record)
         left? (= "left" (:side label))
         highlight-x (- (:textX label) (if left? (+ (:inkWidth label) 5) 5))]
     [:g {:class "nautilus-log-record-annotation"}
@@ -1357,9 +1344,10 @@
        (for [[index line] (map-indexed vector (:lines label))]
          ^{:key index}
          [:tspan {:x (:textX label) :y (+ (:textY label) (* index (:lineHeight label)))} line])]
-      [:text {:class "nautilus-log-record-meta" :x (:textX label) :y (:metadataY label)
-              :text-anchor (:align label) :font-size (:metadataFontSize label) :pointer-events "none"}
-       (chart-record-meta-text event copy compact? (:current-event? params))]]]))
+      (when (or (:current? params) (:current-event? params))
+        [:text {:class "nautilus-log-record-current" :x (:textX label) :y (:metadataY label)
+                :text-anchor (:align label) :font-size (:metadataFontSize label) :pointer-events "none"}
+         (or (get-in copy [:tooltips :current]) "Current")])]]))
 
 (defn estimated-completion? [event]
   (contains? #{"estimated-allocation" "completion-estimate"} (:time-claim event)))
@@ -1426,7 +1414,7 @@
                :data-marker-shape (get-in record [:marker :shape])
                :aria-hidden "true"
                :style (when (:bg-color event) {:stroke (update-opacity-str (:bg-color event) "1")})}])
-     [chart-record-label record copy (:compact frame) params]]))
+     [chart-record-label record copy params]]))
 
 (defn pending-queue-component [queue copy hover-info-state]
   (r/with-let [open-state (r/atom false)]

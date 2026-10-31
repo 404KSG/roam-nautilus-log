@@ -223,7 +223,7 @@ def coverage(page, hidden=False):
 def geometry_audit(page):
     result = page.evaluate('''()=>{
       const nodes=[...document.querySelectorAll('.nautilus-log-event-slice-group')].filter(e=>getComputedStyle(e).visibility==='visible');
-      const boxes=nodes.flatMap(e=>[...e.querySelectorAll('.nautilus-log-record-title,.nautilus-log-record-meta')].map(t=>({uid:e.dataset.taskUid,kind:t.getAttribute('class'),r:t.getBoundingClientRect()})));
+      const boxes=nodes.flatMap(e=>[...e.querySelectorAll('.nautilus-log-record-title,.nautilus-log-record-current')].map(t=>({uid:e.dataset.taskUid,kind:t.getAttribute('class'),r:t.getBoundingClientRect()})));
       const overlaps=[],crossings=[],markerCollisions=[];
       for(const node of nodes){const marker=node.querySelector('.nautilus-log-record-marker');if(!marker)continue;const a=marker.getBoundingClientRect();
         for(const box of boxes){const b=box.r;if(Math.min(a.right,b.right)-Math.max(a.left,b.left)>.5&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>.5)markerCollisions.push([node.dataset.taskUid,box.uid]);}
@@ -376,8 +376,12 @@ def density_and_control_contract(page):
         measure = page.evaluate('''()=>{
           const tip=document.querySelector('.nautilus-log-detail-content').getBoundingClientRect();
           const host=document.querySelector('.nautilus-log-desk-host').getBoundingClientRect();
-          const ink=Math.max(...[...document.querySelectorAll('.nautilus-log-record-title,.nautilus-log-record-meta,.nautilus-log-record-leader,.nautilus-log-slice,.nautilus-log-hour-label,.nautilus-log-record-marker')].map(e=>e.getBoundingClientRect().bottom));
-          return {beforeTip:tip.top-ink,afterTip:host.top-tip.bottom,tipHeight:tip.height};
+          const ink=Math.max(...[...document.querySelectorAll('.nautilus-log-record-title,.nautilus-log-record-current,.nautilus-log-record-leader,.nautilus-log-slice,.nautilus-log-hour-label,.nautilus-log-record-marker')].map(e=>e.getBoundingClientRect().bottom));
+          const labels=new Map(__chartHarness.scene().frame.labels.map(l=>[l.uid,l]));
+          const scale=Math.abs(document.querySelector('svg.nautilus-log-svg').getScreenCTM().a);
+          const inactive=[...document.querySelectorAll('svg [data-task-uid]')].filter(e=>getComputedStyle(e).visibility==='visible'&&e.getAttribute('aria-current')!=='true'&&labels.get(e.dataset.taskUid)?.metadataHeight>0);
+          const reserved=Math.min(14*scale,Math.max(ink,...inactive.map(e=>e.querySelector('.nautilus-log-label-hit').getBoundingClientRect().bottom))-ink);
+          return {beforeTip:tip.top-ink,reservedCurrent:reserved,afterTip:host.top-tip.bottom,tipHeight:tip.height};
         }''')
         # The approved wide B shell is 336 rather than 300 view units across.
         # The symmetric, source-stable frame can retain up to half that growth
@@ -385,10 +389,12 @@ def density_and_control_contract(page):
         # This is bounded by the chosen plot size, not an extra text/card band.
         plot = before['presentation']['timeRadius'] * before['presentation']['plotScale'] * 2
         allowance = 14 + max(0, plot - 300) / 2 if width >= 640 else 20
-        assert 0 <= measure['beforeTip'] <= allowance, (context, width, measure, allowance)
+        # An inactive candidate keeps at most one Current line of hit/layout
+        # allowance, so the minute transition cannot resize the frame.
+        assert 0 <= measure['beforeTip'] <= allowance + measure['reservedCurrent'], (context, width, measure, allowance)
         assert 2 <= measure['afterTip'] <= 5 and measure['tipHeight'] <= 38.5, measure
-        # B adds a real metadata row. Bound the frame by the source column
-        # demand instead of the old title-only fixture's absolute 340px cap.
+        # Source-column sizing includes only a stable allowance for potentially
+        # current records, not a duration/status row on every title.
         budget = page.evaluate('''()=>{const s=__chartHarness.scene(),f=s.frame;let flexible=0,left=0,right=0;
           for(const r of s.records){if(r.event.todo&&!r.event.done&&!r.event.meeting)flexible+=r.label.height;
             else if(r.label.side==='left')left+=r.label.height;else right+=r.label.height;}
@@ -1178,12 +1184,13 @@ def continuous_shell_contract(page):
         proof = page.evaluate('''()=>{
           const scene=__chartHarness.scene(),input=__chartHarness.sceneInput(),svg=document.querySelector('svg.nautilus-log-svg');
           const options={startMinutes:input.startMinutes,endMinutes:input.endMinutes,centerX:scene.frame.center.x,centerY:scene.frame.center.y,innerRadius:50,radiusScale:1};
-          const records=scene.records.filter(r=>r.kind==='timed').map(r=>{const node=document.querySelector(`svg [data-task-uid="${r.uid}"]`),paths=[...node.querySelectorAll('.nautilus-log-slice')],meta=node.querySelector('.nautilus-log-record-meta'),hit=node.querySelector('.nautilus-log-label-hit').getBoundingClientRect(),mr=meta.getBoundingClientRect();return {uid:r.uid,count:paths.length,path:paths[0].getAttribute('d'),expected:nautilusLogCore.shellInterval({...options,start:r.event.start,end:r.event.end}).path,meta:meta.textContent,metadataInside:mr.left>=hit.left-1&&mr.right<=hit.right+1&&mr.bottom<=hit.bottom+1};});
+          const records=scene.records.filter(r=>r.kind==='timed').map(r=>{const node=document.querySelector(`svg [data-task-uid="${r.uid}"]`),paths=[...node.querySelectorAll('.nautilus-log-slice')],indicator=node.querySelector('.nautilus-log-record-current'),hit=node.querySelector('.nautilus-log-label-hit').getBoundingClientRect(),mr=indicator?.getBoundingClientRect();return {uid:r.uid,count:paths.length,path:paths[0].getAttribute('d'),expected:nautilusLogCore.shellInterval({...options,start:r.event.start,end:r.event.end}).path,current:node.getAttribute('aria-current')==='true',indicator:indicator?.textContent??null,indicatorInside:!mr||(mr.left>=hit.left-1&&mr.right<=hit.right+1&&mr.bottom<=hit.bottom+1),legacyMetadata:node.querySelectorAll('.nautilus-log-record-meta').length};});
           const gradients=[...svg.querySelectorAll('radialGradient')].map(g=>({id:g.id,stops:[...g.querySelectorAll('stop')].map(s=>getComputedStyle(s).stopColor)}));
           const fill=getComputedStyle(document.querySelector('[data-task-uid="task-long"] .nautilus-log-slice')).fill;
           return {records,gradients,fill,inlineMaterial:svg.style.getPropertyValue('--nautilus-log-task-future-fill'),oldHourSectors:svg.querySelectorAll('.nautilus-log-grid .nautilus-log-slice').length,outline:svg.querySelector('.nautilus-log-shell-outline').getAttribute('d'),base:svg.querySelector('.nautilus-log-shell-base').getAttribute('d')};
         }''')
-        assert all(r['count'] == 1 and r['path'] == r['expected'] and r['path'].count('M') == 1 and r['path'].endswith('Z') and r['metadataInside'] for r in proof['records']), proof
+        assert all(r['count'] == 1 and r['path'] == r['expected'] and r['path'].count('M') == 1 and r['path'].endswith('Z') and r['indicatorInside'] for r in proof['records']), proof
+        assert all(r['legacyMetadata'] == 0 and r['indicator'] == ('Current' if r['current'] else None) for r in proof['records']), proof
         assert len(proof['gradients']) == 4 and len({g['id'] for g in proof['gradients']}) == 4, proof
         assert proof['inlineMaterial'].startswith('url(#nautilus-shell-') and 'url(' in proof['fill'], 'Reagent CSS variables must use string keys and actually paint the gradients'
         assert proof['oldHourSectors'] == 0 and proof['outline'] == proof['base'], proof
@@ -1203,7 +1210,7 @@ def continuous_shell_contract(page):
     load(page, 'untimed', 'main', 720)
     select(page, 'clock-done'); coverage(page)
     expect(page.locator('.nautilus-log-detail-meta')).to_contain_text('Actual 15m')
-    expect(page.locator('[data-task-uid="clock-done"] .nautilus-log-record-meta')).to_contain_text('Completed · Actual 15m')
+    expect(page.locator('[data-task-uid="clock-done"] .nautilus-log-record-meta,[data-task-uid="clock-done"] .nautilus-log-record-current')).to_have_count(0)
     assert not page.locator('[data-estimate-outline-for="clock-done"]').count()
     page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/'shell-actual.png'))
     select(page, 'untimed-local'); before = coverage(page)
@@ -1220,6 +1227,39 @@ def continuous_shell_contract(page):
     page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/'shell-estimate-expanded.png'))
     assert state(page)['writes'] == 0
     report['completion'] = {'actualVisibleInSummary': True, 'estimateUsesIdenticalDashedPath': True, 'expandedDetailsKeepSvgFrame': True, 'graphWrites': 0}
+    return report
+
+
+def current_only_labels_contract(page):
+    report = {}
+    for width, language in [(720, 'en'), (280, 'en'), (280, 'zh')]:
+        load(page, 'mixed', 'main' if width == 720 else 'sidebar', width, lang=language)
+        word = 'Current' if language == 'en' else '当前'
+        def indicators():
+            values = page.locator('.nautilus-log-record-current').evaluate_all('nodes=>nodes.map(e=>({uid:e.closest("[data-task-uid]").dataset.taskUid,text:e.textContent,current:e.closest("[data-task-uid]").getAttribute("aria-current")}))')
+            assert all(v['text'] == word and v['current'] == 'true' for v in values), values
+            assert not page.locator('svg .nautilus-log-record-meta').count()
+            return values
+        initial = indicators()
+        assert [v['uid'] for v in initial] == ['task-reference'], initial
+        before = state(page); select(page, 'task-long')
+        assert indicators() == initial, 'hover must not create or transfer Current'
+        assert_rect_equal(before, state(page), 'hover does not move Current or resize the frame')
+        expect(page.locator('.nautilus-log-detail-meta')).to_contain_text('1h30m')
+        set_clock(page, '2026-10-29T09:01:00')
+        assert [v['uid'] for v in indicators()] == ['event-standup']
+        page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/f'current-only-{width}-{language}.png'))
+        for iso in ['2026-10-29T04:59:00', '2026-10-29T21:00:00', '2026-10-30T08:01:00', '2026-10-28T08:01:00']:
+            set_clock(page, iso); assert indicators() == [], iso
+        assert state(page)['writes'] == 0
+        report[f'{width}-{language}'] = {'taskAndEventCurrent': True, 'hoverIndependent': True, 'nonCurrentHasNoSublabel': True, 'detailsRetainedInTips': True}
+    load(page, 'empty', 'main', 720, window='flow')
+    set_clock(page, '2026-10-29T17:47:00')
+    gap = page.locator('[data-past-gap-key]').first
+    point_inside_gap(page, gap.locator('.nautilus-log-past-gap-hit'), .35)
+    expect(page.locator('.nautilus-log-detail-title')).to_contain_text('Past gap')
+    page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/'rounded-contour-gap-hover.png'))
+    assert state(page)['writes'] == 0
     return report
 
 
@@ -1337,6 +1377,7 @@ def main():
             report['detailNameSemantics'] = detail_name_semantics_contract(page)
             report['tipSurface'] = tip_surface_contract(page)
             report['continuousShell'] = continuous_shell_contract(page)
+            report['currentOnlyLabels'] = current_only_labels_contract(page)
             report['timeflowRecovery'] = timeflow_recovery(page)
             report['lifecycle'] = lifecycle(page)
             report['nativeMinuteTimer'] = native_minute_contract(page)

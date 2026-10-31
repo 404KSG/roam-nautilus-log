@@ -7,10 +7,15 @@
 - Implement the approved B continuous shell: one smooth surface per timed record, rather
   than a separate visible slice at each hour. Fine edge ticks replace internal hour-sector
   dividers. One pure geometry module serves paint, hit regions, completion outlines and the
-  now needle, including the 12-hour fold and overnight windows. Source times and scheduling
-  are unchanged; the new curves do not claim pixel-area equivalence to the old step profile.
-- Add a fixed duration/status row beneath diagram titles. Actual and estimate completions
-  remain distinct and readable, without strike-through. Hover/focus emphasizes the surface,
+  now needle, including the 12-hour fold and overnight windows. The radius profile now uses
+  convex C2 smoothing to soften the left-side shoulder/apex without changing time boundaries.
+  Source times and scheduling are unchanged; the new curves do not claim pixel-area equivalence
+  to the old step profile.
+- Simplify diagram labels to titles plus **Current** only for active tasks/events. Remove
+  duration, Actual and Estimate sublabels; their complete information stays in hover/focus
+  Tips. Potentially current records retain a small stable line allowance; completed records
+  no longer reserve an unused metadata row. Completion styles remain distinct and readable,
+  without strike-through. Hover/focus emphasizes the surface,
   leader, anchor and colored title together, without moving the SVG or making Tips follow
   the pointer. Actual appears in the first completion summary; More retains extra provenance.
   A local completion stamp does not turn an estimate into Actual. Both stamped estimates and

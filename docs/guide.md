@@ -72,10 +72,11 @@ those controls remain unchanged. Task text uses a deeper blue (`#106ba3`), event
 yellow (`#ad8b24`), and urgency uses a softer red (`#c24b4b`). Fills, leaders, Unfinished cues
 and dark-theme text follow these color families without changing their meanings.
 
-The **continuous shell** draws each timed record as one surface. Hour marks remain as edge
-ticks rather than lines that visually split a task. A fixed second label row shows duration,
-Actual or Estimate; compact views shorten this metadata. The active center time uses a native
-monospace font. The curves retain the shrinking-radius model and real time boundaries, but
+The **continuous shell** draws each timed record as one surface, with rounded transitions
+through the radius profile. Hour marks remain as edge ticks rather than lines that visually
+split a task. Titles have no duration/status sublabel: only the active task or event shows
+**Current** underneath. Hover/focus Tips retain the full duration, Actual and Estimate details.
+The active center time uses a native monospace font. The curves retain the shrinking-radius model and real time boundaries, but
 are not pixel-area-equivalent to the earlier stepped shape.
 
 Hover or keyboard focus emphasizes the surface, its leader and its colored title as one unit.

@@ -1245,7 +1245,8 @@
 .nautilus-log-record--event { --nautilus-log-record-accent: var(--nautilus-log-event); --nautilus-log-record-text: var(--nautilus-log-event-text); }
 .nautilus-log-record--done { --nautilus-log-record-accent: var(--nautilus-log-completed); --nautilus-log-record-text: var(--nautilus-log-completed); }
 .nautilus-log-record-title { fill: var(--nautilus-log-task-text); font-weight: 500; }
-.nautilus-log-record-meta { fill: var(--nautilus-log-chart-muted); font-weight: 400; }
+.nautilus-log-record-meta,
+.nautilus-log-record-current { fill: var(--nautilus-log-chart-muted); font-weight: 400; }
 .nautilus-log-record-anchor { fill: var(--nautilus-log-record-accent); fill-opacity: .7; }
 .nautilus-log-label-highlight { fill: transparent; }
 .nautilus-log-record--event .nautilus-log-record-title { fill: var(--nautilus-log-event-text); }
@@ -1373,6 +1374,7 @@
   .nautilus-log-container .nautilus-log-record--estimated .nautilus-log-slice { stroke: none; }
   .nautilus-log-container .nautilus-log-record-title,
   .nautilus-log-container .nautilus-log-record-meta,
+  .nautilus-log-container .nautilus-log-record-current,
   .nautilus-log-container .nautilus-log-hour-label,
   .nautilus-log-container .nautilus-log-center-now,
   .nautilus-log-container .nautilus-log-center-caption { fill: CanvasText; }

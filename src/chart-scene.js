@@ -103,7 +103,11 @@ function chartPresentationFrame({ containerWidth, items = [], timeRadius = 150,
   const labels = source.map((item, order) => {
     const title = item.description.replace(/\s+/g, ' ').trim();
     const wrapped = wrapTitle(title, labelWidth, measured);
-    const metadataHeight = 14;
+    // Reserve a small, stable Current allowance only for records that can
+    // become current. No duration/status sublabel is rendered for other records.
+    const canBeCurrent = !item.done && (item.todo || item.meeting)
+      && (!validRange(item) || (item.end > startMinutes && item.start < endMinutes));
+    const metadataHeight = canBeCurrent ? 14 : 0;
     const height = wrapped.lines.length * lineHeight + 4 + metadataHeight;
     // This side assignment has no time input, including for pending tasks that
     // might later become unplaced. A loose record never gets a fake angle.
