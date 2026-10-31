@@ -143,7 +143,8 @@ export async function stableDeskReferenceUid({ graphName: name, graphType = '', 
   return uid;
 }
 
-export const canonicalDeskReference = sourceUid => `{{[[TODO]]}} ((${sourceUid}))`;
+// A collection reference must not add a checkbox or override source state.
+export const canonicalDeskReference = sourceUid => `((${sourceUid}))`;
 
 const referencePullPattern = '[:block/uid :block/string :node/title :edit/time {:block/page [:block/uid :node/title]} {:block/_children [:block/uid]} {:block/children [:block/uid :block/string :block/order {:block/_children [:block/uid]}]}]';
 const raw = (entity, ...names) => {

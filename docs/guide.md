@@ -316,15 +316,24 @@ built-in starred/Desk collection.
 ### Safe outside-block references
 
 Drag one ordinary native Roam block from the same window and graph onto a Desk card
-(or the background). Desk preserves the original block and creates one local
-`TODO` reference wrapper under the current plan. Left/right card halves choose
+(or the background). Desk preserves the original block and creates one bare native
+reference, `((source-uid))`, under the current plan. It adds no TODO marker: plain text
+stays plain, and an existing task checkbox is not duplicated. The source text, parent
+and children stay untouched; the reference follows the source's state. New drops of
+already-completed sources are declined with a clear message instead of reopening them
+or silently adding an invisible card to this unfinished-items view.
+Left/right card halves choose
 before/after (mirrored in RTL), with the same native insertion rail and number.
 Background adds after the last unfiltered active task (or first in an empty plan).
 Accepted native transfers use the copy cursor; move-only or link-only transfers
 are not imported. Files, pages, queries, embeds/renderers, events, ambiguous/multi-block and
 cross-graph payloads are rejected. Nautilus ignores modifier gestures and leaves
 those events entirely to Roam; it does not suppress Roam's own modifier behavior.
-Repeated drops reuse the same deterministic wrapper. After a confirmed add,
+Repeated drops reuse the same deterministic wrapper. Existing legacy TODO wrappers
+are recognized read-only for deduplication; this update does not rewrite or remove their
+saved markers. Strict receipt adoption recognizes the exact bare or legacy wrapper at
+its reserved ID, but a new create is confirmed only against the requested bare string.
+After a confirmed add,
 Remove from Desk of its childless local wrapper permits the source to be dropped
 again with that same ID. A promoted wrapper still occupies the ID, so Desk does
 not create another. An unconfirmed attempt in that running view is

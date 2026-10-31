@@ -8,7 +8,8 @@ const extension = () => loaded ||= import(`data:text/javascript;base64,${Buffer.
 const ROOT = '[[Nautilus Log]] {{[[roam/render]]:((roam-render-Nautilus-Log-cljs))}}';
 const SOURCE = 'source-1';
 const WRAPPER = 'refwrap-1';
-const canonical = `{{[[TODO]]}} ((${SOURCE}))`;
+const canonical = `((${SOURCE}))`;
+const legacyCanonical = `{{[[TODO]]}} ${canonical}`;
 const clone = value => JSON.parse(JSON.stringify(value));
 const transfer = ({ uid = SOURCE, uri = `https://roamresearch.com/#/app/desk-fixture/page/${SOURCE}`, onlyParents = uid, list = uid, files = 0, html = '', types } = {}) => ({
   types: types || ['roam/block-uid-list-only-parents', 'roam/block-uid-list', 'roam/roam-uri-list'],
@@ -96,6 +97,10 @@ async function fixture({ createMode = 'normal', onCreate, source = {}, sourceRaw
     rows.splice(location.order, 0, { uid: block.uid, string: block.string, order: location.order });
     rows.forEach((row, index) => { row.order = index; });
     entities.set(block.uid, { uid: block.uid, string: block.string, parentUid: location['parent-uid'], pageUid: 'plan-page', children: [] });
+    if (activeCreateMode === 'legacy-result') {
+      rows.find(row => row.uid === block.uid).string = legacyCanonical;
+      entities.get(block.uid).string = legacyCanonical;
+    }
     if (activeCreateMode === 'source-edited') sourceNode.string = '{{[[TODO]]}} Externally edited source';
     if (activeCreateMode === 'source-moved') sourceNode.parentUid = 'different-parent';
     if (activeCreateMode === 'source-deleted') entities.delete(SOURCE);
@@ -124,10 +129,10 @@ async function fixture({ createMode = 'normal', onCreate, source = {}, sourceRaw
   return { actions, rows, sourceNode, entities, writes, call, context, provider: () => currentProvider, setCreateMode: mode => { activeCreateMode = mode; }, setUser: user => { currentUser = user; }, setProvider: provider => { currentProvider = provider; } };
 }
 
-const addStrictWrapper = (f) => {
-  f.rows.unshift({ uid: WRAPPER, string: canonical, order: 0 });
+const addStrictWrapper = (f, string = canonical) => {
+  f.rows.unshift({ uid: WRAPPER, string, order: 0 });
   f.rows.forEach((row, order) => { row.order = order; });
-  f.entities.set(WRAPPER, { uid: WRAPPER, string: canonical, parentUid: 'plan', pageUid: 'plan-page', children: [] });
+  f.entities.set(WRAPPER, { uid: WRAPPER, string, parentUid: 'plan', pageUid: 'plan-page', children: [] });
 };
 const removeStrictWrapper = (f) => {
   const index = f.rows.findIndex(row => row.uid === WRAPPER);
@@ -136,6 +141,70 @@ const removeStrictWrapper = (f) => {
   f.rows.forEach((row, order) => { row.order = order; });
   f.entities.delete(WRAPPER);
 };
+
+test('external reference import preserves dragged plain/TODO content without adding a local task marker', async t => {
+  for (const string of ['Ordinary note with **formatting** and a child', '{{[[TODO]]}} Existing task 20m', '{{TODO}} Compact task marker']) {
+    await t.test(string, async () => {
+      const f = await fixture({ source: { string }, project: true });
+      const sourceBefore = clone(f.sourceNode);
+      assert.equal((await f.call()).status, 'added');
+      assert.deepEqual(f.writes, [{ uid: WRAPPER, parentUid: 'plan', order: 0, string: `((${SOURCE}))` }]);
+      assert.equal(f.rows.find(row => row.uid === WRAPPER).string, `((${SOURCE}))`);
+      assert.deepEqual(f.sourceNode, sourceBefore, 'source text, state, parent and children must remain untouched');
+    });
+  }
+});
+
+test('completed sources are not reopened or silently imported into unfinished Desk', async t => {
+  for (const string of ['{{[[DONE]]}} Completed original', '{{DONE}} Compact completed marker']) await t.test(string, async () => {
+    const f = await fixture({ source: { string }, project: true });
+    const sourceBefore = clone(f.sourceNode), rowsBefore = clone(f.rows);
+    await assert.rejects(f.call(), error => error.code === 'source-completed');
+    assert.deepEqual(f.rows, rowsBefore);
+    assert.deepEqual(f.sourceNode, sourceBefore);
+    assert.equal(f.writes.length, 0);
+  });
+});
+
+test('legacy TODO references remain read-only duplicates rather than being rewritten or duplicated', async () => {
+  for (const sourceText of ['Plain source note', '{{[[TODO]]}} Source task', '{{[[DONE]]}} Source completed later']) {
+    const f = await fixture({ source: { string: sourceText }, rows: [{ uid: 'legacy-ref', string: legacyCanonical, order: 0 }], project: true });
+    const before = clone(f.rows);
+    const result = await f.call({ insertion: { kind: 'background' } });
+    assert.equal(result.status, 'existing-reference');
+    assert.equal(result.wrapperUid, 'legacy-ref');
+    assert.deepEqual(f.rows, before);
+    assert.equal(f.writes.length, 0);
+  }
+});
+
+test('late bare/legacy receipts resolve before completed-source eligibility, then removal permits bare re-entry', async t => {
+  for (const string of [canonical, legacyCanonical]) await t.test(string, async () => {
+    const f = await fixture({ createMode: 'no-op', project: true });
+    await assert.rejects(f.call());
+    addStrictWrapper(f, string);
+    f.sourceNode.string = '{{[[DONE]]}} Source completed while create was pending';
+    assert.equal((await f.call()).status, 'existing-reference');
+    assert.equal(f.writes.length, 1);
+    removeStrictWrapper(f);
+    f.sourceNode.string = '{{[[TODO]]}} Source reopened by user';
+    f.setCreateMode('normal');
+    assert.equal((await f.call()).status, 'added');
+    assert.equal(f.writes.length, 2);
+    assert.equal(f.rows.find(row => row.uid === WRAPPER).string, canonical);
+  });
+});
+
+test('a legacy result cannot confirm a requested bare create, even when its known identity resolves', async () => {
+  const f = await fixture({ createMode: 'legacy-result', project: true });
+  await assert.rejects(f.call(), /confirm/i);
+  assert.equal(f.rows.find(row => row.uid === WRAPPER).string, legacyCanonical);
+  removeStrictWrapper(f);
+  f.setCreateMode('normal');
+  assert.equal((await f.call()).status, 'added');
+  assert.equal(f.writes.length, 2);
+  assert.equal(f.rows.find(row => row.uid === WRAPPER).string, canonical);
+});
 
 test('strict modern seam: import requires data.pull and data.block.create before a write', async () => {
   for (const providerShape of ['legacy', 'no-create']) {

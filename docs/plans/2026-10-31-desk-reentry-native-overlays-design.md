@@ -2,11 +2,15 @@
 
 ## Decision
 
-Desk remains a projection of the graph, not a separate collection. A confirmed local TODO reference is represented only by its graph wrapper. If that childless wrapper is removed, dropping the same unfinished source again may recreate the same deterministic wrapper ID. An unresolved create remains verification-only and never receives a retry or fallback ID.
+Desk remains a projection of the graph, not a separate collection. A confirmed local reference is represented only by its graph wrapper. New external imports use a bare `((source-uid))` reference, never an automatically prepended TODO. Plain notes keep their syntax and existing source checkboxes are not duplicated. If that childless wrapper is removed, dropping the same unfinished source again may recreate the same deterministic wrapper ID. An unresolved create remains verification-only and never receives a retry or fallback ID.
 
 The focus editor remains Roam's mounted editor. Roam's enhanced image viewer is a portal modal, so it paints and receives interaction above the focus dialog without remounting the editor or changing its selection, IME state, or scroll.
 
 ## Causes and fixes
+
+The import serializer previously forced `{{[[TODO]]}} ((source-uid))`. That added an extra local checkbox and overrode source state. It now writes only the bare reference. Source text, location and children are unchanged, and existing implicit-planning rules are not modified. A fresh already-DONE source is declined explicitly because this Desk projects unfinished items; it is never reopened merely by dragging.
+
+Legacy TODO wrappers remain recognized without rewriting saved notes. Strict deterministic-ID adoption accepts only the exact bare or known legacy string, matching parent, childless shape and outline row. New-create confirmation still requires the bare string requested for that write; recognizing a legacy receipt is not confirmation that a bare create succeeded. Resolve existing receipts and safe duplicate no-ops before enforcing fresh unfinished-source eligibility, so source completion cannot revive a private import latch after a verified removal.
 
 `createDeskActions` retained an import reservation after successful readback. Its `attempted` flag then treated a later, genuinely absent wrapper as an unresolved create. It also compared an old source fingerprint before checking an existing wrapper, so an ordinary source edit made a valid duplicate drop fail.
 

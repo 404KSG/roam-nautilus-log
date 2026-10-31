@@ -968,7 +968,7 @@ def run():
             expect(toast).to_have_text('Added reference. Original kept.')
             assert toast.evaluate('el => ({position:getComputedStyle(el).position,pointerEvents:getComputedStyle(el).pointerEvents})') == {'position': 'absolute', 'pointerEvents': 'none'}
             imported_row = page.evaluate('() => deskHarness.api.children("plan-desk").find(row => row.uid === "ref-outside-source")')
-            assert imported_row['string'] == '{{[[TODO]]}} ((outside-source))', imported_row
+            assert imported_row['string'] == '((outside-source))', imported_row
             assert page.evaluate('() => deskHarness.api.sourceSnapshot("outside-source")') == source_before
             # Exercise the real Remove action and import owner together without
             # a reload: deleting only fixture rows cannot catch lifecycle locks.
@@ -1030,6 +1030,61 @@ def run():
             expect(empty_target).to_be_hidden()
             assert page.evaluate('() => deskHarness.api.stats.writes.length') == 1
             checks.append('empty target receives visible landing feedback and pending toast without flow geometry changes')
+
+            # Collection preserves source syntax instead of creating a second
+            # checkbox in front of an already-TODO native reference.
+            for source_text, expected_checks in [
+                ('Plain note with **formatting**', 0),
+                ('{{[[TODO]]}} Original task 20m', 1),
+                ('{{TODO}} Compact original task', 1),
+            ]:
+                mount(count=3)
+                page.evaluate('''text=>{
+                  deskHarness.api.setString('outside-source',text);
+                  deskHarness.api.addChild('outside-note','outside-source','Source child stays in its original outline.');
+                }''', source_text)
+                source_before = page.evaluate('deskHarness.api.sourceSnapshot("outside-source")')
+                external_drag('[data-task-uid="task-1"]')
+                expect(card('ref-outside-source')).to_be_visible()
+                expect(card('ref-outside-source').locator('.rm-desk-tile__title .rm-desk-tile__check')).to_have_count(expected_checks)
+                expect(card('ref-outside-source').locator('.rm-desk-tile__preview')).to_contain_text('Source child stays')
+                assert page.evaluate('deskHarness.api.text("ref-outside-source")') == '((outside-source))'
+                assert page.evaluate('deskHarness.api.sourceSnapshot("outside-source")') == source_before
+                assert page.evaluate('deskHarness.api.stats.writes.length') == 1
+                activate('ref-outside-source')
+                expect(page.locator('.nautilus-desk__native textarea[data-block-uid="ref-outside-source"]')).to_have_value('((outside-source))')
+                close_focus()
+                page.evaluate('()=>deskHarness.api.setString("outside-source","{{[[DONE]]}} Completed by the user")')
+                expect(card('ref-outside-source')).to_have_count(0)
+                assert page.evaluate('deskHarness.api.text("ref-outside-source")') == '((outside-source))'
+                assert page.evaluate('deskHarness.api.stats.writes.length') == 1
+                assert page.evaluate('deskHarness.api.stats.nativeWrites.length') == 0
+                page.evaluate('()=>deskHarness.api.setString("outside-source","Reopened as a plain note")')
+                expect(card('ref-outside-source')).to_be_visible()
+                expect(card('ref-outside-source').locator('.rm-desk-tile__title .rm-desk-tile__check')).to_have_count(0)
+                assert page.evaluate('deskHarness.api.stats.writes.length') == 1
+            checks.append('plain/TODO imports stay bare references, preserve source children, and follow source state without a local override')
+
+            mount(count=3)
+            page.evaluate('()=>deskHarness.api.setString("outside-source","{{[[DONE]]}} Already completed")')
+            completed_before = page.evaluate('deskHarness.api.sourceSnapshot("outside-source")')
+            external_drag('[data-task-uid="task-1"]')
+            page.wait_for_function('deskHarness.api.stats.referenceRequests.at(-1)?.state === "rejected"')
+            expect(page.locator('.nautilus-desk__drop-toast')).to_have_text('Completed source. Desk only shows unfinished items.')
+            assert page.evaluate('deskHarness.api.stats.writes.length') == 0
+            assert page.evaluate('deskHarness.api.sourceSnapshot("outside-source")') == completed_before
+            expect(card('ref-outside-source')).to_have_count(0)
+            checks.append('a completed source is explicitly declined without reopening or changing it')
+
+            mount(count=3)
+            page.evaluate('()=>deskHarness.api.addChild("legacy-local","plan-desk","{{[[TODO]]}} ((outside-source))")')
+            expect(card('legacy-local')).to_be_visible()
+            external_drag('[data-task-uid="task-1"]')
+            page.wait_for_function('deskHarness.api.stats.referenceRequests.at(-1)?.status === "existing-reference"')
+            assert page.evaluate('deskHarness.api.stats.writes.length') == 0
+            assert page.evaluate('deskHarness.api.text("legacy-local")') == '{{[[TODO]]}} ((outside-source))'
+            expect(card('ref-outside-source')).to_have_count(0)
+            checks.append('legacy TODO wrappers remain untouched read-only duplicates')
 
             # Lifecycle cancellation cannot revoke an issued host call. Late
             # completion is not reported as success and cannot resurrect UI.

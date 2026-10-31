@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- Outside-block drops now create a bare native reference instead of prepending TODO.
+  Plain notes stay plain and existing checkboxes are not duplicated. Completed sources
+  are not silently reopened. Preserve legacy-wrapper deduplication, exact readback,
+  uncertain-create protection and removal/re-entry; do not migrate saved note text.
+
 - Re-adding an outside-block reference after its confirmed childless-wrapper removal reuses the same wrapper ID; a later source edit is no longer treated as an unresolved create.
 - The focus dialog no longer paints over Roam's enhanced image viewer or takes its pointer, wheel, Tab, or Escape behavior.
 
@@ -150,7 +155,7 @@
   compensating write, or destructive shortcut is added. Tests use synthetic graphs.
 
 - Desk accepts one ordinary same-window, same-graph native Roam block drop as a
-  local TODO reference while preserving the original. Files, pages, renderers,
+  bare local reference while preserving the original. Files, pages, renderers,
   events, ambiguous payloads, and cross-graph sources are rejected. Modifier
   gestures are ignored by Nautilus and remain Roam-owned. Repeated drops and
   reloads use the same reserved UID rather than allocating another wrapper UID.

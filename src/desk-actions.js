@@ -111,10 +111,11 @@ export function createDeskActions({
       };
       const sourceUid = claim.sourceUid;
       const canonical = canonicalDeskReference(sourceUid);
-      const simpleReference = (row) => {
-        const value = String(row?.string || '').trim();
-        return value === canonical || value === `((${sourceUid}))`;
-      };
+      // Older releases emitted a local TODO before this reference. Recognize
+      // that exact legacy shape for read-only deduplication/receipt adoption,
+      // but never rewrite it or use it for new creates.
+      const knownReference = string => string === canonical || string === `{{[[TODO]]}} ${canonical}`;
+      const simpleReference = row => knownReference(String(row?.string || '').trim());
       const validSource = (source) => {
         if (!source || source.uid !== sourceUid || sourceUid === planUid || typeof source.string !== 'string' || !source.string.trim()
           || typeof source.title === 'string' || source.parentUids.length !== 1 || !source.parentUids[0] || !source.pageUid
@@ -123,17 +124,22 @@ export function createDeskActions({
           throw new DeskReferenceImportError('The source block is no longer a readable ordinary block.', 'invalid-source');
         }
         const instance = resolveTaskInstance({ uid: `preview-${sourceUid}`, localString: canonical, readString: uid => uid === sourceUid ? source.string : '' });
-        if (instance.kind !== 'task' || instance.status !== 'TODO' || !instance.title || instance.title === '(untitled)') {
+        if (instance.kind !== 'task' || !instance.title || instance.title === '(untitled)') {
           throw new DeskReferenceImportError('This block cannot become a visible unfinished Desk task.', 'not-a-task');
         }
         return instance;
+      };
+      const requireUnfinished = instance => {
+        if (instance.status !== 'TODO') {
+          throw new DeskReferenceImportError('This block is completed. Desk will not add a task marker or reopen it.', 'source-completed');
+        }
       };
 
       assertContext();
       let rows = readStrictReferenceOutline(adapter, planUid);
       const source = await entity(sourceUid);
       assertContext();
-      validSource(source);
+      const sourceInstance = validSource(source);
       const sourceFingerprint = fingerprintDeskReferenceSource(source);
       if (!sourceFingerprint) throw new DeskReferenceImportError('The source block is unreadable.', 'invalid-source');
       let wrapperUid = null;
@@ -146,9 +152,9 @@ export function createDeskActions({
         return wrapperUid;
       };
       const adoptReservedReference = (candidateRows, candidate) => {
-        if (candidate?.uid !== wrapperUid || candidate.string !== canonical || candidate.parentUids.length !== 1
+        if (candidate?.uid !== wrapperUid || !knownReference(candidate.string) || candidate.parentUids.length !== 1
           || candidate.parentUids[0] !== planUid || candidate.children.length !== 0) return null;
-        const row = candidateRows.find(value => value.uid === wrapperUid && value.string === canonical);
+        const row = candidateRows.find(value => value.uid === wrapperUid && value.string === candidate.string);
         if (!row) return null;
         // Once this exact graph wrapper is observed, it is no longer an
         // unresolved private write. A later confirmed removal may re-add it.
@@ -171,6 +177,9 @@ export function createDeskActions({
       // A different visible reference is a safe no-op, but cannot resolve
       // an earlier ambiguous create for this deterministic ID.
       if (duplicate) return { status: 'existing-reference', sourceUid, wrapperUid: duplicate.uid, order: duplicate.order };
+      // Resolve known prior writes/no-ops first, even if the source has since
+      // completed. A fresh create must never reopen that source as a TODO.
+      requireUnfinished(sourceInstance);
 
       await reserveWrapperUid();
       const reservedEntity = await entity(wrapperUid);
@@ -190,7 +199,7 @@ export function createDeskActions({
       // source edit: the host may have completed the prior create late.
       const adopted = await observeReservedReference(rows);
       if (adopted) return adopted;
-      validSource(refreshedSource);
+      requireUnfinished(validSource(refreshedSource));
       if (fingerprintDeskReferenceSource(refreshedSource) !== sourceFingerprint) {
         throw new DeskReferenceImportError('The source changed before the reference could be created.', 'source-changed');
       }
