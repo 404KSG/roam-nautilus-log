@@ -66,8 +66,11 @@
         offset (max 0 (quot (- (int minute) workday-start) 60))]
     (min (dec (count snail-blueprint-outer-radiuses)) (+ 5 offset))))
 
+(declare log-core-call)
+
 (defn spiral-outer-radius [minute settings]
-  (outer-radius-at (spiral-profile-index minute settings)))
+  (or (log-core-call "shellRadius" {:minute minute :startMinutes (:workday-start settings)
+                                    :radiusScale snail-scaler}) 0))
 
 (def len-central-legend 16) ;; length of the central legend description (page name or date)
 
@@ -358,14 +361,19 @@
       {:entries []})
     (catch :default _e {:entries []})))
 
-(defn spiral-cell-inner-radius [start-minute settings fallback-inner-radius]
-  (let [paired-hour (log-core-call "spiralCellInnerHour"
-                                    {:startMinute start-minute
-                                     :endMinutes (:workday-end settings)
-                                     :windowStartMinutes (:workday-start settings)})]
-    (if (number? paired-hour)
-      (max fallback-inner-radius (outer-radius-at paired-hour))
-      fallback-inner-radius)))
+(defn shell-options [center settings inner-radius]
+  {:startMinutes (:workday-start settings) :endMinutes (:workday-end settings)
+   :centerX (or (:center-x center) 0) :centerY (or (:center-y center) 0)
+   :innerRadius inner-radius :radiusScale snail-scaler})
+
+(defn shell-path [start end inner-radius center settings]
+  (or (:path (log-core-call "shellInterval"
+                            (assoc (shell-options center settings inner-radius) :start start :end end))) ""))
+
+(defn spiral-cell-inner-radius [minute settings fallback-inner-radius]
+  (or (:inner (log-core-call "shellRadii"
+                             (assoc (shell-options nil settings fallback-inner-radius) :minute minute)))
+      fallback-inner-radius))
 
 (defn now-minutes []
   (let [now (new js/Date)]
@@ -510,6 +518,7 @@
         range-text (when (and (number? (:full-start event)) (number? (:full-end event)))
                      (str (minutes->time (:full-start event)) "–" (minutes->time (:full-end event))))
         allocation? (= "estimated-allocation" (:time-claim event))
+        actual? (or (= "actual" (:time-claim event)) (= "actual" (:duration-source event)))
         summary (if allocation?
                   (str completed " · " estimate)
                   (case kind
@@ -521,16 +530,21 @@
                     "unplaced" (str (get-in copy [:tooltips :unplaced]) " · " estimate)
                     "outside-window" (str (when (:done event) (str completed " · "))
                                           (get-in copy [:tooltips :outsideWindow]) " · " range-text)
-                    (str (when (:done event) (str completed " · "))
-                         (get-in copy [:tooltips (if (:meeting event) :event :task)]) " · " range-text
-                         " · " (duration-label (- (:full-end event) (:full-start event))))))
+                    (cond
+                      actual? (str completed " · " (get-in copy [:tooltips :actual]) " "
+                                   (duration-label (or (:actual-minutes event) (- (:full-end event) (:full-start event))))
+                                   " · " range-text)
+                      (and (:done event) (:todo event) (not (:meeting event))) (str completed " · " estimate " · " range-text)
+                      :else (str (when (:done event) (str completed " · "))
+                                 (get-in copy [:tooltips (if (:meeting event) :event :task)]) " · " range-text
+                                 " · " (duration-label (- (:full-end event) (:full-start event)))))))
         meta (str summary
                   (when allocation? (str " · " (get-in copy [:tooltips :estimatedAllocation]) " " range-text
                                          " · " (get-in copy [:tooltips :notRecordedCompletion])))
                   (when (not= kind "timed") (str " · " (get-in copy [:tooltips :notTimeScaled])))
                   (when (and (:done event) source?)
                     (str " · " (get-in copy [:tooltips :inheritedCompletion])))
-                  (when (= "actual" (:time-claim event)) (str " · " (get-in copy [:tooltips :actual])))
+                  (when (and actual? (not= kind "timed")) (str " · " (get-in copy [:tooltips :actual])))
                   (when (= "completion-estimate" (:time-claim event))
                     (str " · " (get-in copy [:tooltips :completionEstimate]))))]
     {:title title :meta meta :summary-meta summary :uid (:uid event)
@@ -564,7 +578,11 @@
                     :aria-label (get-in copy [:panels (if expanded? :collapseDetails :expandDetails)])
                     :on-click (fn [event]
                                 (.stopPropagation event)
-                                (swap! detail-state assoc :expanded (if expanded? nil info)))}
+                                (if expanded?
+                                  ;; Less acts on this inspector, not the stale pointer
+                                  ;; preview accumulated behind its expanded content.
+                                  (swap! detail-state assoc :expanded nil :pointer nil :focus info)
+                                  (swap! detail-state assoc :expanded info)))}
            (get-in copy [:panels (if expanded? :less :more)])])])]))
 
 ;; ---------------- helpers ----------------------
@@ -903,103 +921,76 @@
         (if debug? (str (round2 start-radians) " / " start-angle) timestamp)])]))
 
 (defn past-time-overlay-component [inner-radius center settings elapsed-through-minutes]
-  (let [segments (or (log-core-call "pastTimelineSegments"
-                                     {:startMinutes (:workday-start settings)
-                                      :endMinutes (:workday-end settings)
-                                      :nowMinutes elapsed-through-minutes})
-                     [])]
+  (let [start (:workday-start settings)
+        end (min (:workday-end settings) elapsed-through-minutes)]
     [:g {:class "nautilus-log-past-overlay" :aria-hidden "true"}
-     (for [{:keys [start end]} segments]
-       ^{:key (str "past:" start ":" end)}
-       [:path {:d (create-arc-path
-                    (min->angle start)
-                    (min->angle end)
-                    (spiral-cell-inner-radius start settings inner-radius)
-                    (spiral-outer-radius start settings)
-                    center)}])]))
+     (when (< start end)
+       [:path {:d (shell-path start end inner-radius center settings)}])]))
 
 (defn past-unplanned-overlay-component [occupied-events inner-radius center settings elapsed-through-minutes plot-scale]
   (r/with-let [pattern-id (str "nautilus-log-past-" (random-uuid))]
-   (let [scale (or plot-scale 1)
-         segments (or (log-core-call "pastUnplannedSegments"
-                                     {:startMinutes (:workday-start settings)
-                                      :endMinutes (:workday-end settings)
-                                      :nowMinutes elapsed-through-minutes
-                                      :occupiedEvents occupied-events})
-                     [])]
-    [:g {:class "nautilus-log-unplanned-overlay" :aria-hidden "true"}
-     [:defs
-      [:pattern {:id pattern-id :width (/ 6 scale) :height (/ 6 scale)
-                 :patternUnits "userSpaceOnUse" :patternTransform "rotate(45)"}
-       [:rect {:width (/ 6 scale) :height (/ 6 scale) :fill "var(--nautilus-log-unplanned-fill)"}]
-       [:line {:x1 0 :y1 0 :x2 0 :y2 (/ 6 scale)
-               :stroke "var(--nautilus-log-unplanned-stripe)" :stroke-width (/ 0.6 scale)}]]]
-     (for [{:keys [start end]} segments]
-       ^{:key (str "unplanned:" start ":" end)}
-       [:path {:d (create-arc-path
-                    (min->angle start)
-                    (min->angle end)
-                    (spiral-cell-inner-radius start settings inner-radius)
-                    (spiral-outer-radius start settings)
-                    center)
-               :fill (str "url(#" pattern-id ")")}])])))
+    (let [scale (or plot-scale 1)
+          gaps (or (log-core-call "pastUnplannedGroups"
+                                  {:startMinutes (:workday-start settings)
+                                   :endMinutes (:workday-end settings)
+                                   :nowMinutes elapsed-through-minutes :occupiedEvents occupied-events}) [])]
+      [:g {:class "nautilus-log-unplanned-overlay" :aria-hidden "true"}
+       [:defs
+        [:pattern {:id pattern-id :width (/ 6 scale) :height (/ 6 scale)
+                   :patternUnits "userSpaceOnUse" :patternTransform "rotate(45)"}
+         [:rect {:width (/ 6 scale) :height (/ 6 scale) :fill "var(--nautilus-log-unplanned-fill)"}]
+         [:line {:x1 0 :y1 0 :x2 0 :y2 (/ 6 scale)
+                 :stroke "var(--nautilus-log-unplanned-stripe)" :stroke-width (/ 0.6 scale)}]]]
+       (for [{:keys [start end key]} gaps]
+         ^{:key key}
+         [:path {:d (shell-path start end inner-radius center settings)
+                 :fill (str "url(#" pattern-id ")")}])])))
 
+(defn snail-blueprint-component [color inner-radius center settings _show-elapsed? _elapsed-through-minutes & [hour-step plot-scale]]
+  (let [scale (or plot-scale 1)
+        hour-size (/ (if (> (or hour-step 1) 1) 9 10) scale)
+        grid (log-core-call "shellGrid" (assoc (shell-options center settings inner-radius)
+                                               :hourStep (or hour-step 1) :plotScale scale))]
+    [:g {:class "nautilus-log-grid" :aria-hidden "true" :pointer-events "none"}
+     [:path {:class "nautilus-log-shell-outline" :d (:path grid) :fill "none" :stroke color}]
+     (for [{:keys [minute major label x1 y1 x2 y2 labelX labelY]} (:ticks grid)]
+       ^{:key minute}
+       [:g
+        [:line {:class (str "nautilus-log-shell-tick" (when major " is-major"))
+                :x1 x1 :y1 y1 :x2 x2 :y2 y2 :vector-effect "non-scaling-stroke"}]
+        (when label
+          [:text {:class "nautilus-log-hour-label" :x labelX :y labelY
+                  :style {:font-size (str hour-size "px")} :fill "var(--nautilus-log-chart-muted)"
+                  :text-anchor "middle" :dominant-baseline "central"} label])])]))
 
-(defn snail-blueprint-component [color inner-radius center settings show-elapsed? elapsed-through-minutes & [hour-step plot-scale]]
-  (let [hour-size (/ (if (> (or hour-step 1) 1) 9 11) (or plot-scale 1))
-        workday-start (:workday-start settings)
-        workday-end (:workday-end settings)
-        segments (or (log-core-call "hourlyGridSegments"
-                                     {:startMinutes workday-start
-                                      :endMinutes workday-end})
-                     [])]
-    [:g {:class "nautilus-log-grid" :aria-hidden "true"}
-     (mapcat (fn [{:keys [start end label]}]
-               [[slice
-                 [(min->angle start) (min->angle end) (spiral-cell-inner-radius start settings inner-radius)
-                  (spiral-outer-radius start settings)
-                 center settings]
-                 :border-color color
-                 :past? (and show-elapsed? (<= end elapsed-through-minutes))
-                 :hour-font-size hour-size
-                 :timestamp (when (or (= 1 (or hour-step 1))
-                                      (= start workday-start)
-                                      (zero? (mod (js/parseInt label 10) hour-step))) label)]])
-             segments)
-     (when (= workday-end 1440)
-       (let [angle (min->angle workday-end)
-             radians (angle->rad angle)
-             radius (+ (spiral-outer-radius (- workday-end 60) settings) 12)
-             x (+ (:center-x center) (* (cos radians) radius))
-             y (- (:center-y center) (* (sin radians) radius))]
-         [:text {:class "nautilus-log-midnight-label"
-                 :x x :y y :fill color :style {:font-size (str hour-size "px")}
-                 :text-anchor "middle" :alignment-baseline "central"} "0"]))]))
-
-(defn central-label-component [[first-row _] center center-now-label & [plot-scale]]
+(defn central-label-component [[first-row _] center center-now-label & [plot-scale copy]]
   (let [[center-x center-y] [(:center-x center) (:center-y center)]
         scale (or plot-scale 1)
         small? (< scale 0.6)
         date-parts (re-find #"^([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?$" first-row)
-        short-date (when (and small? date-parts)
+        short-date (when (and (< scale 0.9) date-parts)
                      (str (subs (nth date-parts 1) 0 (min 3 (count (nth date-parts 1)))) " " (nth date-parts 2)))
         rows (cond short-date [short-date]
-                   (and (< scale 0.9) (str/includes? first-row " ")) (str/split first-row #"\s+" 2)
+                   (and (not center-now-label) (< scale 0.9) (str/includes? first-row " ")) (str/split first-row #"\s+" 2)
                    :else [first-row])
         two? (= 2 (count rows))
-        size (cond (< scale 0.4) 8.5 small? 9.5 :else 11)
-        common-attr {:x center-x :text-anchor "middle" :dominant-baseline "central"}]
+        date-size (if center-now-label (if small? 8.5 9) (if small? 9.5 11))
+        time-size (min 21 (max 9 (/ (- (* 2 snail-inner-radius scale) 8) 3.2)))
+        common {:x center-x :text-anchor "middle" :dominant-baseline "central"}]
     [:g {:class "nautilus-log-center-date" :aria-label (str first-row (when center-now-label (str " " center-now-label)))}
      (for [[index row] (map-indexed vector rows)]
        ^{:key index}
-       [:text (assoc common-attr
-                     :y (+ center-y (/ (+ (if two? -10 (if small? -5 -2)) (* index 12)) scale))
-                     :fill "var(--nautilus-log-chart-ink)" :font-weight "600"
-                     :font-size (str (/ size scale))) row])
+       [:text (assoc common :y (+ center-y (/ (+ (if center-now-label (if small? -7 -16) (if two? -6 0)) (* index 12)) scale))
+                     :fill "var(--nautilus-log-chart-muted)" :font-weight "500"
+                     :font-size (str (/ date-size scale))) row])
      (when center-now-label
-       [:text (assoc common-attr :y (+ center-y (/ (if two? 16 (if small? 7 13)) scale))
-                     :class "nautilus-log-center-now" :fill "var(--nautilus-log-text-sub)"
-                     :font-weight "600" :font-size (str (/ (if small? size 10) scale))) center-now-label])]))
+       [:text (assoc common :y (+ center-y (/ (if small? 6 3) scale))
+                     :class "nautilus-log-center-now" :font-weight "500"
+                     :font-size (str (/ time-size scale))) center-now-label])
+     (when (and center-now-label (>= scale 0.7))
+       [:text (assoc common :y (+ center-y (/ 22 scale)) :class "nautilus-log-center-caption"
+                     :font-size (str (/ 7 scale)))
+        (or (get-in copy [:tooltips :currentTime]) "Current time")])]))
 
 (defn calculate-slice-params [event index elapsed-page? interactive? timeline-minute settings]
   (let [outer-radius (spiral-outer-radius (:start event) settings)
@@ -1310,16 +1301,9 @@
           :on-focus #(show-hover-tooltip! hover-info-state :focus tooltip-info %)
           :on-click #(activate-detail! hover-info-state tooltip-info %)
           :on-key-down #(inspection-keydown! hover-info-state tooltip-info %)}
-      (for [{:keys [start end]} (:segments gap)]
-        ^{:key (str (:key gap) ":" start ":" end)}
-        [:path {:class "nautilus-log-past-gap-hit"
-                :d (create-arc-path
-                    (min->angle start)
-                    (min->angle end)
-                    (spiral-cell-inner-radius start settings inner-radius)
-                    (spiral-outer-radius start settings)
-                    center)
-                :vector-effect "non-scaling-stroke"}])])])
+      [:path {:class "nautilus-log-past-gap-hit"
+              :d (shell-path (:start gap) (:end gap) inner-radius center settings)
+              :vector-effect "non-scaling-stroke"}]])])
 
 (defn available-slot-component [slots inner-radius center settings hover-info-state copy]
   [:g {:class "nautilus-log-available-slots"}
@@ -1334,47 +1318,62 @@
             :focusable "true"
             :on-mouse-enter #(show-hover-tooltip! hover-info-state :pointer tooltip-info %)
             :on-focus #(show-hover-tooltip! hover-info-state :focus tooltip-info %)}
-        (for [{:keys [start end]} (:segments slot)]
-          ^{:key (str (:key slot) ":" start ":" end)}
-          [:path {:class "nautilus-log-available-slot-hit"
-                  :d (create-arc-path
-                      (min->angle start)
-                      (min->angle end)
-                      (spiral-cell-inner-radius start settings inner-radius)
-                      (spiral-outer-radius start settings)
-                      center)
-                  :vector-effect "non-scaling-stroke"}])])])
+        [:path {:class "nautilus-log-available-slot-hit"
+                :d (shell-path (:start slot) (:end slot) inner-radius center settings)
+                :vector-effect "non-scaling-stroke"}]])])
 
-(defn chart-record-label [label]
-  [:g {:class "nautilus-log-record-annotation"}
-   [:path {:class "nautilus-log-record-leader" :d (:connector label) :fill "none" :pointer-events "none"}]
-   [:g {:class "nautilus-log-record-label"}
-    [:rect {:class "nautilus-log-label-hit" :x (:x label) :y (:y label)
-            :width (:width label) :height (:height label) :fill "transparent"
-            :pointer-events "all" :aria-hidden "true"}]
-    [:text {:class "nautilus-log-record-title" :text-anchor (:align label)
-            :data-label-side (:side label)
-            :style {:white-space "pre" :font-size (str (:fontSize label) "px")} :font-weight "500"}
-     (for [[index line] (map-indexed vector (:lines label))]
-       ^{:key index}
-       [:tspan {:x (:textX label) :y (+ (:textY label) (* index (:lineHeight label)))} line])]]])
+(defn chart-record-meta-text [event copy compact? current-event?]
+  (let [{:keys [duration status]} (or (log-core-call "chartRecordMetadata" event)
+                                    {:duration (duration-label (:duration event))})
+        completed (get-in copy [:tooltips :completed])
+        estimate (get-in copy [:tooltips (if compact? :estimatedShort :estimated)])
+        actual (get-in copy [:tooltips (if compact? :actualShort :actual)])]
+    (cond
+      (= status "actual") (str (when-not compact? (str completed " · ")) actual " " duration)
+      (= status "estimate") (str (when-not compact? (str completed " · ")) estimate " " duration)
+      (= status "completed") (str (get-in copy [:tooltips (if compact? :completedShort :completed)]) " · " duration)
+      (and current-event? (not compact?)) (str duration " · " (get-in copy [:tooltips :currentEvent]))
+      :else duration)))
+
+(defn chart-record-label [record copy compact? params]
+  (let [label (:label record) event (:event record) anchor (:anchor record)
+        left? (= "left" (:side label))
+        highlight-x (- (:textX label) (if left? (+ (:inkWidth label) 5) 5))]
+    [:g {:class "nautilus-log-record-annotation"}
+     [:path {:class "nautilus-log-record-leader" :d (:connector label) :fill "none" :pointer-events "none"}]
+     (when anchor
+       [:circle {:class "nautilus-log-record-anchor" :cx (:x anchor) :cy (:y anchor) :r 1.7
+                 :aria-hidden "true" :pointer-events "none"}])
+     [:g {:class "nautilus-log-record-label"}
+      [:rect {:class "nautilus-log-label-hit" :x (:x label) :y (:y label)
+              :width (:width label) :height (:height label) :fill "transparent"
+              :pointer-events "all" :aria-hidden "true"}]
+      [:rect {:class "nautilus-log-label-highlight" :x highlight-x :y (inc (:y label))
+              :width (+ (:inkWidth label) 10) :height (- (:height label) (:metadataHeight label) 2)
+              :rx 3 :aria-hidden "true" :pointer-events "none"}]
+      [:text {:class "nautilus-log-record-title" :text-anchor (:align label)
+              :data-label-side (:side label)
+              :style {:white-space "pre" :font-size (str (:fontSize label) "px")} :font-weight "500"}
+       (for [[index line] (map-indexed vector (:lines label))]
+         ^{:key index}
+         [:tspan {:x (:textX label) :y (+ (:textY label) (* index (:lineHeight label)))} line])]
+      [:text {:class "nautilus-log-record-meta" :x (:textX label) :y (:metadataY label)
+              :text-anchor (:align label) :font-size (:metadataFontSize label) :pointer-events "none"}
+       (chart-record-meta-text event copy compact? (:current-event? params))]]]))
+
+(defn estimated-completion? [event]
+  (contains? #{"estimated-allocation" "completion-estimate"} (:time-claim event)))
 
 (defn estimated-outline-component [records center settings active-uid show-done?]
   [:g {:class "nautilus-log-estimated-outlines" :aria-hidden "true" :pointer-events "none"
        :visibility (when-not show-done? "hidden")}
    (for [record records
-         :when (= "estimated-allocation" (get-in record [:event :time-claim]))]
-     (let [event (:event record)
-           cuts (concat [(:start event)] (get-hour-boundaries (:start event) (:end event)) [(:end event)])]
-       ^{:key (:uid record)}
-       [:g {:data-estimate-outline-for (:uid record)
-            :class (str "nautilus-log-estimated-outline" (when (= active-uid (:uid record)) " is-active"))}
-        (for [[start end] (partition 2 1 cuts)]
-          ^{:key (str start ":" end)}
-          [:path {:d (create-arc-path (min->angle start) (min->angle end)
-                                     (spiral-cell-inner-radius start settings snail-inner-radius)
-                                     (spiral-outer-radius start settings) center)
-                  :vector-effect "non-scaling-stroke"}])]))])
+         :when (estimated-completion? (:event record))]
+     ^{:key (:uid record)}
+     [:g {:data-estimate-outline-for (:uid record)
+          :class (str "nautilus-log-estimated-outline" (when (= active-uid (:uid record)) " is-active"))}
+      [:path {:d (shell-path (get-in record [:event :start]) (get-in record [:event :end]) snail-inner-radius center settings)
+              :vector-effect "non-scaling-stroke"}]])])
 
 (defn chart-scene-record [record index frame settings timeline-state show-done? hover-info-state copy conflicts active-uid]
   (let [event (:event record)
@@ -1389,13 +1388,12 @@
                        ") translate(" (- (:center-x center)) " " (- (:center-y center)) ")")
         params (when timed? (calculate-slice-params event index (:showElapsed timeline-state)
                                                    (and (:interactive timeline-state) (:showNow timeline-state))
-                                                   (:elapsedThroughMinutes timeline-state) settings))
-        cuts (when timed? (concat [(:start event)] (get-hour-boundaries (:start event) (:end event)) [(:end event)]))]
+                                                   (:elapsedThroughMinutes timeline-state) settings))]
     [:g (merge {:class (str "nautilus-log-event-slice-group nautilus-log-event-slice-group--interactive"
                             (when actionable? " nautilus-log-event-slice-group--actionable")
                             (when (:done event) " nautilus-log-record--done")
                             (when (:meeting event) " nautilus-log-record--event")
-                            (when (= "estimated-allocation" (:time-claim event)) " nautilus-log-record--estimated")
+                            (when (estimated-completion? event) " nautilus-log-record--estimated")
                             (when (:overlaps-planned event) " nautilus-log-record--estimate-overlap")
                             (when (not timed?) " nautilus-log-loose-record")
                             (when (= "unplaced" (:kind record)) " nautilus-log-loose-record--unplaced")
@@ -1408,6 +1406,7 @@
                 :data-past-status (:past-status params)
                 :data-visual-phase (:visual-phase params)
                 :data-category (if (:meeting event) "event" "task")
+                :style (when (:bg-color event) {"--nautilus-log-record-accent" (update-opacity-str (:bg-color event) "1")})
                 :visibility (when hidden? "hidden") :aria-hidden hidden?
                 :aria-current (when (or (:current? params) (:current-event? params)) "true")
                 :role (if actionable? "link" "img") :tab-index (if hidden? -1 0) :focusable "true"
@@ -1419,17 +1418,15 @@
                   :on-key-down #(task-keydown! uid hover-info-state %)}))
      (if timed?
        [:g {:transform transform}
-        (for [[start end] (partition 2 1 cuts)]
-          ^{:key (str start ":" end)}
-          [slice [(min->angle start) (min->angle end) (spiral-cell-inner-radius start settings snail-inner-radius)
-                  (spiral-outer-radius start settings) center settings]
-           :bg-color (:bg-color params) :fill-opacity (:fill-opacity params)
-           :task-start-min (:start event) :task-end-min (:end event)])]
+        [:path {:class "nautilus-log-slice"
+                :d (shell-path (:start event) (:end event) snail-inner-radius center settings)
+                :fill (:bg-color params) :fill-opacity (:fill-opacity params)
+                :vector-effect "non-scaling-stroke"}]]
        [:path {:class "nautilus-log-record-marker" :d (:markerPath record)
                :data-marker-shape (get-in record [:marker :shape])
                :aria-hidden "true"
                :style (when (:bg-color event) {:stroke (update-opacity-str (:bg-color event) "1")})}])
-     [chart-record-label (:label record)]]))
+     [chart-record-label record copy (:compact frame) params]]))
 
 (defn pending-queue-component [queue copy hover-info-state]
   (r/with-let [open-state (r/atom false)]
@@ -1454,8 +1451,18 @@
            [:span {:class "nautilus-log-queue-item-title"} (:description item)]
            [:span {:class "nautilus-log-queue-item-duration"} (duration-label (:duration item))]])]])))
 
+(defn shell-material-defs [material-id center radius]
+  [:defs
+   (for [kind ["task" "task-current" "event" "event-current"]]
+     ^{:key kind}
+     [:radialGradient {:id (str material-id "-" kind) :gradientUnits "userSpaceOnUse"
+                       :cx (:center-x center) :cy (:center-y center) :r radius}
+      [:stop {:offset "15%" :stop-color (str "var(--nautilus-log-shell-" kind "-inner)")}]
+      [:stop {:offset "100%" :stop-color (str "var(--nautilus-log-shell-" kind "-outer)")}]])])
+
 (defn show-events [events-state show-done-atom? _now-time-atom page-title container-width settings copy _compact-open-state hover-info-state _block-uid timeline-state]
-  (let [[events done-todos _untimed-dones source-events] events-state
+  (r/with-let [material-id (str "nautilus-shell-" (random-uuid))]
+   (let [[events done-todos _untimed-dones source-events] events-state
         time-radius (apply max (map outer-radius-at (range (count snail-blueprint-outer-radiuses))))
         scene (log-core-call "chartScene"
                             {:items source-events :events (vec (concat events done-todos))
@@ -1510,8 +1517,15 @@
             :style {:aspect-ratio (str frame-width " / " frame-height)}}
       [:svg {:viewBox (str "0 0 " frame-width " " frame-height)
              :preserveAspectRatio "xMidYMid meet" :xmlns "http://www.w3.org/2000/svg"
-             :class "nautilus-log-svg" :font-family font-family :font-size font-size}
+             :class "nautilus-log-svg" :font-family font-family :font-size font-size
+             :style {"--nautilus-log-task-future-fill" (str "url(#" material-id "-task)")
+                     "--nautilus-log-task-current-fill" (str "url(#" material-id "-task-current)")
+                     "--nautilus-log-event-future-fill" (str "url(#" material-id "-event)")
+                     "--nautilus-log-event-current-fill" (str "url(#" material-id "-event-current)")}}
+       [shell-material-defs material-id center time-radius]
        [:g {:transform transform}
+        [:path {:class "nautilus-log-shell-base" :pointer-events "none" :aria-hidden "true"
+                :d (shell-path (:workday-start settings) (:workday-end settings) snail-inner-radius center settings)}]
         (when elapsed-page? [past-time-overlay-component snail-inner-radius center settings timeline-minute])
         (when elapsed-page? [past-unplanned-overlay-component timed-events snail-inner-radius center settings timeline-minute scale])
         (when elapsed-page?
@@ -1525,20 +1539,16 @@
         (when (:showAvailableSlots timeline-state)
           [available-slot-component available-slots snail-inner-radius center settings hover-info-state copy])
         (when now-visible?
-          (let [rad (angle->rad (min->angle timeline-minute))
-                inner-r (+ snail-inner-radius 2)
-                outer-r (+ (spiral-outer-radius timeline-minute settings) 5)]
+          (when-let [needle (log-core-call "shellNeedle"
+                                          (assoc (shell-options center settings snail-inner-radius) :minute timeline-minute))]
             [:g {:class "nautilus-log-now-needle" :aria-label (str (get-in copy [:capacity :now]) " " center-now-label)}
-             [:line {:x1 (+ (:center-x center) (* inner-r (cos rad)))
-                     :y1 (- (:center-y center) (* inner-r (sin rad)))
-                     :x2 (+ (:center-x center) (* outer-r (cos rad)))
-                     :y2 (- (:center-y center) (* outer-r (sin rad)))
-                     :stroke-linecap "round" :vector-effect "non-scaling-stroke"
-                     :class "nautilus-log-now-needle-line"}]]))
-        [central-label-component (split-and-trim page-title len-central-legend) center center-now-label scale]]]]
+             [:line (assoc needle :stroke-linecap "round" :vector-effect "non-scaling-stroke"
+                                  :class "nautilus-log-now-needle-line")]
+             [:circle {:class "nautilus-log-now-needle-tip" :cx (:x2 needle) :cy (:y2 needle) :r (/ 2 scale)}]]))
+        [central-label-component (split-and-trim page-title len-central-legend) center center-now-label scale copy]]]]
      [detail-region-component hover-info-state copy (min 720 container-width)]
      (when-let [queue (:pendingQueue scene)]
-       ^{:key (:kind queue)} [pending-queue-component queue copy hover-info-state])]))
+       ^{:key (:kind queue)} [pending-queue-component queue copy hover-info-state])])))
 
 (defn add-start-after
   "Adds an end time to events so that tasks placed after the meeting cannot start before it"

@@ -61,8 +61,8 @@ small flame marks whether the current minute is consuming Available or Event tim
 
 - Roam blue: flexible tasks; the current task has a stronger fill and outline
 - Muted golden yellow: fixed events
-- Solid gray: completion history with a local time anchor
-- Gray with dashed outlines: completed tasks placed by estimate, not recorded completion times
+- Solid gray: completed local CLOCK Actual or an explicit fixed range
+- Gray with dashed outlines: completed flexible tasks using estimated durations; Tips distinguish stamped from estimated placement
 - Pale hatching: past gaps not covered by a task or event interval, not future availability
 - Red needle: current time and the starting boundary for pending work
 - Red task color: an explicit urgency override
@@ -72,11 +72,23 @@ those controls remain unchanged. Task text uses a deeper blue (`#106ba3`), event
 yellow (`#ad8b24`), and urgency uses a softer red (`#c24b4b`). Fills, leaders, Unfinished cues
 and dark-theme text follow these color families without changing their meanings.
 
+The **continuous shell** draws each timed record as one surface. Hour marks remain as edge
+ticks rather than lines that visually split a task. A fixed second label row shows duration,
+Actual or Estimate; compact views shorten this metadata. The active center time uses a native
+monospace font. The curves retain the shrinking-radius model and real time boundaries, but
+are not pixel-area-equivalent to the earlier stepped shape.
+
+Hover or keyboard focus emphasizes the surface, its leader and its colored title as one unit.
+It does not move the chart. English is the default UI language; an explicit Chinese preference
+is preserved, and task titles always remain in their source language. Toolbar icons are unchanged.
+
 Completed tasks without actual timing use their explicit estimate, or Default Todo Duration
 (15 minutes by default). They receive spiral slices and connected labels without requiring
 CLOCK or a completion stamp. When no local time anchor exists, Nautilus places those estimates
 in outline order from START, around fixed events and anchored completion intervals. The tip
-identifies this as **Estimated allocation**, not a recorded completion time.
+identifies this as **Estimated allocation**, not a recorded completion time. A local completion
+stamp anchors the end of an estimated interval, but does not turn its duration into Actual;
+that task also keeps a dashed outline, including during hover or explicit expansion.
 
 Estimated allocations do not move with the clock or change pending-task scheduling. They can
 extend past now and overlap a pending forecast; dashed gray outlines distinguish them while
@@ -163,7 +175,9 @@ only the text region in page flow, without resizing SVG or covering Desk. The SV
 bottom padding remains 2px; its center, paths and label positions are unchanged.
 
 Names match the chart's semantic colors: blue tasks, yellow events and neutral gray
-completed records, without gradients. Metadata, dates and gap explanations keep their own
+completed records, without text gradients. Actual appears in a recorded completion's first
+summary; an estimated allocation remains explicitly marked as an estimate. Decorative surface
+gradients do not encode additional time or progress. Metadata, dates and gap explanations keep their own
 colors; forced-color and print modes remain readable. Past gaps show their complete uncovered
 range and duration, not proof of idle or wasted time. Click or Enter/Space pins the details;
 Escape dismisses them. Changed ranges invalidate stale selection; hiding completed items does

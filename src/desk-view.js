@@ -832,7 +832,7 @@ export function createDeskView({
         const target = status === 'ready' ? cards.get(focusedCard)?.open : retryRead;
         if (target?.isConnected) target.focus({ preventScroll: true });
       }
-      count.textContent = status === 'ready' ? ` (${tasks.length})` : '';
+      count.textContent = status === 'ready' ? ` · ${tasks.length}` : '';
       empty.hidden = visible.length > 0;
       empty.textContent = status !== 'ready' ? 'Could not read this plan. Refresh or hide Desk to inspect the outline.'
         : !tasks.length ? 'Nothing unfinished in this plan. Start a new note.'

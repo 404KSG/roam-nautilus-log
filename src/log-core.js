@@ -8,6 +8,7 @@
  */
 
 const { chartScene: renderChartScene, chartPresentationFrame, chartRecordAppearance, chartTipLayout } = require('./chart-scene');
+const { shellRadius, shellRadii, shellInterval, shellGrid, shellNeedle } = require('./chart-shell');
 
 const START_HOURS = Object.freeze(Array.from({ length: 24 }, (_value, hour) => hour));
 const END_HOURS = Object.freeze(Array.from({ length: 24 }, (_value, index) => index + 1));
@@ -931,6 +932,19 @@ function calculateCapacity({
   };
 }
 
+/** One fixed label row; the moving clock never changes its sizing contract. */
+function chartRecordMetadata(event = {}) {
+  const actual = event.done === true && (event['time-claim'] === 'actual' || event['duration-source'] === 'actual');
+  const range = Number.isFinite(event['full-start']) && Number.isFinite(event['full-end'])
+    ? event['full-end'] - event['full-start'] : NaN;
+  const values = actual ? [event['actual-minutes'], event.duration, range]
+    : event.meeting ? [range, event.duration, event['planned-duration']]
+      : [event['planned-duration'], event.duration, range];
+  const minutes = values.map(asNumber).find(value => Number.isFinite(value) && value >= 0) ?? 0;
+  return { duration: formatDuration(minutes), status: !event.done ? null
+    : actual ? 'actual' : event.meeting ? 'completed' : 'estimate' };
+}
+
 function formatDuration(minutes) {
   const value = Math.max(0, Math.round(asNumber(minutes) || 0));
   const hours = Math.floor(value / 60);
@@ -1019,6 +1033,11 @@ const UI_COPY = {
       task: 'Task',
       event: 'Event',
       completed: 'Completed',
+      completedShort: 'Done',
+      estimatedShort: 'Est.',
+      actualShort: 'Actual',
+      currentEvent: 'Current event',
+      currentTime: 'Current time',
       noCompletionTime: 'No completion time recorded',
       inheritedCompletion: 'Completion status from reference',
       inheritedDone: 'Inherited completion',
@@ -1124,6 +1143,11 @@ const UI_COPY = {
       task: '任务',
       event: '事件',
       completed: '已完成',
+      completedShort: '完成',
+      estimatedShort: '估时',
+      actualShort: '实录',
+      currentEvent: '当前事件',
+      currentTime: '当前时间',
       noCompletionTime: '未记录完成时间',
       inheritedCompletion: '完成状态来自引用',
       inheritedDone: '来源完成',
@@ -1866,8 +1890,14 @@ module.exports = {
   childOrderMoves,
   isCompactChartWidth,
   chartPresentationFrame,
+  shellRadius,
+  shellRadii,
+  shellInterval,
+  shellGrid,
+  shellNeedle,
   chartScene,
   chartRecordAppearance,
+  chartRecordMetadata,
   chartTipLayout,
   chartLabelMetrics,
 };

@@ -223,7 +223,7 @@ def coverage(page, hidden=False):
 def geometry_audit(page):
     result = page.evaluate('''()=>{
       const nodes=[...document.querySelectorAll('.nautilus-log-event-slice-group')].filter(e=>getComputedStyle(e).visibility==='visible');
-      const boxes=nodes.map(e=>({uid:e.dataset.taskUid,r:e.querySelector('.nautilus-log-record-title').getBoundingClientRect()}));
+      const boxes=nodes.flatMap(e=>[...e.querySelectorAll('.nautilus-log-record-title,.nautilus-log-record-meta')].map(t=>({uid:e.dataset.taskUid,kind:t.getAttribute('class'),r:t.getBoundingClientRect()})));
       const overlaps=[],crossings=[],markerCollisions=[];
       for(const node of nodes){const marker=node.querySelector('.nautilus-log-record-marker');if(!marker)continue;const a=marker.getBoundingClientRect();
         for(const box of boxes){const b=box.r;if(Math.min(a.right,b.right)-Math.max(a.left,b.left)>.5&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>.5)markerCollisions.push([node.dataset.taskUid,box.uid]);}
@@ -356,8 +356,12 @@ def completion_connections_contract(page):
         page.get_by_role('button', name=show, exact=True).click(); settle_renderer(page)
         assert page.locator('[data-time-claim="estimated-allocation"]').first.is_visible()
         page.evaluate('''()=>{for(let i=0;i<7;i++)__chartHarness.updateChild(`connection-done-${i}`,`{{[[DONE]]}} Recorded task ${i} 30m d8`)}''')
-        page.wait_for_function('document.querySelectorAll("[data-estimate-outline-for]").length===0')
+        page.wait_for_function('document.querySelectorAll("[data-time-claim=estimated-allocation]").length===0')
         assert not page.locator('.nautilus-log-completion-node,[data-time-claim="estimated-allocation"]').count()
+        # A local completion stamp replaces inferred placement, not estimated
+        # duration. Its anchored interval remains dashed rather than implying CLOCK Actual.
+        assert page.locator('[data-task-uid="connection-done-0"]').get_attribute('data-time-claim') == 'completion-estimate'
+        assert page.locator('[data-estimate-outline-for="connection-done-0"] path').count() == 1
         coverage(page)
         reports[f'{context}-{width}-{language}'] = {'allocations': proof, 'overlap': overlap,
             'eyeHidesSlicesAndOutlines': True, 'localStampReplacesEstimatePlacement': True, 'sourceTabOrderPreserved': True}
@@ -372,14 +376,24 @@ def density_and_control_contract(page):
         measure = page.evaluate('''()=>{
           const tip=document.querySelector('.nautilus-log-detail-content').getBoundingClientRect();
           const host=document.querySelector('.nautilus-log-desk-host').getBoundingClientRect();
-          const ink=Math.max(...[...document.querySelectorAll('.nautilus-log-record-title,.nautilus-log-record-leader,.nautilus-log-slice,.nautilus-log-hour-label,.nautilus-log-record-marker')].map(e=>e.getBoundingClientRect().bottom));
+          const ink=Math.max(...[...document.querySelectorAll('.nautilus-log-record-title,.nautilus-log-record-meta,.nautilus-log-record-leader,.nautilus-log-slice,.nautilus-log-hour-label,.nautilus-log-record-marker')].map(e=>e.getBoundingClientRect().bottom));
           return {beforeTip:tip.top-ink,afterTip:host.top-tip.bottom,tipHeight:tip.height};
         }''')
-        # Compact font/anchor placement can leave a few extra pixels inside
-        # the source-stable frame; it must not reserve another label band.
-        assert 0 <= measure['beforeTip'] <= (14 if width >= 640 else 20), (context, width, measure)
+        # The approved wide B shell is 336 rather than 300 view units across.
+        # The symmetric, source-stable frame can retain up to half that growth
+        # as orientation slack when no leader reaches the bottom of the shell.
+        # This is bounded by the chosen plot size, not an extra text/card band.
+        plot = before['presentation']['timeRadius'] * before['presentation']['plotScale'] * 2
+        allowance = 14 + max(0, plot - 300) / 2 if width >= 640 else 20
+        assert 0 <= measure['beforeTip'] <= allowance, (context, width, measure, allowance)
         assert 2 <= measure['afterTip'] <= 5 and measure['tipHeight'] <= 38.5, measure
-        if width == 720: assert before['presentation']['viewBox']['height'] <= 340
+        # B adds a real metadata row. Bound the frame by the source column
+        # demand instead of the old title-only fixture's absolute 340px cap.
+        budget = page.evaluate('''()=>{const s=__chartHarness.scene(),f=s.frame;let flexible=0,left=0,right=0;
+          for(const r of s.records){if(r.event.todo&&!r.event.done&&!r.event.meeting)flexible+=r.label.height;
+            else if(r.label.side==='left')left+=r.label.height;else right+=r.label.height;}
+          return {height:f.viewBox.height,bound:14+Math.max(f.timeRadius*f.plotScale*2+16,flexible+Math.max(left,right)),tail:f.viewBox.height-f.timedBottom};}''')
+        assert budget['height'] <= budget['bound'] + .5 and budget['tail'] == 2, budget
         for iso in ['2026-10-29T08:01:00', '2026-10-29T13:30:00', '2026-10-29T20:30:00']:
             after = set_clock(page, iso); coverage(page); geometry_audit(page)
             assert_clock_layout(before, after, 'same members stay stable; END moves pending work to the queue')
@@ -730,6 +744,25 @@ def detail_name_semantics_contract(page):
             'forcedColorsAndPrintReadable': True, 'graphWrites': 0}
 
 
+def point_inside_gap(page, path, fraction=.5, click=False):
+    # A continuous, folded sector's bounding-box center can be outside its fill
+    # (or inside the other turn). Use a real interior point, then independently
+    # verify both SVG containment and the browser's actual hit target.
+    point = path.evaluate('''(e,fraction)=>{
+      const owner=e.closest('[data-past-gap-key]'),s=__chartHarness.scene(),input=__chartHarness.sceneInput();
+      const start=Number(owner.dataset.pastGapStart),end=Number(owner.dataset.pastGapEnd),minute=start+(end-start)*fraction;
+      const radiusScale=s.frame.timeRadius/150,r=nautilusLogCore.shellRadii({minute,startMinutes:input.startMinutes,endMinutes:input.endMinutes,innerRadius:50*radiusScale,radiusScale});
+      const angle=(minute-900)*Math.PI/360,radius=(r.inner+r.outer)/2;
+      const local=new DOMPoint(s.frame.center.x+Math.cos(angle)*radius,s.frame.center.y+Math.sin(angle)*radius);
+      const screen=local.matrixTransform(e.getScreenCTM()),hit=document.elementFromPoint(screen.x,screen.y)?.closest('[data-past-gap-key]');
+      return {x:screen.x,y:screen.y,inside:e.isPointInFill(local),target:hit?.dataset.pastGapKey,expected:owner.dataset.pastGapKey};
+    }''', fraction)
+    assert point['inside'] and point['target'] == point['expected'], point
+    if click: page.mouse.click(point['x'], point['y'])
+    else: page.mouse.move(point['x'], point['y'])
+    return point
+
+
 def past_gap_inspection_contract(page):
     detail = page.locator('.nautilus-log-detail-region')
 
@@ -756,7 +789,7 @@ def past_gap_inspection_contract(page):
     expect(today_gap).to_have_count(1)
     assert page.locator('.nautilus-log-available-slot').count() >= 1
     reads_before = graph_reads()
-    today_gap.locator('.nautilus-log-past-gap-hit').first.hover()
+    point_inside_gap(page, today_gap.locator('.nautilus-log-past-gap-hit').first)
     expect(detail).to_contain_text('05:00–08:01 · 3h01m')
     expect(today_gap).to_have_attribute('aria-pressed', 'false')
     assert_rect_equal(before, state(page), 'past-gap hover cannot resize the frame')
@@ -779,7 +812,8 @@ def past_gap_inspection_contract(page):
     set_clock(page, '2026-10-28T08:01:00')
     expect(page.locator('.nautilus-log-past-gap')).to_have_count(0)
 
-    # Historical day: full gap range, no Available slot, multiple spiral paths.
+    # Historical day: one continuous gap surface, no Available slot. Both
+    # early and late interior points must resolve to the same logical gap.
     load(page, 'sparse', 'main', 720)
     set_clock(page, '2026-10-30T08:01:00')
     gaps = page.locator('.nautilus-log-past-gap')
@@ -788,17 +822,17 @@ def past_gap_inspection_contract(page):
     gap = page.locator('[data-past-gap-key="past-gap:570:1260"]')
     target = {'start': 570, 'end': 1260, 'duration': 690,
               'paths': gap.locator('.nautilus-log-past-gap-hit').count()}
-    assert target['paths'] == 12, target
+    assert target['paths'] == 1, target
     reads_before = graph_reads()
-    for path in [gap.locator('.nautilus-log-past-gap-hit').first, gap.locator('.nautilus-log-past-gap-hit').last]:
-        path.hover()
+    for fraction in [.2, .8]:
+        point_inside_gap(page, gap.locator('.nautilus-log-past-gap-hit').first, fraction)
         expect(detail).to_contain_text('09:30–21:00 · 11h30m')
         expect(gap).to_have_attribute('aria-pressed', 'false')
-    gap.locator('.nautilus-log-past-gap-hit').first.click()
+    point_inside_gap(page, gap.locator('.nautilus-log-past-gap-hit').first, click=True)
     pinned(gap, '09:30–21:00 · 11h30m')
     expect(detail).to_contain_text('actual activity is unknown')
     other = gaps.first
-    other.locator('.nautilus-log-past-gap-hit').first.click()
+    point_inside_gap(page, other.locator('.nautilus-log-past-gap-hit').first, click=True)
     pinned(other, '05:00–09:00 · 4h')
     expect(gap).to_have_attribute('aria-pressed', 'false')
     other.press('Escape'); dismissed()
@@ -815,14 +849,14 @@ def past_gap_inspection_contract(page):
     # A pinned gap must not intercept either normal locate action.
     load(page, 'sparse', 'main', 720)
     gap = page.locator('.nautilus-log-past-gap').first
-    gap.locator('.nautilus-log-past-gap-hit').first.click()
+    point_inside_gap(page, gap.locator('.nautilus-log-past-gap-hit').first, click=True)
     pinned(gap, 'actual activity is unknown')
     page.locator('[data-task-uid="task-reference"] .nautilus-log-slice').first.click()
     page.wait_for_function('()=>__chartHarness.traces().filter(t=>t.kind==="locate").at(-1)?.uid === "task-reference"')
     dismissed()
     set_clock(page, '2026-10-30T08:01:00')
     gap = page.locator('.nautilus-log-past-gap').first
-    gap.locator('.nautilus-log-past-gap-hit').first.click()
+    point_inside_gap(page, gap.locator('.nautilus-log-past-gap-hit').first, click=True)
     pinned(gap, '05:00–09:00 · 4h')
     assert not page.locator('svg [data-task-uid="task-reference"]').count()
     page.locator('.nautilus-log-pending-queue > summary').click()
@@ -857,7 +891,7 @@ def past_gap_inspection_contract(page):
         page.locator('body').evaluate('e=>{e.classList.add("bp3-dark");e.style.background="#1d1e21";e.style.color="#ecedef"}')
         page.emulate_media(reduced_motion='reduce')
         narrow_gap = page.locator('.nautilus-log-past-gap').first
-        narrow_gap.locator('.nautilus-log-past-gap-hit').first.click()
+        point_inside_gap(page, narrow_gap.locator('.nautilus-log-past-gap-hit').first, click=True)
         pinned(narrow_gap, '05:00–09:00 · 4h')
         expect(detail).to_contain_text('actual activity is unknown' if language == 'en' else '实际活动未知')
         assert state(page)['documentOverflow'] <= 0 and state(page)['writes'] == 0
@@ -1121,7 +1155,11 @@ def full_text(page, context, width):
     hit = label.evaluate('''e=>{const r=e.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('[data-task-uid]')?.dataset.taskUid}''')
     assert hit == 'long-cjk', 'multiline label gaps must belong to their own interactive record'
     assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text(), 'expanded reading must be pinned'
-    page.get_by_role('button', name='Collapse text', exact=True).click(); page.mouse.move(1180, 980); settle_renderer(page)
+    page.get_by_role('button', name='Collapse text', exact=True).click(); settle_renderer(page)
+    # Less must collapse its own record, not expose a stale hover acquired
+    # behind the pinned inspector and remove the focused action mid-render.
+    assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text(), 'collapse changed the inspected record'
+    page.mouse.move(1180, 980); settle_renderer(page)
     if width <= 360:
         assert abs(state(page)['detail']['height'] - 42) < .5
     else:
@@ -1129,6 +1167,60 @@ def full_text(page, context, width):
         assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).textOverflow!=="ellipsis" && e.scrollHeight<=e.clientHeight')
     page.screenshot(path=str(OUT / 'screenshots' / f'fulltext-{context}-{width}.png'), full_page=True)
     return {'closed': compact_record(before), 'expandedHeight': expanded['detail']['height'], 'pinned': True, 'noInternalScroll': True}
+
+
+def continuous_shell_contract(page):
+    report = {}
+    for context, width in [('main', 720), ('embed', 520), ('sidebar', 280)]:
+        load(page, 'mixed', context, width)
+        page.mouse.move(1180, 980); settle_renderer(page)
+        before = state(page); geometry_audit(page)
+        proof = page.evaluate('''()=>{
+          const scene=__chartHarness.scene(),input=__chartHarness.sceneInput(),svg=document.querySelector('svg.nautilus-log-svg');
+          const options={startMinutes:input.startMinutes,endMinutes:input.endMinutes,centerX:scene.frame.center.x,centerY:scene.frame.center.y,innerRadius:50,radiusScale:1};
+          const records=scene.records.filter(r=>r.kind==='timed').map(r=>{const node=document.querySelector(`svg [data-task-uid="${r.uid}"]`),paths=[...node.querySelectorAll('.nautilus-log-slice')],meta=node.querySelector('.nautilus-log-record-meta'),hit=node.querySelector('.nautilus-log-label-hit').getBoundingClientRect(),mr=meta.getBoundingClientRect();return {uid:r.uid,count:paths.length,path:paths[0].getAttribute('d'),expected:nautilusLogCore.shellInterval({...options,start:r.event.start,end:r.event.end}).path,meta:meta.textContent,metadataInside:mr.left>=hit.left-1&&mr.right<=hit.right+1&&mr.bottom<=hit.bottom+1};});
+          const gradients=[...svg.querySelectorAll('radialGradient')].map(g=>({id:g.id,stops:[...g.querySelectorAll('stop')].map(s=>getComputedStyle(s).stopColor)}));
+          const fill=getComputedStyle(document.querySelector('[data-task-uid="task-long"] .nautilus-log-slice')).fill;
+          return {records,gradients,fill,inlineMaterial:svg.style.getPropertyValue('--nautilus-log-task-future-fill'),oldHourSectors:svg.querySelectorAll('.nautilus-log-grid .nautilus-log-slice').length,outline:svg.querySelector('.nautilus-log-shell-outline').getAttribute('d'),base:svg.querySelector('.nautilus-log-shell-base').getAttribute('d')};
+        }''')
+        assert all(r['count'] == 1 and r['path'] == r['expected'] and r['path'].count('M') == 1 and r['path'].endswith('Z') and r['metadataInside'] for r in proof['records']), proof
+        assert len(proof['gradients']) == 4 and len({g['id'] for g in proof['gradients']}) == 4, proof
+        assert proof['inlineMaterial'].startswith('url(#nautilus-shell-') and 'url(' in proof['fill'], 'Reagent CSS variables must use string keys and actually paint the gradients'
+        assert proof['oldHourSectors'] == 0 and proof['outline'] == proof['base'], proof
+        original_paths = {r['uid']: r['path'] for r in proof['records']}
+        select(page, 'task-long')
+        page.wait_for_function('''()=>document.querySelector('[data-task-uid="task-long"] .nautilus-log-slice').getAnimations().every(a=>a.playState==='finished')''')
+        after = coverage(page); assert_rect_equal(before, after, 'B hover/focus preserves the full source frame')
+        hover = page.locator('[data-task-uid="task-long"]').evaluate('''e=>({width:parseFloat(getComputedStyle(e.querySelector('.nautilus-log-slice')).strokeWidth),stroke:getComputedStyle(e.querySelector('.nautilus-log-slice')).stroke,leader:getComputedStyle(e.querySelector('.nautilus-log-record-leader')).stroke,highlight:getComputedStyle(e.querySelector('.nautilus-log-label-highlight')).fill,hit:getComputedStyle(e.querySelector('.nautilus-log-label-hit')).fill})''')
+        assert hover['width'] == 2 and hover['stroke'] == hover['leader'] and hover['highlight'] != 'rgba(0, 0, 0, 0)', hover
+        assert hover['hit'] in ['transparent', 'rgba(0, 0, 0, 0)'], hover
+        assert page.locator('svg [data-connection-active="true"]').count() == 1
+        now_paths = page.locator('svg [data-task-uid]').evaluate_all('nodes=>Object.fromEntries(nodes.filter(e=>e.querySelector(".nautilus-log-slice")).map(e=>[e.dataset.taskUid,e.querySelector(".nautilus-log-slice").getAttribute("d")]))')
+        assert now_paths == original_paths
+        page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/f'shell-hover-{context}-{width}.png'))
+        report[f'{context}-{width}'] = {'proof': proof, 'hover': hover, 'geometryStable': True}
+
+    load(page, 'untimed', 'main', 720)
+    select(page, 'clock-done'); coverage(page)
+    expect(page.locator('.nautilus-log-detail-meta')).to_contain_text('Actual 15m')
+    expect(page.locator('[data-task-uid="clock-done"] .nautilus-log-record-meta')).to_contain_text('Completed · Actual 15m')
+    assert not page.locator('[data-estimate-outline-for="clock-done"]').count()
+    page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/'shell-actual.png'))
+    select(page, 'untimed-local'); before = coverage(page)
+    expect(page.locator('.nautilus-log-detail-meta')).to_contain_text('Completed · Estimate 20m')
+    surface = page.locator('[data-task-uid="untimed-local"] .nautilus-log-slice').get_attribute('d')
+    outline = page.locator('[data-estimate-outline-for="untimed-local"] path')
+    assert outline.count() == 1 and outline.get_attribute('d') == surface
+    assert outline.evaluate('e=>getComputedStyle(e).strokeDasharray') != 'none'
+    assert page.locator('[data-task-uid="untimed-local"] .nautilus-log-slice').evaluate('e=>getComputedStyle(e).stroke') == 'none', 'hover must not paint a solid border underneath the dashed estimate outline'
+    page.get_by_role('button', name='Full text', exact=True).click(); settle_renderer(page)
+    expect(page.locator('.nautilus-log-detail-meta')).to_contain_text('Not a recorded completion time')
+    expanded = coverage(page)
+    assert all(abs(before['svg'][k]-expanded['svg'][k]) < .5 for k in ['x','y','width','height'])
+    page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/'shell-estimate-expanded.png'))
+    assert state(page)['writes'] == 0
+    report['completion'] = {'actualVisibleInSummary': True, 'estimateUsesIdenticalDashedPath': True, 'expandedDetailsKeepSvgFrame': True, 'graphWrites': 0}
+    return report
 
 
 def main():
@@ -1175,7 +1267,7 @@ def main():
                     coverage(page); geometry = geometry_audit(page)
                     if before['presentation']['plotScale'] < .9:
                         date_rows = page.locator('.nautilus-log-center-date > text:not(.nautilus-log-center-now)').all_text_contents()
-                        assert date_rows == (['Oct 29'] if before['presentation']['plotScale'] < .6 else ['October', '29th']), date_rows
+                        assert date_rows == ['Oct 29'], date_rows  # Compact B keeps one date row above the stronger time value.
                         assert 'October 29th' in page.locator('.nautilus-log-center-date').get_attribute('aria-label')
                     for label in page.locator('[data-record-title^="Commute"] .nautilus-log-record-title').all():
                         lines = label.locator('tspan').all_text_contents()
@@ -1244,6 +1336,7 @@ def main():
             report['pastGapInspection'] = past_gap_inspection_contract(page)
             report['detailNameSemantics'] = detail_name_semantics_contract(page)
             report['tipSurface'] = tip_surface_contract(page)
+            report['continuousShell'] = continuous_shell_contract(page)
             report['timeflowRecovery'] = timeflow_recovery(page)
             report['lifecycle'] = lifecycle(page)
             report['nativeMinuteTimer'] = native_minute_contract(page)

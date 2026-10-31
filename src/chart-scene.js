@@ -81,9 +81,11 @@ function chartPresentationFrame({ containerWidth, items = [], timeRadius = 150,
   const compact = width <= 520, source = sourceItems(items);
   const viewWidth = compact ? Math.max(160, Math.round(width)) : 720;
   const radius = Math.max(20, finite(timeRadius, 150));
-  let plotDiameter = compact ? Math.min(radius * 2, viewWidth * .4) : Math.min(300, radius * 2);
+  // B uses 336 of the 720 wide-view units for the shell, matching the approved
+  // surface-to-label proportion. Compact columns keep their existing budget.
+  let plotDiameter = compact ? Math.min(radius * 2, viewWidth * .4) : Math.min(336, radius * 2 * 1.12);
   let fontSize = compact ? 11 : 13;
-  const lineHeight = compact ? 15 : 18;
+  const lineHeight = compact ? 15 : 16;
   let labelWidth = compact ? (viewWidth - 56 - plotDiameter) / 2 : 148;
   const fontAt = size => font.replace(/\b\d+(?:\.\d+)?px/, `${size}px`).replace(/^\d+\s/, '500 ');
   let measured = textMeasure(fontAt(fontSize), measure);
@@ -101,13 +103,15 @@ function chartPresentationFrame({ containerWidth, items = [], timeRadius = 150,
   const labels = source.map((item, order) => {
     const title = item.description.replace(/\s+/g, ' ').trim();
     const wrapped = wrapTitle(title, labelWidth, measured);
-    const height = Math.max(22, wrapped.lines.length * lineHeight + 6);
+    const metadataHeight = 14;
+    const height = wrapped.lines.length * lineHeight + 4 + metadataHeight;
     // This side assignment has no time input, including for pending tasks that
     // might later become unplaced. A loose record never gets a fake angle.
     const sourceSide = sides.left <= sides.right ? 'left' : 'right';
     sides[sourceSide] += height;
     return { uid: item.uid, order, ...wrapped, width: labelWidth, height,
-      inkWidth: Math.max(0, ...wrapped.lines.map(measured)), sourceSide, fontSize, lineHeight };
+      inkWidth: Math.max(0, ...wrapped.lines.map(measured)), sourceSide, fontSize, lineHeight,
+      metadataHeight, metadataFontSize: compact ? 9 : 10 };
   });
   // One source-sized column budget covers both timed and unplaced states.
   // Flexible titles may all move to either side, but never need two copies of space.
@@ -151,9 +155,12 @@ function labelLayout(frame, records) {
   function position(record, side, y) {
     const label = record.label, left = side === 'left';
     const x = left ? 16 : frame.viewBox.width - 16 - label.width;
-    const textX = left ? x + label.width : x, middle = y + label.height / 2;
-    Object.assign(label, { x, y, side, textX, align: left ? 'end' : 'start',
-      textY: y + (label.height - label.lines.length * label.lineHeight) / 2 + label.fontSize });
+    const textX = left ? x + label.width : x;
+    const titleHeight = label.height - label.metadataHeight;
+    const middle = y + titleHeight / 2;
+    const textY = y + (titleHeight - label.lines.length * label.lineHeight) / 2 + label.fontSize;
+    Object.assign(label, { x, y, side, textX, align: left ? 'end' : 'start', textY,
+      metadataY: textY + (label.lines.length - 1) * label.lineHeight + label.metadataHeight });
     if (record.kind !== 'timed') {
       // Non-time glyphs sit beyond the text's outer edge. They neither point
       // into the clock nor cross the real slice leaders on the inner edge.

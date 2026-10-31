@@ -186,12 +186,12 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested L
   assert.match(component, /log-core-call "chartScene"/);
   assert.doesNotMatch(component, /log-core-call "translateLabelRects"/);
   assert.match(component, /log-core-call "resolveRendererSettings"/);
-  assert.match(component, /log-core-call "hourlyGridSegments"/);
-  assert.match(component, /log-core-call "pastTimelineSegments"/);
-  assert.match(component, /log-core-call "pastUnplannedSegments"/);
+  assert.match(component, /log-core-call "shellGrid"/);
+  assert.match(component, /log-core-call "shellInterval"/);
+  assert.match(component, /log-core-call "pastUnplannedGroups"/);
   assert.match(component, /log-core-call "availableSlotGroups"/);
   assert.match(component, /log-core-call "pastItemStatus"/);
-  assert.match(component, /log-core-call "spiralCellInnerHour"/);
+  assert.match(component, /log-core-call "shellRadii"/);
   assert.match(component, /log-core-call "overlappingFixedEventUids"/);
   assert.match(component, /log-core-call "isCurrentPlannedTask"/);
   assert.match(component, /log-core-call "uiCopy"/);
@@ -299,7 +299,9 @@ test('the spiral uses a local fixed detail region above an inert grid', () => {
   const observerEnd = component.indexOf('(defn main', observerStart);
   const observer = component.slice(observerStart, observerEnd);
 
-  assert.match(gridComponent, /\[:g \{:class "nautilus-log-grid" :aria-hidden "true"\}/);
+  assert.match(gridComponent, /\[:g \{:class "nautilus-log-grid" :aria-hidden "true" :pointer-events "none"\}/);
+  assert.match(gridComponent, /log-core-call "shellGrid"/);
+  assert.doesNotMatch(gridComponent, /\[slice|create-arc-path/);
   assert.match(component, /nautilus-log-available-slot-hit/);
   assert.match(component, /nautilus-log-past-gap-hit/);
   assert.match(component, /pastUnplannedGroups/);
@@ -315,7 +317,8 @@ test('the spiral uses a local fixed detail region above an inert grid', () => {
   assert.match(css, /\.nautilus-log-container \.nautilus-log-detail-expand[^}]*white-space:\s*nowrap/s);
   assert.doesNotMatch(css, /\.nautilus-log-detail-region\s*\{[^}]*overflow[^;]*auto/s);
   assert.doesNotMatch(css, /\.nautilus-log-workspace--side/);
-  assert.match(component, /:expanded \(if expanded\? nil info\)/);
+  assert.match(component, /:expanded nil :pointer nil :focus info/);
+  assert.match(component, /swap! detail-state assoc :expanded info/);
   assert.match(css, /\.nautilus-log-detail-region\.is-expanded\s*\{[^}]*height:\s*auto;/s);
   assert.match(css, /\.nautilus-log-grid\s*\{[^}]*pointer-events:\s*none;/s);
   assert.match(css, /\.nautilus-log-available-slot-hit/);
@@ -1086,7 +1089,7 @@ test('Log replaces the center year with an in-range 24-hour now value', () => {
   assert.match(component, /nautilus-log-now-needle/);
   assert.match(component, /nautilus-log-center-now/);
   assert.match(component, /center-now-label/);
-  assert.match(component, /\(defn central-label-component \[\[first-row _\] center center-now-label & \[plot-scale\]\]/);
+  assert.match(component, /\(defn central-label-component \[\[first-row _\] center center-now-label & \[plot-scale copy\]\]/);
   assert.match(component, /center-now-label \(when now-visible\? \(minutes->time timeline-minute\)\)/);
   assert.match(component, /:workday-start settings/);
   assert.match(component, /:workday-end settings/);
@@ -1094,18 +1097,20 @@ test('Log replaces the center year with an in-range 24-hour now value', () => {
   assert.doesNotMatch(component, /needle-label-radius/);
   assert.doesNotMatch(css, /nautilus-log-now-label/);
   assert.doesNotMatch(css, /--nautilus-log-now-label-bg:/);
-  assert.match(component, /:font-size \(str \(\/ \(if small\? size 10\) scale\)\)/);
-  assert.match(component, /:hour-font-size hour-size/);
-  assert.match(component, /:style \{:font-size \(str \(or hour-font-size/);
+  assert.match(component, /:font-size \(str \(\/ time-size scale\)\)/);
+  assert.match(component, /:style \{:font-size \(str hour-size "px"\)\}/);
+  assert.match(component, /log-core-call "shellNeedle"/);
   assert.match(css, /--nautilus-log-now:/);
-  assert.match(css, /\.nautilus-log-center-now\s*\{[^}]*fill:\s*var\(--nautilus-log-now\);[^}]*font-variant-numeric:\s*tabular-nums;/s);
+  assert.match(css, /\.nautilus-log-center-now\s*\{[^}]*fill:\s*var\(--nautilus-log-chart-ink\);[^}]*font-variant-numeric:\s*tabular-nums;/s);
 });
 
 test('Log shades elapsed time continuously behind slices and through the current minute', () => {
   assert.match(component, /past-time-overlay-component/);
   assert.match(component, /nautilus-log-past-overlay/);
-  assert.match(component, /log-core-call "pastTimelineSegments"/);
-  assert.match(component, /create-arc-path/);
+  const overlay = component.slice(component.indexOf('(defn past-time-overlay-component'), component.indexOf('(defn past-unplanned-overlay-component'));
+  assert.match(overlay, /min \(:workday-end settings\) elapsed-through-minutes/);
+  assert.match(overlay, /shell-path start end inner-radius center settings/);
+  assert.doesNotMatch(overlay, /create-arc-path/);
   assert.match(component, /\[past-time-overlay-component[^\n]+\]\)\s*\(when [\s\S]+\[past-unplanned-overlay-component timed-events[^\n]+\]\)/s);
   assert.match(css, /--nautilus-log-past-overlay:/);
   assert.match(css, /\.nautilus-log-past-overlay\s*\{[^}]*fill:\s*var\(--nautilus-log-past-overlay\);[^}]*pointer-events:\s*none;/s);
@@ -1131,12 +1136,18 @@ test('Log separates recorded and unplanned past time without a missed-task categ
   assert.doesNotMatch(css, /\.nautilus-log-past \.nautilus-log-slice/);
 });
 
-test('Log clips paired morning and evening hours into independent spiral cells', () => {
-  assert.match(component, /defn spiral-cell-inner-radius/);
-  assert.match(component, /log-core-call "spiralCellInnerHour"/);
-  assert.match(component, /past-time-overlay-component[\s\S]*spiral-cell-inner-radius start settings inner-radius/);
-  assert.match(component, /snail-blueprint-component[\s\S]*spiral-cell-inner-radius start settings inner-radius/);
-  assert.match(component, /event-slice-component[\s\S]*spiral-cell-inner-radius s settings inner-radius/);
+test('paint and hit regions share the fold-safe continuous shell geometry', () => {
+  assert.match(component, /log-core-call "shellRadii"/);
+  const start = component.indexOf('(defn past-gap-hit-component');
+  const drawing = component.slice(start, component.indexOf('(defn pending-queue-component', start));
+  assert.doesNotMatch(drawing, /create-arc-path|get-hour-boundaries|partition 2 1/);
+  assert.match(drawing, /shell-path \(:start gap\) \(:end gap\)/);
+  assert.match(drawing, /shell-path \(:start slot\) \(:end slot\)/);
+  assert.match(drawing, /shell-path \(:start event\) \(:end event\)/);
+  assert.match(drawing, /data-estimate-outline-for/);
+  assert.match(drawing, /nautilus-log-record-meta/);
+  assert.match(component, /:style \{"--nautilus-log-task-future-fill"/);
+  assert.doesNotMatch(component, /:--nautilus-log-task-future-fill/);
 });
 
 test('Log retains a semantic event material and marks real conflicts separately', () => {

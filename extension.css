@@ -250,10 +250,12 @@
 }
 
 .nautilus-log-center-now {
-  fill: var(--nautilus-log-now);
+  fill: var(--nautilus-log-chart-ink);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.1px;
+  letter-spacing: -0.4px;
 }
+.nautilus-log-center-caption { fill: var(--nautilus-log-chart-muted); letter-spacing: 0.15px; }
 
 .nautilus-log-html-legend {
   display: flex;
@@ -505,12 +507,6 @@
 
 .nautilus-log-event-slice-group--actionable {
   cursor: pointer;
-}
-
-.nautilus-log-event-slice-group[data-connection-active="true"] .nautilus-log-slice {
-  filter: none;
-  stroke: var(--nautilus-log-record-accent);
-  stroke-width: 2px;
 }
 
 .nautilus-log-event-conflict .nautilus-log-slice {
@@ -1091,7 +1087,15 @@
   --nautilus-log-completed: #5d677b;
   --nautilus-log-completed-fill: #c7d0e1;
   --nautilus-log-record-hover: rgba(19, 124, 189, 0.07);
-  --nautilus-log-past-event-fill: #e1d3a0;
+  --nautilus-log-past-event-fill: #efe2c3;
+  --nautilus-log-shell-task-inner: #e3efff;
+  --nautilus-log-shell-task-outer: #6593ef;
+  --nautilus-log-shell-task-current-inner: #cbdfff;
+  --nautilus-log-shell-task-current-outer: #5587d8;
+  --nautilus-log-shell-event-inner: #fff2cf;
+  --nautilus-log-shell-event-outer: #efca68;
+  --nautilus-log-shell-event-current-inner: #f8dea1;
+  --nautilus-log-shell-event-current-outer: #edbd4d;
   --nautilus-log-unplanned-fill: #f8f9fc;
   --nautilus-log-unplanned-stripe: #d9dfea;
   --nautilus-log-now: #c24b4b;
@@ -1241,6 +1245,9 @@
 .nautilus-log-record--event { --nautilus-log-record-accent: var(--nautilus-log-event); --nautilus-log-record-text: var(--nautilus-log-event-text); }
 .nautilus-log-record--done { --nautilus-log-record-accent: var(--nautilus-log-completed); --nautilus-log-record-text: var(--nautilus-log-completed); }
 .nautilus-log-record-title { fill: var(--nautilus-log-task-text); font-weight: 500; }
+.nautilus-log-record-meta { fill: var(--nautilus-log-chart-muted); font-weight: 400; }
+.nautilus-log-record-anchor { fill: var(--nautilus-log-record-accent); fill-opacity: .7; }
+.nautilus-log-label-highlight { fill: transparent; }
 .nautilus-log-record--event .nautilus-log-record-title { fill: var(--nautilus-log-event-text); }
 .nautilus-log-record--done .nautilus-log-record-title { fill: var(--nautilus-log-completed); text-decoration: none; }
 .nautilus-log-current-task .nautilus-log-record-title { fill: var(--nautilus-log-task-text); font-weight: 600; }
@@ -1253,7 +1260,7 @@
 .nautilus-log-estimated-outline.is-active path { stroke-width: 1.8px; stroke-opacity: 1; }
 .nautilus-log-record-marker { fill: none; stroke: var(--nautilus-log-completed); stroke-width: 1px; stroke-linecap: round; stroke-linejoin: round; }
 .nautilus-log-record-marker[data-marker-shape="dot"] { fill: var(--nautilus-log-completed); }
-.nautilus-log-event-slice-group .nautilus-log-slice { stroke: var(--nautilus-log-chart-paper); stroke-width: 0.8px; }
+.nautilus-log-event-slice-group .nautilus-log-slice { stroke: var(--nautilus-log-chart-paper); stroke-width: 1.2px; stroke-linejoin: round; }
 .nautilus-log-event-slice-group.nautilus-log-current-task .nautilus-log-slice { stroke: var(--nautilus-log-task); stroke-width: 2px; }
 .nautilus-log-event-slice-group.nautilus-log-current-event .nautilus-log-slice { stroke: var(--nautilus-log-event); stroke-width: 2px; }
 .nautilus-log-current-event .nautilus-log-record-title { fill: var(--nautilus-log-event-text); font-weight: 600; }
@@ -1262,8 +1269,17 @@
 .nautilus-log-workspace[data-active-connection="true"] .nautilus-log-record-leader { stroke-opacity: 0.5; }
 .nautilus-log-workspace .nautilus-log-event-slice-group[data-connection-active="true"] .nautilus-log-record-leader { stroke: var(--nautilus-log-record-accent); stroke-opacity: 1; stroke-width: 1.6px; }
 .nautilus-log-event-slice-group[data-connection-active="true"] .nautilus-log-record-marker { stroke: var(--nautilus-log-record-accent); stroke-width: 1.5px; }
-.nautilus-log-event-slice-group[data-connection-active="true"] .nautilus-log-label-hit { fill: var(--nautilus-log-record-hover); rx: 3px; }
+.nautilus-log-event-slice-group[data-connection-active="true"] .nautilus-log-label-highlight { fill: var(--nautilus-log-record-hover); }
+.nautilus-log-event-slice-group[data-connection-active="true"] .nautilus-log-record-anchor { fill-opacity: 1; }
+.nautilus-log-event-slice-group[data-connection-active="true"]:not(.nautilus-log-event-conflict):not(.nautilus-log-record--estimated) .nautilus-log-slice { stroke: var(--nautilus-log-record-accent); stroke-width: 2px; }
+/* The pointer-inert estimate outline owns its border, even while hovered. */
+.nautilus-log-event-slice-group.nautilus-log-record--estimated .nautilus-log-slice { stroke: none; }
 .nautilus-log-now-needle-line { filter: none; stroke: var(--nautilus-log-now); stroke-width: 1.5px; }
+.nautilus-log-now-needle-tip { fill: var(--nautilus-log-now); stroke: var(--nautilus-log-chart-paper); stroke-width: .8px; }
+.nautilus-log-shell-base { fill: var(--nautilus-log-chart-panel); fill-rule: evenodd; }
+.nautilus-log-shell-outline { stroke-width: .6px; stroke-opacity: .5; }
+.nautilus-log-shell-tick { stroke: var(--nautilus-log-chart-muted); stroke-width: .55px; stroke-opacity: .35; }
+.nautilus-log-shell-tick.is-major { stroke-width: .8px; stroke-opacity: .7; }
 
 .nautilus-log-pending-queue { margin: 4px 16px 0; border-top: 1px solid var(--nautilus-log-chart-hairline); color: var(--nautilus-log-chart-ink); font-size: 12px; }
 .nautilus-log-pending-queue > summary { min-height: 28px; line-height: 28px; white-space: nowrap; cursor: pointer; }
@@ -1328,6 +1344,14 @@
   --nautilus-log-completed-fill: #48546c;
   --nautilus-log-record-hover: rgba(19, 124, 189, 0.1);
   --nautilus-log-past-event-fill: #403a23;
+  --nautilus-log-shell-task-inner: #243552;
+  --nautilus-log-shell-task-outer: #5375b7;
+  --nautilus-log-shell-task-current-inner: #304c72;
+  --nautilus-log-shell-task-current-outer: #5c87c4;
+  --nautilus-log-shell-event-inner: #3a3525;
+  --nautilus-log-shell-event-outer: #706137;
+  --nautilus-log-shell-event-current-inner: #6f5c2f;
+  --nautilus-log-shell-event-current-outer: #b19347;
   --nautilus-log-unplanned-fill: #1c1f25;
   --nautilus-log-unplanned-stripe: #3a4354;
   --nautilus-log-now: #e58f8c;
@@ -1341,6 +1365,19 @@
   --nautilus-log-task-elapsed-fill: #233844;
   --nautilus-log-event-current-fill: #7b682f;
   --nautilus-log-event-completed-fill: #56566a;
+}
+
+@media (forced-colors: active) {
+  .nautilus-log-container .nautilus-log-shell-base,
+  .nautilus-log-container .nautilus-log-event-slice-group .nautilus-log-slice { fill: Canvas; stroke: CanvasText; }
+  .nautilus-log-container .nautilus-log-record--estimated .nautilus-log-slice { stroke: none; }
+  .nautilus-log-container .nautilus-log-record-title,
+  .nautilus-log-container .nautilus-log-record-meta,
+  .nautilus-log-container .nautilus-log-hour-label,
+  .nautilus-log-container .nautilus-log-center-now,
+  .nautilus-log-container .nautilus-log-center-caption { fill: CanvasText; }
+  .nautilus-log-container .nautilus-log-estimated-outline path,
+  .nautilus-log-container .nautilus-log-record-leader { stroke: CanvasText; }
 }
 
 /* Shared topbar / optional execution layer ---------------------------------

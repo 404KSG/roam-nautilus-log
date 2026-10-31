@@ -71,6 +71,9 @@ def run():
                 page.evaluate('(o) => deskHarness.mount(o)', options)
                 page.get_by_role('button', name='Open Desk', exact=True).click()
                 expect(page.locator('.nautilus-desk').first).to_have_attribute('data-status', 'ready')
+                count = 0 if options.get('empty') else options.get('count', 8)
+                total = count + (3 if count > 0 else 0)  # Three unfinished reference/code fixtures.
+                expect(page.locator('.nautilus-desk__title-label').first).to_have_text(f'Nautilus Desk · {total}')
 
             def card(uid):
                 return page.locator(f'.nautilus-desk__card[data-task-uid="{uid}"]')
@@ -134,6 +137,9 @@ def run():
 
             code_requests = []
             page.route('https://desk-fixture.invalid/code.png', lambda route: code_requests.append(route))
+            for count in [0, 1]:
+                mount(count=count)  # Exercise zero and the screenshot's four-task heading.
+            checks.append('Desk title uses a middle dot for zero, four, and multi-digit counts')
             mount()
             # Simulate a late legacy extension rule. The native span formula
             # assumes zero row-gap; a one-class legacy override otherwise turns
@@ -561,9 +567,11 @@ def run():
             checks.append('IME draft composition is committed once, only after composition ends')
 
             search = page.get_by_role('textbox', name='Search Desk', exact=True)
+            title_before_search = page.locator('.nautilus-desk__title-label').text_content()
             search.fill('中文输入法')
             expect(page.locator('.nautilus-desk__card')).to_have_count(1)
             expect(card(uid2)).to_be_visible()
+            expect(page.locator('.nautilus-desk__title-label')).to_have_text(title_before_search)
             search.fill('')
             expect(card('task-0')).to_be_visible()
             checks.append('native search controls filter the active task view without changing graph membership')
@@ -601,12 +609,15 @@ def run():
             card('task-1').locator('[role="button"]').click()
             expect(page.locator('.nautilus-desk__focus-body > [role="status"]')).to_contain_text('could not open')
             page.get_by_role('button', name='Try again', exact=True).click(); focused('task-1')
+            title_before_pause = page.locator('.nautilus-desk__title-label').text_content()
             page.evaluate('() => deskHarness.api.failRead(true)')
             expect(page.locator('.nautilus-desk')).to_have_attribute('data-status', 'unavailable')
+            expect(page.locator('.nautilus-desk__title-label')).to_have_text('Nautilus Desk')
             expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
             expect(card('task-1').get_by_role('button', name='Move to top')).to_be_disabled()
             page.evaluate('() => deskHarness.api.failRead(false)')
             expect(page.locator('.nautilus-desk')).to_have_attribute('data-status', 'ready')
+            expect(page.locator('.nautilus-desk__title-label')).to_have_text(title_before_pause)
             checks.append('completion/reference state, mount-error retry, stale-read pause, and recovery remain safe')
 
             toolbar_geometry = []
@@ -724,6 +735,7 @@ def run():
             created = page.evaluate('() => deskHarness.api.stats.writes.find(w=>w.type==="create").uid')
             focused(created); close_focus()
             expect(page.locator('.nautilus-desk__card')).to_have_count(1)
+            expect(page.locator('.nautilus-desk__title-label')).to_have_text('Nautilus Desk · 1')
             page.reload()
             page.wait_for_function('() => window.deskHarness?.mount')
             page.evaluate('() => deskHarness.mount({preservePreferences:true})')

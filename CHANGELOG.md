@@ -4,6 +4,24 @@
 
 ### Added
 
+- Implement the approved B continuous shell: one smooth surface per timed record, rather
+  than a separate visible slice at each hour. Fine edge ticks replace internal hour-sector
+  dividers. One pure geometry module serves paint, hit regions, completion outlines and the
+  now needle, including the 12-hour fold and overnight windows. Source times and scheduling
+  are unchanged; the new curves do not claim pixel-area equivalence to the old step profile.
+- Add a fixed duration/status row beneath diagram titles. Actual and estimate completions
+  remain distinct and readable, without strike-through. Hover/focus emphasizes the surface,
+  leader, anchor and colored title together, without moving the SVG or making Tips follow
+  the pointer. Actual appears in the first completion summary; More retains extra provenance.
+  A local completion stamp does not turn an estimate into Actual. Both stamped estimates and
+  unanchored allocations stay dashed, including while hovered or expanded.
+- Fix the intermittent expanded-Tips collapse race: Less retains its own record and clears
+  stale pointer preview state, rather than briefly switching records and removing the focused
+  action. A deterministic regression now checks the settled collapse before pointer exit.
+- Keep English as the default and retain explicit Chinese settings. Source task titles are
+  never translated. Native toolbar paths, Desk switch behavior and safe graph operations
+  remain intact. Materials use mounted-instance gradient IDs and native/local font stacks.
+
 - Past blank intervals can be inspected with hover, click or keyboard focus. Contiguous
   gaps keep their complete range and duration across hour boundaries, with a neutral
   explanation that actual activity is unknown. Click or Enter/Space pins details; Escape
@@ -19,7 +37,7 @@
   4px vertical/6px horizontal padding and 4px corners. Title and metadata share an 11px font
   size and 14px line height. More's text aligns with the metadata row; its independent 24px
   hit area does not stretch over long titles. Wide wrapping and explicit expansion grow in
-  page flow without covering Desk. The SVG's empty tail stays 2px; geometry is unchanged.
+  page flow without covering Desk. The SVG's empty tail stays 2px; Tips do not resize its frame.
 - Desk uses only the sliding control; its name appears on hover or keyboard focus and
   remains available to screen readers. Checked state follows the actual view and saved
   preference through Hide Desk, reload, fold/expand and replacement controls. Click,
@@ -60,7 +78,7 @@
   integration gate verifies scheduler intervals and actual SVG path movement;
   fixed events remain anchored and still block pending work.
 - The chart retains its time vocabulary: blue tasks, yellow fixed events,
-  solid gray completion history and pale hatching for unrecorded past time. Current
+  solid gray Actual/fixed-range completions, dashed estimates and pale hatching for unrecorded past time. Current
   tasks and events remain outlined. The spiral is the only time geometry; the rejected
   outer track and its status badges are removed. Explicit urgency remains authoritative.
 - Short tips fit their content without stretching across the workspace. Roomy views show

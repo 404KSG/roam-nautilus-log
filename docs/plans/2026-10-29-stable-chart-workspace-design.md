@@ -2,9 +2,9 @@
 
 ## Current decision
 
-Revised October 31, 2026. Red/yellow/blue roles remain, calibrated against the existing
-Roam switch blue and Free green. The brighter royal blue and lemon yellow are superseded;
-wide-content tips, past-gap inspection, semantic titles, queues and the Desk switch remain:
+Revised October 31, 2026. The approved B continuous-shell design replaces the stepped,
+hour-sliced presentation. The thin-ribbon alternative was not selected. Task/event title
+colors and native controls remain; completion and hover are part of the same design:
 
 - Roomy tips show their full current content, wrapping rather than using ellipses. Only a
   compressed local width may use a compact preview and More for clipped text.
@@ -13,6 +13,10 @@ wide-content tips, past-gap inspection, semantic titles, queues and the Desk swi
   disclosure arrow and readable yellow-family heading.
 - Past unfinished work and genuinely unscheduled work belong in a default-collapsed queue,
   not in arbitrary diagram positions. Native Desk masonry is verified and retained.
+- Every timed record is one continuous surface. Duration and completion metadata occupy a
+  fixed extra label row. Hover/focus emphasizes the surface, leader and colored title together.
+- English remains the default UI language; an explicit stored Chinese preference still works.
+  Source task titles are never translated or rewritten.
 
 Completed tasks still use valid local Actual, otherwise an explicit estimate or Default
 Todo Duration (15 minutes by default). CLOCK and completion stamps remain optional. No
@@ -23,6 +27,24 @@ current/future whole tasks fill continuous gaps in source order. The view must n
 reconstruct yesterday's unfinished tasks as if their hypothetical placement were history.
 No new graph mutation, automatic carry-forward, completion marker or timestamp inference
 is authorized by this design.
+
+## Continuous geometry
+
+`src/chart-shell.js` is the shared, pure geometry owner. It interpolates the original hourly
+radius anchors at their cell midpoints with bounded monotone Hermite interpolation. START,
+END, source interval boundaries and the clock-angle mapping remain authoritative, including
+overnight logical minutes. The curve is not claimed to preserve the old stepped pixel area.
+
+`shellInterval` uses bounded five-minute chords with exact range ends and fold/anchor knots.
+At the 12-hour fold, both one-sided inner edges are retained; the earlier turn cannot occupy
+the later turn's region. Invalid or oversized windows fail closed. The renderer uses this
+same geometry for record paint, estimated outlines, past gaps, available hits, the shell
+silhouette, ticks and the now needle. Existing hourly helper APIs remain for compatibility,
+but do not draw the production chart's internal hour-sector seams.
+
+Each record is one surface rather than one SVG slice per hour. Subtle task/event gradients
+are decorative, not new timing data. Definition IDs are unique per mounted chart. Reagent
+CSS custom-property keys are strings, so material references reach the actual SVG styles.
 
 ## Completed estimates
 
@@ -37,6 +59,9 @@ Placed estimates use `estimated-allocation`. Their gray dashed outlines and tip 
 estimated position from recorded completion time. They can overlap a pending forecast;
 the outline remains pointer-inert and the gray fill recedes so blue planning stays visible.
 Known local completion stamps and condensed CLOCK totals retain their existing meanings.
+A completion stamp anchors an estimated interval; it is not CLOCK Actual. Both estimated
+allocation and stamped estimate paths keep dashed outlines. Hover must not add a solid
+surface stroke beneath that dashed border.
 Source timestamps and edit metadata are not borrowed. Zero duration stays zero. DONE
 estimate overflow keeps its title and duration in the diagram, not in an unfinished queue.
 
@@ -72,6 +97,13 @@ width. A source-sized column budget handles their possible sides without reservi
 empty lower band. Diagram labels remain on the same side as their time anchors; ordinary
 labels wrap fully, while pathological text retains an explicit full-text route.
 
+Metadata reserves one fixed 14-unit row, independent of the current minute. Title leading is
+16 units in regular charts and 15 in compact charts; metadata uses 10px/9px text. It shows
+duration, Completed/Actual/Estimate status, or the current fixed event where room permits.
+Compact copy is abbreviated without changing the full Tips or accessible record claim.
+The label's entire title/metadata box remains the navigation hit area. Only the title ink
+gets the subtle hover field; a separate anchor joins the label and its continuous surface.
+
 The correct stability boundary is **unchanged diagram membership**. Ordinary minute motion,
 hover and Eye preserve the frame. A task can cease to fit before END: for example, a 45-minute
 task fits at 19:15 with END 20:00, but not at 19:16. A truthful queue must change then. Queue
@@ -79,10 +111,14 @@ membership, day relation or source edits may therefore reflow the diagram. Queue
 only changes content below it, not SVG geometry. Tests must not freeze stale placement to
 satisfy an obsolete unconditional END/clock assertion.
 
-The frame keeps a 12-unit top inset and 2-unit bottom inset; reducing the empty tail does not move its center, time paths or label positions. Native embeds may already
+Wide views devote up to 336 of their 720 view units to the shell, matching B's larger
+surface-to-label proportion. Compact views keep the existing source-aware column budget.
+The frame keeps a 12-unit top inset and 2-unit bottom inset; the tail itself reserves no second band. Native embeds may already
 outdent their host; compare with that baseline rather than adding global padding, overflow
 or negative-margin compensation. Narrow views retain side labels, major hour ticks and a
-compact center date. Hour sizing remains explicit in SVG output.
+compact center date. Hour sizing remains explicit in SVG output. In an active window, the
+center emphasizes a tabular monospace current time with a smaller date; narrow charts shorten
+the date and omit the secondary caption. Native font stacks are used without new font assets.
 
 ## Tip and control layout
 
@@ -108,7 +144,10 @@ time geometry do not. Idle tips reserve only the compact slot. This content-driv
 is intentional under the latest completeness request; do not reintroduce a fixed-height
 clip or a large empty reservation. Explicit expansion also remains in page flow without
 internal scrolling. Pointer, focus and pinned expansion are separate owners; changed or
-removed records, Eye, folding and unload invalidate stale detail. Nothing covers Desk.
+removed records, Eye, folding and unload invalidate stale detail. Less keeps the inspected
+record as the focused preview and clears pointer state accumulated behind the expanded panel;
+it cannot momentarily switch to a different record and remove its own focused button.
+Nothing covers Desk.
 
 The Desk switch has a 40×32px hit area, a 28×16px track and 12px thumb travel. There is no
 visible name span. Its `aria-label`, `role=switch` and `aria-checked` remain, while the existing
@@ -119,10 +158,11 @@ No second React state or new preference is introduced.
 
 ## Past-gap inspection and detail names
 
-`pastUnplannedGroups` retains one logical uncovered interval with full range/duration and
-hour-split drawing segments. `pastUnplannedSegments` remains the compatible flat geometry
-projection. Only elapsed time is inspectable; future availability stays separate. The
-neutral explanation says actual activity is unknown, not that the time was wasted.
+`pastUnplannedGroups` retains one logical uncovered interval with full range/duration. Each
+group now has one continuous shell paint/hit path, rather than separate hour-sector targets.
+`pastUnplannedSegments` remains a compatible data projection for older callers. Only elapsed
+time is inspectable; future availability stays separate. The neutral explanation says actual
+activity is unknown, not that the time was wasted.
 
 Hover/focus previews a gap; click or Enter/Space pins it, and Escape dismisses it. Changed
 keys invalidate stale selection. Gap hits sit below item records, so task navigation still
@@ -140,15 +180,17 @@ must coexist with complete wide-view content and narrow expansion.
 Legend/category colors are Urgent `#c24b4b`, Event golden yellow `#ad8b24` and Task Roam blue
 `#137cbd`. The existing switch blue `#137cbd` and Free green `#277a59` remain unchanged.
 Light text uses deeper Task `#106ba3` and Event `#7b651a`; dark text uses `#8ec0de` and
-`#d7bf70`. Event fills use `#f0e8cd`, with `#d1b965` for the current event; task fills use
-`rgba(19,124,189,0.22)`, with `#8cbad7` for current work. Elapsed and dark fills follow the
-same restrained families rather than retaining the old bright blue/yellow materials.
+`#d7bf70`. The shell uses local radial materials: light task surfaces run from `#e3efff` to
+`#6593ef`, and event surfaces from `#fff2cf` to `#efca68`, with separate current and dark
+variants. Past fixed events use `#efe2c3` in light mode. Legend dots and native controls are
+not replaced by these material gradients; title text never receives a gradient.
 
 Actual tagged urgency uses `rgba(194,75,75,0.72)`, not just a recolored legend. The now
 indicator uses the same red family, lightened to `#e58f8c` in dark themes. Completion stays
 neutral gray unless explicit urgency overrides the fill; no title gets a deletion line.
-Detail names retain semantic text colors without gradients. Typography, geometry, behavior,
-non-category warning/positive colors and native focus controls are unchanged.
+Detail names retain semantic text colors without gradients. Actual is visible in the compact
+completion summary; estimated allocation still has its explicit provenance and More detail.
+The native control typography, warning/positive colors, icon paths and focus behavior remain.
 
 The Unfinished heading uses the readable event-text token and its disclosure arrow uses
 the yellow event-category token. Counts and total duration stay muted, expanded task rows
@@ -182,6 +224,12 @@ history. Cover past demand zero, current/future overflow, a before-END overflow 
 undated fallback, overnight carryover, queue navigation and default collapse, Eye independence,
 completion moving out of the queue, and full long titles after disclosure. Existing live
 minute, fixed-event, foreground recovery, same-minute next-day and cleanup gates remain.
+
+Add continuous-shell path equality across paint/hit/estimate layers, unique material IDs,
+actual SVG gradient paint, metadata bounds, hover/focus surface emphasis and source-frame
+stability. Pointer tests must hit a genuine point inside a long folded path: its bounding-box
+center can belong to the other turn. Verify SVG containment and browser hit-testing rather
+than forcing clicks through overlapping bounding boxes.
 
 Retain real Desk controller/state tests and multi-card masonry geometry, resize, image-load,
 IME, Escape, import/drag, previews, strict Remove and all graph-write guards. Queue testing
