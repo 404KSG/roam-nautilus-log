@@ -12,6 +12,10 @@
   open. Descendant folds, committed text changes and image updates now refresh the
   background cards and masonry without waiting for editor exit. Preserve the native
   editor instance, focus, selection, composition buffer and graph-write guards.
+- Add light, transparent diagonal texture to the elapsed portion of colored timed records.
+  Existing fills, gradients, opacity and gap styling stay unchanged; future portions stay plain.
+  Texture marks elapsed placement, not proof of execution or CLOCK Actual. Estimate dashes,
+  hidden-completion occupancy, midnight behavior, labels, pointer and interactions are retained.
 
 - Make the center clock a quieter readout: cap its size at 16px, use regular weight and
   theme-aware secondary text color, and inherit the shared UI font with tabular numerals.

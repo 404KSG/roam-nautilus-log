@@ -946,6 +946,24 @@
          [:path {:d (shell-path start end inner-radius center settings)
                  :fill (str "url(#" pattern-id ")")}])])))
 
+(defn past-record-texture-defs [material-id inner-radius center settings elapsed-through-minutes plot-scale]
+  (let [scale (or plot-scale 1)
+        start (:workday-start settings)
+        end (min (:workday-end settings) elapsed-through-minutes)]
+    [:defs
+     ;; Unlike the gap pattern, this is transparent between lines: retain every
+     ;; record's existing fill/gradient and communicate elapsed time only.
+     [:pattern {:id (str material-id "-past-texture") :class "nautilus-log-past-record-pattern"
+                :width (/ 6 scale) :height (/ 6 scale)
+                :patternUnits "userSpaceOnUse" :patternTransform "rotate(45)"}
+      [:line {:x1 0 :y1 0 :x2 0 :y2 (/ 6 scale)
+              :stroke "var(--nautilus-log-chart-muted)"
+              :stroke-width (/ 0.6 scale) :stroke-opacity 0.12}]]
+     [:clipPath {:id (str material-id "-past-sweep") :class "nautilus-log-past-record-clip"
+                 :clipPathUnits "userSpaceOnUse" :data-start start :data-end end}
+      (when (< start end)
+        [:path {:d (shell-path start end inner-radius center settings)}])]]))
+
 (defn snail-blueprint-component [color inner-radius center settings _show-elapsed? _elapsed-through-minutes & [hour-step plot-scale]]
   (let [scale (or plot-scale 1)
         hour-size (/ (if (> (or hour-step 1) 1) 9 10) scale)
@@ -1360,7 +1378,7 @@
       [:path {:d (shell-path (get-in record [:event :start]) (get-in record [:event :end]) snail-inner-radius center settings)
               :vector-effect "non-scaling-stroke"}]])])
 
-(defn chart-scene-record [record index frame settings timeline-state show-done? hover-info-state copy conflicts active-uid]
+(defn chart-scene-record [record index frame settings timeline-state show-done? hover-info-state copy conflicts active-uid material-id]
   (let [event (:event record)
         timed? (= "timed" (:kind record))
         uid (:uid event)
@@ -1373,7 +1391,11 @@
                        ") translate(" (- (:center-x center)) " " (- (:center-y center)) ")")
         params (when timed? (calculate-slice-params event index (:showElapsed timeline-state)
                                                    (and (:interactive timeline-state) (:showNow timeline-state))
-                                                   (:elapsedThroughMinutes timeline-state) settings))]
+                                                   (:elapsedThroughMinutes timeline-state) settings))
+        surface-path (when timed? (shell-path (:start event) (:end event) snail-inner-radius center settings))
+        elapsed? (and timed? (:showElapsed timeline-state)
+                      (< (max (:start event) (:workday-start settings))
+                         (min (:end event) (:workday-end settings) (:elapsedThroughMinutes timeline-state))))]
     [:g (merge {:class (str "nautilus-log-event-slice-group nautilus-log-event-slice-group--interactive"
                             (when actionable? " nautilus-log-event-slice-group--actionable")
                             (when (:done event) " nautilus-log-record--done")
@@ -1404,9 +1426,14 @@
      (if timed?
        [:g {:transform transform}
         [:path {:class "nautilus-log-slice"
-                :d (shell-path (:start event) (:end event) snail-inner-radius center settings)
+                :d surface-path
                 :fill (:bg-color params) :fill-opacity (:fill-opacity params)
-                :vector-effect "non-scaling-stroke"}]]
+                :vector-effect "non-scaling-stroke"}]
+        (when elapsed?
+          [:path {:class "nautilus-log-past-record-texture" :data-past-texture-for uid
+                  :d surface-path :fill (str "url(#" material-id "-past-texture)")
+                  :clip-path (str "url(#" material-id "-past-sweep)")
+                  :stroke "none" :pointer-events "none" :aria-hidden "true"}])]
        [:path {:class "nautilus-log-record-marker" :d (:markerPath record)
                :data-marker-shape (get-in record [:marker :shape])
                :aria-hidden "true"
@@ -1510,6 +1537,8 @@
                      "--nautilus-log-event-future-fill" (str "url(#" material-id "-event)")
                      "--nautilus-log-event-current-fill" (str "url(#" material-id "-event-current)")}}
        [shell-material-defs material-id center time-radius]
+       (when elapsed-page?
+         [past-record-texture-defs material-id snail-inner-radius center settings timeline-minute scale])
        [:g {:transform transform}
         [:path {:class "nautilus-log-shell-base" :pointer-events "none" :aria-hidden "true"
                 :d (shell-path (:workday-start settings) (:workday-end settings) snail-inner-radius center settings)}]
@@ -1519,7 +1548,7 @@
           [past-gap-hit-component past-gaps snail-inner-radius center settings hover-info-state copy active-uid])]
        (for [[index record] (map-indexed vector records)]
          ^{:key (:uid record)}
-         [chart-scene-record record index frame settings timeline-state @show-done-atom? hover-info-state copy conflicts active-uid])
+         [chart-scene-record record index frame settings timeline-state @show-done-atom? hover-info-state copy conflicts active-uid material-id])
        [:g {:transform transform}
         [estimated-outline-component records center settings active-uid @show-done-atom?]
         [snail-blueprint-component snail-template-color snail-inner-radius center settings elapsed-page? timeline-minute (:hourStep frame) scale]

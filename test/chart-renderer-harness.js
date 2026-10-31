@@ -93,6 +93,7 @@ const routineChildren = routineTitles.map((title, order) => {
 const scenario = parameters.get('scenario') || 'mixed';
 const context = parameters.get('context') || 'main';
 const windowMode = parameters.get('window') || 'normal';
+const pageTitle = windowMode === 'undated' ? 'Undated project plan' : 'October 29th, 2026';
 const realisticUnknown = ['核对项目周报与月报需求', '整理自动化排版方案与测试记录', '复核本周设计任务的交付清单', '完成新版本的界面验收', '修订英文文档并核对表达', '整理参考资料和实施笔记', '检查日历同步与任务引用', '完成数据导出与归档核验'];
 const realisticChildren = routineChildren.slice(0, 14).map((row, i) => ({ ...row,
   'block/string': (i % 3 === 0 ? '{{[[DONE]]}} ' : '') + row['block/string'],
@@ -187,8 +188,8 @@ let clockEntries = scenario === 'untimed' ? [
 function q(query, ...args) {
   const source = String(query);
   trace('query', { source, args: clone(args) });
-  if (source.includes('?parent-page-title')) return 'October 29th, 2026';
-  if (source.includes('?title')) return [['October 29th, 2026']];
+  if (source.includes('?parent-page-title')) return pageTitle;
+  if (source.includes('?title')) return [[pageTitle]];
   return [];
 }
 
@@ -302,7 +303,7 @@ window.nautilusLogExtensionData = {
 // Optional read-only composition of the exact chart and real Desk controller.
 // It shares the same synthetic source rows; no real graph or write adapter exists.
 if (parameters.get('realDesk') === '1') {
-  const page = { 'block/uid': '10-29-2026', 'node/title': 'October 29th, 2026' };
+  const page = { 'block/uid': windowMode === 'undated' ? 'project-plan' : '10-29-2026', 'node/title': pageTitle };
   const entity = uid => {
     if (uid === page['block/uid']) return page;
     if (uid === 'baseline-plan') return { 'block/uid': uid, 'block/string': '[[Nautilus Log]] {{[[roam/render]]:((roam-render-Nautilus-Log-cljs))}}',
