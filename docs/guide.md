@@ -142,19 +142,26 @@ Inherited completion is identified as coming from its reference. Source timestam
 last-edit metadata are never used as today's wrapper completion time. Estimated allocations
 write no timestamps, add no Actual, and leave pending scheduling and capacity unchanged.
 
-Hover or keyboard-focus a record or available slot to read its context in a centered,
-content-sized tip with 16px side insets. In workspaces wider than 360px, the tip can use
-the available local width instead of stopping at 280px. Its title and displayed metadata
-remain complete, wrapping naturally when necessary; neither uses an ellipsis. Short tips
-stay compact rather than stretching across the chart. **More** reveals additional metadata,
-not a hidden wide-view title.
+Hover or keyboard-focus a record, available slot or past gap to read its context in a
+centered, content-sized tip with 16px side insets. In workspaces wider than 360px, it uses
+available local width instead of stopping at 280px. Titles and displayed metadata remain
+complete, wrapping when needed without ellipses. Short content does not stretch across the
+chart. More reveals additional information, not a hidden wide-view title. At 360px or
+narrower, a compact preview may use More for clipped text.
 
-At 360px or narrower, the tip may use compact rows and offer More for clipped text. Content
-that fits still remains complete. More has intrinsic width and never splits into letters.
-The normal two-row tip retains its 42px content and 44px minimum slot. Wide text that needs
-more lines grows in normal page flow without resizing the SVG, covering Desk or adding an
-internal scrollbar. Idle tips reserve only the compact slot. Explicit expansion pins the
-record while reading; changed or removed records invalidate it.
+The neutral surface has a faint border, 6px corners, 6px vertical/12px horizontal padding
+and a 4px row gap. Its normal 58px content sits in a 66px minimum slot including 8px of lower
+clearance. Wide wrapped content and explicit expansion grow in page flow without resizing
+the SVG, covering Desk or adding an internal scrollbar. Idle tips reserve only the minimum
+slot. More is neutral until hover/focus, has intrinsic width and at least a 24px hit height,
+and never breaks into letters.
+
+Task and event names use a static light/dark gradient. Metadata, dates, category dots and
+gap explanations retain their own colors; forced-color and print modes use solid text.
+Past gaps show the full uncovered range and duration, not proof of idle or wasted activity.
+Click or Enter/Space pins a gap's details; Escape dismisses them. Changed ranges invalidate
+stale selection, and hiding completed records does not make their occupied time into a gap.
+Explicit expansion can also pin record details; changed or removed records invalidate them.
 The area does not follow the pointer or cover the plot. Click or Enter on a flexible task's
 mark or label locates its original block; Shift opens it in the sidebar. These actions
 never rewrite the task or its time. If the block is folded, navigation uses Roam's official

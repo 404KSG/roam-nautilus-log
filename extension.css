@@ -577,8 +577,29 @@
   pointer-events: none;
 }
 
-.nautilus-log-unplanned-overlay {
+.nautilus-log-unplanned-overlay,
+.nautilus-log-past-gap-hits {
   pointer-events: none;
+}
+
+.nautilus-log-past-gap {
+  outline: none;
+}
+
+.nautilus-log-past-gap-hit {
+  fill: transparent;
+  pointer-events: all;
+  stroke: transparent;
+  stroke-width: 1.25px;
+  transition: fill 0.14s ease, stroke 0.14s ease;
+}
+
+.nautilus-log-past-gap:hover .nautilus-log-past-gap-hit,
+.nautilus-log-past-gap:focus .nautilus-log-past-gap-hit,
+.nautilus-log-past-gap--active .nautilus-log-past-gap-hit {
+  fill: var(--nautilus-log-slot-hover);
+  stroke: var(--nautilus-log-chart-muted);
+  stroke-dasharray: 3 3;
 }
 
 .nautilus-log-grid .nautilus-log-slice {
@@ -1053,6 +1074,10 @@
 .nautilus-log-container {
   --nautilus-log-chart-paper: #fff;
   --nautilus-log-chart-panel: #f7f8fa;
+  --nautilus-log-detail-surface: #fbfbfb;
+  --nautilus-log-detail-border: rgba(20, 20, 20, 0.08);
+  --nautilus-log-detail-action-hover: rgba(20, 20, 20, 0.05);
+  --nautilus-log-detail-name-gradient: linear-gradient(100deg, #7952b3 0%, #aa3773 25%, #8a6200 50%, #08797a 75%, #3566bc 100%);
   --nautilus-log-chart-ink: #222326;
   --nautilus-log-chart-muted: #666b78;
   --nautilus-log-text-main: var(--nautilus-log-chart-ink);
@@ -1132,42 +1157,67 @@
   width: 100%;
   margin: 0;
   min-width: 0;
-  height: 44px;
+  /* Reserve a 58px surface plus 8px below it, even while idle. */
+  height: 66px;
+  padding-bottom: 8px;
   color: var(--nautilus-log-chart-ink);
 }
 .nautilus-log-detail-region[data-nautilus-detail="idle"] { visibility: hidden; }
-.nautilus-log-detail-region.is-expanded { height: auto; min-height: 44px; align-items: flex-start; }
-/* Roomy tips show their current content in full. Only the text region grows;
-   the SVG keeps its source-sized frame and the following content stays in flow. */
-.nautilus-log-detail-region[data-tip-content="full"][data-nautilus-detail="active"] { height: auto; min-height: 44px; }
-.nautilus-log-detail-region[data-tip-content="full"] .nautilus-log-detail-content { grid-template-rows: auto auto; }
+.nautilus-log-detail-region.is-expanded { height: auto; min-height: 66px; align-items: flex-start; }
+/* Keep the balanced surface while roomy content wraps in normal page flow. */
+.nautilus-log-detail-region[data-tip-content="full"][data-nautilus-detail="active"] { height: auto; min-height: 66px; }
 .nautilus-log-detail-region[data-tip-content="full"] .nautilus-log-detail-title,
 .nautilus-log-detail-region[data-tip-content="full"] .nautilus-log-detail-meta { display: block; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; word-break: normal; -webkit-line-clamp: unset; }
 .nautilus-log-detail-region[data-tip-content="full"] .nautilus-log-detail-tone,
 .nautilus-log-detail-region.is-expanded .nautilus-log-detail-tone { align-self: start; margin-top: 5px; }
-.nautilus-log-detail-region.is-expanded .nautilus-log-detail-content { padding: 6px 7px; grid-template-rows: auto auto; }
 .nautilus-log-detail-content {
   box-sizing: border-box;
   display: grid;
   grid-template-columns: 5px minmax(0, 1fr);
-  grid-template-rows: 16px 24px;
-  column-gap: 6px;
-  row-gap: 0;
+  grid-template-rows: minmax(16px, auto) minmax(24px, auto);
+  column-gap: 8px;
+  row-gap: 4px;
   max-width: calc(100% - 32px);
-  min-height: 42px;
-  padding: 0 7px;
-  border: 1px solid var(--nautilus-log-chart-hairline);
-  border-radius: 4px;
-  background: var(--nautilus-log-chart-panel);
+  min-height: 58px;
+  padding: 6px 12px;
+  border: 1px solid var(--nautilus-log-detail-border);
+  border-radius: 6px;
+  background: var(--nautilus-log-detail-surface);
 }
 .nautilus-log-detail-content.has-more { grid-template-columns: 5px minmax(0, 1fr) max-content; }
 .nautilus-log-detail-tone { grid-column: 1; grid-row: 1; align-self: center; width: 5px; height: 5px; border-radius: 50%; background: var(--nautilus-log-chart-muted); }
 .nautilus-log-detail-tone--task { background: var(--nautilus-log-task); }
 .nautilus-log-detail-tone--event { background: var(--nautilus-log-event); }
 .nautilus-log-detail-tone--available { background: var(--nautilus-log-positive); }
+.nautilus-log-detail-tone--past-gap { background: var(--nautilus-log-chart-muted); }
 .nautilus-log-detail-tone--completed { background: var(--nautilus-log-completed); }
 .nautilus-log-detail-title { grid-column: 2 / -1; grid-row: 1; min-width: 0; font-size: 12px; line-height: 16px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.nautilus-log-detail-meta { grid-column: 2; grid-row: 2; align-self: center; min-width: 0; color: var(--nautilus-log-chart-muted); font-size: 11px; font-weight: 400; line-height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A static accent for real names only; status text and category dots stay semantic. */
+.nautilus-log-detail-title--record { width: fit-content; max-width: 100%; }
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .nautilus-log-detail-title--record {
+    background-image: var(--nautilus-log-detail-name-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+}
+@media (forced-colors: active) {
+  .nautilus-log-detail-title--record {
+    background-image: none;
+    color: CanvasText;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+@media print {
+  .nautilus-log-detail-title--record {
+    background-image: none;
+    color: #222326;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+.nautilus-log-detail-meta { grid-column: 2; grid-row: 2; align-self: center; min-width: 0; color: var(--nautilus-log-chart-muted); font-size: 11px; font-weight: 400; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nautilus-log-detail-region.is-expanded .nautilus-log-detail-title,
 .nautilus-log-detail-region.is-expanded .nautilus-log-detail-meta { display: block; overflow: visible; white-space: normal; overflow-wrap: anywhere; }
 .nautilus-log-container .nautilus-log-detail-expand {
@@ -1183,14 +1233,20 @@
   overflow-wrap: normal;
   word-break: normal;
   border-radius: 3px;
-  color: var(--nautilus-log-chart-focus);
+  color: var(--nautilus-log-chart-muted);
   background: transparent;
   font: inherit;
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 400;
   line-height: 16px;
   cursor: pointer;
 }
 .nautilus-log-detail-region.is-expanded .nautilus-log-detail-expand { grid-row: 2; align-self: start; }
+.nautilus-log-container .nautilus-log-detail-expand:hover,
+.nautilus-log-container .nautilus-log-detail-expand:focus-visible {
+  color: var(--nautilus-log-chart-ink);
+  background: var(--nautilus-log-detail-action-hover);
+}
 .nautilus-log-detail-expand:focus-visible { outline: 2px solid var(--nautilus-log-chart-focus); outline-offset: 1px; }
 .nautilus-log-event-slice-group { --nautilus-log-record-accent: var(--nautilus-log-task); --nautilus-log-record-text: var(--nautilus-log-task-text); }
 .nautilus-log-record--event { --nautilus-log-record-accent: var(--nautilus-log-event); --nautilus-log-record-text: var(--nautilus-log-event-text); }
@@ -1268,6 +1324,10 @@
 .dark .nautilus-log-container {
   --nautilus-log-chart-paper: #101113;
   --nautilus-log-chart-panel: #181a20;
+  --nautilus-log-detail-surface: #1c1c1e;
+  --nautilus-log-detail-border: rgba(255, 255, 255, 0.08);
+  --nautilus-log-detail-action-hover: rgba(255, 255, 255, 0.06);
+  --nautilus-log-detail-name-gradient: linear-gradient(100deg, #d4a6ff 0%, #f2a2ca 25%, #efcd75 50%, #7bd6c2 75%, #9dc6ff 100%);
   --nautilus-log-chart-ink: #ebecef;
   --nautilus-log-chart-muted: #b8bdca;
   --nautilus-log-chart-hairline: #303440;

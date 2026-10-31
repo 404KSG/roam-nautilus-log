@@ -4,12 +4,21 @@
 
 ### Added
 
-- Roomy tips now use available local width instead of a universal 280px cap. At widths
-  above 360px, titles and displayed metadata are complete and wrap naturally, including
-  unbroken strings; More only reveals extra information. Compressed views retain a bounded
-  preview and explicit full text. Ordinary tips keep their compact 42px content/44px slot;
-  wrapping grows the detail region in page flow without resizing the SVG or covering Desk.
-  More retains intrinsic width and never breaks into letters.
+- Past blank intervals can be inspected with hover, click or keyboard focus. Contiguous
+  gaps keep their complete range and duration across hour boundaries, with a neutral
+  explanation that actual activity is unknown. Click or Enter/Space pins details; Escape
+  dismisses them, and changed intervals invalidate stale selection. Hidden completed
+  estimates still occupy their intervals; unfinished past-day tasks remain in their queue.
+- Task/event detail names retain their static light/dark gradient, with solid fallbacks
+  for forced colors and print. Dates, category dots, timing metadata and gap explanations
+  keep their own colors.
+- Roomy tips use available local width rather than a universal 280px cap. Above 360px,
+  titles and displayed metadata wrap completely, including unbroken strings; More reveals
+  extra information. Compressed views retain a bounded preview and explicit full text.
+- The balanced tip surface has 6px vertical/12px horizontal padding, a 4px row gap,
+  faint border and 6px corners. Normal 58px content uses a 66px minimum slot with 8px lower
+  clearance. Full content grows in page flow without resizing SVG or covering Desk. More
+  is neutral until hover/focus, has intrinsic width and retains its 24px hit height.
 - Desk uses only the sliding control; its name appears on hover or keyboard focus and
   remains available to screen readers. Checked state follows the actual view and saved
   preference through Hide Desk, reload, fold/expand and replacement controls. Click,
@@ -65,8 +74,8 @@
   not pointer movement or ordinary minute motion within the same membership. The spiral,
   whole-task scheduler, Actual and completed-estimate allocation remain intact.
 - Details stay centered within the local workspace. Wide content wraps in page flow;
-  explicit expansion can pin additional information or narrow-view full text. The compact
-  44px slot is invisible when idle. The rejected below-chart completion list, its reserved
+  explicit expansion can pin additional information or narrow-view full text. The minimum
+  66px slot is invisible when idle. The rejected below-chart completion list, its reserved
   gap, and wheel-based text reading are removed.
 - Narrow charts keep side labels, readable major hour ticks and a compact center date.
   Hour sizes are applied directly to SVG text instead of relying on a CSS variable that

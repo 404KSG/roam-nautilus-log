@@ -85,17 +85,23 @@ compact center date. Hour sizing remains explicit in SVG output.
 
 ## Tip and control layout
 
-`chartTipLayout` separates content mode from its two-layer layout. At a local width above
-360px, `contentMode=full`: natural content width is capped only by workspace width minus
-32px, not 280px. The title and displayed metadata use normal wrapping, including unbroken
-strings, without ellipsis, line clamp or hidden overflow. More only reveals extra provenance
-or timing explanation; it is not required to read a wide-view title.
+`chartTipLayout` combines the balanced surface with width-aware content mode. Above 360px,
+`contentMode=full`: natural width is capped only by local workspace width minus 32px, not
+280px. Titles and displayed metadata wrap, including unbroken strings, without ellipsis,
+line clamp or hidden overflow. More reveals extra information rather than a hidden title.
+
+The normal surface is 58px tall in a 66px minimum slot, including 8px of lower clearance.
+It has 6px vertical/12px horizontal padding, a 4px row gap, an 8px column gap, a faint border
+and 6px corners. The 12px/16px title occupies the first row; 11px/16px metadata and More
+occupy the second. More is neutral until hover/focus, has an intrinsic width, nowrap and
+at least a 24px hit height. Width measurement includes the same 39px content gutter and
+11px action font as CSS. Expansion retains the padding rather than adding another layer.
 
 At 360px or narrower, `contentMode=compact` keeps bounded rows and offers More for clipped
 content. Text that fits still remains complete. In both modes the title has its own first
 row, metadata and More occupy the second, and More uses intrinsic width and nowrap.
 
-Ordinary short tips retain 42px content and a 44px minimum slot. Full-mode wrapping grows
+Ordinary short tips retain 58px content and a 66px minimum slot. Full-mode wrapping grows
 only the detail region in normal page flow, so following content may move but SVG size and
 time geometry do not. Idle tips reserve only the compact slot. This content-driven height
 is intentional under the latest completeness request; do not reintroduce a fixed-height
@@ -109,6 +115,22 @@ hover/focus tooltip supplies the visual label without wrapping. The real Desk bi
 checked state through registration, start, close, preferences and remounts. Keyboard focus
 is visible; Space/Enter, existing Alt navigation, focus return and reduced motion are retained.
 No second React state or new preference is introduced.
+
+## Past-gap inspection and detail names
+
+`pastUnplannedGroups` retains one logical uncovered interval with full range/duration and
+hour-split drawing segments. `pastUnplannedSegments` remains the compatible flat geometry
+projection. Only elapsed time is inspectable; future availability stays separate. The
+neutral explanation says actual activity is unknown, not that the time was wasted.
+
+Hover/focus previews a gap; click or Enter/Space pins it, and Escape dismisses it. Changed
+keys invalidate stale selection. Gap hits sit below item records, so task navigation still
+wins. Hidden completed estimates remain occupied in the underlying data. No graph reads
+or writes are added by inspection.
+
+Only real task/event names receive the static light/dark gradient. Dates, semantic category
+dots, metadata and explanatory labels stay unchanged. Forced-color and print modes use solid
+text. Gradient styling must coexist with complete wide-view titles and narrow expansion.
 
 ## Category colors and native Desk
 
