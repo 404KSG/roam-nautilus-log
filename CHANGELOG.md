@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- Re-adding an outside-block reference after its confirmed childless-wrapper removal reuses the same wrapper ID; a later source edit is no longer treated as an unresolved create.
+- The focus dialog no longer paints over Roam's enhanced image viewer or takes its pointer, wheel, Tab, or Escape behavior.
+
 ### Added
 
 - Make the center clock a quieter readout: cap its size at 16px, use regular weight and

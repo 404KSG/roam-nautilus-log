@@ -220,8 +220,9 @@ export function createDeskView({
     });
 
     const layer = el('div', 'nautilus-desk__focus-layer');
+    const nativeImageViewerOpen = () => Boolean(document.querySelector('#rm-modal-portal .rm-enhanced-image-modal-container'));
     const backdrop = el('div', 'rm-desk-backdrop');
-    backdrop.addEventListener('click', () => showOverview(true, 'focus-backdrop'));
+    backdrop.addEventListener('click', () => { if (!nativeImageViewerOpen()) showOverview(true, 'focus-backdrop'); });
     const focus = el('section', 'rm-desk rm-desk--dialog rm-desk--overlay bp3-elevation-3');
     focus.setAttribute('role', 'dialog');
     focus.setAttribute('aria-modal', 'true');
@@ -936,6 +937,10 @@ export function createDeskView({
       renderCards();
     });
     const onKey = (event) => {
+      // Roam's enhanced image viewer is a portal modal above this focus dialog.
+      // Yield all keys so its document handlers retain Escape, Tab, and zoom
+      // navigation ownership without remounting the editor underneath.
+      if (nativeImageViewerOpen()) return;
       if ((!root.contains(event.target) && !layer.contains(event.target) && event.target !== (binding.origin || origin)) || !checkScope() || composing) return;
       if (mode === 'overview' && event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey
         && !event.target.closest('input,textarea,[contenteditable="true"]') && /^Digit[1-9]$/.test(event.code)) {

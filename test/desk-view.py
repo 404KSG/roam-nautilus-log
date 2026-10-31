@@ -48,7 +48,7 @@ body {{ margin:0; font-family:Inter,sans-serif; font-size:15px; line-height:1.5;
 .nautilus-desk__native textarea {{ width:100%; display:block; min-height:90px; margin:8px 0; font:inherit; color:inherit; background:transparent; }}
 body.bp3-dark {{ background:#293742;color:#e1e8ed; }}
 #page-after {{ min-height:120px; }}
-</style></head><body><div class="roam-app"><div class="roam-main"><div class="rm-article-wrapper"><article class="roam-article">
+</style></head><body><div id="rm-modal-portal" class="roam-lift-modal"></div><div class="roam-app"><div class="roam-main"><div class="rm-article-wrapper"><article class="roam-article">
 <h1>October 26th, 2026</h1><div id="launchers"></div><div id="page-after" contenteditable="true">Other page content remains editable.</div>
 </article></div></div></div><script src="harness.js"></script></body></html>''')
 
@@ -362,6 +362,75 @@ def run():
             page.keyboard.press('Alt+Comma'); focused('task-1')
             page.keyboard.press('Alt+Period'); focused('task-0')
             page.wait_for_function('document.querySelector(".nautilus-desk__focus-body").scrollTop >= 399')
+            lightbox = page.evaluate('''() => {
+              const portal=document.querySelector('#rm-modal-portal');
+              const viewer=document.createElement('div');
+              viewer.className='rm-enhanced-image-modal-container';
+              const image=document.createElement('img'); image.alt='Fixture image';
+              image.src='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160"/>';
+              image.style.cssText='width:240px;height:160px;background:#fff';
+              const controls=document.createElement('div'); controls.className='rm-image-zoom-controls';
+              const out=document.createElement('button'); out.textContent='Zoom out';
+              const plus=document.createElement('button'); plus.textContent='Zoom in';
+              controls.append(out,plus); viewer.append(image); portal.append(viewer,controls);
+              const state=window.fixtureLightboxState={escapes:0,tabs:0,wheels:0,zooms:0,prevented:[]};
+              out.addEventListener('click',() => { state.zooms += 1; });
+              const onKey=event => {
+                if (event.key === 'Tab' || event.key === 'Escape' || event.code === 'Comma') state.prevented.push(event.defaultPrevented);
+                if (event.key === 'Tab') { state.tabs += 1; event.preventDefault(); plus.focus(); }
+                if (event.key === 'Escape') { state.escapes += 1; event.preventDefault(); viewer.remove(); controls.remove(); document.removeEventListener('keydown',onKey); }
+              };
+              document.addEventListener('keydown',onKey);
+              image.addEventListener('wheel',event => { state.wheels += 1; event.preventDefault(); }, {passive:false});
+              const edit=document.querySelector('textarea[data-block-uid="task-0"]');
+              edit.focus(); edit.setSelectionRange(2,8);
+              window.fixtureLightboxIdentity={edit, native:edit.closest('.nautilus-desk__native'), layer:document.querySelector('.nautilus-desk__focus-layer')};
+              return {state, scroll:document.querySelector('.nautilus-desk__focus-body').scrollTop,
+                selection:[edit.selectionStart,edit.selectionEnd],renders:deskHarness.api.stats.renders.length,
+                unmounts:deskHarness.api.stats.unmounts,writes:deskHarness.api.stats.writes.length};
+            }''')
+            center = page.locator('.rm-enhanced-image-modal-container img').evaluate('''image => {
+              const r=image.getBoundingClientRect(), top=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);
+              const control=document.querySelector('.rm-image-zoom-controls button'), c=control.getBoundingClientRect();
+              const controlTop=document.elementFromPoint(c.left+c.width/2,c.top+c.height/2);
+              return {image:top === image || top.closest('.rm-enhanced-image-modal-container') === image.parentElement,
+                control:controlTop === control};
+            }''')
+            assert center == {'image': True, 'control': True}, center
+            page.get_by_role('button', name='Zoom out', exact=True).click()
+            # Native portals may leave focus on Desk chrome. Exercise the guard
+            # there, where target-scoping alone would otherwise steal these keys.
+            chrome_close = page.locator('.rm-desk__header').get_by_role('button', name='Close', exact=True)
+            chrome_close.focus()
+            page.keyboard.press('Tab')
+            expect(page.get_by_role('button', name='Zoom in', exact=True)).to_be_focused()
+            chrome_close.focus()
+            page.keyboard.press('Alt+Comma')
+            expect(page.locator('.nautilus-desk__native')).to_have_attribute('data-task-uid', 'task-0')
+            page.locator('.rm-desk-backdrop').dispatch_event('click')
+            expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(1)
+            image_box = page.locator('.rm-enhanced-image-modal-container img').bounding_box()
+            page.mouse.move(image_box['x'] + image_box['width']/2, image_box['y'] + image_box['height']/2)
+            page.mouse.wheel(0, 120)
+            page.wait_for_function('fixtureLightboxState.wheels === 1')
+            page.screenshot(path=str(OUT/'native-image-above-desk.png'))
+            chrome_close.focus()
+            page.keyboard.press('Escape')
+            expect(page.locator('.rm-enhanced-image-modal-container')).to_have_count(0)
+            lightbox_after = page.evaluate('''() => {
+              const edit=document.querySelector('textarea[data-block-uid="task-0"]'), saved=window.fixtureLightboxIdentity;
+              return {state:window.fixtureLightboxState, portal:document.querySelector('#rm-modal-portal').children.length,
+                editor:edit===saved.edit && edit.closest('.nautilus-desk__native')===saved.native,
+                layer:document.querySelector('.nautilus-desk__focus-layer')===saved.layer,
+                scroll:document.querySelector('.nautilus-desk__focus-body').scrollTop,
+                selection:[edit?.selectionStart,edit?.selectionEnd],renders:deskHarness.api.stats.renders.length,
+                unmounts:deskHarness.api.stats.unmounts,writes:deskHarness.api.stats.writes.length};
+            }''')
+            assert lightbox_after == {'state': {'escapes': 1, 'tabs': 1, 'wheels': 1, 'zooms': 1, 'prevented': [False,False,False]},
+              'portal': 0, 'editor': True, 'layer': True, 'scroll': lightbox['scroll'], 'selection': lightbox['selection'],
+              'renders': lightbox['renders'], 'unmounts': lightbox['unmounts'], 'writes': lightbox['writes']}, lightbox_after
+            assert page.locator('#rm-modal-portal').evaluate('el=>getComputedStyle(el).zIndex') == '1'
+            checks.append('enhanced-image portal paints and receives pointer, Tab, wheel, and Escape above focus Desk while retaining the mounted editor, scroll, and selection')
             close_focus()
             activate('code-literal')
             expect(page.locator('.rm-desk__header').get_by_role('button', name='Next', exact=True)).to_be_disabled()
@@ -900,13 +969,31 @@ def run():
             imported_row = page.evaluate('() => deskHarness.api.children("plan-desk").find(row => row.uid === "ref-outside-source")')
             assert imported_row['string'] == '{{[[TODO]]}} ((outside-source))', imported_row
             assert page.evaluate('() => deskHarness.api.sourceSnapshot("outside-source")') == source_before
+            # Exercise the real Remove action and import owner together without
+            # a reload: deleting only fixture rows cannot catch lifecycle locks.
+            for cycle in range(3):
+                card('ref-outside-source').hover()
+                card('ref-outside-source').get_by_role('button', name='Remove from Desk', exact=True).click()
+                expect(card('ref-outside-source')).to_have_count(0)
+                expect(card('task-1').get_by_role('button', name='Move to top', exact=True)).to_be_enabled()
+                external_drag('[data-task-uid="task-1"]')
+                expect(card('ref-outside-source')).to_be_visible()
+                page.wait_for_function('deskHarness.api.stats.referenceRequests.at(-1)?.state === "fulfilled"')
+                assert page.evaluate('deskHarness.api.stats.referenceRequests.at(-1).status') == 'added'
+                assert page.evaluate('deskHarness.api.stats.writes.length') == import_before + 3 + cycle * 2
+                assert page.evaluate('deskHarness.api.sourceSnapshot("outside-source")') == source_before
+            assert page.evaluate('deskHarness.api.stats.writes.slice(-6).map(w=>w.type)') == ['delete','create'] * 3
+            checks.append('same-view reference add/remove/re-add repeats three times through production actions with the same UID and untouched source')
+
             # Settled retry and a fresh view/action owner also do not create again.
+            import_before += 6
+            request_count = page.evaluate('deskHarness.api.stats.referenceRequests.length')
             external_drag('[data-task-uid="task-1"]')
             page.wait_for_function('deskHarness.api.stats.referenceRequests.at(-1)?.status === "existing-reference"')
             page.evaluate('() => deskHarness.api.reloadView()')
             expect(card('ref-outside-source')).to_be_visible()
             external_drag('[data-task-uid="task-1"]')
-            page.wait_for_function('deskHarness.api.stats.referenceRequests.length === 3 && deskHarness.api.stats.referenceRequests.at(-1)?.state === "fulfilled"')
+            page.wait_for_function('(count) => deskHarness.api.stats.referenceRequests.length === count + 2 && deskHarness.api.stats.referenceRequests.at(-1)?.state === "fulfilled"', arg=request_count)
             assert page.evaluate('() => deskHarness.api.stats.writes.length') == import_before + 1
             checks.append('held reference create survives repeated, modifier, internal, and unrelated drags; settled/reloaded retries make no second create')
 

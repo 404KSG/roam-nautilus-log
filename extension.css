@@ -2673,6 +2673,9 @@ button.nautilus-log-timing__plan-heading:focus-visible {
 .nautilus-desk .rm-desk-tile:focus-within .rm-desk-tile__actions { opacity: 1; }
 .nautilus-desk [aria-disabled="true"] { cursor: default; opacity: .65; }
 .nautilus-desk [hidden], .nautilus-desk__focus-layer [hidden] { display: none !important; }
+/* Roam's image viewer lives in a z-index:1 portal while this native Desk
+   dialog is at 19. Lift only that portal while both overlays are open. */
+body:has(.nautilus-desk__focus-layer) #rm-modal-portal:has(.rm-enhanced-image-modal-container) { z-index: 20; }
 .nautilus-desk__notice { padding: 8px 12px; }
 .nautilus-desk__menu { position: absolute; right: 8px; top: 36px; z-index: 2; }
 /* The body-mounted focus dialog uses the viewport, not the card/main column.

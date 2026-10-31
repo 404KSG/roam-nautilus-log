@@ -309,9 +309,14 @@ Accepted native transfers use the copy cursor; move-only or link-only transfers
 are not imported. Files, pages, queries, embeds/renderers, events, ambiguous/multi-block and
 cross-graph payloads are rejected. Nautilus ignores modifier gestures and leaves
 those events entirely to Roam; it does not suppress Roam's own modifier behavior.
-Repeated drops reuse the same deterministic wrapper. An unconfirmed attempt in
-that running view is verification-only; reload checks the same reserved UID and
-never allocates a second UID for that source and plan. Imports require the public
+Repeated drops reuse the same deterministic wrapper. After a confirmed add,
+Remove from Desk of its childless local wrapper permits the source to be dropped
+again with that same ID. A promoted wrapper still occupies the ID, so Desk does
+not create another. An unconfirmed attempt in that running view is
+verification-only; if its exact childless wrapper is later observed, that graph
+state resolves the reservation and a later confirmed removal may re-add it. A
+different wrapper does not resolve the reservation. Reload checks the same
+reserved UID and never allocates a second UID for that source and plan. Imports require the public
 `data.pull` and `data.block.create` APIs and a verifiable graph/type/user context.
 Progress temporarily uses the existing title area, leaving Search, New note, and
 Hide Desk unobstructed. Hover over a truncated message to read it in full. The
@@ -336,6 +341,9 @@ late completion removes the card. There is no compensating rollback or blind ret
 These reservations are not durable transactions across extension/browser restarts.
 
 Other moves and creation also check parent and task state before writing; UID, text, and order are read back afterward.
+A native image zoom opened from the focus editor remains Roam's viewer: it takes
+pointer, wheel, Tab, and Escape first while the mounted editor and its scroll stay
+in place. Without that viewer, Desk's normal Escape behavior is unchanged.
 A host API response alone is not confirmation. An uncertain create is checked
 using its reserved UID, never blindly repeated with a new UID. Locks do not cover
 other devices or manual writers; concurrent changes fail conservatively. Read
