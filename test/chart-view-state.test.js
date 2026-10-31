@@ -36,8 +36,8 @@ test('short Review tips fit their content and do not offer redundant full text',
   const tip = chartTipLayout(input);
   assert.equal(tip.mode, 'stacked');
   assert.equal(tip.more, false);
-  assert.ok(tip.width < 240 && tip.width >= input.summary.length * 5.2 + 27, tip);
-  assert.equal(tip.slotHeight, 44);
+  assert.ok(tip.width < 240 && tip.width >= input.summary.length * 5.2 + 39, tip);
+  assert.equal(tip.slotHeight, 66);
   const narrow = chartTipLayout({ ...input, containerWidth: 280 });
   assert.ok(narrow.width <= 248);
 });
@@ -47,7 +47,7 @@ test('tip measurement reserves tabular digit advances used by the painted time t
   const measured = text => [...text].reduce((n, ch) => n + (ch === '0' ? 8 : 4), 0);
   const result = chartTipLayout({ title: 'Review', summary: meta, meta, containerWidth: 720,
     measureTitle: () => 40, measureMeta: measured });
-  assert.ok(result.width >= Math.max(40, measured(meta.replace(/[0-9]/g, '0'))) + 27);
+  assert.ok(result.width >= Math.max(40, measured(meta.replace(/[0-9]/g, '0'))) + 39);
   assert.equal(result.more, false);
 });
 
@@ -58,5 +58,5 @@ test('clipped or additional detail can explicitly expand without a scroll model'
   assert.equal(tip.mode, 'stacked');
   assert.equal(tip.width, 248);
   assert.equal(tip.expandedWidth, 248);
-  assert.equal(tip.slotHeight, 44);
+  assert.equal(tip.slotHeight, 66);
 });

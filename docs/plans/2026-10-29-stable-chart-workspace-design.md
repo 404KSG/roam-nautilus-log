@@ -83,11 +83,14 @@ compact center date. Hour sizing remains explicit in SVG output.
 
 ## Tip and control layout
 
-The closed tip has two rows in a stable 44px slot. Its 42px content places the 12px/16px title
-across the whole first row after the tone dot. The second row contains 11px/14px metadata
-and an intrinsically sized More action with at least a 24px hit height. More uses nowrap,
-normal word breaking and its actual text width, not a fixed 24px column. The panel remains
-at most 280px wide, with 16px narrow-container insets.
+The closed tip has two rows in a stable 66px slot: a 58px minimum surface and 8px of clearance
+below it. Content uses 6px vertical/12px horizontal padding, a 4px row gap and an 8px column gap.
+The gradient 12px/16px task/event title spans the first row after the 5px tone dot; 11px/16px
+metadata and More occupy the second. The neutral surface has a faint border and 6px corners,
+without a shadow. More uses neutral text until hover/focus, an intrinsic width, nowrap, normal
+word breaking and at least a 24px hit height. Width measurement includes the same padding,
+borders, dot, gap and 11px action font as CSS. The panel remains at most 280px wide, with 16px
+narrow-container insets. Expansion keeps the same inner padding and may grow in page flow.
 
 Ordinary titles that fit the title row are complete. Text exceeding that width, or extra
 metadata, exposes More. Expanded text stays in normal page flow and is never internally

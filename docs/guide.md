@@ -140,11 +140,13 @@ Inherited completion is identified as coming from its reference. Source timestam
 last-edit metadata are never used as today's wrapper completion time. Estimated allocations
 write no timestamps, add no Actual, and leave pending scheduling and capacity unchanged.
 
-Hover or keyboard-focus a record or available slot to read its context in a centered
+Hover or keyboard-focus a record, available slot, or past gap to read its context in a centered
 tip that fits its content, capped at 280px and inset by 16px in narrower workspaces.
-Closed tips use two compact rows in a stable 44px slot, invisible when idle. The title
-owns the first row; metadata and **More** occupy the second. More has its own intrinsic
-width and never breaks into letters. Ordinary titles that fit the available title row
+Closed tips reserve 66px, including a 58px surface and 8px of clearance below it, and are invisible
+when idle. The neutral surface has a faint border, 6px corners, 6px vertical/12px horizontal padding,
+and a 4px row gap. The gradient task/event name owns the first row; metadata and **More** occupy
+the second. More stays neutral until hover/focus, has an intrinsic width and a minimum 24px hit
+height, and never breaks into letters. Ordinary titles that fit the available title row
 remain complete; oversized text can expand. No internal scrollbar is used. **More** appears
 only when text is clipped
 or additional metadata exists; it explicitly expands that content in page flow and pins

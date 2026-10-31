@@ -265,11 +265,14 @@ function chartTipLayout({ title = '', summary = '', meta = summary, containerWid
   // tolerance that lets a supposedly complete short tip paint an ellipsis.
   const metaWidth = textMeasure(`400 11px ${fontFamily}`, measureMeta)(String(summary).replace(/[0-9]/g, '0'))
     + 2 + metaDigits * .4;
-  const more = String(meta) !== String(summary) || titleWidth > maxWidth - 27 || metaWidth > maxWidth - 27;
-  const actionWidth = Math.max(28, Math.ceil(textMeasure(`500 10px ${fontFamily}`)(moreLabel)) + 10);
-  const width = Math.max(titleWidth + 27, metaWidth + 27 + (more ? actionWidth + 6 : 0));
+  // Match the detail surface: 12px side padding, two 1px borders, a 5px dot
+  // and an 8px column gap. The action keeps its own intrinsic hit area.
+  const contentGutter = 12 * 2 + 2 + 5 + 8;
+  const more = String(meta) !== String(summary) || titleWidth > maxWidth - contentGutter || metaWidth > maxWidth - contentGutter;
+  const actionWidth = Math.max(28, Math.ceil(textMeasure(`400 11px ${fontFamily}`)(moreLabel)) + 10);
+  const width = Math.max(titleWidth + contentGutter, metaWidth + contentGutter + (more ? actionWidth + 8 : 0));
   return { mode: 'stacked', width: Math.max(60, Math.min(maxWidth, Math.ceil(width))), maxWidth,
-    expandedWidth: maxWidth, more, actionWidth, slotHeight: 44 };
+    expandedWidth: maxWidth, more, actionWidth, slotHeight: 66 };
 
 }
 

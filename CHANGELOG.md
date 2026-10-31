@@ -15,8 +15,10 @@
 
 - Tips now give the title its own first row instead of letting metadata squeeze it into
   a narrow single-line track. Metadata and More occupy the second row; More uses its actual
-  text width and cannot break into letters. The compact content is 42px in a stable 44px
-  slot, with explicit full text still expanding in page flow.
+  text width and cannot break into letters. A neutral, faintly bordered surface now uses
+  6px vertical/12px horizontal padding, a 4px row gap and 6px corners. The 58px content has
+  a stable 66px slot including 8px of lower clearance. More is neutral until hover/focus,
+  with its 24px hit height preserved. Full text expands in page flow with the same padding.
 - Desk uses only the sliding control; its name appears on hover or keyboard focus and
   remains available to screen readers. Checked state follows the actual view and saved
   preference through Hide Desk, reload, fold/expand and replacement controls. Click,
@@ -56,7 +58,7 @@
   tasks and events remain outlined. The spiral is the only time geometry; the rejected
   outer track and its status badges are removed. Explicit urgency remains authoritative.
 - Short tips fit their content up to 280px, without a redundant full-text action.
-  The title-first closed slot is 44px and surrounding spacing remains tight. Longer content
+  The title-first closed slot is 66px with balanced padding and lower clearance. Longer content
   can still explicitly expand in page flow, without internal scrollbars or overlays.
 
 - Every titled source record remains in the diagram or the pending queue. Completed
@@ -71,7 +73,7 @@
   whole-task scheduler, Actual and completed-estimate allocation remain intact.
 - Details fit a centered, at-most-280px area. Full text explicitly expands in
   page flow without an internal scrollbar and stays pinned while reading. The closed
-  44px slot is invisible when idle. The rejected below-chart completion list, its reserved
+  66px slot is invisible when idle. The rejected below-chart completion list, its reserved
   gap, and wheel-based text reading are removed.
 - Narrow charts keep side labels, readable major hour ticks and a compact center date.
   Hour sizes are applied directly to SVG text instead of relying on a CSS variable that
