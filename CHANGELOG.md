@@ -4,6 +4,10 @@
 
 ### Added
 
+- Make the center clock a quieter readout: cap its size at 16px, use regular weight and
+  theme-aware secondary text color, and inherit the shared UI font with tabular numerals.
+  Narrow views still adapt. The date, clock anchor, needle and chart geometry are unchanged.
+
 - Remove the redundant `Current time` caption below the center clock. The date, digital
   time, current-time needle, accessible labels and chart geometry remain unchanged.
 

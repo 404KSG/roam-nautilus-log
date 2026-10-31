@@ -74,8 +74,10 @@ and dark-theme text follow these color families without changing their meanings.
 
 The **continuous shell** draws each timed record as one surface. Hour marks remain as edge
 ticks rather than lines that visually split a task. A fixed second label row shows duration,
-Actual or Estimate; compact views shorten this metadata. The active center time uses a native
-monospace font. The curves retain the shrinking-radius model and real time boundaries, but
+Actual or Estimate; compact views shorten this metadata. The center clock uses the shared UI
+font with tabular numerals, regular weight and secondary text color. Its size is capped at 16px
+and still adapts to narrow views; the date, clock position and needle are unchanged.
+The curves retain the shrinking-radius model and real time boundaries, but
 are not pixel-area-equivalent to the earlier stepped shape.
 
 Hover or keyboard focus emphasizes the surface, its leader and its colored title as one unit.
