@@ -2597,6 +2597,33 @@ button.nautilus-log-timing__plan-heading:focus-visible {
   .nautilus-log-timing__energy-planned-value.is-confirming { animation: none; }
 }
 
+/* Native-style Help is a transient body-mounted reader, not another chart rail. */
+.nautilus-log-help-layer { position: fixed; z-index: 10080; max-width: calc(100vw - 24px); }
+.nautilus-log-help-popover { box-sizing: border-box; border: 0; max-width: 100%; overflow: auto; border-radius: 3px; background: #fff; color: inherit; font-family: inherit; font-size: 14px; font-weight: 400; line-height: 1.45; box-shadow: 0 0 0 1px rgba(16,22,26,.15), 0 2px 4px rgba(16,22,26,.2), 0 4px 12px rgba(16,22,26,.12); overflow-wrap: anywhere; }
+.nautilus-log-help-popover > .bp3-popover-content { padding: 12px; border-radius: inherit; background: inherit; color: inherit; }
+.nautilus-log-help-popover .nautilus-log-help-title { margin: 0 0 8px; color: inherit; font-size: 16px; font-weight: 600; line-height: 1.4; }
+.nautilus-log-help-intro { margin: 0 0 8px; }
+.nautilus-log-help-setup { margin: 0 0 10px; color: #5c7080; font-size: 12px; font-variant-numeric: tabular-nums; }
+.nautilus-log-help-rows { margin: 0; }
+.nautilus-log-help-row + .nautilus-log-help-row { margin-top: 7px; }
+.nautilus-log-help-row dt, .nautilus-log-help-row dd { display: inline; margin: 0; }
+.nautilus-log-help-row dt { font-weight: 600; }
+.nautilus-log-help-row dt::after { content: ': '; }
+.nautilus-log-help-settings { margin: 12px 0 8px; font-size: 13px; }
+.nautilus-log-help-guide { color: #106ba3; text-decoration: underline; }
+.nautilus-log-help-popover:focus-visible, .nautilus-log-help-guide:focus-visible { outline: 2px solid #137cbd; outline-offset: 2px; }
+:where(.bp3-dark,.rm-dark-theme,.dark) .nautilus-log-help-popover { background: #293742; }
+:where(.bp3-dark,.rm-dark-theme,.dark) .nautilus-log-help-setup { color: #a7b6c2; }
+:where(.bp3-dark,.rm-dark-theme,.dark) .nautilus-log-help-guide { color: #8ec0de; }
+.nautilus-log-help-btn[aria-expanded="true"] { background: var(--nautilus-log-hover) !important; }
+.nautilus-log-help-btn[aria-expanded="true"]::after, .nautilus-log-help-btn[aria-expanded="true"]::before { display: none !important; }
+@media (forced-colors: active) {
+  .nautilus-log-help-popover { background: Canvas !important; color: CanvasText; box-shadow: none; outline: 1px solid CanvasText; }
+  .nautilus-log-help-setup { color: CanvasText !important; }
+  .nautilus-log-help-guide { color: LinkText !important; }
+}
+@media print { .nautilus-log-help-layer { display: none !important; } }
+
 /* Desk deliberately uses Roam's rm-desk-* and Blueprint styles. Only embedding,
    scoped outline hiding, narrow-container safety, and write state belong here. */
 /* Opt-in diagnostic report only; fixed positioning never changes page flow. */

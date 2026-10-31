@@ -4,6 +4,15 @@
 
 ### Added
 
+- Add a native-style Help question mark to the left of the Desk switch. Its read-only
+  popover explains capacity labels (including the full-day denominator for `left`),
+  resolved chart hours/default duration, core actions and completion styles, with a
+  localized full-guide link. Outside click and owned Escape dismiss it; settings,
+  folding, navigation, anchor removal and unload release its transient resources.
+- Remove the Eye button and its completed-visibility state. Completed records, labels,
+  estimated outlines and elapsed texture remain visible; Desk still shows unfinished
+  tasks. Scheduling, occupied intervals and source data are unchanged.
+
 - Remove the duplicate close X from the Desk overview toolbar. Search and New note
   remain, with New note at the trailing edge and cards next in the Tab order. The
   chart's Desk switch still hides the view; the focus dialog's Close, backdrop and
@@ -81,7 +90,7 @@
   Unfinished uses a yellow disclosure arrow and a readable yellow-family heading;
   counts and duration remain muted, task rows use blue, and Unscheduled remains neutral.
 - Source-sized frames stay stable for ordinary motion of the same diagram members, hover
-  and Eye. Genuine queue membership changes (including before END), day relation changes
+  and Help. Genuine queue membership changes (including before END), day relation changes
   and source edits may relayout. Queue expansion does not resize the SVG. No empty duplicate
   overflow band or production host-padding compensation is introduced.
 - Native Desk masonry is retained, not rebuilt. Additional geometry checks verify that

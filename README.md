@@ -56,7 +56,9 @@ fill suitable gaps from the current moment. Tasks that cannot fit appear in
 ```
 
 Durations support `30m`, `30min`, `1h`, and `1h30m`. Untimed tasks use the
-configured default.
+configured default. Click **?**, to the left of Desk, for the current chart settings,
+a plain explanation of `left`, and a quick feature guide. Completed chart records
+remain visible; the former Eye filter has been removed.
 
 ## Optional Google Calendar sync
 

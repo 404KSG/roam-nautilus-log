@@ -138,7 +138,7 @@ def compact_record(s):
     }
 
 
-def coverage(page, hidden=False):
+def coverage(page):
     s = state(page); expected = page.evaluate('() => __chartHarness.expectedSourceUids()')
     represented = [r['uid'] for r in s['records']] + [r['uid'] for r in s['queueItems']]
     assert len(represented) == len(expected) == len(set(represented))
@@ -155,7 +155,7 @@ def coverage(page, hidden=False):
         assert not page.locator('.nautilus-log-pending-queue').count()
     for record in s['records']:
         assert record['marks'] > 0 and record['label'].strip(), record
-        if not hidden: assert record['visible'], record
+        assert record['visible'], record
         if record['kind'] != 'timed': assert record['timeClaim'] == 'none' and record['markerPath'], record
     scene = page.evaluate('() => __chartHarness.scene()')
     by_uid = {r['uid']: r for r in s['records']}
@@ -275,11 +275,12 @@ def contrast(page):
         focus:paint('.nautilus-log-available-slot:focus .nautilus-log-available-slot-hit','stroke'),
         now:paint('.nautilus-log-now-needle-line','stroke'),
         clock:paint('.nautilus-log-center-now','fill'),
-        control:paint('.nautilus-log-toggle-btn svg','stroke')};
+        control:paint('.nautilus-log-collapse-btn svg','stroke'),
+        helpControl:paint('.nautilus-log-help-btn svg path','fill')};
     }''')
     scores = {k: ratio(v, paints['background']) for k, v in paints.items() if k != 'background'}
     assert min(scores[k] for k in ('task', 'event', 'completed', 'clock')) >= 4.5, scores
-    assert min(scores[k] for k in ('estimateOutline', 'focus', 'now', 'control')) >= 3, scores
+    assert min(scores[k] for k in ('estimateOutline', 'focus', 'now', 'control', 'helpControl')) >= 3, scores
     return {'paint': paints, 'ratios': scores}
 
 
@@ -349,13 +350,12 @@ def completion_connections_contract(page):
         assert page.locator('[data-task-uid="connection-event-0"] .nautilus-log-record-title').evaluate('e=>getComputedStyle(e).opacity') == '1'
         assert_rect_equal(before, state(page), 'estimate hover cannot resize the frame')
         page.screenshot(path=str(OUT/'screenshots'/f'connections-{context}-{width}-{language}.png'), full_page=True)
-        hide = 'Hide completed on chart' if language == 'en' else '在海螺中隐藏已完成'
-        show = 'Show completed on chart' if language == 'en' else '在海螺中显示已完成'
-        page.get_by_role('button', name=hide, exact=True).click(); settle_renderer(page)
-        assert not page.locator('[data-time-claim="estimated-allocation"]').first.is_visible()
-        assert not page.locator('.nautilus-log-estimated-outline').first.is_visible()
-        assert_rect_equal(before, state(page), 'eye visibility preserves the source frame')
-        page.get_by_role('button', name=show, exact=True).click(); settle_renderer(page)
+        page.locator('.nautilus-log-help-btn').click(); settle_renderer(page)
+        assert page.locator('.nautilus-log-help-popover').is_visible()
+        assert page.locator('[data-time-claim="estimated-allocation"]').first.is_visible()
+        assert page.locator('.nautilus-log-estimated-outline').first.is_visible()
+        assert_rect_equal(before, state(page), 'Help preserves the source frame and completed records')
+        page.keyboard.press('Escape'); settle_renderer(page)
         assert page.locator('[data-time-claim="estimated-allocation"]').first.is_visible()
         page.evaluate('''()=>{for(let i=0;i<7;i++)__chartHarness.updateChild(`connection-done-${i}`,`{{[[DONE]]}} Recorded task ${i} 30m d8`)}''')
         page.wait_for_function('document.querySelectorAll("[data-time-claim=estimated-allocation]").length===0')
@@ -366,7 +366,7 @@ def completion_connections_contract(page):
         assert page.locator('[data-estimate-outline-for="connection-done-0"] path').count() == 1
         coverage(page)
         reports[f'{context}-{width}-{language}'] = {'allocations': proof, 'overlap': overlap,
-            'eyeHidesSlicesAndOutlines': True, 'localStampReplacesEstimatePlacement': True, 'sourceTabOrderPreserved': True}
+            'completedSlicesAndOutlinesAlwaysVisible': True, 'localStampReplacesEstimatePlacement': True, 'sourceTabOrderPreserved': True}
     return reports
 
 
@@ -497,11 +497,10 @@ def four_corrections_contract(page):
         assert not page.locator('svg [data-task-uid^="connection-pending-"]').count()
         capacity = page.evaluate('()=>__chartHarness.traces().filter(t=>t.kind==="capacity").at(-1).result')
         assert capacity['demandMinutes'] == 0 and capacity['overloadMinutes'] == 0 and capacity['unplacedMinutes'] == 0, capacity
-        hidden = 'Hide completed on chart' if lang == 'en' else '在海螺中隐藏已完成'
-        shown = 'Show completed on chart' if lang == 'en' else '在海螺中显示已完成'
-        page.get_by_role('button', name=hidden, exact=True).click(); coverage(page, hidden=True)
+        page.locator('.nautilus-log-help-btn').click(); coverage(page)
         assert page.locator('.nautilus-log-pending-queue').is_visible()
-        page.get_by_role('button', name=shown, exact=True).click(); settle_renderer(page)
+        assert not state(page)['queueOpen']
+        page.keyboard.press('Escape'); settle_renderer(page)
         select(page, 'connection-done-0'); before = coverage(page)
         page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/f'corrections-{context}-{width}-{lang}.png'))
         page.locator('.nautilus-log-pending-queue > summary').click(); settle_renderer(page); opened = coverage(page)
@@ -518,7 +517,7 @@ def four_corrections_contract(page):
         page.evaluate('()=>__chartHarness.updateChild("connection-pending-1","{{[[DONE]]}} Ship 45m")')
         page.wait_for_function('!document.querySelector(".nautilus-log-pending-queue")'); coverage(page)
         reports[f'{context}-{width}-{lang}'] = {'normalTip': normal, 'hostFontPressure': pressure, 'colors': colors,
-          'pastCapacity': capacity, 'pastQueueMinutes': 90, 'fullTitlesAndNavigation': True, 'eyeIndependent': True, 'completedRejoinsDiagram': True}
+          'pastCapacity': capacity, 'pastQueueMinutes': 90, 'fullTitlesAndNavigation': True, 'helpPreservesQueue': True, 'completedRejoinsDiagram': True}
     load(page, 'sparse'); set_clock(page, '2026-10-29T20:30:00'); coverage(page)
     assert not state(page)['pendingQueue']
     set_clock(page, '2026-10-29T20:31:00'); coverage(page)
@@ -874,13 +873,14 @@ def past_gap_inspection_contract(page):
     page.wait_for_function('n=>__chartHarness.traces().filter(t=>t.kind==="locate").length===n+1', arg=before_locates)
     dismissed()
 
-    # Hidden completions/estimates still occupy their original intervals.
+    # Completed records/estimates remain visible and keep their occupied intervals.
     load(page, 'untimed', 'main', 720)
     set_clock(page, '2026-10-30T08:01:00')
     assert page.locator('[data-time-claim="estimated-allocation"]').count() > 0
     gap_keys = page.locator('.nautilus-log-past-gap').evaluate_all('nodes=>nodes.map(n=>n.dataset.pastGapKey)')
-    page.get_by_role('button', name='Hide completed on chart', exact=True).click()
-    settle_renderer(page)
+    page.locator('.nautilus-log-help-btn').click(); settle_renderer(page)
+    assert page.locator('[data-time-claim="estimated-allocation"]').first.is_visible()
+    page.keyboard.press('Escape'); settle_renderer(page)
     assert page.locator('.nautilus-log-past-gap').evaluate_all('nodes=>nodes.map(n=>n.dataset.pastGapKey)') == gap_keys
     assert state(page)['writes'] == 0
 
@@ -1019,11 +1019,12 @@ def past_record_texture_contract(page):
     settled_paint()
     page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/'past-texture-completions.png'))
     gap_keys = page.locator('.nautilus-log-past-gap').evaluate_all('nodes=>nodes.map(n=>n.dataset.pastGapKey)')
-    page.get_by_role('button', name='Hide completed on chart', exact=True).click(); settle_renderer(page)
-    assert page.locator('svg .nautilus-log-record--done .nautilus-log-past-record-texture').evaluate_all('nodes=>nodes.length>0&&nodes.every(e=>getComputedStyle(e).visibility==="hidden")')
+    page.locator('.nautilus-log-help-btn').click(); settle_renderer(page)
+    assert page.locator('svg .nautilus-log-record--done .nautilus-log-past-record-texture').evaluate_all('nodes=>nodes.length>0&&nodes.every(e=>getComputedStyle(e).visibility==="visible")')
+    page.keyboard.press('Escape'); settle_renderer(page)
     assert page.locator('.nautilus-log-past-gap').evaluate_all('nodes=>nodes.map(n=>n.dataset.pastGapKey)') == gap_keys
     assert state(page)['writes'] == 0
-    report['completionAndHiddenOccupancy'] = True
+    report['completionAndPermanentOccupancy'] = True
 
     load(page, 'mixed', 'main', 720)
     set_clock(page, '2026-10-29T04:59:00')
@@ -1268,12 +1269,12 @@ def lifecycle(page):
     page.locator('[data-task-uid="untimed-reference"]').press('Shift+Enter')
     assert page.evaluate('()=>__chartHarness.traces().filter(t=>t.kind==="locate").at(-1)') == {'kind': 'locate', 'uid': 'untimed-reference', 'sidebar': True}
     header = page.locator('.nautilus-log-header-copy').inner_text()
-    page.get_by_role('button', name='Hide completed on chart', exact=True).click()
-    settle_renderer(page); hidden = coverage(page, True)
-    assert [r['uid'] for r in hidden['records'] if r['visible']] == ['pending-next']
+    page.locator('.nautilus-log-help-btn').click()
+    settle_renderer(page); helped = coverage(page)
+    assert all(r['visible'] for r in helped['records'])
     assert page.locator('.nautilus-log-header-copy').inner_text() == header
-    assert_rect_equal(start, hidden, 'eye toggle')
-    page.get_by_role('button', name='Show completed on chart', exact=True).click(); settle_renderer(page)
+    assert_rect_equal(start, helped, 'Help leaves completed history and the source frame intact')
+    page.keyboard.press('Escape'); settle_renderer(page)
     page.evaluate('()=>__chartHarness.updateChild("pending-next","{{[[DONE]]}} Draft next chapter 30m")')
     page.wait_for_function('document.querySelector("[data-task-uid=pending-next]").dataset.timeClaim === "estimated-allocation"')
     settle_renderer(page); done = coverage(page)
@@ -1315,7 +1316,7 @@ def lifecycle(page):
     assert page.locator('.nautilus-log-detail-region').get_attribute('data-nautilus-detail') == 'idle'
     page.evaluate('()=>__chartHarness.unmount()'); settle_renderer(page)
     assert state(page)['activeClockIntervals'] == 0 and not page.locator('svg.nautilus-log-svg').count()
-    return {'before': compact_record(start), 'hidden': compact_record(hidden), 'done': compact_record(done), 'actual': compact_record(actual), 'navigation': True, 'foldAndUnload': True, 'explicitSourceEditsMayReflow': True}
+    return {'before': compact_record(start), 'withHelp': compact_record(helped), 'done': compact_record(done), 'actual': compact_record(actual), 'navigation': True, 'foldAndUnload': True, 'explicitSourceEditsMayReflow': True}
 
 
 def full_text(page, context, width):

@@ -1367,9 +1367,8 @@
 (defn estimated-completion? [event]
   (contains? #{"estimated-allocation" "completion-estimate"} (:time-claim event)))
 
-(defn estimated-outline-component [records center settings active-uid show-done?]
-  [:g {:class "nautilus-log-estimated-outlines" :aria-hidden "true" :pointer-events "none"
-       :visibility (when-not show-done? "hidden")}
+(defn estimated-outline-component [records center settings active-uid]
+  [:g {:class "nautilus-log-estimated-outlines" :aria-hidden "true" :pointer-events "none"}
    (for [record records
          :when (estimated-completion? (:event record))]
      ^{:key (:uid record)}
@@ -1378,11 +1377,10 @@
       [:path {:d (shell-path (get-in record [:event :start]) (get-in record [:event :end]) snail-inner-radius center settings)
               :vector-effect "non-scaling-stroke"}]])])
 
-(defn chart-scene-record [record index frame settings timeline-state show-done? hover-info-state copy conflicts active-uid material-id]
+(defn chart-scene-record [record index frame settings timeline-state hover-info-state copy conflicts active-uid material-id]
   (let [event (:event record)
         timed? (= "timed" (:kind record))
         uid (:uid event)
-        hidden? (and (:done event) (not show-done?))
         actionable? (boolean (:todo event))
         info (chart-record-info event copy)
         center {:center-x (get-in frame [:center :x]) :center-y (get-in frame [:center :y])}
@@ -1414,9 +1412,8 @@
                 :data-visual-phase (:visual-phase params)
                 :data-category (if (:meeting event) "event" "task")
                 :style (when (:bg-color event) {"--nautilus-log-record-accent" (update-opacity-str (:bg-color event) "1")})
-                :visibility (when hidden? "hidden") :aria-hidden hidden?
                 :aria-current (when (or (:current? params) (:current-event? params)) "true")
-                :role (if actionable? "link" "img") :tab-index (if hidden? -1 0) :focusable "true"
+                :role (if actionable? "link" "img") :tab-index 0 :focusable "true"
                 :aria-label (:aria-label info)
                 :on-mouse-enter #(show-hover-tooltip! hover-info-state :pointer info %)
                 :on-focus #(show-hover-tooltip! hover-info-state :focus info %)}
@@ -1472,7 +1469,7 @@
       [:stop {:offset "15%" :stop-color (str "var(--nautilus-log-shell-" kind "-inner)")}]
       [:stop {:offset "100%" :stop-color (str "var(--nautilus-log-shell-" kind "-outer)")}]])])
 
-(defn show-events [events-state show-done-atom? _now-time-atom page-title container-width settings copy _compact-open-state hover-info-state _block-uid timeline-state]
+(defn show-events [events-state _now-time-atom page-title container-width settings copy _compact-open-state hover-info-state _block-uid timeline-state]
   (r/with-let [material-id (str "nautilus-shell-" (random-uuid))]
    (let [[events done-todos _untimed-dones source-events] events-state
         time-radius (apply max (map outer-radius-at (range (count snail-blueprint-outer-radiuses))))
@@ -1493,8 +1490,7 @@
         transform (str "translate(" (:center-x center) " " (:center-y center) ") scale(" scale
                        ") translate(" (- (:center-x center)) " " (- (:center-y center)) ")")
         records (:records scene)
-        shown-records (filter #(or @show-done-atom? (not (get-in % [:event :done]))) records)
-        all-events (mapv :event shown-records)
+        all-events (mapv :event records)
         timed-events (mapv :event (filter #(= "timed" (:kind %)) records))
         elapsed-page? (:showElapsed timeline-state)
         interactive? (:interactive timeline-state)
@@ -1548,9 +1544,9 @@
           [past-gap-hit-component past-gaps snail-inner-radius center settings hover-info-state copy active-uid])]
        (for [[index record] (map-indexed vector records)]
          ^{:key (:uid record)}
-         [chart-scene-record record index frame settings timeline-state @show-done-atom? hover-info-state copy conflicts active-uid material-id])
+         [chart-scene-record record index frame settings timeline-state hover-info-state copy conflicts active-uid material-id])
        [:g {:transform transform}
-        [estimated-outline-component records center settings active-uid @show-done-atom?]
+        [estimated-outline-component records center settings active-uid]
         [snail-blueprint-component snail-template-color snail-inner-radius center settings elapsed-page? timeline-minute (:hourStep frame) scale]
         (when (:showAvailableSlots timeline-state)
           [available-slot-component available-slots snail-inner-radius center settings hover-info-state copy])
@@ -1623,23 +1619,29 @@
     ;; Minute-of-day alone cannot wake a chart resumed at the same time tomorrow.
     (when epoch-state (reset! epoch-state (js/Math.floor (/ (.getTime now) 60000))))))
 
-(defn switch-done-visibility-button [show-done-state copy]
-  (let [label (if @show-done-state (:hideDone copy) (:showDone copy))]
-    [:button
-     {:type "button"
-      :on-click #(swap! show-done-state not)
-      :class "nautilus-log-toggle-btn"
-      :data-nautilus-tooltip label
-      :aria-pressed @show-done-state
-      :aria-description (:doneScope copy)
-      :aria-label label}
-     (if @show-done-state
-       [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}
-        [:path {:d "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"}]
-        [:circle {:cx "12" :cy "12" :r "3"}]]
-       [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}
-        [:path {:d "M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"}]
-        [:line {:x1 "1" :y1 "1" :x2 "23" :y2 "23"}]])]))
+(defn help-button [settings copy]
+  (r/with-let [button-node (atom nil)
+               close-help! (fn [node]
+                             (when-let [close-help (some-> js/window .-nautilusLogExtensionData .-closeChartHelp)]
+                               (.call close-help nil node)))
+               button-ref (fn [node]
+                            (when (and @button-node (not (identical? node @button-node)))
+                              (close-help! @button-node))
+                            (reset! button-node node))]
+    [:button {:type "button" :class "nautilus-log-toggle-btn nautilus-log-help-btn"
+              :ref button-ref :aria-label (:help copy) :data-nautilus-tooltip (:helpHint copy)
+              :aria-haspopup "dialog" :aria-expanded "false"
+              :on-click (fn [event]
+                          (.stopPropagation event)
+                          (when-let [toggle-help (some-> js/window .-nautilusLogExtensionData .-toggleChartHelp)]
+                            (.call toggle-help nil
+                                   (clj->js {:anchor (.-currentTarget event) :language (:language settings)
+                                             :startMinutes (:workday-start settings) :endMinutes (:workday-end settings)
+                                             :defaultDuration (:default-duration settings)}))))}
+     ;; Blueprint's native 16px help glyph; reuse geometry, not a client bundle or font.
+     [:svg {:width "18" :height "18" :viewBox "0 0 16 16" :fill "currentColor" :aria-hidden "true" :data-icon "help"}
+      [:path {:d "M8 0C3.58 0 0 3.58 0 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm1 13H7v-2h2v2zm1.93-6.52c-.14.32-.35.64-.62.97L9.25 8.83c-.12.15-.24.29-.28.42-.04.13-.09.3-.09.52V10H7.12V8.88s.05-.51.21-.71L8.4 6.73c.22-.26.35-.49.44-.68.09-.19.12-.38.12-.58 0-.3-.1-.55-.28-.75-.18-.19-.44-.28-.76-.28-.33 0-.59.1-.78.29-.19.19-.33.46-.4.81-.03.11-.1.15-.2.14l-1.7-.25c-.12-.01-.16-.08-.14-.19.12-.82.46-1.47 1.03-1.94.57-.48 1.32-.72 2.25-.72.47 0 .9.07 1.29.22s.72.34 1 .59c.28.25.49.55.65.89.15.35.22.72.22 1.12s-.07.75-.21 1.08z"}]]]
+    (finally (when @button-node (close-help! @button-node)))))
 
 (defn plan-writes-allowed? [plan-status-state]
   (let [status @plan-status-state]
@@ -1900,8 +1902,7 @@
                   :burningAvailable "Flexible time is elapsing" :burningEvents "Event time is elapsing" :now "Current time"}
        :allocation {:planned "planned" :free "free" :over "over" :noSlot "no slot" :left "left"}
        :legend {:urgent "Urgent" :event "Event" :task "Task"}
-       :controls {:hideDone "Hide completed on chart" :showDone "Show completed on chart"
-                  :doneScope "Chart only. Desk shows unfinished tasks."
+       :controls {:help "Nautilus Log help" :helpHint "Help"
                   :desk "Open Desk"
                   :calendar "Sync Google Calendar" :calendarForce "⌥ Click to restore Google-managed items"
                   :calendarSetup "Connect Google Calendar and sync this date"
@@ -2062,10 +2063,10 @@
            [:span (:description event)]
            [:span {:class "nautilus-log-warning-message"} (localized-warning (:warning event) copy)]])]])))
 
-(defn log-controls [show-done-state settings collapsed-state block-uid page-title-val render-context settled-uids tidy-state calendar-state copy show-debug-button? plan-status-state]
+(defn log-controls [settings collapsed-state block-uid page-title-val render-context settled-uids tidy-state calendar-state copy show-debug-button? plan-status-state]
   [:div {:class "nautilus-log-controls-top"}
+   [help-button settings (:controls copy)]
    [desk-button block-uid page-title-val (:controls copy)]
-   [switch-done-visibility-button show-done-state (:controls copy)]
    [tidy-button block-uid settled-uids tidy-state settings (:controls copy) plan-status-state]
    [calendar-button block-uid page-title-val calendar-state settings (:controls copy) plan-status-state]
    [collapse-button collapsed-state block-uid render-context (:controls copy)]
@@ -2226,7 +2227,6 @@
                                    [(add-start-after (:pendingEvents history))
                                     (:timedDoneEvents history) (:untimedDoneEvents history)
                                     (:completedUids history) filtered]))))
-               show-done-state (r/atom true)
                tidy-state (r/atom false)
                calendar-state (r/atom {:busy false
                                        :hovered false
@@ -2306,19 +2306,19 @@
                    :data-nautilus-plan-status (or (:status plan-status) "unbound")}
              (if @collapsed-state
                (do (clear-detail-state! hover-info-state)
-                   [log-controls show-done-state settings collapsed-state block-uid page-title-val @render-context-state settled-uids tidy-state calendar-state copy show-debug-button? plan-status-state])
+                   [log-controls settings collapsed-state block-uid page-title-val @render-context-state settled-uids tidy-state calendar-state copy show-debug-button? plan-status-state])
                [:div {:class "nautilus-log-shell" :ref container-ref}
                 [:header {:class (str "nautilus-log-header"
                                      (when @compact-state " nautilus-log-header--compact"))}
                  [:div {:class "nautilus-log-header-copy"}
                   [capacity-metrics-component capacity settings]]
                  [:div {:class "nautilus-log-header-actions"}
-                  [log-controls show-done-state settings collapsed-state block-uid page-title-val @render-context-state settled-uids tidy-state calendar-state copy show-debug-button? plan-status-state]
+                  [log-controls settings collapsed-state block-uid page-title-val @render-context-state settled-uids tidy-state calendar-state copy show-debug-button? plan-status-state]
                   [html-legend-component copy]]]
                 (when @compact-state
                   [compact-overview-component capacity settings copy compact-overview-open-state])
                 [:div {:class "nautilus-log-content"}
-                 [show-events events-state show-done-state now-time-atom page-title-val @presentation-width-state settings copy compact-list-open-state hover-info-state block-uid timeline-state]
+                 [show-events events-state now-time-atom page-title-val @presentation-width-state settings copy compact-list-open-state hover-info-state block-uid timeline-state]
                  [:div {:class "nautilus-log-status-rail"}
                   [:div {:class "nautilus-log-status-slot"} [schedule-warning-panel text-events copy]]]]])
              ;; Keep the host mounted while folded so its scoped outline claim

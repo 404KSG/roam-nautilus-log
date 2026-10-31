@@ -8,6 +8,8 @@ colors and native controls remain; completion and hover are part of the same des
 
 - Roomy tips show their full current content, wrapping rather than using ellipses. Only a
   compressed local width may use a compact preview and More for clipped text.
+- Help is a native-style question mark to the left of Desk. It opens a transient
+  quick guide; the Eye control and completed-visibility filter are removed.
 - Desk shows only its slider, with a hover/focus label.
 - Categories are red urgency, yellow events and blue tasks. Unfinished uses a yellow
   disclosure arrow and readable yellow-family heading.
@@ -89,7 +91,7 @@ intersection on `showElapsed` days. Future/undated charts and unfinished queues 
 
 The decorative path is pointer-inert and hidden from accessibility APIs. It inherits the
 record's visibility and is painted before labels, estimate outlines, grid and the now needle.
-Eye hides the completion texture with its record without changing occupied-gap calculations.
+Completed records and their texture remain visible and retain their occupied intervals.
 Per-chart resource IDs must not collide when the same plan is mounted more than once.
 
 Renderer checks cover partial/complete events, unchanged future-fill interior pixels, transparent
@@ -116,8 +118,8 @@ module. It partitions the existing source records; it does not create or modify 
 
 The queue is below the tip and above Desk. It is absent when empty and collapsed by default.
 Opening it exposes full titles and estimates in source order, without an internal scrollbar.
-Click/Enter locates the original local UID; Shift opens the sidebar. Eye affects completed
-chart records only, not the queue. Changing a task to DONE moves it back to completed-history
+Click/Enter locates the original local UID; Shift opens the sidebar. Help does not change
+queue membership or disclosure. Changing a task to DONE moves it back to completed-history
 handling; DONE estimate overflow never mixes with pending work.
 
 The pending queue and native Desk serve different purposes: the queue explains what is not
@@ -141,7 +143,7 @@ The existing label hit area is retained. Only the title ink gets the subtle hove
 a separate anchor joins the label and its continuous surface.
 
 The correct stability boundary is **unchanged diagram membership**. Ordinary minute motion,
-hover and Eye preserve the frame. A task can cease to fit before END: for example, a 45-minute
+hover and opening Help preserve the SVG frame. A task can cease to fit before END: for example, a 45-minute
 task fits at 19:15 with END 20:00, but not at 19:16. A truthful queue must change then. Queue
 membership, day relation or source edits may therefore reflow the diagram. Queue open/close
 only changes content below it, not SVG geometry. Tests must not freeze stale placement to
@@ -182,7 +184,7 @@ time geometry do not. Idle tips reserve only the compact slot. This content-driv
 is intentional under the latest completeness request; do not reintroduce a fixed-height
 clip or a large empty reservation. Explicit expansion also remains in page flow without
 internal scrolling. Pointer, focus and pinned expansion are separate owners; changed or
-removed records, Eye, folding and unload invalidate stale detail. Less keeps the inspected
+removed records, folding and unload invalidate stale detail. Less keeps the inspected
 record as the focused preview and clears pointer state accumulated behind the expanded panel;
 it cannot momentarily switch to a different record and remove its own focused button.
 Nothing covers Desk.
@@ -193,6 +195,31 @@ hover/focus tooltip supplies the visual label without wrapping. The real Desk bi
 checked state through registration, start, close, preferences and remounts. Keyboard focus
 is visible; Space/Enter, existing Alt navigation, focus return and reduced motion are retained.
 No second React state or new preference is introduced.
+
+## Help instead of completion filtering
+
+The user's Help request supersedes the earlier proposal to explain capacity through
+segment Tips. Keep Tips unchanged. Place the native Blueprint help glyph before Desk;
+remove the Eye button, its local atom and visibility branches, not merely its icon.
+All existing completed records, labels, estimated outlines and elapsed texture stay visible.
+The existing folded state remains expand-only, and folding dismisses an open Help card.
+
+`src/chart-help.js` owns a read-only body-mounted popover. It receives resolved hours,
+default duration and language from the renderer, never task text or graph data. English is
+the default; explicit Chinese uses localized copy. Explain remaining/full-day budgets,
+unfinished Planned demand, the full-day denominator of `left`, whole-task source order,
+Desk/Tidy and completion provenance. Tidy's settled-first behavior must match the actual
+allocator, not a remembered description. Point to the existing settings and a revision-bound
+full guide; do not introduce a second settings editor or saved Help preference.
+
+Use native typography and a restrained 360px maximum width with 12px viewport gutters.
+Prefer a complete compact guide; only constrained viewport height requires internal scrolling.
+The popover may cover the chart like the supplied native Desk reference, but it must not
+resize the SVG, alter Desk width or take over the in-flow Tips region. Escape is owned only
+inside Help or its trigger; outside pointer/focus interactions pass through without forced
+focus restoration. Closing with Escape returns focus to the trigger. Settings changes,
+navigation, anchor removal and extension unload release listeners, observers and queued frames.
+Multiple charts share one transient Help owner without sharing their task/editor state.
 
 ## Past-gap inspection and detail names
 
@@ -259,7 +286,7 @@ versus muted counts/totals, blue task rows and a neutral Unscheduled heading. Pr
 
 Assert every source UID appears exactly once across SVG and queue, with no false pending
 history. Cover past demand zero, current/future overflow, a before-END overflow transition,
-undated fallback, overnight carryover, queue navigation and default collapse, Eye independence,
+undated fallback, overnight carryover, queue navigation and default collapse, permanent completion visibility,
 completion moving out of the queue, and full long titles after disclosure. Existing live
 minute, fixed-event, foreground recovery, same-minute next-day and cleanup gates remain.
 
@@ -269,6 +296,10 @@ hover/focus surface emphasis and source-frame stability. Check smooth shoulder c
 bounded control-envelope rounding and unchanged interval/queue data. Pointer tests must hit a genuine point inside a long folded path: its bounding-box
 center can belong to the other turn. Verify SVG containment and browser hit-testing rather
 than forcing clicks through overlapping bounding boxes.
+
+Help checks cover placement before Desk, absent Eye controls, live minute stability,
+English/Chinese settings, native light/dark styling, small viewports, keyboard access,
+outside interaction, native-editor Escape, IME, multiple charts, cleanup and zero graph reads/writes.
 
 Retain real Desk controller/state tests and multi-card masonry geometry, resize, image-load,
 IME, Escape, import/drag, previews, strict Remove and all graph-write guards. Queue testing

@@ -916,16 +916,16 @@ test('Tidy is a stable, reversible direct-child action that does not rewrite sch
   assert.match(component, /M19 14a1 1 0 0 0 1-1v-1a2 2/);
   assert.match(component, /M19 14H5l-1\.973 6\.767/);
   assert.match(component, /m8 22 1-4/);
-  const visibilitySource = component.slice(
-    component.indexOf('(defn switch-done-visibility-button'),
-    component.indexOf('(defn tidy-button')
+  const helpSource = component.slice(
+    component.indexOf('(defn help-button'),
+    component.indexOf('(defn plan-writes-allowed?')
   );
   const collapseSource = component.slice(
     component.indexOf('(defn collapse-button'),
     component.indexOf('(defn switch-debug-button')
   );
-  assert.doesNotMatch(visibilitySource, /:width "16" :height "16"/);
-  assert.match(visibilitySource, /:width "18" :height "18"/);
+  assert.doesNotMatch(helpSource, /:width "16" :height "16"/);
+  assert.match(helpSource, /:width "18" :height "18"/);
   assert.doesNotMatch(collapseSource, /:width "16" :height "16"/);
   assert.match(collapseSource, /:width "18" :height "18"/);
   assert.match(component, /:settledUids settled-uids/);
@@ -963,18 +963,18 @@ test('Log keeps a hover-labeled Desk switch and four quiet icon controls without
   assert.match(css, /\.nautilus-log-toggle-btn\[data-nautilus-tooltip\]:focus-visible::after/);
 });
 
-test('Log puts Desk before visibility, Tidy, Calendar, and collapse', () => {
+test('Log puts Help before Desk, Tidy, Calendar, and collapse', () => {
   const controls = component.slice(
     component.indexOf('(defn log-controls'),
     component.indexOf('(defn render-context-probe'),
   );
+  const help = controls.indexOf('[help-button');
   const desk = controls.indexOf('[desk-button');
-  const visibility = controls.indexOf('[switch-done-visibility-button');
   const tidy = controls.indexOf('[tidy-button');
   const calendar = controls.indexOf('[calendar-button');
   const collapse = controls.indexOf('[collapse-button');
-  assert.ok(desk >= 0 && desk < visibility);
-  assert.ok(visibility < tidy);
+  assert.ok(help >= 0 && help < desk);
+  assert.ok(desk < tidy);
   assert.ok(tidy < calendar);
   assert.ok(calendar < collapse);
 });
@@ -1159,8 +1159,8 @@ test('Log retains a semantic event material and marks real conflicts separately'
   assert.match(component, /meeting-fill-color "var\(--nautilus-log-event-fill\)"/);
   assert.match(component, /log-core-call "overlappingFixedEventUids"/);
   assert.match(component, /nautilus-log-event-conflict/);
-  assert.match(component, /hidden\? \(and \(:done event\) \(not show-done\?\)\)/);
-  assert.match(component, /:visibility \(when hidden\? "hidden"\) :aria-hidden hidden\?/);
+  assert.doesNotMatch(component, /show-done\?|show-done-state|switch-done-visibility-button/);
+  assert.match(component, /all-events \(mapv :event records\)/);
   assert.match(css, /--nautilus-log-event-fill:\s*#[0-9a-f]{6};/i);
   assert.match(css, /\.nautilus-log-event-conflict \.nautilus-log-slice\s*\{[^}]*stroke:\s*var\(--nautilus-log-warning\);[^}]*stroke-dasharray:/s);
 });

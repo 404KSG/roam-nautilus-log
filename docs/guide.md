@@ -77,7 +77,7 @@ Hatching leaves existing fills, gradients and opacity intact. Only the portion b
 current time is striped; the future portion stays plain. Yellow stripes mark elapsed event
 time, not confirmed attendance. Gray stripes do not turn an estimate into Actual. Estimated
 outlines remain dashed above the texture, and labels, the pointer and interactions stay clear.
-Hidden completions still occupy their intervals; they do not become empty gaps.
+Completed records and estimates remain visible and occupy their intervals; they do not become empty gaps.
 
 The **continuous shell** draws each timed record as one surface, with rounded transitions
 through the radius profile. Hour marks remain as edge ticks rather than lines that visually
@@ -117,9 +117,12 @@ Past gaps describe the chart allocation, not proof that time was idle or wasted.
 
 ## Chart controls
 
+- **Help (?):** the question mark to the left of Desk opens a native-style quick guide.
+  It shows this chart's resolved hours and default task duration, explains Available,
+  Events, Planned and `left`, and summarizes scheduling, Desk/Tidy and completion styles.
+  It also points to the main settings and the full guide. Help is read-only, not a second
+  settings editor. Click again, click outside or press Escape inside Help to close it.
 - **Desk switch:** show or hide unfinished-task cards below the chart. Only the slider is visible; hover or keyboard focus shows its Desk label. The thumb slides right and the track turns blue when open. Click, Space or Enter toggles it; the state also follows fold/expand restoration, control remounts and saved preferences.
-- **Eye:** show or hide completed slices, estimate outlines and their connected titles.
-  It defaults to showing them and does not affect the pending queue or Desk, which only shows unfinished tasks.
 - **Calendar:** after Google Calendar reports Connected in Settings, import
   timed busy events and dated Google Tasks for this chart's Daily Note.
   Option/Alt-click force-refreshes only the Google-managed strings.
@@ -133,6 +136,14 @@ Past gaps describe the chart allocation, not proof that time was idle or wasted.
   saved Desk preference is unchanged. Expand restores the spiral and, when Desk
   was selected, its cards.
 
+The Eye button and completed-visibility filter have been removed. Completed slices,
+estimate outlines and their connected titles remain visible; Desk still shows unfinished tasks.
+Unlike the in-flow segment Tips, Help is a temporary button-anchored popover. It does not
+resize the SVG or change Desk width. Short viewports may scroll the Help card so its full
+content and guide link remain reachable. Folding closes Help and retains the existing
+expand-only compact control. Settings changes close the old Help snapshot; reopening shows
+the updated resolved configuration. Help adds no graph reads, writes or saved preference.
+
 Every titled source record remains available either in the diagram or in the pending queue.
 Fixed events, completed history and estimates, and genuinely scheduled tasks keep their
 connected diagram labels. Ordinary titles wrap rather than disappearing when a label
@@ -140,7 +151,7 @@ budget is full. Narrow views retain side labels, major hours and a compact cente
 Timed labels stay on their slice's side.
 
 The frame uses the current diagram members' source titles, status/ranges and local width.
-Ordinary minute motion of the same members, hover and Eye do not resize it. A task entering
+Ordinary minute motion of the same members, hover and opening Help do not resize it. A task entering
 or leaving the pending queue, a change of day relation, or an explicit source edit may
 change the layout. A whole task can cease to fit before END; the queue must reflect that
 change rather than keeping a stale slice. Expanding the queue does not resize the SVG.
@@ -191,8 +202,8 @@ summary; an estimated allocation remains explicitly marked as an estimate. Decor
 gradients do not encode additional time or progress. Metadata, dates and gap explanations keep their own
 colors; forced-color and print modes remain readable. Past gaps show their complete uncovered
 range and duration, not proof of idle or wasted time. Click or Enter/Space pins the details;
-Escape dismisses them. Changed ranges invalidate stale selection; hiding completed items does
-not turn their occupied time into a gap. Record expansion can also pin details and is invalidated
+Escape dismisses them. Changed ranges invalidate stale selection; completed records and
+estimates keep their occupied intervals. Record expansion can also pin details and is invalidated
 by source changes or removal.
 The area does not follow the pointer or cover the plot. Click or Enter on a flexible task's
 mark or label locates its original block; Shift opens it in the sidebar. These actions

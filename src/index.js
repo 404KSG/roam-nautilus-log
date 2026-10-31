@@ -30,6 +30,7 @@ import { createTimingTopbar } from "./timing-topbar";
 import { createPlanWatchBridge } from "./plan-watch";
 import { createRendererPlanSession } from "./renderer-plan-session";
 import { createDeskView } from "./desk-view";
+import { createChartHelp } from "./chart-help";
 import { createDeskActions } from "./desk-actions";
 import { createDeskDiagnosticCommands } from "./desk-diagnostics";
 import { createPlanTidy } from "./tidy-plan";
@@ -102,6 +103,7 @@ let todayPlanLauncher = null;
 let todayPlanCommands = null;
 let planWatchBridge = null;
 let deskView = null;
+let chartHelp = null;
 let deskActions = null;
 let deskDiagnosticCommands = null;
 let planTidy = null;
@@ -806,6 +808,10 @@ async function onload({ extensionAPI }) {
   activeCodeBlockUID = codeBlockUID;
   activeRenderStringCore = renderStringCore;
   calendarPanelState = { action: "", error: "" };
+  chartHelp?.destroy();
+  chartHelp = createChartHelp({
+    revision: typeof __NAUTILUS_SOURCE_REVISION__ === 'string' ? __NAUTILUS_SOURCE_REVISION__ : 'unknown',
+  });
   deskDiagnosticCommands?.destroy();
   deskView?.destroy();
   deskActions?.destroy();
@@ -853,6 +859,8 @@ async function onload({ extensionAPI }) {
     openDesk: (options) => deskView?.open(options),
     registerDeskHost: (options) => deskView?.registerHost(options),
     closeDeskHost: (container) => deskView?.closeForHost(container),
+    toggleChartHelp: (options) => chartHelp?.toggle(options),
+    closeChartHelp: (anchor) => chartHelp?.closeForAnchor(anchor),
     tidyPlan: planTidy.run,
     locatePlanTask: (taskUid, origin, sidebar = false) => (
       sidebar
@@ -961,6 +969,8 @@ function onunload() {
   todayPlanSession?.destroy();
   todayPlanSession = null;
   stopTiming({ closeActive: false });
+  chartHelp?.destroy();
+  chartHelp = null;
   deskDiagnosticCommands?.destroy();
   deskDiagnosticCommands = null;
   deskView?.destroy();

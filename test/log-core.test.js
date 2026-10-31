@@ -640,9 +640,8 @@ test('English UI settings localize all extension-owned status labels', () => {
   assert.equal(uiCopy('zh').capacity.burningEvents, '事件时间正在流逝');
   assert.deepEqual(copy.legend, { urgent: 'Urgent', event: 'Event', task: 'Task', unrecorded: 'Past, no record' });
   assert.deepEqual(copy.controls, {
-    hideDone: 'Hide completed on chart',
-    showDone: 'Show completed on chart',
-    doneScope: 'Chart only. Desk shows unfinished tasks.',
+    help: 'Nautilus Log help',
+    helpHint: 'Help',
     calendar: 'Sync Google Calendar',
     calendarForce: '⌥ Click to restore Google-managed items',
     calendarSetup: 'Connect Google Calendar in Nautilus Log settings',

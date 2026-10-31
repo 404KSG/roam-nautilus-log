@@ -976,9 +976,8 @@ const UI_COPY = {
     },
     legend: { urgent: 'Urgent', event: 'Event', task: 'Task', unrecorded: 'Past, no record' },
     controls: {
-      hideDone: 'Hide completed on chart',
-      showDone: 'Show completed on chart',
-      doneScope: 'Chart only. Desk shows unfinished tasks.',
+      help: 'Nautilus Log help',
+      helpHint: 'Help',
       calendar: 'Sync Google Calendar',
       calendarForce: '⌥ Click to restore Google-managed items',
       calendarSetup: 'Connect Google Calendar in Nautilus Log settings',
@@ -1088,9 +1087,8 @@ const UI_COPY = {
     },
     legend: { urgent: '紧急', event: '事件', task: '任务', unrecorded: '已过无记录' },
     controls: {
-      hideDone: '在海螺中隐藏已完成',
-      showDone: '在海螺中显示已完成',
-      doneScope: '仅影响海螺图。Desk 只显示未完成任务。',
+      help: 'Nautilus Log 帮助',
+      helpHint: '帮助',
       calendar: '同步 Google Calendar',
       calendarForce: '⌥ 点击可恢复 Google 管理的内容',
       calendarSetup: '请先在 Nautilus Log 设置中连接 Google Calendar',

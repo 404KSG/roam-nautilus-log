@@ -1,6 +1,7 @@
 import * as logCore from '../src/log-core.js';
 import * as timingCore from '../src/timing-core.js';
 import { createDeskView } from '../src/desk-view.js';
+import { createChartHelp } from '../src/chart-help.js';
 import { projectPull } from './pull-projection.cjs';
 // This is the dependency-free module re-exported by src/entry-helpers.js;
 // production and the renderer exercise the same sidebar selector contract.
@@ -278,8 +279,11 @@ window.roamAlphaAPI = {
   platform: { isMobile: false },
   util: { dateToPageTitle },
 };
+const chartHelp = createChartHelp({ host: window, document, revision: 'a'.repeat(40) });
 window.nautilusLogExtensionData = {
   running: true,
+  toggleChartHelp: options => chartHelp.toggle(options),
+  closeChartHelp: anchor => chartHelp.closeForAnchor(anchor),
   settings: { language: parameters.get('lang') || 'en', ...(windowMode === 'overnight' ? { 'workday-start': 21, 'workday-end': 2 } : windowMode === 'flow' ? { 'workday-start': 6, 'workday-end': 20 } : {}) },
   shouldSuppressRenderContext: () => false,
   isRightSidebarRenderContext,
@@ -325,6 +329,7 @@ if (parameters.get('realDesk') === '1') {
 
 window.__chartHarness = {
   q,
+  destroyHelp: () => chartHelp.destroy(),
   traces: () => clone(traces),
   setWidth(width) {
     const shell = document.querySelector('#renderer-shell');
