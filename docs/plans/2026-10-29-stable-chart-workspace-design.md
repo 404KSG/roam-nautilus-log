@@ -83,14 +83,17 @@ compact center date. Hour sizing remains explicit in SVG output.
 
 ## Tip and control layout
 
-The closed tip has two rows in a stable 66px slot: a 58px minimum surface and 8px of clearance
-below it. Content uses 6px vertical/12px horizontal padding, a 4px row gap and an 8px column gap.
-The gradient 12px/16px task/event title spans the first row after the 5px tone dot; 11px/16px
-metadata and More occupy the second. The neutral surface has a faint border and 6px corners,
-without a shadow. More uses neutral text until hover/focus, an intrinsic width, nowrap, normal
-word breaking and at least a 24px hit height. Width measurement includes the same padding,
-borders, dot, gap and 11px action font as CSS. The panel remains at most 280px wide, with 16px
-narrow-container insets. Expansion keeps the same inner padding and may grow in page flow.
+The closed tip is a compact two-line note in a stable 38px slot: a 36px surface plus 2px below it.
+Content uses 2px vertical/6px horizontal padding, no extra row gap and a 4px column gap. The
+12px/16px gradient title and 11px/14px metadata share the text column. More sits to their right,
+spanning both rows; its 24px hit height therefore does not force a taller second row. The neutral
+surface has a very faint border and 4px corners, without a shadow. More stays neutral until
+hover/focus, uses intrinsic width and never breaks into letters or overlaps the text hit area.
+Width measurement includes the same padding, borders, dot, gap, 11px action font and a small
+host-font allowance. Width remains capped at 280px, with 16px narrow-container insets. Expansion
+restores the title's full row and moves More beside the wrapping metadata. Only explicit expansion
+may grow the note. The SVG's empty bottom padding is 2px; its center, time paths and label positions
+are unchanged. This replaces the rejected 66px card-like reservation.
 
 Ordinary titles that fit the title row are complete. Text exceeding that width, or extra
 metadata, exposes More. Expanded text stays in normal page flow and is never internally

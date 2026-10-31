@@ -192,15 +192,19 @@ def coverage(page, hidden=False):
         svg = s['svg']
         assert box['x'] >= svg['x'] - 1 and box['y'] >= svg['y'] - 1, (box, svg)
         assert box['x'] + box['width'] <= svg['x'] + svg['width'] + 1 and box['bottom'] <= svg['bottom'] + 1, (box, svg)
+    assert page.locator('.nautilus-log-hour-label').evaluate_all('''nodes=>nodes.every(e=>{
+      const r=e.getBoundingClientRect(),svg=e.ownerSVGElement.getBoundingClientRect();
+      return r.left>=svg.left-.5&&r.top>=svg.top-.5&&r.right<=svg.right+.5&&r.bottom<=svg.bottom+.5;
+    })'''), 'compact chart padding must not clip hour labels'
     detail = page.locator('.nautilus-log-detail-region')
     if 'is-expanded' not in detail.get_attribute('class'):
-        assert abs(s['detail']['height'] - 66) < .5
+        assert abs(s['detail']['height'] - 38) < .5
     if detail.get_attribute('data-nautilus-detail') == 'active':
         tip = page.locator('.nautilus-log-detail-content').bounding_box()
         assert tip['width'] <= min(280, s['workspace']['width'] - 32) + 1, tip
         assert abs(tip['x'] + tip['width'] / 2 - s['workspace']['x'] - s['workspace']['width'] / 2) <= 1
         if 'is-expanded' not in detail.get_attribute('class'):
-            assert tip['height'] <= 58.5, tip
+            assert tip['height'] <= 36.5, tip
         if detail.get_attribute('data-tip-more') == 'false':
             assert not page.locator('.nautilus-log-detail-expand').count()
             assert page.locator('.nautilus-log-detail-title').evaluate('e=>e.scrollWidth<=e.clientWidth')
@@ -368,8 +372,8 @@ def density_and_control_contract(page):
         }''')
         # Compact font/anchor placement can leave a few extra pixels inside
         # the source-stable frame; it must not reserve another label band.
-        assert 0 <= measure['beforeTip'] <= (18 if width >= 640 else 24), (context, width, measure)
-        assert 8 <= measure['afterTip'] <= 11 and measure['tipHeight'] <= 58.5, measure
+        assert 0 <= measure['beforeTip'] <= (12 if width >= 640 else 18), (context, width, measure)
+        assert 2 <= measure['afterTip'] <= 5 and measure['tipHeight'] <= 36.5, measure
         if width == 720: assert before['presentation']['viewBox']['height'] <= 340
         for iso in ['2026-10-29T08:01:00', '2026-10-29T13:30:00', '2026-10-29T20:30:00']:
             after = set_clock(page, iso); coverage(page); geometry_audit(page)
@@ -416,7 +420,7 @@ def density_and_control_contract(page):
       const toolbar=document.querySelector('.nautilus-desk .rm-desk-page__toolbar').getBoundingClientRect();
       return {tipToQueue:queue.top-tip.bottom,queueToDesk:toolbar.top-queue.bottom,queueHeight:queue.height,cardUids:[...document.querySelectorAll('.nautilus-desk__card')].map(e=>e.dataset.taskUid),checked:document.querySelector('[role=switch]').getAttribute('aria-checked')};
     }''')
-    assert 8 <= composed['tipToQueue'] <= 14 and 0 <= composed['queueToDesk'] <= 10, composed
+    assert 2 <= composed['tipToQueue'] <= 8 and 0 <= composed['queueToDesk'] <= 10, composed
     assert composed['cardUids'] == ['connection-pending-0', 'connection-pending-1'], composed
     page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/'density-with-native-desk.png'))
     page.get_by_role('button', name='Hide Desk', exact=True).click(); settle_renderer(page)
@@ -445,7 +449,7 @@ def four_corrections_contract(page):
         pressure_style = page.add_style_tag(content='.nautilus-log-content{overflow-wrap:anywhere;word-break:break-word}.nautilus-log-detail-expand{font-size:13px!important;letter-spacing:.4px}')
         settle_renderer(page); pressure = tip_metrics()
         assert pressure['titleScroll'] <= pressure['titleWidth'] and pressure['moreScroll'] <= pressure['moreWidth'] + 1 and len(pressure['rows']) == 1, pressure
-        assert pressure['height'] <= 58.5, pressure
+        assert pressure['height'] <= 36.5, pressure
         pressure_style.evaluate('e=>e.remove()'); settle_renderer(page)
         colors = page.locator('.nautilus-log-html-legend').first.locator('.nautilus-log-legend-dot').evaluate_all('els=>els.map(e=>getComputedStyle(e).backgroundColor)')
         assert colors == ['rgb(234, 15, 15)', 'rgb(249, 115, 22)', 'rgb(8, 153, 200)'], colors
@@ -521,16 +525,17 @@ def tip_surface_contract(page):
                   const s=getComputedStyle(content),m=getComputedStyle(meta),b=getComputedStyle(button),r=content.getBoundingClientRect();
                   const tr=title.getBoundingClientRect(),mr=meta.getBoundingClientRect(),br=button.getBoundingClientRect();
                   return {padding:[s.paddingTop,s.paddingRight,s.paddingBottom,s.paddingLeft].map(parseFloat),rowGap:parseFloat(s.rowGap),columnGap:parseFloat(s.columnGap),radius:parseFloat(s.borderRadius),shadow:s.boxShadow,background:s.backgroundColor,border:s.borderTopColor,
-                    titleLeft:tr.left-r.left,metaLeft:mr.left-r.left,titleTop:tr.top-r.top,buttonHeight:br.height,buttonWidth:br.width,metaCenter:mr.top+mr.height/2,buttonCenter:br.top+br.height/2,buttonColor:b.color,metaColor:m.color,
+                    titleLeft:tr.left-r.left,metaLeft:mr.left-r.left,titleTop:tr.top-r.top,buttonHeight:br.height,buttonWidth:br.width,buttonLeft:br.left,textRight:Math.max(tr.right,mr.right),panelCenter:r.top+r.height/2,buttonCenter:br.top+br.height/2,buttonColor:b.color,metaColor:m.color,
                     bottomSpace:region.getBoundingClientRect().bottom-r.bottom,height:r.height,titleFits:title.scrollWidth<=title.clientWidth,buttonFits:button.scrollWidth<=button.clientWidth,metaLineHeight:m.lineHeight};
                 }''')
             normal = metrics()
-            assert normal['padding'] == [6, 12, 6, 12] and normal['rowGap'] == 4 and normal['columnGap'] == 8, normal
-            assert normal['radius'] == 6 and normal['shadow'] == 'none', normal
-            assert abs(normal['titleLeft'] - normal['metaLeft']) < .5 and abs(normal['titleTop'] - 7) < .5, normal
-            assert abs(normal['height'] - 58) < .5 and abs(normal['bottomSpace'] - 8) < .5, normal
+            assert normal['padding'] == [2, 6, 2, 6] and normal['rowGap'] == 0 and normal['columnGap'] == 4, normal
+            assert normal['radius'] == 4 and normal['shadow'] == 'none', normal
+            assert abs(normal['titleLeft'] - normal['metaLeft']) < .5 and abs(normal['titleTop'] - 3) < .5, normal
+            assert abs(normal['height'] - 36) < .5 and abs(normal['bottomSpace'] - 2) < .5, normal
             assert normal['buttonHeight'] >= 24 and normal['buttonWidth'] >= 28 and normal['buttonFits'] and normal['titleFits'], normal
-            assert abs(normal['buttonCenter'] - normal['metaCenter']) < .5 and normal['metaLineHeight'] == '16px', normal
+            assert abs(normal['buttonCenter'] - normal['panelCenter']) < .5 and normal['metaLineHeight'] == '14px', normal
+            assert normal['buttonLeft'] - normal['textRight'] >= 3.5, 'the 24px action must not overlap either text row'
             assert normal['buttonColor'] == normal['metaColor'], normal
             background = [float(n) for n in re.findall(r'[\d.]+', normal['background'])]
             foreground = [float(n) for n in re.findall(r'[\d.]+', normal['metaColor'])]
@@ -549,7 +554,7 @@ def tip_surface_contract(page):
             coverage(page)
             expanded = metrics()
             assert expanded['padding'] == normal['padding'] and expanded['titleLeft'] == normal['titleLeft'], expanded
-            assert expanded['height'] >= normal['height'] and abs(expanded['bottomSpace'] - 8) < .5, expanded
+            assert expanded['height'] >= normal['height'] and abs(expanded['bottomSpace'] - 2) < .5, expanded
             button.press('Enter')
             expect(button).to_have_attribute('aria-expanded', 'false')
             settle_renderer(page)
@@ -911,7 +916,7 @@ def material_and_tip_contract(page):
         page.wait_for_function('document.querySelector("[data-task-uid=routine-0]").dataset.recordTitle==="Review"')
         select(page,'routine-0');coverage(page)
         short=page.locator('.nautilus-log-detail-content').bounding_box()
-        assert short['width'] < 250 and short['height'] <= 58.5, short
+        assert short['width'] < 250 and short['height'] <= 36.5, short
         assert not page.locator('.nautilus-log-detail-expand').count()
         before=state(page)
         page.evaluate('()=>__chartHarness.updateChild("routine-0","18:30-19:00 核对项目全部材料并完成交付内容的逐项检查和验收确认工作")')
@@ -923,7 +928,7 @@ def material_and_tip_contract(page):
         page.locator('[data-task-uid="routine-0"]').evaluate('e=>e.blur()')
         select(page,'routine-0');coverage(page)
         long=page.locator('.nautilus-log-detail-content').bounding_box()
-        assert long['width'] <= min(280,width-32)+1 and long['height'] <= 58.5
+        assert long['width'] <= min(280,width-32)+1 and long['height'] <= 36.5
         assert page.get_by_role('button',name='Full text',exact=True).count()==1
         page.screenshot(path=str(OUT/'screenshots'/f'compact-tip-{context}-{width}.png'),full_page=True)
         result['tips'][f'{context}-{width}']={'short':short,'long':long}
@@ -1012,7 +1017,7 @@ def full_text(page, context, width):
     assert hit == 'long-cjk', 'multiline label gaps must belong to their own interactive record'
     assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text(), 'expanded reading must be pinned'
     page.get_by_role('button', name='Collapse text', exact=True).click(); page.mouse.move(1180, 980); settle_renderer(page)
-    assert abs(state(page)['detail']['height'] - 66) < .5
+    assert abs(state(page)['detail']['height'] - 38) < .5
     page.screenshot(path=str(OUT / 'screenshots' / f'fulltext-{context}-{width}.png'), full_page=True)
     return {'closed': compact_record(before), 'expandedHeight': expanded['detail']['height'], 'pinned': True, 'noInternalScroll': True}
 

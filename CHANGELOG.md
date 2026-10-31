@@ -13,12 +13,11 @@
   light/dark palettes. Dates, category dots, timing metadata, and gap explanations retain
   their existing colors. Forced-color and print modes fall back to solid readable text.
 
-- Tips now give the title its own first row instead of letting metadata squeeze it into
-  a narrow single-line track. Metadata and More occupy the second row; More uses its actual
-  text width and cannot break into letters. A neutral, faintly bordered surface now uses
-  6px vertical/12px horizontal padding, a 4px row gap and 6px corners. The 58px content has
-  a stable 66px slot including 8px of lower clearance. More is neutral until hover/focus,
-  with its 24px hit height preserved. Full text expands in page flow with the same padding.
+- Tips are compact two-line notes rather than tall cards: 36px content in a stable 38px
+  slot, 2px vertical/6px horizontal padding and 4px corners. Title and metadata font sizes
+  remain 12px/11px. More spans the two rows at the right, preserving its 24px hit height
+  without inflating the metadata row. The chart's empty bottom padding drops to 2px without
+  changing time paths or label positions. Full text expands only by explicit action.
 - Desk uses only the sliding control; its name appears on hover or keyboard focus and
   remains available to screen readers. Checked state follows the actual view and saved
   preference through Hide Desk, reload, fold/expand and replacement controls. Click,
@@ -58,7 +57,7 @@
   tasks and events remain outlined. The spiral is the only time geometry; the rejected
   outer track and its status badges are removed. Explicit urgency remains authoritative.
 - Short tips fit their content up to 280px, without a redundant full-text action.
-  The title-first closed slot is 66px with balanced padding and lower clearance. Longer content
+  The two-line closed slot is 38px with minimal padding and lower clearance. Longer content
   can still explicitly expand in page flow, without internal scrollbars or overlays.
 
 - Every titled source record remains in the diagram or the pending queue. Completed
@@ -73,7 +72,7 @@
   whole-task scheduler, Actual and completed-estimate allocation remain intact.
 - Details fit a centered, at-most-280px area. Full text explicitly expands in
   page flow without an internal scrollbar and stays pinned while reading. The closed
-  66px slot is invisible when idle. The rejected below-chart completion list, its reserved
+  38px slot is invisible when idle. The rejected below-chart completion list, its reserved
   gap, and wheel-based text reading are removed.
 - Narrow charts keep side labels, readable major hour ticks and a compact center date.
   Hour sizes are applied directly to SVG text instead of relying on a CSS variable that

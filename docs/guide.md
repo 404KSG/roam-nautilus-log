@@ -142,11 +142,12 @@ write no timestamps, add no Actual, and leave pending scheduling and capacity un
 
 Hover or keyboard-focus a record, available slot, or past gap to read its context in a centered
 tip that fits its content, capped at 280px and inset by 16px in narrower workspaces.
-Closed tips reserve 66px, including a 58px surface and 8px of clearance below it, and are invisible
-when idle. The neutral surface has a faint border, 6px corners, 6px vertical/12px horizontal padding,
-and a 4px row gap. The gradient task/event name owns the first row; metadata and **More** occupy
-the second. More stays neutral until hover/focus, has an intrinsic width and a minimum 24px hit
-height, and never breaks into letters. Ordinary titles that fit the available title row
+Closed tips reserve only 38px: a 36px surface and 2px of lower clearance, invisible when idle.
+The faintly bordered surface has 4px corners and 2px vertical/6px horizontal padding. The gradient
+name and metadata use two tight rows without reducing their 12px/11px font sizes. **More** sits
+to the right, spanning both rows, so its minimum 24px hit height does not add a tall metadata row.
+It stays neutral until hover/focus and never breaks into letters. The chart's empty bottom
+padding is also reduced to 2px without changing the time geometry. Ordinary titles that fit the available title row
 remain complete; oversized text can expand. No internal scrollbar is used. **More** appears
 only when text is clipped
 or additional metadata exists; it explicitly expands that content in page flow and pins
