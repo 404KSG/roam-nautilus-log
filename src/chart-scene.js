@@ -6,6 +6,16 @@ const round = value => Math.round(value * 1000) / 1000;
 const canBeCurrent = (item, start, end) => !item.done && (item.todo || item.meeting)
   && (!validRange(item) || (item.end > start && item.start < end));
 
+// A display-boundary attachment is not a timestamp or an allocated interval.
+function outsideBoundary(item, start, end) {
+  if (!validRange(item) || !Number.isFinite(start) || !Number.isFinite(end)
+    || start < 0 || end <= start || end - start > 1440) return null;
+  if (item.end <= start) return { edge: 'start', minute: start };
+  if (item.start >= end) return { edge: 'end', minute: end };
+  return null;
+}
+const labelAnchor = record => record.anchor || record.boundaryAnchor;
+
 function sourceItems(items) {
   const seen = new Set();
   return (Array.isArray(items) ? items : []).filter(item => {
@@ -121,8 +131,8 @@ function chartPresentationFrame({ containerWidth, items = [], timeRadius = 150,
     // become current. No duration/status sublabel is rendered for other records.
     const metadataHeight = canBeCurrent(item, startMinutes, endMinutes) ? 14 : 0;
     const height = wrapped.lines.length * lineHeight + 4 + metadataHeight;
-    // This side assignment has no time input, including for pending tasks that
-    // might later become unplaced. A loose record never gets a fake angle.
+    // Unknown-time records keep this stable source-side fallback. Known
+    // out-of-window ranges instead connect to their actual display boundary.
     const sourceSide = sides.left <= sides.right ? 'left' : 'right';
     sides[sourceSide] += height;
     return { uid: item.uid, order, ...wrapped, width: labelWidth, height,
@@ -135,8 +145,10 @@ function chartPresentationFrame({ containerWidth, items = [], timeRadius = 150,
   let flexible = 0;
   source.forEach((item, index) => {
     const label = labels[index];
-    if ((item.meeting || item.done) && validRange(item) && item.end > startMinutes && item.start < endMinutes) {
-      const minute = (Math.max(startMinutes, item.start) + Math.min(endMinutes, item.end)) / 2;
+    const boundary = outsideBoundary(item, startMinutes, endMinutes);
+    if ((item.meeting || item.done) && validRange(item)
+      && (boundary || (item.end > startMinutes && item.start < endMinutes))) {
+      const minute = boundary ? boundary.minute : (Math.max(startMinutes, item.start) + Math.min(endMinutes, item.end)) / 2;
       const angle = (180 - (((minute - 540) / 2 % 360 + 360) % 360)) * Math.PI / 180;
       fixed[Math.cos(angle) < 0 ? 'left' : 'right'] += label.height;
     } else if (!item.done && !item.meeting) flexible += label.height;
@@ -154,19 +166,20 @@ function chartPresentationFrame({ containerWidth, items = [], timeRadius = 150,
 }
 
 function labelLayout(frame, records) {
-  const sides = { left: { timed: [], loose: [] }, right: { timed: [], loose: [] } };
+  const sides = { left: { connected: [], loose: [] }, right: { connected: [], loose: [] } };
   const metrics = new Map(frame.labels.map(label => [label.uid, label]));
   const routeY = record => {
-    const angle = Math.atan2(record.anchor.y - frame.center.y, record.anchor.x - frame.center.x);
+    const anchor = labelAnchor(record);
+    const angle = Math.atan2(anchor.y - frame.center.y, anchor.x - frame.center.x);
     return Math.sin(angle);
   };
   for (const record of records) {
     record.label = { ...metrics.get(record.uid) };
-    if (record.kind !== 'timed') sides[record.label.sourceSide].loose.push(record);
+    if (!labelAnchor(record)) sides[record.label.sourceSide].loose.push(record);
   }
-  for (const record of records.filter(r => r.kind === 'timed').sort((a, b) => routeY(a) - routeY(b) || a.event.start - b.event.start || a.order - b.order)) {
-    const side = record.anchor.x < frame.center.x ? 'left' : 'right';
-    sides[side].timed.push(record);
+  for (const record of records.filter(labelAnchor).sort((a, b) => routeY(a) - routeY(b) || a.event.start - b.event.start || a.order - b.order)) {
+    const side = labelAnchor(record).x < frame.center.x ? 'left' : 'right';
+    sides[side].connected.push(record);
   }
   function position(record, side, y) {
     const label = record.label, left = side === 'left';
@@ -177,7 +190,7 @@ function labelLayout(frame, records) {
     const textY = y + (titleHeight - label.lines.length * label.lineHeight) / 2 + label.fontSize;
     Object.assign(label, { x, y, side, textX, align: left ? 'end' : 'start', textY,
       metadataY: textY + (label.lines.length - 1) * label.lineHeight + label.metadataHeight });
-    if (record.kind !== 'timed') {
+    if (!labelAnchor(record)) {
       // Non-time glyphs sit beyond the text's outer edge. They neither point
       // into the clock nor cross the real slice leaders on the inner edge.
       const textEdge = left ? textX - label.inkWidth : textX + label.inkWidth;
@@ -190,7 +203,7 @@ function labelLayout(frame, records) {
         : `M${round(markerX - 3)},${round(middle - 3)}h6v6h-6Z`;
       return;
     }
-    const a = record.anchor, { x: cx, y: cy } = frame.center;
+    const a = labelAnchor(record), { x: cx, y: cy } = frame.center;
     const radius = frame.timeRadius * frame.plotScale;
     const endX = left ? x + label.width + 5 : x - 5;
     const railX = cx + (left ? -1 : 1) * (radius + 5);
@@ -203,19 +216,19 @@ function labelLayout(frame, records) {
       + `C${round(controlX)} ${round(p.y)} ${round(controlX)} ${round(middle)} ${round(endX)} ${round(middle)}`;
   }
   for (const side of ['left', 'right']) {
-    const { timed, loose } = sides[side];
+    const { connected, loose } = sides[side];
     const low = frame.timedTop;
     const high = frame.timedBottom - loose.reduce((sum, record) => sum + record.label.height, 0);
     let cursor = high;
     for (const record of loose) { position(record, side, cursor); cursor += record.label.height; }
     const ys = []; cursor = low;
-    for (const record of timed) {
-      const y = Math.max(cursor, Math.min(high - record.label.height, record.anchor.y - record.label.height / 2));
+    for (const record of connected) {
+      const y = Math.max(cursor, Math.min(high - record.label.height, labelAnchor(record).y - record.label.height / 2));
       ys.push(y); cursor = y + record.label.height;
     }
     cursor = high;
-    for (let i = timed.length - 1; i >= 0; i -= 1) { ys[i] = Math.min(ys[i], cursor - timed[i].label.height); cursor = ys[i]; }
-    for (let i = 0; i < timed.length; i += 1) position(timed[i], side, ys[i]);
+    for (let i = connected.length - 1; i >= 0; i -= 1) { ys[i] = Math.min(ys[i], cursor - connected[i].label.height); cursor = ys[i]; }
+    for (let i = 0; i < connected.length; i += 1) position(connected[i], side, ys[i]);
   }
 }
 
@@ -251,6 +264,19 @@ function chartScene({ items = [], events = [], containerWidth, startMinutes = 30
       try { if (typeof radiusForMinute === 'function') radius = finite(radiusForMinute(minute), radius); } catch (_) { /* drawing fallback only */ }
       record.anchor = { x: frame.center.x + Math.cos(angle) * (radius + 4) * frame.plotScale,
         y: frame.center.y - Math.sin(angle) * (radius + 4) * frame.plotScale };
+    } else if (kind === 'outside-window') {
+      const boundary = outsideBoundary(original, start, end);
+      if (boundary) {
+        const angle = (180 - (((boundary.minute - 540) / 2 % 360 + 360) % 360)) * Math.PI / 180;
+        let radius = frame.timeRadius;
+        try { if (typeof radiusForMinute === 'function') radius = finite(radiusForMinute(boundary.minute), radius); } catch (_) { /* drawing fallback only */ }
+        if (radius <= 0) radius = frame.timeRadius;
+        // Land on the shell's outer endpoint, not on a fictitious slice beyond
+        // the boundary. Match shell-path rounding before the plot transform.
+        record.boundaryAnchor = { ...boundary,
+          x: frame.center.x + (round(frame.center.x + Math.cos(angle) * radius) - frame.center.x) * frame.plotScale,
+          y: frame.center.y + (round(frame.center.y - Math.sin(angle) * radius) - frame.center.y) * frame.plotScale };
+      }
     }
     return record;
   });

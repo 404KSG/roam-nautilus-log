@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- Known out-of-window records now use ordinary boundary-connected labels rather than a
+  special square icon. Earlier intervals connect to START; later intervals connect to END.
+  Tips keep the real range and outside-hours explanation. No time slice, changed timestamp,
+  scheduling allocation or graph write is introduced.
+
 - Outside-block drops now create a bare native reference instead of prepending TODO.
   Plain notes stay plain and existing checkboxes are not duplicated. Completed sources
   are not silently reopened. Preserve legacy-wrapper deduplication, exact readback,

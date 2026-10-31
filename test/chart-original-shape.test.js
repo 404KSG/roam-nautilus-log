@@ -67,12 +67,14 @@ test('dense timed labels never flip across the spiral to fill a column', () => {
   for (let i = 1; i < ordered.length; i++) assert.ok(ordered[i - 1].label.y + ordered[i - 1].label.height <= ordered[i].label.y);
 });
 
-test('outside-window records keep their real range but receive no angle on this clock', () => {
+test('outside-window records keep their real range and use a boundary attachment instead of a time angle', () => {
   const event = { uid: 'early', description: 'Early appointment', meeting: true, start: 60, end: 90 };
   const r = build({ items: [event] }).records[0];
   assert.equal(r.kind, 'outside-window');
   assert.equal(r.event['full-start'], 60);
   assert.equal(r.event['full-end'], 90);
   assert.equal(r.anchor, undefined);
-  assert.ok(r.markerPath);
+  assert.equal(r.markerPath, undefined);
+  assert.equal(r.boundaryAnchor.edge, 'start');
+  assert.equal(r.boundaryAnchor.minute, 360);
 });

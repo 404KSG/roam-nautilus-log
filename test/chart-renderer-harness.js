@@ -143,6 +143,12 @@ let children = clone({
     { 'block/uid': 'overflow-2', 'block/string': '{{[[TODO]]}} Overflow gamma 900m', 'block/order': 20, 'block/refs': [] },
     { 'block/uid': 'overflow-3', 'block/string': `{{[[TODO]]}} ${'Long title '.repeat(260)}END_LONG 900m`, 'block/order': 21, 'block/refs': [] },
   ]),
+  'outside-boundary': [
+    ['boundary-lunch', '12:00-13:00 Lunch'],
+    ['boundary-review', '{{[[DONE]]}} Review 20m d18:00'],
+    ['boundary-write', '{{[[DONE]]}} Write 45m d21:28'],
+    ['boundary-early', '{{[[DONE]]}} Earlier completion 20m d05:40'],
+  ].map(([uid, string], order) => ({ 'block/uid': uid, 'block/string': string, 'block/order': order, 'block/refs': [] })),
   outside: [
     { 'block/uid': 'outside-event', 'block/string': '01:00-01:30 Earlier appointment', 'block/order': 0, 'block/refs': [] },
     { 'block/uid': 'outside-done', 'block/string': '{{[[DONE]]}} Earlier completion 20m d2', 'block/order': 1, 'block/refs': [] },
@@ -433,7 +439,9 @@ window.__chartHarness = {
         uid: el.dataset.taskUid, kind: el.dataset.chartKind, timeClaim: el.dataset.timeClaim,
         title: el.dataset.recordTitle, label: el.querySelector('.nautilus-log-record-title')?.textContent,
         aria: el.getAttribute('aria-label'), visible: getComputedStyle(el).visibility === 'visible',
-        marks: el.querySelectorAll('.nautilus-log-slice,.nautilus-log-record-marker').length,
+        marks: el.querySelectorAll('.nautilus-log-slice,.nautilus-log-record-marker,.nautilus-log-record-anchor').length,
+        boundaryEdge: el.dataset.boundaryEdge || null,
+        boundaryMinute: el.dataset.boundaryMinute ? Number(el.dataset.boundaryMinute) : null,
         markerPath: el.querySelector('.nautilus-log-record-marker')?.getAttribute('d') || null,
         markerShape: el.querySelector('.nautilus-log-record-marker')?.dataset.markerShape || null,
         labelSide: el.querySelector('.nautilus-log-record-title')?.dataset.labelSide,

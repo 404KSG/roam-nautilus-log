@@ -107,7 +107,11 @@ the pending task keeps its blue fill. If the configured window cannot hold a who
 its title and duration remain visible with a capacity-overflow endpoint. No task is split,
 no later short task overtakes it, and no extra time is added beyond END. Unscheduled pending
 work belongs in the collapsed **Unscheduled** queue below the chart, not at an arbitrary
-point in the spiral. Known ranges outside chart hours keep their square.
+point in the spiral. Known ranges entirely outside chart hours use the ordinary label
+and curved leader, without a special icon: before START connects to START, and after END
+connects to END. This is a boundary attachment only, not an allocated interval or a changed
+completion time. For example, a 20:43–21:28 completion connects to a configured END of 20:00,
+while hover/focus Tips retain its original range and the outside-hours explanation.
 
 Hover or focus a title to emphasize its whole connection and slice.
 Completed titles retain their neutral color without a deletion line; other titles stay

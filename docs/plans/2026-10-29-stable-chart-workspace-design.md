@@ -70,6 +70,26 @@ surface stroke beneath that dashed border.
 Source timestamps and edit metadata are not borrowed. Zero duration stays zero. DONE
 estimate overflow keeps its title and duration in the diagram, not in an unfinished queue.
 
+## Out-of-window annotations
+
+Known intervals wholly outside a valid configured window use the ordinary title, leader and
+small connection dot, not the former square icon beside the text. Attach earlier intervals
+to START and later intervals to END, including normalized overnight minutes. The attachment
+lands on the shell boundary's outer endpoint using the existing radius callback and rounding;
+it does not use the four-unit offset of an in-range slice anchor.
+
+Keep `kind: outside-window`, `time-claim: none`, the original start/end and full-start/full-end,
+and all duration/completion provenance. Store the presentation point as `boundaryAnchor`,
+not a timed `anchor`. Render no slice, hatch, capacity allocation or invented interval for it.
+A completion at 20:43–21:28 can therefore connect to END 20:00 without claiming it happened at
+20:00. Only Tips and the accessible description explain the outside-hours condition.
+
+Boundary-connected labels use the normal angular side/routing and overlap prevention. Frame
+budgets include their source-sized text on the boundary's side, independent of the moving
+clock. Partial intersections retain their ordinary clipped timed slices. Missing or unplaced
+completion estimates do not gain a fabricated boundary or timestamp. Existing hover/focus,
+block navigation and Eye behavior remain; no graph or scheduling changes are introduced.
+
 ## Elapsed texture
 
 Colors retain their existing category/state meanings; diagonal texture means only that the

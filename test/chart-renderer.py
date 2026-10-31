@@ -156,7 +156,12 @@ def coverage(page, hidden=False):
     for record in s['records']:
         assert record['marks'] > 0 and record['label'].strip(), record
         if not hidden: assert record['visible'], record
-        if record['kind'] != 'timed': assert record['timeClaim'] == 'none' and record['markerPath'], record
+        if record['kind'] != 'timed':
+            assert record['timeClaim'] == 'none', record
+            if record['boundaryEdge']:
+                assert record['kind'] == 'outside-window' and not record['markerPath'], record
+            else:
+                assert record['markerPath'], record
     scene = page.evaluate('() => __chartHarness.scene()')
     by_uid = {r['uid']: r for r in s['records']}
     for record in scene['records']:
@@ -164,8 +169,15 @@ def coverage(page, hidden=False):
             assert re.sub(r'\s+', '', by_uid[record['uid']]['label']) == re.sub(r'\s+', '', record['event']['description']), record['uid']
         if record['kind'] != 'timed':
             assert not record.get('anchor') and not record.get('slot') and not record.get('indexPath'), record
-            assert record['marker']['size'] <= 6 and record['label']['side'] == record['label']['sourceSide']
+            if record.get('boundaryAnchor'):
+                assert record['kind'] == 'outside-window' and not record.get('markerPath'), record
+                assert by_uid[record['uid']]['boundaryEdge'] == record['boundaryAnchor']['edge'], record
+                assert by_uid[record['uid']]['boundaryMinute'] == record['boundaryAnchor']['minute'], record
+                assert record['label']['side'] == ('left' if record['boundaryAnchor']['x'] < scene['frame']['center']['x'] else 'right'), record
+            else:
+                assert record['marker']['size'] <= 6 and record['label']['side'] == record['label']['sourceSide']
         else:
+            assert not record.get('boundaryAnchor'), record
             assert record['label']['side'] == ('left' if record['anchor']['x'] < scene['frame']['center']['x'] else 'right'), record
         if record['event']['time-claim'] == 'estimated-allocation':
             assert record['kind'] == 'timed' and record['event']['end'] - record['event']['start'] == record['event']['duration']
@@ -1358,6 +1370,79 @@ def full_text(page, context, width):
     return {'closed': compact_record(before), 'expandedHeight': expanded['detail']['height'], 'pinned': True, 'noInternalScroll': True}
 
 
+def outside_boundary_contract(page):
+    report = {}
+    for theme in ['light', 'dark']:
+        for context, width, lang in [('main', 960, 'en'), ('embed', 520, 'en'), ('sidebar', 280, 'zh')]:
+            load(page, 'outside-boundary', context, width, window='flow', lang=lang)
+            set_clock(page, '2026-10-29T22:00:00')
+            if theme == 'dark':
+                page.locator('body').evaluate("e=>{e.classList.add('bp3-dark');e.style.background='#1d1e21';e.style.color='#ecedef'}")
+            before = coverage(page); geometry_audit(page)
+            write = page.locator('svg [data-task-uid="boundary-write"]')
+            expect(write).to_have_attribute('data-chart-kind', 'outside-window')
+            expect(write).to_have_attribute('data-time-claim', 'none')
+            expect(write).to_have_attribute('data-boundary-edge', 'end')
+            expect(write).to_have_attribute('data-boundary-minute', '1200')
+            expect(write.locator('.nautilus-log-record-marker,.nautilus-log-slice,.nautilus-log-past-record-texture,.nautilus-log-record-current')).to_have_count(0)
+            expect(write.locator('.nautilus-log-record-title')).to_have_text('Write')
+            expect(write.locator('.nautilus-log-record-anchor')).to_have_count(1)
+            assert write.locator('.nautilus-log-record-leader').evaluate('e=>getComputedStyle(e).pointerEvents') == 'none'
+            expect(page.locator('svg [data-task-uid="boundary-early"]')).to_have_attribute('data-boundary-edge', 'start')
+            expect(page.locator('svg [data-task-uid="boundary-early"]')).to_have_attribute('data-boundary-minute', '360')
+            proof = page.evaluate('''()=>{
+              const scene=__chartHarness.scene(),input=__chartHarness.sceneInput(),r=scene.records.find(r=>r.uid==='boundary-write'),
+                node=document.querySelector('svg [data-task-uid="boundary-write"]'),leader=node.querySelector('.nautilus-log-record-leader'),
+                outline=document.querySelector('.nautilus-log-shell-outline'),dot=node.querySelector('.nautilus-log-record-anchor'),
+                edge=nautilusLogCore.shellInterval({startMinutes:input.startMinutes,endMinutes:input.endMinutes,start:input.startMinutes,end:input.endMinutes,centerX:scene.frame.center.x,centerY:scene.frame.center.y}).endOuter,
+                expected=new DOMPoint(edge.x,edge.y).matrixTransform(outline.getScreenCTM()),actual=leader.getPointAtLength(0).matrixTransform(leader.getScreenCTM()),
+                circle=new DOMPoint(Number(dot.getAttribute('cx')),Number(dot.getAttribute('cy'))).matrixTransform(dot.getScreenCTM());
+              return {range:[r.event.start,r.event.end,r.event['full-start'],r.event['full-end']],claim:r.event['time-claim'],
+                endDistance:Math.hypot(actual.x-expected.x,actual.y-expected.y),dotDistance:Math.hypot(circle.x-expected.x,circle.y-expected.y),
+                ordinaryCurve:leader.getAttribute('d').includes('C'),notTimeAnchor:!r.anchor,boundary:r.boundaryAnchor};
+            }''')
+            assert proof['range'] == [1243, 1288, 1243, 1288] and proof['claim'] == 'none', proof
+            assert proof['endDistance'] < .05 and proof['dotDistance'] < .05 and proof['ordinaryCurve'] and proof['notTimeAnchor'], proof
+            write.locator('.nautilus-log-record-title').hover(); settle_renderer(page)
+            expect(page.locator('.nautilus-log-detail-region')).to_contain_text('Outside chart hours' if lang == 'en' else '显示时段外')
+            expect(page.locator('.nautilus-log-detail-region')).to_contain_text('20:43–21:28')
+            assert_rect_equal(before, state(page), 'outside-boundary hover must not resize the frame')
+            page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/f'outside-boundary-{theme}-{context}-{width}.png'))
+            page.get_by_role('button', name='Full text' if lang == 'en' else '全文', exact=True).click(); settle_renderer(page)
+            expect(page.locator('.nautilus-log-detail-region')).to_contain_text('Not placed on the timeline' if lang == 'en' else '不占用时间刻度')
+            write.locator('.nautilus-log-record-title').click(modifiers=['Shift'])
+            assert page.evaluate('()=>__chartHarness.traces().filter(t=>t.kind==="locate").at(-1)') == {'kind': 'locate', 'uid': 'boundary-write', 'sidebar': True}
+            write.focus(); write.press('Enter')
+            assert page.evaluate('()=>__chartHarness.traces().filter(t=>t.kind==="locate").at(-1)') == {'kind': 'locate', 'uid': 'boundary-write', 'sidebar': False}
+            page.get_by_role('button', name='Hide completed on chart' if lang == 'en' else '在海螺中隐藏已完成', exact=True).click(); settle_renderer(page)
+            assert write.locator('.nautilus-log-record-leader').evaluate('e=>getComputedStyle(e).visibility') == 'hidden'
+            page.get_by_role('button', name='Show completed on chart' if lang == 'en' else '在海螺中显示已完成', exact=True).click(); settle_renderer(page)
+            assert write.locator('.nautilus-log-record-leader').evaluate('e=>getComputedStyle(e).visibility') == 'visible'
+            coverage(page); geometry_audit(page)
+            assert state(page)['writes'] == 0
+            report[f'{theme}-{context}-{width}'] = proof
+
+    load(page, 'outside-boundary', 'main', 720, window='flow')
+    set_clock(page, '2026-10-29T22:00:00')
+    write = page.locator('svg [data-task-uid="boundary-write"]')
+    page.evaluate('()=>__chartHarness.updateChild("boundary-write","{{[[DONE]]}} Write 45m d19:15")')
+    expect(write).to_have_attribute('data-chart-kind', 'timed')
+    assert write.get_attribute('data-boundary-edge') is None
+    expect(write.locator('.nautilus-log-slice')).to_have_count(1)
+    expect(write.locator('.nautilus-log-record-marker')).to_have_count(0)
+    page.evaluate('()=>__chartHarness.updateChild("boundary-write","{{[[DONE]]}} Write 45m d21:28")')
+    expect(write).to_have_attribute('data-chart-kind', 'outside-window')
+    expect(write).to_have_attribute('data-boundary-minute', '1200')
+    expect(write.locator('.nautilus-log-slice,.nautilus-log-past-record-texture,.nautilus-log-record-marker')).to_have_count(0)
+    page.evaluate('''()=>{for(const [i,uid] of ['boundary-lunch','boundary-review','boundary-write','boundary-early'].entries())
+      __chartHarness.updateChild(uid,`{{[[DONE]]}} Late completion ${i+1} 45m d21:${10+i}`);}''')
+    expect(page.locator('svg [data-boundary-edge="end"]')).to_have_count(4)
+    coverage(page); geometry_audit(page)
+    assert state(page)['writes'] == 0
+    report['liveRangeChangesAndSharedBoundary'] = True
+    return report
+
+
 def center_clock_contract(page):
     report = {}
 
@@ -1622,6 +1707,7 @@ def main():
             report['tipSurface'] = tip_surface_contract(page)
             report['continuousShell'] = continuous_shell_contract(page)
             report['currentOnlyLabels'] = current_only_labels_contract(page)
+            report['outsideBoundary'] = outside_boundary_contract(page)
             report['centerClock'] = center_clock_contract(page)
             report['timeflowRecovery'] = timeflow_recovery(page)
             report['lifecycle'] = lifecycle(page)

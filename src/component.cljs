@@ -1337,7 +1337,7 @@
                 :vector-effect "non-scaling-stroke"}]])])
 
 (defn chart-record-label [record copy params]
-  (let [label (:label record) anchor (:anchor record)
+  (let [label (:label record) anchor (or (:anchor record) (:boundaryAnchor record))
         left? (= "left" (:side label))
         highlight-x (- (:textX label) (if left? (+ (:inkWidth label) 5) 5))]
     [:g {:class "nautilus-log-record-annotation"}
@@ -1409,6 +1409,8 @@
                             (when (:current-event? params) " nautilus-log-current-event"))
                 :data-task-uid uid :data-record-title (:description event)
                 :data-chart-kind (:kind record) :data-time-claim (:time-claim event)
+                :data-boundary-edge (get-in record [:boundaryAnchor :edge])
+                :data-boundary-minute (get-in record [:boundaryAnchor :minute])
                 :data-connection-active (when (= uid active-uid) "true")
                 :data-past-status (:past-status params)
                 :data-visual-phase (:visual-phase params)
@@ -1434,10 +1436,11 @@
                   :d surface-path :fill (str "url(#" material-id "-past-texture)")
                   :clip-path (str "url(#" material-id "-past-sweep)")
                   :stroke "none" :pointer-events "none" :aria-hidden "true"}])]
-       [:path {:class "nautilus-log-record-marker" :d (:markerPath record)
-               :data-marker-shape (get-in record [:marker :shape])
-               :aria-hidden "true"
-               :style (when (:bg-color event) {:stroke (update-opacity-str (:bg-color event) "1")})}])
+       (when (:markerPath record)
+         [:path {:class "nautilus-log-record-marker" :d (:markerPath record)
+                 :data-marker-shape (get-in record [:marker :shape])
+                 :aria-hidden "true"
+                 :style (when (:bg-color event) {:stroke (update-opacity-str (:bg-color event) "1")})}]))
      [chart-record-label record copy params]]))
 
 (defn pending-queue-component [queue copy hover-info-state]
