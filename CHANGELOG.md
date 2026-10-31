@@ -4,6 +4,15 @@
 
 ### Added
 
+- Remove the duplicate close X from the Desk overview toolbar. Search and New note
+  remain, with New note at the trailing edge and cards next in the Tab order. The
+  chart's Desk switch still hides the view; the focus dialog's Close, backdrop and
+  Escape behavior are unchanged.
+- Keep the read-only preview queue running while a task editor or new-note draft is
+  open. Descendant folds, committed text changes and image updates now refresh the
+  background cards and masonry without waiting for editor exit. Preserve the native
+  editor instance, focus, selection, composition buffer and graph-write guards.
+
 - Make the center clock a quieter readout: cap its size at 16px, use regular weight and
   theme-aware secondary text color, and inherit the shared UI font with tabular numerals.
   Narrow views still adapt. The date, clock anchor, needle and chart geometry are unchanged.
@@ -59,7 +68,7 @@
   page flow without covering Desk. The SVG's empty tail stays 2px; Tips do not resize its frame.
 - Desk uses only the sliding control; its name appears on hover or keyboard focus and
   remains available to screen readers. Checked state follows the actual view and saved
-  preference through Hide Desk, reload, fold/expand and replacement controls. Click,
+  preference through reload, fold/expand and replacement controls. Click,
   Space/Enter, Alt navigation and reduced motion remain supported.
 - Past unfinished tasks no longer get replanned from START into false historical slices
   or counted as active Planned demand. They remain in a default-collapsed Unfinished
@@ -202,14 +211,13 @@
   behavior; no real macro, clipboard, app switch, paste, or send workflow was run.
 - External-drop ownership now blocks later native graph-drop handlers and
   preserves the original source. Feedback stays inside the existing title area,
-  without moving cards or covering Search, New note, or Hide Desk. Terminal
+  without moving cards or covering Search or New note. Terminal
   messages clear after five seconds; lifecycle cleanup also clears their timers.
 - Alt-only hint labels now reconcile after ordinary ready reorder, add, remove,
   and filter updates so Alt+Digit matches the visible card number.
-- Search, New note and the close X share a single flex-aligned tool group. X is
-  centered with the plus control rather than absolutely positioned against the
-  title. Narrow layouts avoid a third control row; compact search, far-right
-  close and Search → New note → Hide Desk keyboard order are preserved.
+- Search and New note share a single flex-aligned tool group. Narrow layouts avoid
+  a third control row; compact search, trailing New note and direct keyboard access
+  to the cards remain after removal of the overview's duplicate close X.
 - A legacy later `gap` rule can no longer turn Desk's 4px masonry tracks into a
   giant reserved blank area: the Desk grid explicitly keeps its native zero
   row-gap while retaining the 12px column gap. Sparse/tall cards and responsive
@@ -217,7 +225,7 @@
 - Folding hides the entire widget, including Desk cards, toolbar, and native focus
   layer, while keeping the original outline hidden when Desk is selected. The
   expand control and saved Desk preference remain. Expanding restores the overview;
-  explicit Hide Desk or unload restores the ordinary outline. Buffered drafts
+  switching Desk off or unloading restores the ordinary outline. Buffered drafts
   survive folding without duplicate creation or an unexpected focus dialog.
   Unconfirmed IME input stays uncommitted across folding and pending creates;
   closing the view does not flush that partial text into the graph.

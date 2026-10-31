@@ -82,7 +82,7 @@ def run():
                 assert [(x['left'],x['right']) for x in on['wrappers']]==[(x['left'],x['right']) for x in off['wrappers']], row
                 assert all(not x['claimsPage'] for x in on['wrappers']), row
                 assert on['gridMin']=='0px', row
-                toggle('Hide Desk')
+                toggle('Open Desk')
                 closed = snap()
                 for key in ['title','chart']:
                     assert abs(closed[key]['x']-off[key]['x'])<=0.5, (row,closed)
@@ -96,7 +96,7 @@ def run():
             toggle('Open Desk')
             with_inline = snap()
             assert with_inline['wrappers']==native['wrappers'], (native,with_inline)
-            toggle('Hide Desk')
+            toggle('Open Desk')
             assert snap()['wrappers']==native['wrappers']
             # A current stylesheet must retain its own 12px/0 page rule. Legacy
             # snapshots are checked against their own positive-control baseline.

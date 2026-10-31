@@ -57,17 +57,18 @@ def run():
                     root=page.locator(scope)
                     m=root.evaluate('''root=>{
                       const rect=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,cy:r.y+r.height/2,right:r.right};};
-                      const bar=root.querySelector('.rm-desk-page__toolbar'),plus=root.querySelector('[aria-label="New note"]'),close=root.querySelector('[aria-label="Hide Desk"]');
-                      return {bar:rect(bar),plus:rect(plus),close:rect(close),sameGroup:plus.parentElement===close.parentElement,overflow:bar.scrollWidth-bar.clientWidth};
+                      const bar=root.querySelector('.rm-desk-page__toolbar'),plus=root.querySelector('[aria-label="New note"]'),search=root.querySelector('[aria-label="Search Desk"]');
+                      return {bar:rect(bar),plus:rect(plus),search:rect(search),sameGroup:plus.parentElement===search.parentElement.parentElement,
+                        closeCount:bar.querySelectorAll('[aria-label="Hide Desk"],.bp3-icon-cross').length,overflow:bar.scrollWidth-bar.clientWidth};
                     }''')
-                    assert m['sameGroup'] and abs(m['plus']['cy']-m['close']['cy'])<=0.5,m
-                    assert m['overflow']<=1 and m['close']['w']>=30 and m['close']['h']>=30,m
-                    assert m['close']['x']>=m['plus']['right'],m
-                    assert m['bar']['right']-m['close']['right']<=14,m
+                    assert m['closeCount']==0 and m['sameGroup'] and abs(m['plus']['cy']-m['search']['cy'])<=0.5,m
+                    assert m['overflow']<=1 and m['plus']['w']>=30 and m['plus']['h']>=30,m
+                    assert m['plus']['x']>=m['search']['right'],m
+                    assert m['bar']['right']-m['plus']['right']<=14,m
                     measurements.append({'width':width,**m})
                     root.get_by_role('textbox',name='Search Desk',exact=True).focus()
                     page.keyboard.press('Tab');expect(root.get_by_role('button',name='New note',exact=True)).to_be_focused()
-                    page.keyboard.press('Tab');expect(root.get_by_role('button',name='Hide Desk',exact=True)).to_be_focused()
+                    page.keyboard.press('Tab');expect(root.locator('.rm-desk-tile__preview').first).to_be_focused()
                 inspect('[data-fixture-host="plan-desk"] .nautilus-desk','wide')
                 page.evaluate('()=>deskHarness.api.openCopy()')
                 for width in [280,320,360,480,520]:

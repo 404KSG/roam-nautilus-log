@@ -587,7 +587,7 @@ def run():
             assert page.evaluate('() => deskHarness.api.stats.writes.length') == before_count
             prefs = page.evaluate('() => Object.fromEntries(Object.entries(localStorage).filter(([k])=>k.startsWith("nautilus-log:desk-view:")))')
             assert list(prefs.values()) == ['true'], prefs
-            page.get_by_role('button', name='Hide Desk', exact=True).click()
+            page.get_by_role('button', name='Open Desk', exact=True).click()
             expect(page.locator('[data-fixture-host="plan-desk"] > .fixture-raw')).to_be_visible()
             page.evaluate('() => deskHarness.api.reloadView()')
             expect(page.locator('.nautilus-desk')).to_have_count(0)
@@ -624,24 +624,24 @@ def run():
             wide = page.locator('[data-fixture-host="plan-desk"] .rm-desk-page__toolbar').evaluate('''toolbar => {
               const rect = el => { const r = el.getBoundingClientRect(); return {left:r.left, right:r.right, top:r.top, bottom:r.bottom, width:r.width, height:r.height, centerY:(r.top+r.bottom)/2}; };
               const title = toolbar.querySelector('.rm-desk-page__title');
-              const close = toolbar.querySelector('[aria-label="Hide Desk"]');
+              const closeCount = toolbar.querySelectorAll('[aria-label="Hide Desk"],.bp3-icon-cross').length;
               const search = toolbar.querySelector('[aria-label="Search Desk"]');
               const add = toolbar.querySelector('.rm-desk-page__new-note');
               const rows = [...toolbar.querySelectorAll('input, button')].map(el => rect(el).centerY)
                 .sort((a, b) => a - b).reduce((all, y) => !all.length || y - all.at(-1) > 4 ? [...all, y] : all, []);
-              return { toolbar:rect(toolbar), title:rect(title), close:rect(close), search:rect(search), add:rect(add),
+              return { toolbar:rect(toolbar), title:rect(title), closeCount, search:rect(search), add:rect(add),
                 overflow:toolbar.scrollWidth-toolbar.clientWidth, rows };
             }''')
             toolbar_geometry.append({'width': 'wide-main', **wide})
-            assert abs(wide['close']['centerY'] - wide['add']['centerY']) <= 0.5, wide
-            assert wide['close']['width'] >= 30 and wide['close']['height'] >= 30, wide
-            assert wide['close']['left'] >= wide['toolbar']['left'] - 1 and wide['close']['right'] <= wide['toolbar']['right'] + 1, wide
+            assert wide['closeCount'] == 0, wide
+            assert abs(wide['search']['centerY'] - wide['add']['centerY']) <= 0.5, wide
+            assert wide['add']['width'] >= 30 and wide['add']['height'] >= 30, wide
             assert wide['search']['left'] >= wide['toolbar']['left'] - 1 and wide['search']['right'] <= wide['toolbar']['right'] + 1, wide
             assert wide['add']['left'] >= wide['toolbar']['left'] - 1 and wide['add']['right'] <= wide['toolbar']['right'] + 1, wide
             assert wide['overflow'] <= 1 and len(wide['rows']) == 1, wide
             assert 120 <= wide['search']['width'] <= 220, wide
-            assert wide['close']['left'] >= wide['add']['right'], wide
-            assert wide['toolbar']['right'] - wide['close']['right'] <= 20, wide
+            assert wide['add']['left'] >= wide['search']['right'], wide
+            assert wide['toolbar']['right'] - wide['add']['right'] <= 20, wide
 
             watches = page.evaluate('() => deskHarness.api.stats.watches')
             page.evaluate('() => deskHarness.api.openCopy()')
@@ -664,37 +664,37 @@ def run():
                 metrics = sidebar.locator('.rm-desk-page__toolbar').evaluate('''toolbar => {
                   const rect = el => { const r = el.getBoundingClientRect(); return {left:r.left, right:r.right, top:r.top, bottom:r.bottom, width:r.width, height:r.height, centerY:(r.top+r.bottom)/2}; };
                   const title = toolbar.querySelector('.rm-desk-page__title');
-                  const close = toolbar.querySelector('[aria-label="Hide Desk"]');
+                  const closeCount = toolbar.querySelectorAll('[aria-label="Hide Desk"],.bp3-icon-cross').length;
                   const search = toolbar.querySelector('[aria-label="Search Desk"]');
                   const add = toolbar.querySelector('.rm-desk-page__new-note');
                   const rows = [...toolbar.querySelectorAll('input, button')].map(el => rect(el).centerY)
                     .sort((a, b) => a - b).reduce((all, y) => !all.length || y - all.at(-1) > 4 ? [...all, y] : all, []);
                   const tools=toolbar.querySelector('.rm-desk-page__tools'),style=getComputedStyle(tools);
-                  const searchBudget=tools.getBoundingClientRect().width-rect(add).width-rect(close).width-2*(parseFloat(style.columnGap)||0);
-                  return { toolbar:rect(toolbar), title:rect(title), close:rect(close), search:rect(search), add:rect(add),
+                  const searchBudget=tools.getBoundingClientRect().width-rect(add).width-(parseFloat(style.columnGap)||0);
+                  return { toolbar:rect(toolbar), title:rect(title), closeCount, search:rect(search), add:rect(add),
                     overflow:toolbar.scrollWidth-toolbar.clientWidth, rows, searchBudget };
                 }''')
                 toolbar_geometry.append({'width': width, **metrics})
-                assert abs(metrics['close']['centerY'] - metrics['add']['centerY']) <= 0.5, metrics
-                assert metrics['close']['left'] >= metrics['toolbar']['left'] - 1 and metrics['close']['right'] <= metrics['toolbar']['right'] + 1, metrics
-                assert metrics['close']['width'] >= 30 and metrics['close']['height'] >= 30, metrics
+                assert metrics['closeCount'] == 0, metrics
+                assert abs(metrics['search']['centerY'] - metrics['add']['centerY']) <= 0.5, metrics
+                assert metrics['add']['width'] >= 30 and metrics['add']['height'] >= 30, metrics
                 assert metrics['overflow'] <= 1, metrics
                 assert metrics['search']['left'] >= metrics['toolbar']['left'] - 1 and metrics['search']['right'] <= metrics['toolbar']['right'] + 1, metrics
                 assert metrics['add']['left'] >= metrics['toolbar']['left'] - 1 and metrics['add']['right'] <= metrics['toolbar']['right'] + 1, metrics
                 assert len(metrics['rows']) <= 2, metrics
-                # Close now shares this row by user request. Search should use
-                # all remaining room up to the native 200px cap, not retain a
-                # minimum derived from the previous two-control row.
+                # Search uses the space before New note, up to the native
+                # 200px cap; there is no reserved cross-button column.
                 assert metrics['search']['width'] >= min(200, metrics['searchBudget']) - 0.5, metrics
-            # Preserve the original logical order: search, create, then dismiss.
+            # Search and New note lead directly to the cards, without a dead
+            # close-button tab stop. Escape still hides this Desk only.
             owner.evaluate('(el) => { el.style.width = "320px"; }')
             sidebar.get_by_role('textbox', name='Search Desk', exact=True).focus()
             page.keyboard.press('Tab')
             expect(sidebar.get_by_role('button', name='New note', exact=True)).to_be_focused()
             page.keyboard.press('Tab')
-            expect(sidebar.get_by_role('button', name='Hide Desk', exact=True)).to_be_focused()
+            expect(sidebar.locator('.rm-desk-tile__preview').first).to_be_focused()
             writes_before_close = page.evaluate('() => deskHarness.api.stats.writes.length')
-            sidebar.get_by_role('button', name='Hide Desk', exact=True).click()
+            page.keyboard.press('Escape')
             expect(sidebar).to_have_count(0)
             expect(page.locator('[data-fixture-host="copy"] > .fixture-raw')).to_be_visible()
             assert page.evaluate('() => deskHarness.api.stats.writes.length') == writes_before_close
@@ -708,7 +708,7 @@ def run():
             expect(sidebar).to_have_count(0)
             assert not main_grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
             (OUT/'sidebar-toolbar-geometry.json').write_text(json.dumps(toolbar_geometry, indent=2))
-            checks.append('sidebar toolbar aligns Hide Desk with New note at 280–520px, has no overflow or third control row, preserves keyboard order, and closes without writes')
+            checks.append('sidebar toolbar has no close button at 280–520px, aligns Search and New note without overflow, tabs directly to cards, and preserves write-free Escape dismissal')
 
             mount(editor=False)
             card('task-0').locator('[role="button"]').click()
@@ -720,7 +720,7 @@ def run():
             page.wait_for_function('deskHarness.api.pending()')
             page.locator('.rm-desk__header').get_by_role('button', name='Next', exact=True).click()
             close_focus()
-            page.get_by_role('button', name='Hide Desk', exact=True).click()
+            page.get_by_role('button', name='Open Desk', exact=True).click()
             page.evaluate('() => deskHarness.api.release()')
             page.wait_for_function('deskHarness.api.activeEditors()===0 && deskHarness.api.stats.watches===0')
             assert page.evaluate('() => deskHarness.api.stats.renders.length') == 1
@@ -778,10 +778,11 @@ def run():
                 if width == 390:
                     narrow_main = page.locator('.nautilus-desk .rm-desk-page__toolbar').evaluate('''toolbar => {
                       const add=toolbar.querySelector('[aria-label="New note"]').getBoundingClientRect();
-                      const close=toolbar.querySelector('[aria-label="Hide Desk"]').getBoundingClientRect();
-                      return {overflow:toolbar.scrollWidth-toolbar.clientWidth, centerDelta:Math.abs((add.top+add.bottom-close.top-close.bottom)/2)};
+                      const search=toolbar.querySelector('[aria-label="Search Desk"]').getBoundingClientRect();
+                      return {overflow:toolbar.scrollWidth-toolbar.clientWidth, centerDelta:Math.abs((add.top+add.bottom-search.top-search.bottom)/2),
+                        closeCount:toolbar.querySelectorAll('[aria-label="Hide Desk"],.bp3-icon-cross').length};
                     }''')
-                    assert narrow_main['overflow'] <= 1 and narrow_main['centerDelta'] <= 0.5, narrow_main
+                    assert narrow_main['closeCount'] == 0 and narrow_main['overflow'] <= 1 and narrow_main['centerDelta'] <= 0.5, narrow_main
             page.set_viewport_size({'width':1280,'height':1000})
             page.wait_for_function('Number(document.querySelector(".nautilus-desk__grid").dataset.columns)>=1')
             responsive_gaps = []

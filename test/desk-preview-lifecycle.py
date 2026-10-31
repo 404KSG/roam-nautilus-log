@@ -85,7 +85,7 @@ def stop_view(page, mode):
         page.evaluate('() => deskHarness.api.setCollapsed("plan-desk", true)')
         expect(page.locator('.nautilus-desk')).to_be_hidden()
     elif mode == 'off':
-        page.get_by_role('button', name='Hide Desk', exact=True).click()
+        page.get_by_role('button', name='Open Desk', exact=True).click()
         expect(page.locator('.nautilus-desk')).to_have_count(0)
     else:
         page.evaluate('() => deskHarness.destroy()')
@@ -226,6 +226,122 @@ def replacement(page, images):
     failed = assert_geometry(page)
     assert failed['height'] == removed['height'] and failed['span'] == removed['span']
     return {'undecoded': before_decode, 'newDecoded': decoded, 'afterRemoval': removed, 'afterFailure': failed}
+
+
+def live_focus_preview(page, images, mode='task'):
+    if mode == 'no-observer':
+        page.evaluate('window.IntersectionObserver = undefined')
+    prepare(page)
+    page.evaluate('''host => {
+      const a = deskHarness.api;
+      a.setString('task-3', '{{[[TODO]]}} Live image card 30m');
+      a.addChild('live-group', 'task-3', 'Image section');
+      a.addChild('live-image', 'live-group', 'Nested image ![](' + host + '/live.png)');
+      a.addChild('live-sibling', 'task-3', 'Sibling note');
+    }''', HOST)
+    open_desk(page)
+    all_loaded(page)
+    tile = card(page)
+    tile.scroll_into_view_if_needed()
+    expect(tile.locator('.rm-desk-tile__text')).to_have_text(['Image section', 'Nested image', 'Sibling note'])
+    page.wait_for_function('document.querySelector(\'[data-task-uid="task-3"] img\').naturalWidth > 0')
+    page.evaluate('''() => {
+      window.liveOtherCard = document.querySelector('[data-task-uid="task-0"]');
+    }''')
+    if mode == 'search':
+        page.get_by_role('textbox', name='Search Desk', exact=True).fill('live image')
+        expect(page.locator('.nautilus-desk__card')).to_have_count(1)
+        all_loaded(page)
+    page.evaluate('window.liveOtherImage = liveOtherCard.querySelector("img")')
+    if mode == 'draft':
+        page.get_by_role('button', name='New note', exact=True).first.click()
+        active = page.get_by_role('textbox', name='New note', exact=True)
+    else:
+        tile.locator('.rm-desk-tile__preview').click()
+        expect(page.locator('.nautilus-desk__native')).to_have_attribute('data-task-uid', 'task-3')
+        active = page.locator('textarea[data-block-uid="task-3"]')
+    active.focus()
+    active.dispatch_event('compositionstart')
+    if mode != 'draft':
+        active.fill('Uncommitted composition buffer')
+    active.evaluate('el => el.setSelectionRange(2, 8)')
+    page.evaluate('''() => {
+      const input = document.activeElement, body = document.querySelector('.nautilus-desk__focus-body');
+      body.scrollTop = 40;
+      window.liveEditor = {input, value:input.value, start:input.selectionStart, end:input.selectionEnd,
+        layer:document.querySelector('.nautilus-desk__focus-layer'), scroll:body.scrollTop,
+        native:document.querySelector('.nautilus-desk__native'), renders:deskHarness.api.stats.renders.length,
+        unmounts:deskHarness.api.stats.unmounts};
+    }''')
+
+    def assert_editor():
+        proof = page.evaluate('''() => {
+          const p = liveEditor, s = deskHarness.api.stats;
+          return {sameInput:document.activeElement === p.input && p.input.isConnected,
+            sameLayer:document.querySelector('.nautilus-desk__focus-layer') === p.layer,
+            sameNative:document.querySelector('.nautilus-desk__native') === p.native,
+            sameValue:p.input.value === p.value, sameSelection:p.input.selectionStart === p.start && p.input.selectionEnd === p.end,
+            sameScroll:document.querySelector('.nautilus-desk__focus-body').scrollTop === p.scroll,
+            sameMounts:s.renders.length === p.renders && s.unmounts === p.unmounts,
+            unrelatedImage:liveOtherCard.querySelector('img') === liveOtherImage,
+            inert:document.querySelector('.nautilus-desk').inert,
+            noWrites:s.writes.length === 0 && s.nativeWrites.length === 0 && s.forbiddenWrites === 0};
+        }''')
+        assert all(proof.values()), proof
+        expect(page.get_by_role('dialog', name='Desk', exact=True).get_by_role('button', name='Close', exact=True)).to_have_count(1)
+        return proof
+
+    def verify(opened, text='Nested image', source='/live.png'):
+        # No-image alone is insufficient: invalidation used to erase every row
+        # and leave the read queue paused until the editor closed.
+        expect(tile.locator('.rm-desk-tile__text')).to_have_text(
+            ['Image section', text, 'Sibling note'] if opened else ['Image section', 'Sibling note'])
+        expect(tile.locator('img')).to_have_count(1 if opened else 0)
+        if opened:
+            expect(tile.locator('img')).to_have_attribute('src', HOST + source)
+            page.wait_for_function('document.querySelector(\'[data-task-uid="task-3"] img\').naturalWidth > 0')
+        else:
+            expect(tile.locator('.rm-desk-tile__more')).to_be_visible()
+        geometry = assert_geometry(page)
+        assert_editor()
+        return geometry
+
+    initial = verify(True)
+    cycles = []
+    for _ in range(3):
+        page.evaluate('() => deskHarness.api.setOpen("live-group", false)')
+        folded = verify(False)
+        page.evaluate('() => deskHarness.api.setOpen("live-group", true)')
+        expanded = verify(True)
+        assert folded['height'] < expanded['height'] and expanded['height'] == initial['height']
+        cycles.append({'folded': folded, 'expanded': expanded})
+
+    page.evaluate('(url) => deskHarness.api.setString("live-image", "Changed image ![](" + url + ")")', HOST + '/live-changed.png')
+    verify(True, 'Changed image', '/live-changed.png')
+    # Race a second fold with the new root watch registration. Admission must
+    # reread/retry in the background without touching the active composition.
+    page.evaluate('''() => {
+      deskHarness.api.holdNextWatchRegistration('task-3');
+      deskHarness.api.setString('task-3', '{{[[TODO]]}} Updated live image card 30m');
+    }''')
+    page.wait_for_function('() => deskHarness.api.watchSnapshot().some(w => w.uid === "task-3" && w.state === "held")')
+    page.evaluate('() => { deskHarness.api.setOpen("live-group", false); deskHarness.api.release(); }')
+    verify(False)
+    expect(tile.locator('.rm-desk-tile__title')).to_have_text('Updated live image card 30m')
+    page.evaluate('() => deskHarness.api.setOpen("live-group", true)')
+    verify(True, 'Changed image', '/live-changed.png')
+
+    images.held.add('/live-held.png')
+    page.evaluate('(url) => deskHarness.api.setString("live-image", "Late image ![](" + url + ")")', HOST + '/live-held.png')
+    images.wait('/live-held.png')
+    page.evaluate('() => deskHarness.api.setOpen("live-group", false)')
+    before_late = verify(False)
+    images.finish('/live-held.png', TALL_PNG)
+    after_late = verify(False)
+    assert before_late == after_late, 'An obsolete image decode changed the folded preview'
+    page.screenshot(path=str(OUT / f'live-focus-{mode}.png'))
+    return {'mode': mode, 'cycles': cycles, 'editor': assert_editor(), 'registrationRace': True,
+            'lateImageIgnored': True, 'graphWrites': 0}
 
 
 def descendants(page, images):
@@ -482,6 +598,8 @@ def run():
               ('watch-admission-reread', admission_reread), ('watch-page-title', page_title_watch),
               ('watch-rejection-retry', rejected_preview_retry)]
     cases += [(f'late-image-{mode}', lambda p, i, mode=mode: late_image(p, i, mode)) for mode in ['fold', 'off', 'destroy']]
+    cases += [(f'live-focus-{mode}', lambda p, i, mode=mode: live_focus_preview(p, i, mode))
+              for mode in ['task', 'draft', 'no-observer', 'search']]
     cases += [('replacement-removal-failure', replacement), ('descendant-fields', descendants),
               ('fallback-no-observer', lambda p, i: invalidation_fallback(p, i, 'no-observer')),
               ('fallback-search', lambda p, i: invalidation_fallback(p, i, 'search')),

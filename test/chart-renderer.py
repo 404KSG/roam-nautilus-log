@@ -449,7 +449,8 @@ def density_and_control_contract(page):
     assert 2 <= composed['tipToQueue'] <= 8 and 0 <= composed['queueToDesk'] <= 10, composed
     assert composed['cardUids'] == ['connection-pending-0', 'connection-pending-1'], composed
     page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/'density-with-native-desk.png'))
-    page.get_by_role('button', name='Hide Desk', exact=True).click(); settle_renderer(page)
+    assert page.locator('.nautilus-desk .rm-desk-page__toolbar .bp3-icon-cross').count() == 0
+    toggle.click(); settle_renderer(page)
     assert toggle.get_attribute('aria-checked') == 'false' and not page.locator('.nautilus-desk').count()
     assert state(page)['writes'] == 0
     reports['nativeDeskComposition'] = composed
