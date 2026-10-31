@@ -78,30 +78,30 @@ membership, day relation or source edits may therefore reflow the diagram. Queue
 only changes content below it, not SVG geometry. Tests must not freeze stale placement to
 satisfy an obsolete unconditional END/clock assertion.
 
-The frame keeps a 12-unit top inset and 8-unit bottom inset. Native embeds may already
+The frame keeps a 12-unit top inset and 2-unit bottom inset; reducing the empty tail does not move its center, time paths or label positions. Native embeds may already
 outdent their host; compare with that baseline rather than adding global padding, overflow
 or negative-margin compensation. Narrow views retain side labels, major hour ticks and a
 compact center date. Hour sizing remains explicit in SVG output.
 
 ## Tip and control layout
 
-`chartTipLayout` combines the balanced surface with width-aware content mode. Above 360px,
-`contentMode=full`: natural width is capped only by local workspace width minus 32px, not
-280px. Titles and displayed metadata wrap, including unbroken strings, without ellipsis,
-line clamp or hidden overflow. More reveals extra information rather than a hidden title.
+`chartTipLayout` combines compact note chrome with width-aware content mode. Above 360px,
+`contentMode=full`: natural width is bounded by local workspace width minus 32px, never a
+universal 280px cap. Titles and displayed metadata wrap completely, including unbroken strings.
+More reveals extra information rather than unlocking a wide-view title.
 
-The normal surface is 58px tall in a 66px minimum slot, including 8px of lower clearance.
-It has 6px vertical/12px horizontal padding, a 4px row gap, an 8px column gap, a faint border
-and 6px corners. The 12px/16px title occupies the first row; 11px/16px metadata and More
-occupy the second. More is neutral until hover/focus, has an intrinsic width, nowrap and
-at least a 24px hit height. Width measurement includes the same 39px content gutter and
-11px action font as CSS. Expansion retains the padding rather than adding another layer.
+Normal content is 36px high in a 38px minimum slot, including 2px below it. Padding is 2px
+vertical/6px horizontal, column gap 4px, with no extra row gap, a faint border and 4px corners.
+The 12px/16px gradient title and 11px/14px metadata share the text column; intrinsic More spans
+both rows on the right so its 24px hit height does not inflate the second row. Measurement
+uses a 23px content gutter plus action width and a small host-font allowance. Expansion lets
+the title span the full row and moves More beside metadata, retaining the same padding.
 
 At 360px or narrower, `contentMode=compact` keeps bounded rows and offers More for clipped
-content. Text that fits still remains complete. In both modes the title has its own first
-row, metadata and More occupy the second, and More uses intrinsic width and nowrap.
+content. Text that fits still remains complete. More uses intrinsic width and nowrap and
+must not overlap either text row.
 
-Ordinary short tips retain 58px content and a 66px minimum slot. Full-mode wrapping grows
+Ordinary short tips retain 36px content and a 38px minimum slot. Full-mode wrapping grows
 only the detail region in normal page flow, so following content may move but SVG size and
 time geometry do not. Idle tips reserve only the compact slot. This content-driven height
 is intentional under the latest completeness request; do not reintroduce a fixed-height

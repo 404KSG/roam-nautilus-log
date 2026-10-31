@@ -310,7 +310,7 @@ test('the spiral uses a local fixed detail region above an inert grid', () => {
   assert.match(component, /:on-mouse-enter/);
   assert.match(component, /:on-focus/);
   assert.doesNotMatch(component, /createPortal|getScreenCTM|placeFloatingTooltip|radialTooltipGeometry/);
-  assert.match(css, /\.nautilus-log-detail-region\s*\{[^}]*height:\s*66px;/s);
+  assert.match(css, /\.nautilus-log-detail-region\s*\{[^}]*height:\s*38px;/s);
   assert.match(css, /\.nautilus-log-detail-title[^}]*grid-column:\s*2 \/ -1/s);
   assert.match(css, /\.nautilus-log-container \.nautilus-log-detail-expand[^}]*white-space:\s*nowrap/s);
   assert.doesNotMatch(css, /\.nautilus-log-detail-region\s*\{[^}]*overflow[^;]*auto/s);

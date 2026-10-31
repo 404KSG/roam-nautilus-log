@@ -9,7 +9,7 @@ test('roomy tips use available local width instead of a universal 280px truncati
   assert.equal(tip.contentMode, 'full');
   assert.equal(tip.maxWidth, 688);
   assert.ok(tip.width > 280 && tip.width <= 688);
-  assert.ok(tip.width - 39 >= measure(title));
+  assert.ok(tip.width - 23 >= measure(title));
   assert.equal(tip.more, false, 'wide title readability must not depend on More');
 });
 

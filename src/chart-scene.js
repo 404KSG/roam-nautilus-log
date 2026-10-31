@@ -125,7 +125,7 @@ function chartPresentationFrame({ containerWidth, items = [], timeRadius = 150,
   const timedTop = 12;
   const timedHeight = Math.max(plotDiameter + 16, flexible + Math.max(fixed.left + loose.left, fixed.right + loose.right));
   const timedBottom = timedTop + timedHeight;
-  const height = timedBottom + 8;
+  const height = timedBottom + 2;
   return { viewBox: { width: viewWidth, height }, center: { x: viewWidth / 2, y: timedTop + timedHeight / 2 },
     timeRadius: radius, plotScale: scale, compact, density: compact ? 'compact' : 'regular',
     inspector: 'wrapped', compactHeader: width <= 640, columnCapacity: timedHeight,
@@ -267,15 +267,16 @@ function chartTipLayout({ title = '', summary = '', meta = summary, containerWid
   // tolerance that lets a supposedly complete short tip paint an ellipsis.
   const metaWidth = textMeasure(`400 11px ${fontFamily}`, measureMeta)(String(summary).replace(/[0-9]/g, '0'))
     + 2 + metaDigits * .4;
-  // Match the balanced surface without restoring a fixed wide-view cap:
-  // 12px side padding, two 1px borders, a 5px dot and an 8px column gap.
-  const contentGutter = 12 * 2 + 2 + 5 + 8;
+  // Two tight rows share an intrinsic action. Wide content still wraps in full;
+  // only compact previews use More to reveal clipped text.
+  const contentGutter = 6 * 2 + 2 + 5 + 4;
   const more = String(meta) !== String(summary) || (compact && (titleWidth > maxWidth - contentGutter || metaWidth > maxWidth - contentGutter));
-  const actionWidth = Math.max(28, Math.ceil(textMeasure(`400 11px ${fontFamily}`)(moreLabel)) + 10);
-  const width = Math.max(titleWidth + contentGutter, metaWidth + contentGutter + (more ? actionWidth + 8 : 0));
+  const actionWidth = Math.max(28, Math.ceil(textMeasure(`400 11px ${fontFamily}`)(moreLabel)) + 6);
+  const actionRoom = more ? actionWidth + 4 + 6 : 0;
+  const width = Math.max(titleWidth, metaWidth) + contentGutter + actionRoom;
   return { mode: 'stacked', contentMode: compact ? 'compact' : 'full',
     width: Math.max(60, Math.min(maxWidth, Math.ceil(width))), maxWidth,
-    expandedWidth: maxWidth, more, actionWidth, slotHeight: 66 };
+    expandedWidth: maxWidth, more, actionWidth, slotHeight: 38 };
 }
 
 module.exports = { chartScene, chartPresentationFrame, chartRecordAppearance, chartTipLayout };
