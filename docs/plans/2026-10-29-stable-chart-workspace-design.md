@@ -1,156 +1,141 @@
-# A single time spiral with complete diagram labels
+# Nautilus: honest time geometry and readable controls
 
 ## Current decision
 
-Revised October 31, 2026. The latest UI request removes excessive chart/tip/Desk spacing
-and replaces the Desk icon with a sliding switch. It does not change the estimate rule.
-The completion correction still supersedes the earlier A/B decision:
-completed tasks without actual timing use their explicit estimate, or Default Todo Duration
-(15 minutes by default). Neither CLOCK nor a completion timestamp is required for a slice.
-The Completed / No timestamp node and its upper connection band are removed. Last-edit
-inference, borrowed source timestamps, the outer track and footer inventory remain rejected.
+Revised October 31, 2026. The latest four corrections take precedence over the earlier
+single-line tip, labeled Desk switch, indigo/gold palette and all-records-in-SVG rule:
 
-Nautilus is a changing time budget. Its unequal-radius spiral is the only time geometry.
-The red needle is now; fixed events stay anchored; pending whole tasks move through future
-continuous gaps in outline order. Pending scheduling, END, capacity, CLOCK writes and
-reference ownership remain unchanged.
+- The tip prioritizes the title; metadata must not squeeze an ordinary title into an ellipsis.
+- Desk shows only its slider, with a hover/focus label.
+- Categories are red urgency, bright-orange events and blue tasks.
+- Past unfinished work and genuinely unscheduled work belong in a default-collapsed queue,
+  not in arbitrary diagram positions. Native Desk masonry is verified and retained.
 
-Every titled source task or event remains visible in the diagram. Counts, hidden accessible
-nodes and separate inventories cannot replace its title. The indigo/gold palette is an
-intentional design choice, not a claim to use official Linear tokens. No asset or font ships.
+Completed tasks still use valid local Actual, otherwise an explicit estimate or Default
+Todo Duration (15 minutes by default). CLOCK and completion stamps remain optional. No
+unrecorded-completion node, date-root wiring or outer status track returns.
 
-## Completed-estimate allocation
+The unequal-radius spiral is a finite time budget. Fixed events keep written ranges;
+current/future whole tasks fill continuous gaps in source order. The view must not
+reconstruct yesterday's unfinished tasks as if their hypothetical placement were history.
+No new graph mutation, automatic carry-forward, completion marker or timestamp inference
+is authorized by this design.
 
-`src/log-core.js` owns the pure `projectCompletedEstimates` function. Its public `chartScene`
-entry applies that projection before calling the geometry module in `src/chart-scene.js`.
-The raw geometry module does not read the graph, write storage or infer timestamps.
+## Completed estimates
 
-1. Keep fixed events and anchored completion intervals unchanged. Local CLOCK totals still
-   take precedence over Planned and are not capped at Planned. A local completion stamp can
-   anchor an estimate without CLOCK.
-2. For each remaining completed flexible task, use `planned-duration`, then its parsed
-   duration, then the configured default. A deliberate zero duration remains zero.
-3. Allocate whole estimates in source order from START, around fixed events and anchored
-   completion intervals. Reuse `scheduleTasks` with temporary explicit-duration copies;
-   the copies disable the DONE filter and mark obstacles as fixed. Never mutate originals.
-4. Do not use now, source completion timestamps or edit metadata. The allocation stays
-   fixed through minute ticks and END. A source/status/range edit may change it.
-5. Mark placed records `estimated-allocation`. The tip states the duration and explains
-   that the position is estimated, not a recorded completion time. Do not write `doneAt`,
-   add Actual, alter pending demand or reserve extra future capacity.
-6. If a whole estimate cannot fit before END, keep its title and duration with a capacity
-   endpoint. Do not split it, backfill a later short task ahead of it, or extend the day.
-   Zero duration and invalid-window inputs have separate explanations, not false overload.
+`projectCompletedEstimates` in `src/log-core.js` remains a pure, read-only allocation.
+It keeps fixed and locally anchored completion intervals unchanged. Unanchored completed
+flexible tasks use Planned, parsed duration or the configured default, in source order
+from START around those intervals. The allocator receives temporary copies; originals,
+Actual and live pending demand are not changed. No task is split or extended beyond END,
+and a later short task cannot overtake an earlier task that does not fit.
 
-Estimated completion positions can extend beyond now and overlap a pending forecast. This
-is intentional: they are not observed history. Gray dashed outlines distinguish them from
-solid anchored history. When an estimate overlaps a pending forecast, its gray fill recedes
-so the indigo forecast remains visible. A pointer-inert outline layer keeps the estimated
-boundary visible without changing source tab order or intercepting navigation.
+Placed estimates use `estimated-allocation`. Their gray dashed outlines and tip distinguish
+estimated position from recorded completion time. They can overlap a pending forecast;
+the outline remains pointer-inert and the gray fill recedes so blue planning stays visible.
+Known local completion stamps and condensed CLOCK totals retain their existing meanings.
+Source timestamps and edit metadata are not borrowed. Zero duration stays zero. DONE
+estimate overflow keeps its title and duration in the diagram, not in an unfinished queue.
 
-`partitionChartEvents` still retains the pre-projection pending, anchored-DONE and
-unanchored-DONE inputs. Every completed local UID remains available to Tidy. Desk keeps its
-independent unfinished-task projection. Estimates never become graph records or Actual.
+## Pending-work disposition
+
+`chartTaskDisposition` runs after completed-estimate allocation and before the geometry
+module. It partitions the existing source records; it does not create or modify graph data.
+
+- **Past:** `timelineDayState.scheduleFromMinutes` is END. The component excludes unfinished
+  flexible tasks from planning input and active capacity demand. These tasks appear in
+  **Unfinished / 未完成**, with no start/end interval. Fixed events and completed history
+  remain visible. Old tasks are not moved to today, marked DONE or timestamped.
+- **Today:** the existing scheduler starts at the current cursor. Only tasks with an actual
+  scheduled interval enter the diagram. Others appear in **Unscheduled / 未排入**.
+- **Future:** scheduling still starts at START; true overflow uses Unscheduled.
+- **Undated (`other`):** preserve existing planning rather than treating an unparsed date as past.
+- **Overnight:** next-day carryover remains today until the configured logical END. Midnight
+  alone must not turn an active overnight plan into an unfinished-history queue.
+
+The queue is below the tip and above Desk. It is absent when empty and collapsed by default.
+Opening it exposes full titles and estimates in source order, without an internal scrollbar.
+Click/Enter locates the original local UID; Shift opens the sidebar. Eye affects completed
+chart records only, not the queue. Changing a task to DONE moves it back to completed-history
+handling; DONE estimate overflow never mixes with pending work.
+
+The pending queue and native Desk serve different purposes: the queue explains what is not
+on the time axis; Desk remains the user's optional editing surface for unfinished tasks.
 
 ## Frame and labels
 
-Source titles, source status/ranges, estimated allocations and local width determine the
-frame. Each side reserves its fixed labels and static non-time records, plus the full
-flexible-title budget for the worst case where pending work moves to one side. It does not
-add a second lower band for the same flexible titles. Non-time records occupy the bottom
-of their own column; timed labels use the remaining space. This keeps a safe source-sized
-upper bound without resizing for a changing scheduled subset.
+The frame uses the current diagram members, their source titles/status/ranges and local
+width. A source-sized column budget handles their possible sides without reserving a second
+empty lower band. Diagram labels remain on the same side as their time anchors; ordinary
+labels wrap fully, while pathological text retains an explicit full-text route.
 
-Non-time glyphs sit just beyond the text's outer edge, away from the clock and time leaders.
-They represent unplaced work, genuine completed-estimate overflow or known off-hours ranges.
-There is no status node, date-root wiring or outer circular track. The frame retains a 12-unit
-top inset and 8-unit bottom inset; no clipping, negative margin or clock-driven crop is used.
+The correct stability boundary is **unchanged diagram membership**. Ordinary minute motion,
+hover and Eye preserve the frame. A task can cease to fit before END: for example, a 45-minute
+task fits at 19:15 with END 20:00, but not at 19:16. A truthful queue must change then. Queue
+membership, day relation or source edits may therefore reflow the diagram. Queue open/close
+only changes content below it, not SVG geometry. Tests must not freeze stale placement to
+satisfy an obsolete unconditional END/clock assertion.
 
-Timed labels stay on the same side as their slice, ordered by anchor position. Same-side
-curves share routing coordinates; labels never flip across the clock to fill space.
-Ordinary titles wrap in full. Balanced wrapping avoids unnecessary Latin word splits and
-isolated CJK final characters. Pathological titles retain complete accessible text and an
-explicit full-text action.
+The frame keeps a 12-unit top inset and 8-unit bottom inset. Native embeds may already
+outdent their host; compare with that baseline rather than adding global padding, overflow
+or negative-margin compensation. Narrow views retain side labels, major hour ticks and a
+compact center date. Hour sizing remains explicit in SVG output.
 
-Narrow containers retain side columns, major hour ticks and a compact center date. Text
-measurement uses the SVG font family. Hour text receives an explicit inline font size,
-not a CSS variable that SCI/Reagent may fail to emit. The red needle keeps a non-scaling
-stroke. Native Desk typography remains independent.
+## Tip and control layout
 
-Explicit status, duration, range or local CLOCK edits may change page flow. Clock-only
-updates, hover and Eye visibility may not. Eye hides completed records and their estimate
-outlines together, without laying out a reduced source collection.
+The closed tip has two rows in a stable 44px slot. Its 42px content places the 12px/16px title
+across the whole first row after the tone dot. The second row contains 11px/14px metadata
+and an intrinsically sized More action with at least a 24px hit height. More uses nowrap,
+normal word breaking and its actual text width, not a fixed 24px column. The panel remains
+at most 280px wide, with 16px narrow-container insets.
 
-## Materials and wall-clock recovery
+Ordinary titles that fit the title row are complete. Text exceeding that width, or extra
+metadata, exposes More. Expanded text stays in normal page flow and is never internally
+scrollable. Pointer, focus and pinned expansion remain distinct owners; changed or removed
+records, Eye, folding and unload invalidate stale detail. The tip never covers the plot or Desk.
 
-Tasks use vivid indigo, fixed events gold, and anchored completion history solid gray-blue.
-Estimated completion uses the same gray family with dashed outlines. Elapsed events use
-paler gold. Hatching covers past gaps not covered by a task or event interval; it does not
-prove idle or wasted time. Pattern IDs remain unique per mounted chart.
+The Desk switch has a 40×32px hit area, a 28×16px track and 12px thumb travel. There is no
+visible name span. Its `aria-label`, `role=switch` and `aria-checked` remain, while the existing
+hover/focus tooltip supplies the visual label without wrapping. The real Desk binding owns
+checked state through registration, start, close, preferences and remounts. Keyboard focus
+is visible; Space/Enter, existing Alt navigation, focus return and reduced motion are retained.
+No second React state or new preference is introduced.
 
-Current tasks and events retain stronger fills and outlines. Explicit urgency overrides
-ordinary materials. The header keeps three category dots. Completed titles have no deletion
-line. The existing detail owner highlights the title, connection and slice or estimate
-outline, preserving completion color. Inactive connectors may recede; other text stays legible.
+## Category colors and native Desk
 
-Clock recovery is unchanged: minute ticks, focus, visible-page return, pageshow and owned
-CLOCK notifications share one refresh. Epoch-minute comparison handles same-minute next-day
-return. Unmount releases all listeners and the timer. Tests follow callbacks through actual
-scheduler intervals and SVG paths, rather than relying only on unchanged function bodies.
+Legend/category colors are Urgent `#ea0f0f`, Event `#f97316`, and Task `#0899c8`. Light-theme
+text uses darker family members (`#c2410c` for events, `#087b9f` for tasks) for readability;
+legend dots do not reuse these darker text tokens. Events use orange rather than gold fills,
+and tasks use blue rather than purple. Completion stays neutral gray, explicit urgency
+continues to override ordinary fill, and no title gets a deletion line.
 
-## Details and preserved interactions
+Masonry remains Roam's measured grid-span layout: four-pixel rows, zero row gap, spans based
+on card height plus column gap, and native auto-fill columns. A shorter column can receive
+the next card before a tall neighboring card ends. Tile resize/image completion remeasure
+spans without reordering DOM or graph data. No CSS columns replacement, equal-height grid,
+new column cap or production masonry rewrite is part of this request.
 
-The centered tip fits its content up to 280px, with 16px narrow-container insets. Closed tips
-use one 28px row in a stable 32px slot, invisible when idle. Title and summary stay on one
-line; clipping or extra metadata exposes More. Full diagram titles are not removed. Explicit
-expansion stays in page flow, pins the selected record and has no internal scrollbar or
-overlay over following blocks. The Desk root's top embedding margin is 4px; native toolbar,
-card geometry and typography remain unchanged.
+Earlier visual research included Linear's [2026 refresh](https://linear.app/now/behind-the-latest-design-refresh)
+and [2024 redesign](https://linear.app/now/how-we-redesigned-the-linear-ui). Their hierarchy and
+noise-reduction principles remain useful, but the user's current color and content decisions
+are authoritative. These dimensions are Nautilus choices, not official Linear tokens.
 
-Pointer, focus and expansion remain separate owners. Changes to time, status, duration,
-provenance or presence invalidate stale detail, as do Eye, fold and unload. Existing click,
-Enter and Shift navigation is reused. No shortcut is added.
+## Verification and boundaries
 
-The labeled Desk switch has a 70×32px hit area, 28×16px track and 12px thumb travel. It uses
-`role=switch` and `aria-checked`, with click and native button Space/Enter activation. The
-existing Desk binding owns checked state; there is no separate React boolean. Registration,
-start and close synchronize the current control. Remounted controls replace the binding's
-origin for focus return and existing Alt navigation. Reduced motion suppresses the slide.
+Use exact production CLJS/JS in the isolated renderer. Verify ordinary CJK title width,
+More/展开 line count under font and inherited word-break pressure, hidden Desk text with
+hover/focus labels, computed category colors and readable title contrast. Preserve default
+15/explicit 45 completion tests, source-reference ownership and optional local CLOCK updates.
 
-Desk editing, IME, Escape, drag/import, previews, strict Remove, safe drafts, calendar
-integration and the execution layer are unchanged. No global Roam padding, overflow or
-negative-margin compensation is introduced.
+Assert every source UID appears exactly once across SVG and queue, with no false pending
+history. Cover past demand zero, current/future overflow, a before-END overflow transition,
+undated fallback, overnight carryover, queue navigation and default collapse, Eye independence,
+completion moving out of the queue, and full long titles after disclosure. Existing live
+minute, fixed-event, foreground recovery, same-minute next-day and cleanup gates remain.
 
-### Design references
-
-Linear's [2026 refresh](https://linear.app/now/behind-the-latest-design-refresh) emphasizes
-retaining information density while making supporting controls quieter and removing needless
-boundaries. Its [2024 redesign account](https://linear.app/now/how-we-redesigned-the-linear-ui)
-describes alignment, hierarchy and testing across layouts and themes. This change applies
-those principles to Nautilus; the dimensions above are our design choices, not Linear tokens.
-
-## Verification and limits
-
-The exact-source SCI/Reagent gate checks default 15-minute and explicit 45-minute slices
-without stamps; optional local CLOCK replacing an estimate with Actual; source-reference
-ownership; stable estimate positions across clock updates; unchanged pending forecasts;
-overlap paint and pointer behavior; and real capacity overflow without title loss.
-
-It also retains source-hash verification, all-title coverage, routing and collision checks,
-Eye visibility, hover emphasis, source tab order, narrow hours, unique patterns, END and
-overnight stability, full-text ownership, lifecycle cleanup, main/sidebar/embed contexts,
-Chinese, default/native styles and computed light/dark contrast. Added checks cover compact
-spacing, long-title hover, source-stable shared columns, switch markup/callbacks, and the exact
-chart composed with the production Desk controller over the same synthetic rows. A separate
-Desk switch gate verifies state, preferences, replacement controls, Alt hints/navigation,
-focus return, host isolation and reduced motion. Graph writes, unexpected
-HTTP(S), missing resources and page/console errors remain failures. Missing configured
-native CSS fails before launching the renderer.
-
-Native embed CSS may outdent its host before Nautilus mounts. Compare against that baseline,
-never compensate globally. Explicit full-text expansion may scroll the page; compare document
-flow rather than treating scrolling as frame resizing.
-
-Private notes, screenshots, signed URLs and native assets stay outside the repository.
-Isolated tests do not certify authenticated Desktop reloads, private host lifecycle,
-physical device input or every custom theme.
+Retain real Desk controller/state tests and multi-card masonry geometry, resize, image-load,
+IME, Escape, import/drag, previews, strict Remove and all graph-write guards. Queue testing
+uses synthetic graph data. Native CSS and private screenshots remain outside the repository.
+No dependency, font installation, global rule, network configuration, memory/Wiki record,
+merge or marketplace release is introduced. Isolated tests do not certify an authenticated
+Desktop reload, private-host lifecycle, physical drag or real clipboard/macro/send behavior.

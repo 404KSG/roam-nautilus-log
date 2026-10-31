@@ -120,17 +120,38 @@ def assert_rect_equal(a, b, label):
         assert all(abs(a[key][part] - b[key][part]) <= .5 for part in ('x', 'y', 'width', 'height')), (label, key, a[key], b[key])
 
 
+def assert_clock_layout(a, b, label):
+    # Queue membership is a semantic state change, including a whole task
+    # ceasing to fit before END. Ordinary motion of the same members is stable.
+    assert set(a['sourceUids']) == set(b['sourceUids']), label
+    same = ([r['uid'] for r in a['records']], a['queueKind'], [r['uid'] for r in a['queueItems']]) == ([r['uid'] for r in b['records']], b['queueKind'], [r['uid'] for r in b['queueItems']])
+    if same:
+        assert_rect_equal(a, b, label)
+
+
 def compact_record(s):
     return {k: s[k] for k in ('viewBox', 'svg', 'stage', 'workspace', 'detail', 'status', 'desk', 'following', 'nowLabel', 'recordCount')} | {
         'kinds': {r['uid']: r['kind'] for r in s['records']},
+        'queueKind': s['queueKind'], 'queueUids': [r['uid'] for r in s['queueItems']],
         'markerPaths': {r['uid']: r['markerPath'] for r in s['records'] if r['markerPath']},
     }
 
 
 def coverage(page, hidden=False):
     s = state(page); expected = page.evaluate('() => __chartHarness.expectedSourceUids()')
-    assert len(s['records']) == len(expected) == len({r['uid'] for r in s['records']})
-    assert {r['uid'] for r in s['records']} == set(expected)
+    represented = [r['uid'] for r in s['records']] + [r['uid'] for r in s['queueItems']]
+    assert len(represented) == len(expected) == len(set(represented))
+    assert set(represented) == set(expected)
+    if s['pendingQueue']:
+        assert s['queueKind'] in ('unfinished', 'unscheduled')
+        assert [r['uid'] for r in s['queueItems']] == [r['uid'] for r in s['pendingQueue']['items']]
+        for ui, item in zip(s['queueItems'], s['pendingQueue']['items']):
+            assert item['todo'] and not item['done'] and not item.get('meeting')
+            assert item.get('start') is None and item.get('end') is None
+            assert ui['title'] == item['description'] and ui['visible'] == s['queueOpen'], {'ui': ui, 'item': item, 'open': s['queueOpen']}
+        if s['queueKind'] == 'unfinished': assert s['lastTimeline']['result']['relation'] == 'past'
+    else:
+        assert not page.locator('.nautilus-log-pending-queue').count()
     for record in s['records']:
         assert record['marks'] > 0 and record['label'].strip(), record
         if not hidden: assert record['visible'], record
@@ -173,13 +194,13 @@ def coverage(page, hidden=False):
         assert box['x'] + box['width'] <= svg['x'] + svg['width'] + 1 and box['bottom'] <= svg['bottom'] + 1, (box, svg)
     detail = page.locator('.nautilus-log-detail-region')
     if 'is-expanded' not in detail.get_attribute('class'):
-        assert abs(s['detail']['height'] - 32) < .5
+        assert abs(s['detail']['height'] - 44) < .5
     if detail.get_attribute('data-nautilus-detail') == 'active':
         tip = page.locator('.nautilus-log-detail-content').bounding_box()
         assert tip['width'] <= min(280, s['workspace']['width'] - 32) + 1, tip
         assert abs(tip['x'] + tip['width'] / 2 - s['workspace']['x'] - s['workspace']['width'] / 2) <= 1
         if 'is-expanded' not in detail.get_attribute('class'):
-            assert tip['height'] <= 28.5, tip
+            assert tip['height'] <= 42.5, tip
         if detail.get_attribute('data-tip-more') == 'false':
             assert not page.locator('.nautilus-log-detail-expand').count()
             assert page.locator('.nautilus-log-detail-title').evaluate('e=>e.scrollWidth<=e.clientWidth')
@@ -290,7 +311,7 @@ def completion_connections_contract(page):
         assert all(r['end'] - r['start'] == r['duration'] and not r['actual'] and r['doneAt'] is None for r in proof)
         for iso in ['2026-10-29T08:01:00', '2026-10-29T13:30:00', '2026-10-29T20:30:00']:
             current = set_clock(page, iso); coverage(page); geometry_audit(page)
-            assert_rect_equal(before, current, 'estimated completion source-reserved frame')
+            assert_clock_layout(before, current, 'estimated completion and changing pending membership')
             assert allocations() == proof
             if iso.endswith('08:01:00'):
                 overlap = page.evaluate('''()=>{
@@ -303,7 +324,9 @@ def completion_connections_contract(page):
                 assert overlap['actual'] == overlap['planned'], overlap
                 assert overlap['opacity'] and max(overlap['opacity']) <= .2
                 assert overlap['outlines'] and all(r['dash'] != 'none' and r['pointer'] == 'none' for r in overlap['outlines'])
-        assert [r['uid'] for r in state(page)['records']] == page.evaluate('()=>__chartHarness.expectedSourceUids()')
+        before = state(page)
+        expected = page.evaluate('()=>__chartHarness.expectedSourceUids()')
+        assert [r['uid'] for r in before['records']] == [uid for uid in expected if uid not in {r['uid'] for r in before['queueItems']}]
         uid = 'connection-done-2'
         title = page.locator(f'[data-task-uid="{uid}"] .nautilus-log-record-title')
         idle_fill = title.evaluate('e=>getComputedStyle(e).fill')
@@ -336,7 +359,6 @@ def density_and_control_contract(page):
     reports = {}
     for context, width in [('main', 720), ('embed', 520), ('sidebar', 280)]:
         load(page, 'connections', context, width, window='flow')
-        set_clock(page, '2026-10-30T08:00:00')
         select(page, 'connection-pending-0'); before = coverage(page); geometry_audit(page)
         measure = page.evaluate('''()=>{
           const tip=document.querySelector('.nautilus-log-detail-content').getBoundingClientRect();
@@ -347,20 +369,19 @@ def density_and_control_contract(page):
         # Compact font/anchor placement can leave a few extra pixels inside
         # the source-stable frame; it must not reserve another label band.
         assert 0 <= measure['beforeTip'] <= (18 if width >= 640 else 24), (context, width, measure)
-        assert 0 <= measure['afterTip'] <= 3 and measure['tipHeight'] <= 28.5, measure
+        assert 0 <= measure['afterTip'] <= 3 and measure['tipHeight'] <= 42.5, measure
         if width == 720: assert before['presentation']['viewBox']['height'] <= 340
         for iso in ['2026-10-29T08:01:00', '2026-10-29T13:30:00', '2026-10-29T20:30:00']:
             after = set_clock(page, iso); coverage(page); geometry_audit(page)
-            assert_rect_equal(before, after, 'shared column frame across time and END')
-        # Time changes correctly invalidate detail without moving DOM focus.
-        # A real re-entry must blur first; focus() on the same node emits nothing.
-        page.locator('[data-task-uid="connection-pending-0"]').evaluate('e=>e.blur()')
-        select(page, 'connection-pending-0'); geometry_audit(page)
+            assert_clock_layout(before, after, 'same members stay stable; END moves pending work to the queue')
+        select(page, 'connection-done-0'); geometry_audit(page)
         toggle = page.get_by_role('switch', name='Desk', exact=True)
         assert toggle.get_attribute('aria-checked') == 'false'
         assert toggle.get_attribute('aria-expanded') is None
         assert toggle.locator('svg').count() == 0 and toggle.locator('.nautilus-log-desk-switch-thumb').count() == 1
-        box = toggle.bounding_box(); assert box['width'] == 70 and box['height'] == 32
+        box = toggle.bounding_box(); assert box['width'] == 40 and box['height'] == 32
+        assert toggle.inner_text().strip() == '' and toggle.get_attribute('data-nautilus-tooltip') == 'Desk'
+        assert toggle.evaluate('e=>getComputedStyle(e,"::after").whiteSpace==="nowrap"')
         # Verify the production CLJS callback boundary. The real Desk session
         # state/persistence/remount behavior is exercised by desk-switch.py.
         page.evaluate('''()=>{window.__deskCalls=[];window.nautilusLogExtensionData.openDesk=o=>__deskCalls.push({uid:o.planUid,origin:o.origin===document.querySelector('.nautilus-log-desk-btn'),host:o.container===document.querySelector('.nautilus-log-desk-host')})}''')
@@ -371,8 +392,9 @@ def density_and_control_contract(page):
         page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/f'density-{context}-{width}.png'))
         reports[f'{context}-{width}'] = {'spacing': measure, 'switchCallbacks': calls, 'clockStable': True, 'graphWrites': state(page)['writes']}
     load(page, 'stress', 'main', 720); set_clock(page, '2026-10-29T21:30:00')
+    page.locator('.nautilus-log-pending-queue > summary').click(); settle_renderer(page)
     for uid in ['overflow-0', 'overflow-1', 'overflow-2', 'overflow-3']:
-        select(page, uid); coverage(page); geometry_audit(page)
+        page.locator(f'[data-queued-task-uid="{uid}"]').focus(); coverage(page); geometry_audit(page)
     load(page, 'connections', 'main', 720, window='flow', real_desk=True)
     set_clock(page, '2026-10-30T08:00:00')
     toggle = page.get_by_role('switch', name='Desk', exact=True)
@@ -387,19 +409,95 @@ def density_and_control_contract(page):
     assert toggle.get_attribute('aria-checked') == 'true'
     assert page.locator('.nautilus-desk__card').count() == 2
     page.wait_for_function('()=>[...document.querySelectorAll(".nautilus-desk__card")].every(e=>e.dataset.previewState==="ready")')
-    select(page, 'connection-pending-0'); coverage(page); geometry_audit(page)
+    select(page, 'connection-done-0'); coverage(page); geometry_audit(page)
     composed = page.evaluate('''()=>{
       const tip=document.querySelector('.nautilus-log-detail-content').getBoundingClientRect();
+      const queue=document.querySelector('.nautilus-log-pending-queue').getBoundingClientRect();
       const toolbar=document.querySelector('.nautilus-desk .rm-desk-page__toolbar').getBoundingClientRect();
-      return {tipToDesk:toolbar.top-tip.bottom,cardUids:[...document.querySelectorAll('.nautilus-desk__card')].map(e=>e.dataset.taskUid),checked:document.querySelector('[role=switch]').getAttribute('aria-checked')};
+      return {tipToQueue:queue.top-tip.bottom,queueToDesk:toolbar.top-queue.bottom,queueHeight:queue.height,cardUids:[...document.querySelectorAll('.nautilus-desk__card')].map(e=>e.dataset.taskUid),checked:document.querySelector('[role=switch]').getAttribute('aria-checked')};
     }''')
-    assert 0 <= composed['tipToDesk'] <= 10, composed
+    assert 0 <= composed['tipToQueue'] <= 8 and 0 <= composed['queueToDesk'] <= 10, composed
     assert composed['cardUids'] == ['connection-pending-0', 'connection-pending-1'], composed
     page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/'density-with-native-desk.png'))
     page.get_by_role('button', name='Hide Desk', exact=True).click(); settle_renderer(page)
     assert toggle.get_attribute('aria-checked') == 'false' and not page.locator('.nautilus-desk').count()
     assert state(page)['writes'] == 0
     reports['nativeDeskComposition'] = composed
+    return reports
+
+
+def four_corrections_contract(page):
+    reports = {}
+    title_text = '核对项目资料分类与交付说明文本'
+    for context, width, lang in [('main', 720, 'en'), ('sidebar', 280, 'zh')]:
+        load(page, 'connections', context, width, window='flow', lang=lang)
+        page.evaluate('text=>__chartHarness.updateChild("connection-done-0","{{[[DONE]]}} "+text+" 30m")', title_text)
+        page.wait_for_function('text=>document.querySelector("[data-task-uid=connection-done-0]").dataset.recordTitle===text', arg=title_text)
+        select(page, 'connection-done-0'); coverage(page)
+        def tip_metrics():
+            return page.evaluate('''()=>{
+              const t=document.querySelector('.nautilus-log-detail-title'),b=document.querySelector('.nautilus-log-detail-expand'),range=document.createRange();range.selectNodeContents(b);
+              return {title:t.textContent,titleWidth:t.clientWidth,titleScroll:t.scrollWidth,more:b.textContent,moreWidth:b.clientWidth,moreScroll:b.scrollWidth,whiteSpace:getComputedStyle(b).whiteSpace,rows:[...new Set([...range.getClientRects()].map(r=>Math.round(r.y)))],height:document.querySelector('.nautilus-log-detail-content').getBoundingClientRect().height};
+            }''')
+        normal = tip_metrics()
+        assert normal['title'] == title_text and normal['titleScroll'] <= normal['titleWidth'], normal
+        assert normal['moreScroll'] <= normal['moreWidth'] + 1 and len(normal['rows']) == 1 and normal['whiteSpace'] == 'nowrap', normal
+        pressure_style = page.add_style_tag(content='.nautilus-log-content{overflow-wrap:anywhere;word-break:break-word}.nautilus-log-detail-expand{font-size:13px!important;letter-spacing:.4px}')
+        settle_renderer(page); pressure = tip_metrics()
+        assert pressure['titleScroll'] <= pressure['titleWidth'] and pressure['moreScroll'] <= pressure['moreWidth'] + 1 and len(pressure['rows']) == 1, pressure
+        assert pressure['height'] <= 42.5, pressure
+        pressure_style.evaluate('e=>e.remove()'); settle_renderer(page)
+        colors = page.locator('.nautilus-log-html-legend').first.locator('.nautilus-log-legend-dot').evaluate_all('els=>els.map(e=>getComputedStyle(e).backgroundColor)')
+        assert colors == ['rgb(234, 15, 15)', 'rgb(249, 115, 22)', 'rgb(8, 153, 200)'], colors
+        switch = page.get_by_role('switch', name='Desk', exact=True)
+        assert switch.inner_text().strip() == '' and not switch.locator('.nautilus-log-desk-switch-label').count()
+        switch.hover()
+        page.wait_for_function('getComputedStyle(document.querySelector(".nautilus-log-desk-btn"),"::after").opacity==="1"')
+        assert switch.evaluate('e=>getComputedStyle(e,"::after").content.includes("Desk")&&getComputedStyle(e,"::after").whiteSpace==="nowrap"')
+        rows_before = page.evaluate('()=>__chartHarness.sourceRows()')
+        past = set_clock(page, '2026-10-30T08:00:00'); coverage(page)
+        assert past['queueKind'] == 'unfinished' and not past['queueOpen']
+        assert [r['uid'] for r in past['queueItems']] == ['connection-pending-0', 'connection-pending-1']
+        assert past['pendingQueue']['minutes'] == 90
+        assert not page.locator('svg [data-task-uid^="connection-pending-"]').count()
+        capacity = page.evaluate('()=>__chartHarness.traces().filter(t=>t.kind==="capacity").at(-1).result')
+        assert capacity['demandMinutes'] == 0 and capacity['overloadMinutes'] == 0 and capacity['unplacedMinutes'] == 0, capacity
+        hidden = 'Hide completed on chart' if lang == 'en' else '在海螺中隐藏已完成'
+        shown = 'Show completed on chart' if lang == 'en' else '在海螺中显示已完成'
+        page.get_by_role('button', name=hidden, exact=True).click(); coverage(page, hidden=True)
+        assert page.locator('.nautilus-log-pending-queue').is_visible()
+        page.get_by_role('button', name=shown, exact=True).click(); settle_renderer(page)
+        select(page, 'connection-done-0'); before = coverage(page)
+        page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/f'corrections-{context}-{width}-{lang}.png'))
+        page.locator('.nautilus-log-pending-queue > summary').click(); settle_renderer(page); opened = coverage(page)
+        assert all(r['visible'] for r in opened['queueItems'])
+        assert all(abs(opened['svg'][k] - before['svg'][k]) < .5 for k in ['width', 'height'])
+        before_locates = len(page.evaluate('()=>__chartHarness.traces().filter(t=>t.kind==="locate")'))
+        page.locator('[data-queued-task-uid="connection-pending-0"]').press('Shift+Enter')
+        calls = page.evaluate('()=>__chartHarness.traces().filter(t=>t.kind==="locate")')
+        assert len(calls) == before_locates + 1 and calls[-1]['uid'] == 'connection-pending-0' and calls[-1]['sidebar']
+        assert page.evaluate('()=>__chartHarness.sourceRows()') == rows_before
+        page.evaluate('()=>__chartHarness.updateChild("connection-pending-0","{{[[DONE]]}} Write 45m")')
+        page.wait_for_function('document.querySelector("svg [data-task-uid=connection-pending-0]")?.dataset.timeClaim==="estimated-allocation"')
+        assert [r['uid'] for r in coverage(page)['queueItems']] == ['connection-pending-1']
+        page.evaluate('()=>__chartHarness.updateChild("connection-pending-1","{{[[DONE]]}} Ship 45m")')
+        page.wait_for_function('!document.querySelector(".nautilus-log-pending-queue")'); coverage(page)
+        reports[f'{context}-{width}-{lang}'] = {'normalTip': normal, 'hostFontPressure': pressure, 'colors': colors,
+          'pastCapacity': capacity, 'pastQueueMinutes': 90, 'fullTitlesAndNavigation': True, 'eyeIndependent': True, 'completedRejoinsDiagram': True}
+    load(page, 'sparse'); set_clock(page, '2026-10-29T20:30:00'); coverage(page)
+    assert not state(page)['pendingQueue']
+    set_clock(page, '2026-10-29T20:31:00'); coverage(page)
+    assert state(page)['queueKind'] == 'unscheduled' and [r['uid'] for r in state(page)['queueItems']] == ['task-reference']
+    assert not page.locator('svg [data-task-uid="task-reference"]').count()
+    load(page, 'connections', window='flow'); set_clock(page, '2026-10-28T23:00:00'); coverage(page)
+    assert state(page)['lastTimeline']['result']['relation'] == 'future' and not state(page)['pendingQueue']
+    load(page, 'overnight', window='overnight'); set_clock(page, '2026-10-30T00:15:00'); coverage(page)
+    assert state(page)['lastTimeline']['result']['relation'] == 'today' and not state(page)['pendingQueue']
+    set_clock(page, '2026-10-30T00:31:00'); coverage(page)
+    assert state(page)['lastTimeline']['result']['relation'] == 'today' and state(page)['queueKind'] == 'unscheduled'
+    set_clock(page, '2026-10-30T02:00:00'); coverage(page)
+    assert state(page)['lastTimeline']['result']['relation'] == 'past' and state(page)['queueKind'] == 'unfinished'
+    reports['dayBoundaries'] = {'beforeEndOverflow': True, 'futureFromStart': True, 'overnightCarryover': True, 'logicalEndBecomesPast': True}
     return reports
 
 
@@ -465,9 +563,14 @@ def timeflow_recovery(page):
     resume('2026-10-29T08:01:00', '()=>__chartHarness.signalFocus()')
     next_day = resume('2026-10-30T08:01:00', '()=>__chartHarness.signalFocus()')
     assert next_day['timeline']['result']['relation'] == 'past' and next_day['now'] is None
-    assert next_day['timeline']['result']['scheduleFromMinutes'] == 300
+    assert next_day['timeline']['result']['scheduleFromMinutes'] == 1260
+    assert state(page)['queueKind'] == 'unfinished'
+    assert [r['uid'] for r in state(page)['queueItems']] == ['task-reference','task-long','task-unbroken']
+    assert not any(r['uid'] in ['task-reference','task-long','task-unbroken'] for r in next_day['records'])
     set_clock(page, '2026-10-29T20:59:00'); ended = snapshot()
-    assert all(r['kind']=='unplaced' for r in ended['records'] if r['uid'] in ['task-reference','task-long','task-unbroken'])
+    assert state(page)['queueKind'] == 'unscheduled'
+    assert [r['uid'] for r in state(page)['queueItems']] == ['task-reference','task-long','task-unbroken']
+    assert not any(r['uid'] in ['task-reference','task-long','task-unbroken'] for r in ended['records'])
     assert len(page.evaluate('()=>__chartHarness.activeClockListeners()')) == 3
     page.evaluate('()=>__chartHarness.unmount()')
     assert page.evaluate('()=>__chartHarness.activeClockListeners()') == []
@@ -476,7 +579,8 @@ def timeflow_recovery(page):
 
 
 def afternoon_flow_contract(page):
-    before=load(page,'flow','main',640,window='flow')
+    load(page,'flow','main',640,window='flow')
+    before=set_clock(page,'2026-10-29T13:29:00')
     observations=[]
     for iso in ['2026-10-29T13:29:00','2026-10-29T13:30:00','2026-10-29T13:31:00']:
         set_clock(page,iso);coverage(page)
@@ -501,11 +605,13 @@ def afternoon_flow_contract(page):
     assert a['firstPath']==b['firstPath'] and b['firstPath']!=c['firstPath']
     assert a['fixedPath']==b['fixedPath']==c['fixedPath']
     assert a['fixedPhase']=='current' and b['fixedPhase']=='elapsed'
-    assert a['looseKinds'] == ['unplaced', 'unplaced']
+    assert a['looseKinds'] == []
+    assert [r['uid'] for r in state(page)['queueItems']] == ['flow-task-6', 'flow-task-7']
     assert page.locator('[data-time-claim="estimated-allocation"]').count() == 2
     set_clock(page,'2026-10-29T20:00:00');coverage(page)
-    assert_rect_equal(before,state(page),'ordinary pending flow through END')
-    assert page.locator('[data-chart-kind="unplaced"]').count() == 8
+    assert_clock_layout(before,state(page),'pending membership changes at END')
+    assert page.locator('[data-queued-task-uid]').count() == 8
+    assert not page.locator('svg [data-task-uid^="flow-task-"]').count()
     return observations
 
 
@@ -534,7 +640,7 @@ def material_and_tip_contract(page):
         page.wait_for_function('document.querySelector("[data-task-uid=routine-0]").dataset.recordTitle==="Review"')
         select(page,'routine-0');coverage(page)
         short=page.locator('.nautilus-log-detail-content').bounding_box()
-        assert short['width'] < 250 and short['height'] <= 36, short
+        assert short['width'] < 250 and short['height'] <= 42.5, short
         assert not page.locator('.nautilus-log-detail-expand').count()
         before=state(page)
         page.evaluate('()=>__chartHarness.updateChild("routine-0","18:30-19:00 核对项目全部材料并完成交付内容的逐项检查和验收确认工作")')
@@ -546,7 +652,7 @@ def material_and_tip_contract(page):
         page.locator('[data-task-uid="routine-0"]').evaluate('e=>e.blur()')
         select(page,'routine-0');coverage(page)
         long=page.locator('.nautilus-log-detail-content').bounding_box()
-        assert long['width'] <= min(280,width-32)+1 and long['height'] <= 28.5
+        assert long['width'] <= min(280,width-32)+1 and long['height'] <= 42.5
         assert page.get_by_role('button',name='Full text',exact=True).count()==1
         page.screenshot(path=str(OUT/'screenshots'/f'compact-tip-{context}-{width}.png'),full_page=True)
         result['tips'][f'{context}-{width}']={'short':short,'long':long}
@@ -618,24 +724,24 @@ def lifecycle(page):
 
 
 def full_text(page, context, width):
-    load(page, 'stress', context, width)
-    select(page, 'overflow-3')
+    load(page, 'long', context, width)
+    select(page, 'long-unbroken')
     before = coverage(page)
     scroll_before = page.evaluate('() => scrollY')
     page.get_by_role('button', name='Full text', exact=True).click(); settle_renderer(page)
     expanded = coverage(page)
-    assert 'END_LONG' in page.locator('.nautilus-log-detail-title').inner_text()
+    assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text()
     assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).webkitLineClamp') == 'none'
     assert expanded['detail']['height'] > before['detail']['height']
     assert all(abs(expanded['svg'][key] - before['svg'][key]) < .5 for key in ('x', 'width', 'height')), 'explicit expansion must not resize the SVG'
     assert abs(expanded['svg']['y'] + page.evaluate('() => scrollY') - before['svg']['y'] - scroll_before) < .5, 'the diagram must keep its document-flow position'
-    label = page.locator('[data-task-uid="overflow-1"] .nautilus-log-record-label')
+    label = page.locator('[data-task-uid="long-cjk"] .nautilus-log-record-label')
     label.hover(); settle_renderer(page)
     hit = label.evaluate('''e=>{const r=e.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('[data-task-uid]')?.dataset.taskUid}''')
-    assert hit == 'overflow-1', 'multiline label gaps must belong to their own interactive record'
-    assert 'END_LONG' in page.locator('.nautilus-log-detail-title').inner_text(), 'expanded reading must be pinned'
+    assert hit == 'long-cjk', 'multiline label gaps must belong to their own interactive record'
+    assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text(), 'expanded reading must be pinned'
     page.get_by_role('button', name='Collapse text', exact=True).click(); page.mouse.move(1180, 980); settle_renderer(page)
-    assert abs(state(page)['detail']['height'] - 32) < .5
+    assert abs(state(page)['detail']['height'] - 44) < .5
     page.screenshot(path=str(OUT / 'screenshots' / f'fulltext-{context}-{width}.png'), full_page=True)
     return {'closed': compact_record(before), 'expandedHeight': expanded['detail']['height'], 'pinned': True, 'noInternalScroll': True}
 
@@ -646,7 +752,7 @@ def main():
                           env={**os.environ, 'NODE_PATH': str(NODE_MODULES)})
     source = COMPONENT.read_text(); write_page(source)
     report = {'artifactDirectory': str(OUT), 'componentSha256': sha(source), 'componentBytes': len(source.encode()),
-              'acceptance': 'All source records have diagram marks and labels; no footer inventory or nested scroll reading.'}
+              'acceptance': 'Observed/completed/planned intervals stay in the diagram; past unfinished and unscheduled TODOs remain in a truthful collapsible queue. No task loss or nested scroll reading.'}
     errors, requests, resources, console_errors = [], [], [], []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -692,7 +798,7 @@ def main():
                     observations = []
                     for iso in CLOCKS:
                         current = set_clock(page, iso); coverage(page)
-                        assert_rect_equal(before, current, f'{context}/{width}/{iso}')
+                        assert_clock_layout(before, current, f'{context}/{width}/{iso}')
                         observations.append(compact_record(current))
                     select(page, 'unknown-2'); active = coverage(page)
                     assert_rect_equal(before, active, 'hover/focus frame')
@@ -703,13 +809,18 @@ def main():
             report['stress'] = {}
             for context, width in [('main', 960), ('main', 520), ('sidebar', 320), ('sidebar', 280), ('embed', 640)]:
                 before = load(page, 'stress', context, width); coverage(page); geometry = geometry_audit(page)
-                cjk = next(r for r in before['records'] if r['uid'] == 'overflow-0')
-                assert cjk['label'].replace(' ', '') == cjk['title'].replace(' ', ''), cjk
+                cjk = next(r for r in before['queueItems'] if r['uid'] == 'overflow-0')
+                assert cjk['title'] == next(r['description'] for r in before['pendingQueue']['items'] if r['uid'] == 'overflow-0')
+                assert before['queueKind'] == 'unscheduled' and not before['queueOpen']
                 late = set_clock(page, '2026-10-29T21:01:00'); coverage(page)
                 assert_rect_equal(before, late, 'END cannot drop overflow or resize frame')
                 for uid in ['overflow-0', 'overflow-1', 'overflow-2', 'overflow-3']:
-                    a = next(r for r in before['records'] if r['uid'] == uid); b = next(r for r in late['records'] if r['uid'] == uid)
-                    assert a['kind'] == b['kind'] == 'unplaced' and a['labelSide'] == b['labelSide']
+                    a = next(r for r in before['queueItems'] if r['uid'] == uid); b = next(r for r in late['queueItems'] if r['uid'] == uid)
+                    assert a['title'] == b['title'] and a['duration'] == b['duration']
+                page.locator('.nautilus-log-pending-queue > summary').click(); settle_renderer(page); opened = coverage(page)
+                assert all(r['visible'] for r in opened['queueItems'])
+                assert all(abs(opened['svg'][key] - late['svg'][key]) < .5 for key in ['width', 'height'])
+                assert 'END_LONG' in page.locator('[data-queued-task-uid="overflow-3"]').inner_text()
                 page.screenshot(path=str(OUT / 'screenshots' / f'stress-{context}-{width}.png'), full_page=True)
                 report['stress'][f'{context}-{width}'] = {'before': compact_record(before), 'after': compact_record(late), 'geometry': geometry}
             report['scenarios'] = {}
@@ -728,7 +839,7 @@ def main():
                 before = load(page, 'overnight', context, width, window='overnight')
                 observations = []
                 for iso in NIGHT:
-                    current = set_clock(page, iso); coverage(page); assert_rect_equal(before, current, 'overnight frame')
+                    current = set_clock(page, iso); coverage(page); assert_clock_layout(before, current, 'overnight queue transition')
                     observations.append(compact_record(current))
                 assert observations[3]['nowLabel'] == '01:59' and observations[4]['nowLabel'] is None
                 report['overnight'][f'{context}-{width}'] = observations
@@ -740,6 +851,7 @@ def main():
             report['chinese'] = compact_record(state(page))
             report['completionConnections'] = completion_connections_contract(page)
             report['densityAndControl'] = density_and_control_contract(page)
+            report['fourCorrections'] = four_corrections_contract(page)
             report['afternoonFlow'] = afternoon_flow_contract(page)
             report['materialsAndTips'] = material_and_tip_contract(page)
             report['timeflowRecovery'] = timeflow_recovery(page)

@@ -23,9 +23,11 @@ for (const width of [280, 320, 520, 640, 960]) {
     const states = [[], source.filter(r => r.todo && !r.done).map((r, i) => ({ ...r, start: 780 + i * 5, end: 810 + i * 5 })),
       source.filter(r => r.todo && !r.done).map((r, i) => ({ ...r, start: 420 + i * 5, end: 450 + i * 5 }))];
     const scenes = states.map(events => build({ items: source, events, containerWidth: width }));
+    assert.deepEqual(scenes[1].frame, scenes[2].frame, 'same members, different clock positions');
     for (const scene of scenes) {
-      assert.deepEqual(scene.frame, scenes[0].frame);
-      assert.deepEqual(scene.records.map(r => r.uid), source.map(r => r.uid));
+      const represented = [...scene.records.map(r => r.uid), ...(scene.pendingQueue?.items || []).map(r => r.uid)];
+      assert.equal(represented.length, source.length);
+      assert.deepEqual(new Set(represented), new Set(source.map(r => r.uid)));
       const f = scene.frame;
       for (const r of scene.records) {
         const b = r.label;
@@ -44,13 +46,13 @@ for (const width of [280, 320, 520, 640, 960]) {
   });
 }
 
-test('closed tips use one compact row; full details remain an explicit action', () => {
+test('closed tips prioritize the title on two compact rows; full details remain explicit', () => {
   const measure = text => text.length * 6;
   const short = chartTipLayout({ title: 'Write', summary: 'Task · 45m', measureTitle: measure, measureMeta: measure });
   const long = chartTipLayout({ title: 'Detailed review '.repeat(30), summary: 'Estimate 30m', meta: 'Estimated allocation, not observed completion', measureTitle: measure, measureMeta: measure });
-  assert.equal(short.slotHeight, 32);
-  assert.equal(short.mode, 'inline'); assert.equal(short.more, false);
-  assert.equal(long.slotHeight, 32);
-  assert.equal(long.mode, 'inline'); assert.equal(long.more, true);
+  assert.equal(short.slotHeight, 44);
+  assert.equal(short.mode, 'stacked'); assert.equal(short.more, false);
+  assert.equal(long.slotHeight, 44);
+  assert.equal(long.mode, 'stacked'); assert.equal(long.more, true);
   assert.ok(long.width <= 280 && long.expandedWidth <= 280);
 });

@@ -175,6 +175,18 @@ def run():
             assert gap['autoRows'] == '4px', gap
             assert gap['reserved'] <= 32 and gap['followingGap'] <= 80, gap
             (OUT/'gap-measurement-after-open.json').write_text(json.dumps(gap, indent=2))
+            page.wait_for_function('''()=>['task-0','task-1','task-2'].every(uid=>{const e=document.querySelector(`.nautilus-desk__card[data-task-uid="${uid}"]`);return e?.dataset.previewState==='ready'&&e.style.gridRowEnd===`span ${Math.ceil((e.offsetHeight+12)/4)}`})''')
+            masonry = page.evaluate('''()=>{
+              const grid=document.querySelector('.nautilus-desk__grid');
+              const box=uid=>{const e=grid.querySelector(`[data-task-uid="${uid}"]`),r=e.getBoundingClientRect();return {uid,x:r.x,y:r.y,bottom:r.bottom,height:r.height,span:e.style.gridRowEnd}};
+              return {columns:Number(grid.dataset.columns),a:box('task-0'),b:box('task-1'),c:box('task-2'),order:[...grid.children].map(e=>e.dataset.taskUid)};
+            }''')
+            assert masonry['columns'] == 2, masonry
+            assert masonry['a']['height'] > masonry['b']['height'], masonry
+            assert abs(masonry['c']['x'] - masonry['b']['x']) < 1, masonry
+            assert masonry['b']['bottom'] <= masonry['c']['y'] < masonry['a']['bottom'], masonry
+            (OUT/'masonry-flow.json').write_text(json.dumps(masonry, indent=2))
+            checks.append('masonry places the next card beneath the shorter column, not an equal-height row')
             expect(card('task-0').locator('.rm-desk-tile__images img')).to_have_count(2)
             expect(card('task-0').locator('.rm-desk-tile__images img').nth(1)).to_have_js_property('naturalWidth', 40)
             # Code remains literal whether the asynchronous preview has loaded

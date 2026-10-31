@@ -306,7 +306,9 @@ test('the spiral uses a local fixed detail region above an inert grid', () => {
   assert.match(component, /:on-mouse-enter/);
   assert.match(component, /:on-focus/);
   assert.doesNotMatch(component, /createPortal|getScreenCTM|placeFloatingTooltip|radialTooltipGeometry/);
-  assert.match(css, /\.nautilus-log-detail-region\s*\{[^}]*height:\s*32px;/s);
+  assert.match(css, /\.nautilus-log-detail-region\s*\{[^}]*height:\s*44px;/s);
+  assert.match(css, /\.nautilus-log-detail-title[^}]*grid-column:\s*2 \/ -1/s);
+  assert.match(css, /\.nautilus-log-container \.nautilus-log-detail-expand[^}]*white-space:\s*nowrap/s);
   assert.doesNotMatch(css, /\.nautilus-log-detail-region\s*\{[^}]*overflow[^;]*auto/s);
   assert.doesNotMatch(css, /\.nautilus-log-workspace--side/);
   assert.match(component, /:expanded \(if expanded\? nil info\)/);
@@ -937,14 +939,14 @@ test('Tidy is a stable, reversible direct-child action that does not rewrite sch
   assert.doesNotMatch(tidyPlan, /deleteGraphBlock|createGraphBlock/);
 });
 
-test('Log keeps a labeled Desk switch and four quiet icon controls without playback mode', () => {
+test('Log keeps a hover-labeled Desk switch and four quiet icon controls without playback mode', () => {
   assert.doesNotMatch(component, /\(defn playback-button/);
   assert.doesNotMatch(component, /playback-state-atom|playback-frame-atom|requestAnimationFrame/);
   assert.doesNotMatch(logCore, /playback\s*=/);
   assert.doesNotMatch(css, /nautilus-log-playback-active|nautilus-log-slice-pop-in/);
-  assert.equal((component.match(/:data-nautilus-tooltip/g) || []).length, 4);
+  assert.equal((component.match(/:data-nautilus-tooltip/g) || []).length, 5);
   assert.match(component, /:role "switch"/);
-  assert.match(component, /nautilus-log-desk-switch-label/);
+  assert.doesNotMatch(component, /nautilus-log-desk-switch-label/);
   assert.match(css, /\.nautilus-log-desk-btn\[aria-checked="true"\] \.nautilus-log-desk-switch-thumb\s*\{[^}]*translateX\(12px\)/);
   assert.match(css, /\.nautilus-log-toggle-btn\s*\{[\s\S]*?width:\s*32px !important;[\s\S]*?height:\s*32px !important;[\s\S]*?padding:\s*7px !important;/);
   assert.match(css, /\.nautilus-log-toggle-btn\[data-nautilus-tooltip\]::after/);
@@ -1159,17 +1161,19 @@ test('current diagram labels have individually routed leaders without track-budg
   assert.doesNotMatch(css, /\.nautilus-log-event-slice-group\s*\{[^}]*opacity:/s);
 });
 
-test('the chart uses vivid indigo and gold without crossing out completed titles', () => {
+test('the chart restores red/orange/blue categories with readable text and no completion strike-through', () => {
   assert.match(component, /def task-fill-color "var\(--nautilus-log-task-fill\)"/);
   assert.doesNotMatch(component, /todo-color-palette/);
-  assert.match(css, /--nautilus-log-task:\s*#4f46c6/);
-  assert.match(css, /--nautilus-log-event:\s*#8a5a00/);
+  assert.match(css, /--nautilus-log-task:\s*#0899c8/);
+  assert.match(css, /--nautilus-log-event:\s*#f97316/);
+  assert.match(css, /--nautilus-log-event-text:\s*#c2410c/);
+  assert.doesNotMatch(css, /#4f46c6|#8a5a00/);
   assert.match(css, /--nautilus-log-completed-fill:\s*#c7d0e1/);
   assert.match(css, /\.nautilus-log-record--done \.nautilus-log-record-title[^}]*text-decoration:\s*none/s);
   assert.doesNotMatch(component, /completion-node-component|data-status-node "untimed-completed"/);
   assert.match(component, /data-estimate-outline-for/);
   assert.match(css, /\.nautilus-log-estimated-outline path[^}]*stroke-dasharray:\s*3 2/s);
-  assert.match(css, /\.nautilus-log-record-title\s*\{[^}]*fill:\s*var\(--nautilus-log-task\)/s);
+  assert.match(css, /\.nautilus-log-record-title\s*\{[^}]*fill:\s*var\(--nautilus-log-task-text\)/s);
   assert.match(css, /\.nautilus-log-legend-dot--task\s*\{\s*background:\s*var\(--nautilus-log-task\);\s*\}/);
 });
 

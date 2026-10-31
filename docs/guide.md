@@ -59,8 +59,8 @@ small flame marks whether the current minute is consuming Available or Event tim
 
 ## Visual language
 
-- Vivid indigo-blue: flexible tasks; the current task has a stronger fill and outline
-- Gold: fixed events; elapsed events fade to pale gold
+- Blue: flexible tasks; the current task has a stronger fill and outline
+- Bright orange: fixed events; elapsed events use a lighter orange
 - Solid gray: completion history with a local time anchor
 - Gray with dashed outlines: completed tasks placed by estimate, not recorded completion times
 - Pale hatching: past gaps not covered by a task or event interval, not future availability
@@ -75,10 +75,11 @@ identifies this as **Estimated allocation**, not a recorded completion time.
 
 Estimated allocations do not move with the clock or change pending-task scheduling. They can
 extend past now and overlap a pending forecast; dashed gray outlines distinguish them while
-the pending task keeps its indigo fill. If the configured window cannot hold a whole estimate,
+the pending task keeps its blue fill. If the configured window cannot hold a whole estimate,
 its title and duration remain visible with a capacity-overflow endpoint. No task is split,
 no later short task overtakes it, and no extra time is added beyond END. Unscheduled pending
-work keeps its hollow diamond; known ranges outside chart hours keep their square.
+work belongs in the collapsed **Unscheduled** queue below the chart, not at an arbitrary
+point in the spiral. Known ranges outside chart hours keep their square.
 
 Hover or focus a title to emphasize its whole connection and slice.
 Completed titles retain their neutral color without a deletion line; other titles stay
@@ -88,9 +89,9 @@ Past gaps describe the chart allocation, not proof that time was idle or wasted.
 
 ## Chart controls
 
-- **Desk switch:** show or hide unfinished-task cards below the chart. The thumb slides right and the track turns indigo when open. Click, Space or Enter toggles it; the state also follows Hide Desk, fold/expand restoration and saved preferences.
+- **Desk switch:** show or hide unfinished-task cards below the chart. Only the slider is visible; hover or keyboard focus shows its Desk label. The thumb slides right and the track turns blue when open. Click, Space or Enter toggles it; the state also follows Hide Desk, fold/expand restoration and saved preferences.
 - **Eye:** show or hide completed slices, estimate outlines and their connected titles.
-  It defaults to showing them and does not affect Desk, which only shows unfinished tasks.
+  It defaults to showing them and does not affect the pending queue or Desk, which only shows unfinished tasks.
 - **Calendar:** after Google Calendar reports Connected in Settings, import
   timed busy events and dated Google Tasks for this chart's Daily Note.
   Option/Alt-click force-refreshes only the Google-managed strings.
@@ -104,20 +105,34 @@ Past gaps describe the chart allocation, not proof that time was idle or wasted.
   saved Desk preference is unchanged. Expand restores the spiral and, when Desk
   was selected, its cards.
 
-Every titled source task or event has a visible diagram mark and a connected label.
-Ordinary titles wrap inside the SVG rather than disappearing when a label budget is full.
-Labels stay on both sides of the spiral, including in narrow containers. Narrow views keep
-major hour labels and a compact center date so the task titles remain readable. Timed
-labels never switch to the opposite side to fill space. The frame budgets for all source
-titles, source status/ranges and local width. Editing a task's status or adding local CLOCK
-evidence may change its region and page flow; clock-only updates, completion visibility
-and hover do not resize the frame. Timed and unplaced labels share one source-sized column
-budget instead of reserving an empty second band. Non-time glyphs sit beyond the title's
-outer edge, away from the spiral's time leaders.
+Every titled source record remains available either in the diagram or in the pending queue.
+Fixed events, completed history and estimates, and genuinely scheduled tasks keep their
+connected diagram labels. Ordinary titles wrap rather than disappearing when a label
+budget is full. Narrow views retain side labels, major hours and a compact center date.
+Timed labels stay on their slice's side.
+
+The frame uses the current diagram members' source titles, status/ranges and local width.
+Ordinary minute motion of the same members, hover and Eye do not resize it. A task entering
+or leaving the pending queue, a change of day relation, or an explicit source edit may
+change the layout. A whole task can cease to fit before END; the queue must reflect that
+change rather than keeping a stale slice. Expanding the queue does not resize the SVG.
 
 The spiral is the only time geometry. There is no completion-status node, separate upper
-connection band, outer track, below-chart inventory or scrolling Schedule. The header
-still reports remaining capacity and overload.
+connection band or outer track. The lower queue is only for unfinished work, not an
+inventory of completed history. It has no internal scrollbar.
+
+### Past days and unscheduled work
+
+On a **past** Daily Note, unfinished tasks are not replanned from START and are not counted
+as active Planned demand or overload. They remain under **Unfinished**, collapsed by default,
+with their original titles, estimates and local UIDs. Nothing is moved to today or marked
+complete. Completed estimates and real fixed ranges remain in the diagram.
+
+Today, future days and undated views keep their existing scheduling order. Tasks that do
+not fit a whole continuous gap appear under **Unscheduled**. Empty queues are absent.
+Expand either queue to read full titles; click or Enter locates the original block, and
+Shift opens it in the sidebar. DONE estimate overflow never enters an unfinished queue.
+An overnight window remains today's active plan until its logical END, even after midnight.
 
 CLOCK and completion stamps are optional. A local stamp such as `d14:30` anchors an estimate;
 without it, the estimate still receives a slice through the allocation described above.
@@ -127,9 +142,11 @@ write no timestamps, add no Actual, and leave pending scheduling and capacity un
 
 Hover or keyboard-focus a record or available slot to read its context in a centered
 tip that fits its content, capped at 280px and inset by 16px in narrower workspaces.
-Closed tips use a single 28px row in a stable 32px slot, invisible when idle. Long titles
-can shorten in this tip, but their diagram labels remain visible. No internal scrollbar
-is used. **More** appears only when text is clipped
+Closed tips use two compact rows in a stable 44px slot, invisible when idle. The title
+owns the first row; metadata and **More** occupy the second. More has its own intrinsic
+width and never breaks into letters. Ordinary titles that fit the available title row
+remain complete; oversized text can expand. No internal scrollbar is used. **More** appears
+only when text is clipped
 or additional metadata exists; it explicitly expands that content in page flow and pins
 it while you read. Collapse
 it to resume the compact view. Changed or removed records invalidate the pinned text.
@@ -145,8 +162,10 @@ Desk. The switch reflects the actual view, including after a reload or control r
 font, size, or card theme. Desk stays within the same local renderer width as the
 chart above, including centered Daily Notes, sidebars, and embeds. It does not
 expand to the article wrapper or use a compensating negative margin.
-Native auto-fill determines the column count;
-there is no fixed two-column layout or three-column cap. The embedded root does
+Native masonry uses four-pixel grid rows and measured row spans: the next card can fill
+space beneath a shorter card instead of waiting for an equal-height row. Tile resize and
+image loading trigger remeasurement without changing DOM or task order. Native auto-fill
+determines the column count; there is no fixed two-column layout or three-column cap. The embedded root does
 not use Roam's full-page `rm-desk-page` marker: current host styles use that marker
 to change ancestor padding and impose a viewport-sized canvas. Only native card
 sizes are retained locally; opening this component must not change page spacing. Search, New note and Hide Desk

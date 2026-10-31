@@ -4,15 +4,25 @@
 
 ### Added
 
-- The chart shares one source-sized label budget instead of reserving a second empty
-  overflow band. The frame remains stable through clock updates, END and hover. Closed
-  tips use a 28px single row in a 32px slot; explicit full text still expands in page flow.
-  Non-time glyphs stay outside their titles, clear of time leaders. The Desk embedding
-  margin is tighter without restyling native cards or typography.
-- Desk now has a labeled sliding switch rather than a four-square icon. Its checked
-  state comes from the actual view and saved preference, including Hide Desk, reload,
-  fold/expand and replacement controls. Click, Space/Enter and existing Alt navigation
-  remain supported; reduced motion suppresses the slide.
+- Tips now give the title its own first row instead of letting metadata squeeze it into
+  a narrow single-line track. Metadata and More occupy the second row; More uses its actual
+  text width and cannot break into letters. The compact content is 42px in a stable 44px
+  slot, with explicit full text still expanding in page flow.
+- Desk uses only the sliding control; its name appears on hover or keyboard focus and
+  remains available to screen readers. Checked state follows the actual view and saved
+  preference through Hide Desk, reload, fold/expand and replacement controls. Click,
+  Space/Enter, Alt navigation and reduced motion remain supported.
+- Past unfinished tasks no longer get replanned from START into false historical slices
+  or counted as active Planned demand. They remain in a default-collapsed Unfinished
+  queue. Today/future tasks without a fitting whole slot enter Unscheduled. Queues preserve
+  full titles, estimates, original UIDs and navigation; no task is moved or completed.
+- Source-sized frames stay stable for ordinary motion of the same diagram members, hover
+  and Eye. Genuine queue membership changes (including before END), day relation changes
+  and source edits may relayout. Queue expansion does not resize the SVG. No empty duplicate
+  overflow band or production host-padding compensation is introduced.
+- Native Desk masonry is retained, not rebuilt. Additional geometry checks verify that
+  later cards fill beneath the shorter column, while existing resize and image-load tests
+  retain native row spans and task/DOM order.
 
 - Completed tasks without actual timing now receive spiral slices using their explicit
   estimate or Default Todo Duration (15 minutes by default). CLOCK and completion stamps
@@ -21,7 +31,9 @@
   Dashed gray outlines identify estimated placement and remain visible over pending
   forecasts. Genuine capacity overflow retains the title and duration. The rejected
   Completed / No timestamp node and its upper connection band are removed.
-- A more vivid indigo/gold palette, readable neutral completion text without
+- Red urgency, bright-orange events and blue tasks restore the category palette. Separate
+  darker text tokens keep light-theme labels readable without turning the legend dots brown.
+  Readable neutral completion text without
   strike-through, and whole-connection focus replace the disconnected, faded
   presentation. Other text is not dimmed. No completion time is inferred from
   last edits or borrowed from a reference source.
@@ -30,27 +42,27 @@
   page show and CLOCK updates, including a same-minute next-day resume. The new
   integration gate verifies scheduler intervals and actual SVG path movement;
   fixed events remain anchored and still block pending work.
-- The chart returns to its original time vocabulary: blue tasks, gold fixed events,
+- The chart retains its time vocabulary: blue tasks, orange fixed events,
   solid gray completion history and pale hatching for unrecorded past time. Current
   tasks and events remain outlined. The spiral is the only time geometry; the rejected
   outer track and its status badges are removed. Explicit urgency remains authoritative.
 - Short tips fit their content up to 280px, without a redundant full-text action.
-  The closed slot is reduced to 32px and status spacing is tighter. Longer content
+  The title-first closed slot is 44px and surrounding spacing remains tight. Longer content
   can still explicitly expand in page flow, without internal scrollbars or overlays.
 
-- Every titled source task or event retains a diagram mark and connected label.
-  Completed estimates connect to their slices; unscheduled work, capacity overflow and
-  out-of-window ranges retain separate endpoints. Estimated positions are never presented
-  as recorded completion times. There is no footer inventory. Timed labels stay on their
-  slice's side. Desk retains its independent unfinished-task projection.
+- Every titled source record remains in the diagram or the pending queue. Completed
+  estimates connect to their slices; DONE estimate overflow and out-of-window ranges keep
+  separate endpoints and never enter the unfinished queue. Estimated positions are not
+  recorded completion times. Timed labels stay on their slice's side. Desk retains its
+  independent unfinished-task projection.
 - Source-sized frames replace the rejected finite label budget. Ordinary titles wrap,
   including CJK, and narrow views retain connected diagram labels instead of a scrolling
-  Schedule. Frame height follows the full source titles and local width, not the clock,
-  pointer or currently scheduled subset. The original time geometry and domain calculations
-  remain intact.
+  Schedule. Frame height follows the diagram membership, its source titles and local width,
+  not pointer movement or ordinary minute motion within the same membership. The spiral,
+  whole-task scheduler, Actual and completed-estimate allocation remain intact.
 - Details fit a centered, at-most-280px area. Full text explicitly expands in
   page flow without an internal scrollbar and stays pinned while reading. The closed
-  32px slot is invisible when idle. The rejected below-chart completion list, its reserved
+  44px slot is invisible when idle. The rejected below-chart completion list, its reserved
   gap, and wheel-based text reading are removed.
 - Narrow charts keep side labels, readable major hour ticks and a compact center date.
   Hour sizes are applied directly to SVG text instead of relying on a CSS variable that

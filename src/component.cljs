@@ -526,8 +526,9 @@
         expanded? (boolean (:expanded @detail-state))
         layout (or (log-core-call "chartTipLayout"
                                    {:title (or title "") :summary (or summary-meta meta "") :meta (or meta "")
-                                    :containerWidth container-width :fontFamily font-family})
-                   {:mode "inline" :width 280 :expandedWidth 280 :more true})]
+                                    :containerWidth container-width :fontFamily font-family
+                                    :moreLabel (get-in copy [:panels :more])})
+                   {:mode "stacked" :width 280 :expandedWidth 280 :more true})]
     [:aside {:class (str "nautilus-log-detail-region" (when expanded? " is-expanded"))
              :aria-label (get-in copy [:panels :details]) :aria-hidden (not active?) :aria-live "polite"
              :data-tip-mode (:mode layout) :data-tip-more (str (:more layout))
@@ -1368,13 +1369,36 @@
                :style (when (:bg-color event) {:stroke (update-opacity-str (:bg-color event) "1")})}])
      [chart-record-label (:label record)]]))
 
+(defn pending-queue-component [queue copy hover-info-state]
+  (r/with-let [open-state (r/atom false)]
+    (let [items (:items queue)
+          title (get-in copy [:panels (if (= "unfinished" (:kind queue)) :unfinished :overflow)])]
+      [:details {:class "nautilus-log-pending-queue" :data-queue-kind (:kind queue)
+                 :open @open-state
+                 :on-toggle (fn [event] (reset! open-state (boolean (.-open (.-currentTarget event)))))
+                 :on-click (fn [event] (.stopPropagation event))}
+       [:summary
+        [:span {:class "nautilus-log-queue-title"} title]
+        [:span {:class "nautilus-log-queue-count"} (count items)]
+        [:span {:class "nautilus-log-queue-total"} (duration-label (:minutes queue))]]
+       [:div {:class "nautilus-log-queue-items"}
+        (for [item items]
+          ^{:key (:uid item)}
+          [:button {:type "button" :class "nautilus-log-queue-item" :data-queued-task-uid (:uid item)
+                    :aria-label (str (:description item) ". " (get-in copy [:tooltips :estimated]) " "
+                                     (duration-label (:duration item)) ". " (get-in copy [:tooltips :locateTask]))
+                    :on-click (fn [event] (locate-plan-task! (:uid item) hover-info-state event))
+                    :on-key-down (fn [event] (task-keydown! (:uid item) hover-info-state event))}
+           [:span {:class "nautilus-log-queue-item-title"} (:description item)]
+           [:span {:class "nautilus-log-queue-item-duration"} (duration-label (:duration item))]])]])))
+
 (defn show-events [events-state show-done-atom? _now-time-atom page-title container-width settings copy _compact-open-state hover-info-state _block-uid timeline-state]
   (let [[events done-todos _untimed-dones source-events] events-state
         time-radius (apply max (map outer-radius-at (range (count snail-blueprint-outer-radiuses))))
         scene (log-core-call "chartScene"
                             {:items source-events :events (vec (concat events done-todos))
                              :containerWidth container-width :timeRadius time-radius
-                             :defaultDuration (:default-duration settings)
+                             :defaultDuration (:default-duration settings) :relation (:relation timeline-state)
                              :font (str "500 13px " font-family)
                              :radiusForMinute (fn [minute] (spiral-outer-radius minute settings))
                              :startMinutes (:workday-start settings) :endMinutes (:workday-end settings)})
@@ -1437,7 +1461,9 @@
                      :stroke-linecap "round" :vector-effect "non-scaling-stroke"
                      :class "nautilus-log-now-needle-line"}]]))
         [central-label-component (split-and-trim page-title len-central-legend) center center-now-label scale]]]]
-     [detail-region-component hover-info-state copy (min 720 container-width)]]))
+     [detail-region-component hover-info-state copy (min 720 container-width)]
+     (when-let [queue (:pendingQueue scene)]
+       ^{:key (:kind queue)} [pending-queue-component queue copy hover-info-state])]))
 
 (defn add-start-after
   "Adds an end time to events so that tasks placed after the meeting cannot start before it"
@@ -1527,7 +1553,7 @@
     [:button
      {:type "button" :role "switch"
       :class "nautilus-log-toggle-btn nautilus-log-desk-btn"
-      :aria-label (:desk copy) :aria-checked "false"
+      :aria-label (:desk copy) :aria-checked "false" :data-nautilus-tooltip (:desk copy)
       ;; The existing Desk owner restores the real session state, including
       ;; when folding or a renderer update mounts a replacement control.
       :ref (fn [node]
@@ -1537,7 +1563,6 @@
       :on-click (fn [event]
                   (when-let [open-desk (some-> js/window .-nautilusLogExtensionData .-openDesk)]
                     (.call open-desk nil (options (.-currentTarget event)))))}
-     [:span {:class "nautilus-log-desk-switch-label" :aria-hidden "true"} (:desk copy)]
      [:span {:class "nautilus-log-desk-switch-track" :aria-hidden "true"}
       [:span {:class "nautilus-log-desk-switch-thumb"}]]]))
 
@@ -2140,6 +2165,9 @@
                 plan-from-time (:scheduleFromMinutes timeline-state)
                 plan-status @plan-status-state
                 [text-events done-events untimed-done-events completed-uids source-events] @*text-events
+                planning-events (if (= "past" (:relation timeline-state))
+                                  (vec (remove #(and (:todo %) (not (:done %))) text-events))
+                                  text-events)
                 expired-fixed-uids (->> text-events
                                         (filter :meeting)
                                         (filter (fn [event]
@@ -2149,7 +2177,7 @@
                                                            (<= (:end event) (:elapsedThroughMinutes timeline-state))))))
                                         (mapv :uid))
                 settled-uids (vec (distinct (concat completed-uids expired-fixed-uids)))
-                pending-tasks (vec (filter #(and (:todo %) (not (:done %))) text-events))
+                pending-tasks (vec (filter #(and (:todo %) (not (:done %))) planning-events))
                 fixed-events (vec (filter #(and (:meeting %) (not (:done %))) text-events))
                 all-fixed-events (vec (concat fixed-events (filter :meeting done-events)))
                 capacity-base (or (log-core-call "calculateCapacity"
@@ -2169,7 +2197,7 @@
                                                 :nowMinutes (:capacityFromMinutes timeline-state)
                                                 :fixedEvents fixed-events})
                 capacity (assoc capacity-base :burningBucket burning-bucket)
-                events-state [(fill-day text-events (:workday-start settings) (:workday-end settings) plan-from-time) done-events untimed-done-events source-events]]
+                events-state [(fill-day planning-events (:workday-start settings) (:workday-end settings) plan-from-time) done-events untimed-done-events source-events]]
             [:div {:class (str "nautilus-log-container" (when @collapsed-state " nautilus-log-collapsed"))
                    :data-nautilus-log-block block-uid
                    :data-nautilus-plan-status (or (:status plan-status) "unbound")}

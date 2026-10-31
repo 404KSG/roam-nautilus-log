@@ -290,7 +290,8 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     if (switchControl) {
       launch.classList.add('nautilus-log-toggle-btn'); launch.setAttribute('role', 'switch'); launch.setAttribute('aria-checked', 'false');
       launch.setAttribute('aria-label', uid === planUid ? 'Desk' : 'Other Desk');
-      launch.innerHTML = '<span class="nautilus-log-desk-switch-label" aria-hidden="true">Desk</span><span class="nautilus-log-desk-switch-track" aria-hidden="true"><span class="nautilus-log-desk-switch-thumb"></span></span>';
+      launch.setAttribute('data-nautilus-tooltip', 'Desk');
+      launch.innerHTML = '<span class="nautilus-log-desk-switch-track" aria-hidden="true"><span class="nautilus-log-desk-switch-thumb"></span></span>';
     }
     const controls = document.createElement('div'); controls.className = 'nautilus-log-controls-top';
     const collapse = document.createElement('button');

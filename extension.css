@@ -9,9 +9,11 @@
   --nautilus-log-hover: rgba(25, 25, 25, 0.05);
   --nautilus-log-positive: #4f9f7b;
   --nautilus-log-warning: #c96c00;
-  --nautilus-log-event: #c58a00;
-  --nautilus-log-event-fill: #fee18a;
+  --nautilus-log-event: #f97316;
+  --nautilus-log-event-text: #c2410c;
+  --nautilus-log-event-fill: #fed7aa;
   --nautilus-log-task: #0899c8;
+  --nautilus-log-task-text: #087b9f;
   --nautilus-log-task-fill: rgba(8, 153, 200, 0.28);
   --nautilus-log-control-icon: #888;
   --nautilus-log-roam-toolbar-icon: #5c7080;
@@ -20,7 +22,7 @@
   --nautilus-log-unplanned-fill: #f0f1f2;
   --nautilus-log-completed: #77818c;
   --nautilus-log-completed-fill: rgba(86, 101, 116, 0.22);
-  --nautilus-log-past-event-fill: rgba(252, 194, 0, 0.24);
+  --nautilus-log-past-event-fill: rgba(249, 115, 22, 0.24);
   --nautilus-log-slot-hover: rgba(86, 101, 116, 0.08);
   --nautilus-log-slot-stroke: rgba(86, 101, 116, 0.5);
 }
@@ -34,9 +36,11 @@
   --nautilus-log-hover: rgba(255, 255, 255, 0.08);
   --nautilus-log-positive: #70c49f;
   --nautilus-log-warning: #f4b75d;
-  --nautilus-log-event: #f2c14e;
-  --nautilus-log-event-fill: #6d570f;
-  --nautilus-log-task: #47b8df;
+  --nautilus-log-event: #f97316;
+  --nautilus-log-event-text: #fdba74;
+  --nautilus-log-event-fill: #653a1f;
+  --nautilus-log-task: #0899c8;
+  --nautilus-log-task-text: #7dd3fc;
   --nautilus-log-task-fill: rgba(71, 184, 223, 0.32);
   --nautilus-log-control-icon: #aaa;
   --nautilus-log-roam-toolbar-icon: #bfccd6;
@@ -45,7 +49,7 @@
   --nautilus-log-unplanned-fill: #26272a;
   --nautilus-log-completed: #aeb8c2;
   --nautilus-log-completed-fill: rgba(199, 207, 214, 0.2);
-  --nautilus-log-past-event-fill: rgba(242, 193, 78, 0.23);
+  --nautilus-log-past-event-fill: rgba(249, 115, 22, 0.23);
   --nautilus-log-slot-hover: rgba(199, 207, 214, 0.09);
   --nautilus-log-slot-stroke: rgba(199, 207, 214, 0.54);
 }
@@ -221,7 +225,7 @@
 
 .nautilus-log-metric--event .nautilus-log-metric-label,
 .nautilus-log-metric--event .nautilus-log-metric-value {
-  color: var(--nautilus-log-event);
+  color: var(--nautilus-log-event-text);
 }
 
 .nautilus-log-burning-icon {
@@ -1055,28 +1059,30 @@
   --nautilus-log-text-sub: var(--nautilus-log-chart-muted);
   --nautilus-log-control-icon: var(--nautilus-log-chart-muted);
   --nautilus-log-chart-hairline: #e3e5eb;
-  --nautilus-log-chart-focus: #5e6ad2;
+  --nautilus-log-chart-focus: #137cbd;
   --nautilus-log-chart-leader: #7785a3;
-  --nautilus-log-task: #4f46c6;
+  --nautilus-log-task: #0899c8;
+  --nautilus-log-task-text: #087b9f;
   --nautilus-log-positive: #277a59;
   --nautilus-log-completed: #5d677b;
   --nautilus-log-completed-fill: #c7d0e1;
-  --nautilus-log-record-hover: rgba(94, 106, 210, 0.07);
-  --nautilus-log-past-event-fill: #eecf88;
+  --nautilus-log-record-hover: rgba(8, 153, 200, 0.07);
+  --nautilus-log-past-event-fill: #fdba74;
   --nautilus-log-unplanned-fill: #f8f9fc;
   --nautilus-log-unplanned-stripe: #d9dfea;
   --nautilus-log-now: #df4357;
   --nautilus-log-spiral: #8992a4;
-  --nautilus-log-slot-stroke: #5e6ad2;
-  --nautilus-log-task-fill: #c5cafa;
-  --nautilus-log-event: #8a5a00;
-  --nautilus-log-event-fill: #f6d56a;
+  --nautilus-log-slot-stroke: #137cbd;
+  --nautilus-log-task-fill: #b5e0ef;
+  --nautilus-log-event: #f97316;
+  --nautilus-log-event-text: #c2410c;
+  --nautilus-log-event-fill: #fed7aa;
   --nautilus-log-task-future-fill: var(--nautilus-log-task-fill);
-  --nautilus-log-task-current-fill: #9faff5;
+  --nautilus-log-task-current-fill: #82cde6;
   --nautilus-log-task-completed-fill: var(--nautilus-log-completed-fill);
   --nautilus-log-task-elapsed-fill: #d6dded;
   --nautilus-log-event-future-fill: var(--nautilus-log-event-fill);
-  --nautilus-log-event-current-fill: #efb936;
+  --nautilus-log-event-current-fill: #fb923c;
   --nautilus-log-event-completed-fill: #d2d5df;
   --nautilus-log-event-elapsed-fill: var(--nautilus-log-past-event-fill);
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -1126,48 +1132,48 @@
   width: 100%;
   margin: 0;
   min-width: 0;
-  height: 32px;
+  height: 44px;
   color: var(--nautilus-log-chart-ink);
 }
 .nautilus-log-detail-region[data-nautilus-detail="idle"] { visibility: hidden; }
-.nautilus-log-detail-region.is-expanded { height: auto; min-height: 32px; align-items: flex-start; }
-.nautilus-log-detail-region.is-expanded .nautilus-log-detail-content { padding: 6px 7px; }
+.nautilus-log-detail-region.is-expanded { height: auto; min-height: 44px; align-items: flex-start; }
+.nautilus-log-detail-region.is-expanded .nautilus-log-detail-content { padding: 6px 7px; grid-template-rows: auto auto; }
 .nautilus-log-detail-content {
   box-sizing: border-box;
   display: grid;
   grid-template-columns: 5px minmax(0, 1fr);
+  grid-template-rows: 16px 24px;
   column-gap: 6px;
-  row-gap: 2px;
+  row-gap: 0;
   max-width: calc(100% - 32px);
-  min-height: 28px;
-  padding: 1px 7px;
+  min-height: 42px;
+  padding: 0 7px;
   border: 1px solid var(--nautilus-log-chart-hairline);
   border-radius: 4px;
   background: var(--nautilus-log-chart-panel);
 }
-.nautilus-log-detail-content.has-more { grid-template-columns: 5px minmax(0, 1fr) 24px; }
-.nautilus-log-detail-tone { grid-column: 1; grid-row: 1 / 3; align-self: center; width: 5px; height: 5px; border-radius: 50%; background: var(--nautilus-log-chart-muted); }
+.nautilus-log-detail-content.has-more { grid-template-columns: 5px minmax(0, 1fr) max-content; }
+.nautilus-log-detail-tone { grid-column: 1; grid-row: 1; align-self: center; width: 5px; height: 5px; border-radius: 50%; background: var(--nautilus-log-chart-muted); }
 .nautilus-log-detail-tone--task { background: var(--nautilus-log-task); }
 .nautilus-log-detail-tone--event { background: var(--nautilus-log-event); }
 .nautilus-log-detail-tone--available { background: var(--nautilus-log-positive); }
 .nautilus-log-detail-tone--completed { background: var(--nautilus-log-completed); }
-.nautilus-log-detail-title { grid-column: 2; grid-row: 1; min-width: 0; font-size: 12px; line-height: 16px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.nautilus-log-detail-meta { grid-column: 2; grid-row: 2; min-width: 0; color: var(--nautilus-log-chart-muted); font-size: 11px; font-weight: 400; line-height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.nautilus-log-detail-content.is-inline { grid-template-columns: 5px minmax(40px, 1fr) minmax(0, max-content); align-items: center; }
-.nautilus-log-detail-content.is-inline.has-more { grid-template-columns: 5px minmax(40px, 1fr) minmax(0, max-content) 24px; }
-.nautilus-log-detail-content.is-inline .nautilus-log-detail-tone { grid-row: 1; }
-.nautilus-log-detail-content.is-inline .nautilus-log-detail-meta { grid-column: 3; grid-row: 1; }
-.nautilus-log-detail-content.is-inline .nautilus-log-detail-expand { grid-column: 4; grid-row: 1; }
+.nautilus-log-detail-title { grid-column: 2 / -1; grid-row: 1; min-width: 0; font-size: 12px; line-height: 16px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nautilus-log-detail-meta { grid-column: 2; grid-row: 2; align-self: center; min-width: 0; color: var(--nautilus-log-chart-muted); font-size: 11px; font-weight: 400; line-height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nautilus-log-detail-region.is-expanded .nautilus-log-detail-title,
 .nautilus-log-detail-region.is-expanded .nautilus-log-detail-meta { display: block; overflow: visible; white-space: normal; overflow-wrap: anywhere; }
 .nautilus-log-container .nautilus-log-detail-expand {
   grid-column: 3;
-  grid-row: 1 / 3;
+  grid-row: 2;
   align-self: center;
   border: 0;
-  padding: 0;
-  min-width: 24px;
+  padding: 0 5px;
+  width: auto;
+  min-width: 28px;
   min-height: 24px;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
   border-radius: 3px;
   color: var(--nautilus-log-chart-focus);
   background: transparent;
@@ -1176,16 +1182,16 @@
   line-height: 16px;
   cursor: pointer;
 }
-.nautilus-log-detail-region.is-expanded .nautilus-log-detail-expand { grid-row: 1; align-self: start; }
+.nautilus-log-detail-region.is-expanded .nautilus-log-detail-expand { grid-row: 2; align-self: start; }
 .nautilus-log-detail-expand:focus-visible { outline: 2px solid var(--nautilus-log-chart-focus); outline-offset: 1px; }
-.nautilus-log-event-slice-group { --nautilus-log-record-accent: var(--nautilus-log-task); }
-.nautilus-log-record--event { --nautilus-log-record-accent: var(--nautilus-log-event); }
-.nautilus-log-record--done { --nautilus-log-record-accent: var(--nautilus-log-completed); }
-.nautilus-log-record-title { fill: var(--nautilus-log-task); font-weight: 500; }
-.nautilus-log-record--event .nautilus-log-record-title { fill: var(--nautilus-log-event); }
+.nautilus-log-event-slice-group { --nautilus-log-record-accent: var(--nautilus-log-task); --nautilus-log-record-text: var(--nautilus-log-task-text); }
+.nautilus-log-record--event { --nautilus-log-record-accent: var(--nautilus-log-event); --nautilus-log-record-text: var(--nautilus-log-event-text); }
+.nautilus-log-record--done { --nautilus-log-record-accent: var(--nautilus-log-completed); --nautilus-log-record-text: var(--nautilus-log-completed); }
+.nautilus-log-record-title { fill: var(--nautilus-log-task-text); font-weight: 500; }
+.nautilus-log-record--event .nautilus-log-record-title { fill: var(--nautilus-log-event-text); }
 .nautilus-log-record--done .nautilus-log-record-title { fill: var(--nautilus-log-completed); text-decoration: none; }
-.nautilus-log-current-task .nautilus-log-record-title { fill: var(--nautilus-log-task); font-weight: 600; }
-.nautilus-log-record-leader { stroke: var(--nautilus-log-chart-leader); stroke-width: 1.05px; stroke-opacity: 0.9; }
+.nautilus-log-current-task .nautilus-log-record-title { fill: var(--nautilus-log-task-text); font-weight: 600; }
+.nautilus-log-record-leader { stroke: var(--nautilus-log-record-accent); stroke-width: 1.05px; stroke-opacity: 0.9; }
 .nautilus-log-record--done .nautilus-log-record-leader { stroke: var(--nautilus-log-completed); }
 .nautilus-log-loose-record--unplaced .nautilus-log-record-leader { stroke-dasharray: 3 2; }
 .nautilus-log-record--estimated .nautilus-log-slice { fill-opacity: 0.6; }
@@ -1197,14 +1203,25 @@
 .nautilus-log-event-slice-group .nautilus-log-slice { stroke: var(--nautilus-log-chart-paper); stroke-width: 0.8px; }
 .nautilus-log-event-slice-group.nautilus-log-current-task .nautilus-log-slice { stroke: var(--nautilus-log-task); stroke-width: 2px; }
 .nautilus-log-event-slice-group.nautilus-log-current-event .nautilus-log-slice { stroke: var(--nautilus-log-event); stroke-width: 2px; }
-.nautilus-log-current-event .nautilus-log-record-title { fill: var(--nautilus-log-event); font-weight: 600; }
+.nautilus-log-current-event .nautilus-log-record-title { fill: var(--nautilus-log-event-text); font-weight: 600; }
 .nautilus-log-event-slice-group.nautilus-log-event-conflict .nautilus-log-slice { stroke: var(--nautilus-log-warning); stroke-width: 1.5px; stroke-dasharray: 4 2; }
-.nautilus-log-event-slice-group[data-connection-active="true"] .nautilus-log-record-title { fill: var(--nautilus-log-record-accent); font-weight: 600; }
+.nautilus-log-event-slice-group[data-connection-active="true"] .nautilus-log-record-title { fill: var(--nautilus-log-record-text); font-weight: 600; }
 .nautilus-log-workspace[data-active-connection="true"] .nautilus-log-record-leader { stroke-opacity: 0.5; }
 .nautilus-log-workspace .nautilus-log-event-slice-group[data-connection-active="true"] .nautilus-log-record-leader { stroke: var(--nautilus-log-record-accent); stroke-opacity: 1; stroke-width: 1.6px; }
 .nautilus-log-event-slice-group[data-connection-active="true"] .nautilus-log-record-marker { stroke: var(--nautilus-log-record-accent); stroke-width: 1.5px; }
 .nautilus-log-event-slice-group[data-connection-active="true"] .nautilus-log-label-hit { fill: var(--nautilus-log-record-hover); rx: 3px; }
 .nautilus-log-now-needle-line { filter: none; stroke: var(--nautilus-log-now); stroke-width: 1.5px; }
+
+.nautilus-log-pending-queue { margin: 4px 16px 0; border-top: 1px solid var(--nautilus-log-chart-hairline); color: var(--nautilus-log-chart-ink); font-size: 12px; }
+.nautilus-log-pending-queue > summary { min-height: 28px; line-height: 28px; white-space: nowrap; cursor: pointer; }
+.nautilus-log-queue-title { font-weight: 500; }
+.nautilus-log-queue-count { margin-left: 6px; color: var(--nautilus-log-chart-muted); }
+.nautilus-log-queue-total { float: right; font-variant-numeric: tabular-nums; color: var(--nautilus-log-chart-muted); }
+.nautilus-log-pending-queue .nautilus-log-queue-item { display: flex; align-items: baseline; gap: 10px; box-sizing: border-box; width: 100%; min-height: 28px; margin: 0; padding: 4px 2px; border: 0; border-radius: 3px; background: transparent; color: var(--nautilus-log-task-text); font: inherit; line-height: 18px; text-align: left; cursor: pointer; }
+.nautilus-log-queue-item-title { flex: 1 1 auto; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.nautilus-log-queue-item-duration { flex: 0 0 auto; white-space: nowrap; color: var(--nautilus-log-chart-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.nautilus-log-queue-item:hover { background: var(--nautilus-log-record-hover); }
+.nautilus-log-pending-queue > summary:focus-visible, .nautilus-log-queue-item:focus-visible { outline: 2px solid var(--nautilus-log-chart-focus); outline-offset: 1px; }
 
 .nautilus-log-status-rail {
   display: block;
@@ -1244,25 +1261,27 @@
   --nautilus-log-chart-ink: #ebecef;
   --nautilus-log-chart-muted: #b8bdca;
   --nautilus-log-chart-hairline: #303440;
-  --nautilus-log-chart-focus: #b5b4ff;
+  --nautilus-log-chart-focus: #69b9ea;
   --nautilus-log-chart-leader: #8c99b5;
-  --nautilus-log-task: #b5b4ff;
+  --nautilus-log-task: #0899c8;
+  --nautilus-log-task-text: #7dd3fc;
   --nautilus-log-positive: #77d7ab;
   --nautilus-log-completed: #b9c3d6;
   --nautilus-log-completed-fill: #48546c;
-  --nautilus-log-record-hover: rgba(181, 180, 255, 0.1);
-  --nautilus-log-past-event-fill: #655228;
+  --nautilus-log-record-hover: rgba(8, 153, 200, 0.1);
+  --nautilus-log-past-event-fill: #653a1f;
   --nautilus-log-unplanned-fill: #1c1f25;
   --nautilus-log-unplanned-stripe: #3a4354;
   --nautilus-log-now: #ed8790;
   --nautilus-log-spiral: #a7b2c7;
-  --nautilus-log-slot-stroke: #b5b4ff;
-  --nautilus-log-task-fill: #454b88;
-  --nautilus-log-event: #f0cc79;
-  --nautilus-log-event-fill: #846625;
-  --nautilus-log-task-current-fill: #636ec0;
-  --nautilus-log-task-elapsed-fill: #394662;
-  --nautilus-log-event-current-fill: #ad822d;
+  --nautilus-log-slot-stroke: #69b9ea;
+  --nautilus-log-task-fill: #18586e;
+  --nautilus-log-event: #f97316;
+  --nautilus-log-event-text: #fdba74;
+  --nautilus-log-event-fill: #87471d;
+  --nautilus-log-task-current-fill: #207d9d;
+  --nautilus-log-task-elapsed-fill: #254451;
+  --nautilus-log-event-current-fill: #b75a20;
   --nautilus-log-event-completed-fill: #56566a;
 }
 
@@ -2563,9 +2582,10 @@ button.nautilus-log-timing__plan-heading:focus-visible {
 .nautilus-desk__notice { padding: 8px 12px; }
 .nautilus-desk__menu { position: absolute; right: 8px; top: 36px; z-index: 2; }
 .nautilus-log-container .nautilus-log-desk-btn {
-  width: 70px !important; min-width: 70px !important; max-width: 70px !important;
-  padding: 4px 6px !important; gap: 6px; font-size: 11px; line-height: 16px; font-weight: 500;
+  width: 40px !important; min-width: 40px !important; max-width: 40px !important;
+  padding: 4px 6px !important;
 }
+.nautilus-log-desk-btn[data-nautilus-tooltip]::after { white-space: nowrap; overflow-wrap: normal; word-break: normal; }
 .nautilus-log-container .nautilus-log-desk-btn:focus-visible { outline: 2px solid var(--nautilus-log-chart-focus); outline-offset: 1px; }
 .nautilus-log-desk-switch-track { position: relative; flex: 0 0 28px; width: 28px; height: 16px; border-radius: 8px; background: #c7cdd5; box-shadow: inset 0 0 0 1px rgba(30, 35, 45, .08); transition: background-color 150ms ease; }
 .nautilus-log-desk-switch-thumb { position: absolute; left: 2px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(20, 24, 32, .16); transition: transform 150ms ease; }

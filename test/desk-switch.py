@@ -46,7 +46,10 @@ def run():
                 settle(page)
                 on = toggle.locator('.nautilus-log-desk-switch-thumb').bounding_box()
                 assert abs(on['x'] - off['x'] - 12) < .5
-                box = toggle.bounding_box(); assert box['height'] == 32 and box['width'] == 70
+                box = toggle.bounding_box(); assert box['height'] == 32 and box['width'] == 40
+                assert toggle.inner_text().strip() == ''
+                assert toggle.get_attribute('data-nautilus-tooltip') == 'Desk'
+                assert toggle.evaluate('e=>getComputedStyle(e,"::after").whiteSpace==="nowrap"')
                 assert toggle.get_attribute('aria-expanded') is None
                 toggle.press('Enter')
                 expect(toggle).to_have_attribute('aria-checked', 'false'); expect(owner.locator('.nautilus-desk')).to_have_count(0)

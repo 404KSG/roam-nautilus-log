@@ -35,14 +35,16 @@ for (const width of [280, 320, 520, 640, 720, 960]) {
   });
 }
 
-test('clock scheduling cannot resize the frame or move completed estimates', () => {
+test('unchanged membership keeps its frame; queued work does not move completion estimates in time', () => {
   const a = build({ events: [{ ...items.find(i => i.uid === 'next'), start: 780, end: 825 }] });
   const b = build();
-  assert.deepEqual(a.frame, b.frame);
+  const minute = build({ events: [{ ...items.find(i => i.uid === 'next'), start: 781, end: 826 }] });
+  assert.deepEqual(a.frame, minute.frame);
   assert.deepEqual(a.records.filter(r => r.event.done).map(r => [r.uid, r.event.start, r.event.end]),
     b.records.filter(r => r.event.done).map(r => [r.uid, r.event.start, r.event.end]));
   assert.equal(a.records.find(r => r.uid === 'next').kind, 'timed');
-  assert.equal(b.records.find(r => r.uid === 'next').kind, 'unplaced');
+  assert.ok(!b.records.some(r => r.uid === 'next'));
+  assert.deepEqual(b.pendingQueue.items.map(r => r.uid), ['next']);
 });
 
 test('edit metadata and reference timestamps never determine estimated allocation', () => {

@@ -7,26 +7,27 @@ function scene(input = {}) {
   return chartScene({ items, events: [], containerWidth: 720, startMinutes: 300, endMinutes: 1260, measure, ...input });
 }
 
-test('every source record gets an in-diagram record and label, not a footer fallback', () => {
+test('completed history stays in the diagram; unfinished unplaced tasks remain in the queue', () => {
   const s = scene();
-  assert.deepEqual(s.records.map(r => r.uid), items.map(r => r.uid));
+  assert.deepEqual(s.records.map(r => r.uid), items.slice(14).map(r => r.uid));
+  assert.deepEqual(s.pendingQueue.items.map(r => r.uid), items.slice(0, 14).map(r => r.uid));
   assert.ok(s.records.every(r => r.label.lines.length && r.label.connector));
   const estimates = s.records.filter(r => r.event['time-claim'] === 'estimated-allocation');
   assert.equal(estimates.length, 8);
   assert.ok(estimates.every(r => r.anchor && r.event.end - r.event.start === 30));
-  const unplaced = s.records.filter(r => r.kind === 'unplaced');
-  assert.equal(unplaced.length, 14);
-  assert.ok(unplaced.every(r => r.markerPath && !Number.isFinite(r.event.start) && !Number.isFinite(r.event.end)));
+  assert.ok(!s.records.some(r => r.kind === 'unplaced'));
+  assert.ok(s.pendingQueue.items.every(r => !Number.isFinite(r.start) && !Number.isFinite(r.end)));
 });
 
-test('clock-driven scheduling and END cannot change the frame or estimated completion positions', () => {
+test('minute motion preserves the frame; entering the queue preserves completed time positions', () => {
   const a = scene({ events: items.slice(0, 14).map((r, i) => ({ ...r, start: 480 + i * 30, end: 510 + i * 30 })) });
   const b = scene({ events: [] });
-  assert.deepEqual(a.frame, b.frame);
+  const next = scene({ events: items.slice(0, 14).map((r, i) => ({ ...r, start: 481 + i * 30, end: 511 + i * 30 })) });
+  assert.deepEqual(a.frame, next.frame);
+  assert.equal(b.pendingQueue.items.length, 14);
   for (const item of items.slice(14)) {
     const one = a.records.find(r => r.uid === item.uid), two = b.records.find(r => r.uid === item.uid);
     assert.equal(one.label.side, two.label.side);
-    assert.deepEqual(one.anchor, two.anchor);
     assert.deepEqual([one.event.start, one.event.end], [two.event.start, two.event.end]);
   }
   assert.ok(a.records.slice(0, 14).every(r => r.kind === 'timed'));

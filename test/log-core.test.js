@@ -226,7 +226,7 @@ test('a past Daily Note is fully elapsed and exposes no available planning slots
     {
       relation: 'past',
       timelineMinutes: 1941,
-      scheduleFromMinutes: 300,
+      scheduleFromMinutes: 1260,
       capacityFromMinutes: 1260,
       elapsedThroughMinutes: 1260,
       interactive: false,
@@ -623,7 +623,8 @@ test('English UI settings localize all extension-owned status labels', () => {
   });
   assert.deepEqual(copy.panels, {
     overview: 'Overview',
-    overflow: 'Unscheduled today',
+    overflow: 'Unscheduled',
+    unfinished: 'Unfinished',
     warnings: 'Schedule warnings',
     schedule: 'Schedule',
     untimedCompleted: 'Completed · No time recorded',

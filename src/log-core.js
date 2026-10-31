@@ -345,7 +345,7 @@ function timelineDayState({
   return {
     relation,
     timelineMinutes,
-    scheduleFromMinutes: past ? safeStart : (today ? cursor : safeStart),
+    scheduleFromMinutes: past ? safeEnd : (today ? cursor : safeStart),
     capacityFromMinutes: past ? safeEnd : (today ? cursor : safeStart),
     elapsedThroughMinutes: past ? safeEnd : (today ? cursor : safeStart),
     interactive: today,
@@ -839,10 +839,32 @@ function projectCompletedEstimates({ items = [], startMinutes = 300, endMinutes 
     overflowUids: projected.filter(item => item?.['estimate-unplaced-reason'] === 'capacity').map(item => item.uid) };
 }
 
-/** Production presentation entry: missing CLOCK/finish stamps never erase estimates. */
+/** Unfinished work is not observed history. Keep its original identity in a queue. */
+function chartTaskDisposition({ items = [], events = [], relation = 'other', startMinutes = 300, endMinutes = 1260, defaultDuration = 15 } = {}) {
+  const source = Array.isArray(items) ? items : [];
+  const intervals = Array.isArray(events) ? events : [];
+  const scheduled = new Set(intervals.filter(item => item?.uid && Number.isFinite(item.start) && Number.isFinite(item.end)
+    && item.end > item.start && item.end > startMinutes && item.start < endMinutes).map(item => item.uid));
+  const queued = source.filter(item => item?.todo === true && item.done !== true && !item.meeting && !item.freetime
+    && typeof item.uid === 'string' && item.uid && typeof item.description === 'string' && item.description.trim()
+    && (relation === 'past' || !scheduled.has(item.uid)));
+  const ids = new Set(queued.map(item => item.uid));
+  const rows = queued.map(item => {
+    const duration = [item['planned-duration'], item.duration, defaultDuration, 15].map(asNumber).find(value => Number.isFinite(value) && value >= 0);
+    const row = { ...item, duration: Math.round(duration) };
+    delete row.start; delete row.end; delete row['full-start']; delete row['full-end'];
+    return row;
+  });
+  return { items: source.filter(item => !ids.has(item?.uid)), events: intervals.filter(item => !ids.has(item?.uid)),
+    pendingQueue: rows.length ? { kind: relation === 'past' ? 'unfinished' : 'unscheduled', items: rows,
+      minutes: rows.reduce((sum, item) => sum + remainingDuration(item), 0) } : null };
+}
+
+/** Production presentation entry: estimates stay visible; unfinished work stays honest. */
 function chartScene(input = {}) {
   const projection = projectCompletedEstimates(input);
-  return renderChartScene({ ...input, items: projection.items });
+  const disposition = chartTaskDisposition({ ...input, items: projection.items });
+  return { ...renderChartScene({ ...input, items: disposition.items, events: disposition.events }), pendingQueue: disposition.pendingQueue };
 }
 
 function calculateCapacity({
@@ -975,7 +997,8 @@ const UI_COPY = {
     },
     panels: {
       overview: 'Overview',
-      overflow: 'Unscheduled today',
+      overflow: 'Unscheduled',
+      unfinished: 'Unfinished',
       warnings: 'Schedule warnings',
       schedule: 'Schedule',
       untimedCompleted: 'Completed · No time recorded',
@@ -1076,7 +1099,8 @@ const UI_COPY = {
     },
     panels: {
       overview: '概览',
-      overflow: '今日放不下',
+      overflow: '未排入',
+      unfinished: '未完成',
       warnings: '时间范围提醒',
       schedule: '时间安排',
       untimedCompleted: '已完成 · 未记录时间',
@@ -1813,6 +1837,7 @@ module.exports = {
   historicalDoneSlice,
   partitionChartEvents,
   projectCompletedEstimates,
+  chartTaskDisposition,
   calculateCapacity,
   burningCapacityBucket,
   formatDuration,
