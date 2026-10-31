@@ -250,12 +250,10 @@
 }
 
 .nautilus-log-center-now {
-  fill: var(--nautilus-log-chart-ink);
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  fill: var(--nautilus-log-chart-muted);
+  font-family: inherit;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.4px;
 }
-.nautilus-log-center-caption { fill: var(--nautilus-log-chart-muted); letter-spacing: 0.15px; }
 
 .nautilus-log-html-legend {
   display: flex;
@@ -1376,8 +1374,7 @@
   .nautilus-log-container .nautilus-log-record-meta,
   .nautilus-log-container .nautilus-log-record-current,
   .nautilus-log-container .nautilus-log-hour-label,
-  .nautilus-log-container .nautilus-log-center-now,
-  .nautilus-log-container .nautilus-log-center-caption { fill: CanvasText; }
+  .nautilus-log-container .nautilus-log-center-now { fill: CanvasText; }
   .nautilus-log-container .nautilus-log-estimated-outline path,
   .nautilus-log-container .nautilus-log-record-leader { stroke: CanvasText; }
 }

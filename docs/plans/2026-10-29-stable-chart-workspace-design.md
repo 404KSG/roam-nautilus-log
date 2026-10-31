@@ -122,8 +122,10 @@ The frame keeps a 12-unit top inset and 2-unit bottom inset; the tail itself res
 outdent their host; compare with that baseline rather than adding global padding, overflow
 or negative-margin compensation. Narrow views retain side labels, major hour ticks and a
 compact center date. Hour sizing remains explicit in SVG output. In an active window, the
-center emphasizes a tabular monospace current time with a smaller date; narrow charts shorten
-the date and omit the secondary caption. Native font stacks are used without new font assets.
+center presents a quiet time readout: the shared UI font with tabular numerals, weight 400,
+and the existing theme-aware secondary text color. Cap the clock at 16 CSS pixels while
+retaining narrow-view fitting. Keep the date, text anchors, needle and shell geometry unchanged;
+there is no secondary clock caption. Native font stacks are used without new font assets.
 
 ## Tip and control layout
 

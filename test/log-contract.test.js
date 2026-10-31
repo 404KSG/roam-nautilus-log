@@ -1101,7 +1101,7 @@ test('Log replaces the center year with an in-range 24-hour now value', () => {
   assert.match(component, /:style \{:font-size \(str hour-size "px"\)\}/);
   assert.match(component, /log-core-call "shellNeedle"/);
   assert.match(css, /--nautilus-log-now:/);
-  assert.match(css, /\.nautilus-log-center-now\s*\{[^}]*fill:\s*var\(--nautilus-log-chart-ink\);[^}]*font-variant-numeric:\s*tabular-nums;/s);
+  assert.match(css, /\.nautilus-log-center-now\s*\{[^}]*fill:\s*var\(--nautilus-log-chart-muted\);[^}]*font-family:\s*inherit;[^}]*font-variant-numeric:\s*tabular-nums;/s);
 });
 
 test('Log shades elapsed time continuously behind slices and through the current minute', () => {

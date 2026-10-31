@@ -273,10 +273,11 @@ def contrast(page):
         estimateOutline:paint('.nautilus-log-estimated-outline path','stroke'),
         focus:paint('.nautilus-log-available-slot:focus .nautilus-log-available-slot-hit','stroke'),
         now:paint('.nautilus-log-now-needle-line','stroke'),
+        clock:paint('.nautilus-log-center-now','fill'),
         control:paint('.nautilus-log-toggle-btn svg','stroke')};
     }''')
     scores = {k: ratio(v, paints['background']) for k, v in paints.items() if k != 'background'}
-    assert min(scores[k] for k in ('task', 'event', 'completed')) >= 4.5, scores
+    assert min(scores[k] for k in ('task', 'event', 'completed', 'clock')) >= 4.5, scores
     assert min(scores[k] for k in ('estimateOutline', 'focus', 'now', 'control')) >= 3, scores
     return {'paint': paints, 'ratios': scores}
 
@@ -1175,6 +1176,66 @@ def full_text(page, context, width):
     return {'closed': compact_record(before), 'expandedHeight': expanded['detail']['height'], 'pinned': True, 'noInternalScroll': True}
 
 
+def center_clock_contract(page):
+    report = {}
+
+    def quiet_typography():
+        proof = page.locator('.nautilus-log-center-now').evaluate('''e=>{
+          const s=getComputedStyle(e),svg=getComputedStyle(e.closest('svg')),
+            date=getComputedStyle(e.parentElement.querySelector('text')),m=e.getScreenCTM(),r=e.getBoundingClientRect();
+          return {pixels:parseFloat(s.fontSize)*Math.hypot(m.c,m.d),weight:s.fontWeight,
+            family:s.fontFamily,uiFamily:svg.fontFamily,numerals:s.fontVariantNumeric,
+            spacing:s.letterSpacing,uiSpacing:svg.letterSpacing,fill:s.fill,dateFill:date.fill,
+            dateWeight:date.fontWeight,width:r.width};
+        }''')
+        assert 8.9 <= proof['pixels'] <= 16.05, proof
+        assert proof['weight'] == '400' and proof['dateWeight'] == '500', proof
+        assert proof['family'] == proof['uiFamily'] and proof['spacing'] == proof['uiSpacing'], proof
+        assert 'tabular-nums' in proof['numerals'], proof
+        return proof
+
+    for lang in ['en', 'zh']:
+        for context, width in [('main', 960), ('embed', 520), ('sidebar', 280)]:
+            before = load(page, 'mixed', context, width, lang=lang)
+            center = page.locator('.nautilus-log-center-date')
+            rows = center.locator('text').all_text_contents()
+            assert len(rows) == 2 and rows[0] in ['October 29th', 'Oct 29'] and rows[1] == '08:01', rows
+            assert not page.locator('.nautilus-log-center-caption').count()
+            assert center.get_attribute('aria-label') == 'October 29th 08:01'
+            now_name = 'Current time' if lang == 'en' else '当前时间'
+            expect(page.locator('.nautilus-log-now-needle')).to_have_attribute('aria-label', f'{now_name} 08:01')
+            typography = {'light': quiet_typography()}
+            assert typography['light']['fill'] == typography['light']['dateFill'], typography
+            if width == 960:
+                assert abs(typography['light']['pixels'] - 16) < .05, typography
+            current = set_clock(page, '2026-10-29T08:02:00')
+            assert center.locator('text').all_text_contents() == [rows[0], '08:02']
+            assert center.get_attribute('aria-label') == 'October 29th 08:02'
+            assert_rect_equal(before, current, 'caption-free center retains the clock and stable frame')
+            assert abs(quiet_typography()['width'] - typography['light']['width']) < .05, 'tabular time must not jump at a minute update'
+            page.locator('.nautilus-log-container').screenshot(path=str(OUT / 'screenshots' / f'center-clock-{lang}-{context}-{width}.png'))
+            page.locator('body').evaluate("e=>{e.classList.add('bp3-dark');e.style.background='#1d1e21';e.style.color='#ecedef'}")
+            settle_renderer(page)
+            typography['dark'] = quiet_typography()
+            assert typography['dark']['fill'] == typography['dark']['dateFill'], typography
+            assert typography['dark']['fill'] != typography['light']['fill'], typography
+            page.locator('.nautilus-log-container').screenshot(path=str(OUT / 'screenshots' / f'center-clock-dark-{lang}-{context}-{width}.png'))
+            page.emulate_media(forced_colors='active'); settle_renderer(page)
+            typography['forcedColors'] = quiet_typography()
+            canvas_text = page.evaluate('''()=>{const e=document.createElement('span');e.style.cssText='position:absolute;visibility:hidden;color:CanvasText';
+              document.body.append(e);const value=getComputedStyle(e).color;e.remove();return value;}''')
+            assert typography['forcedColors']['fill'] == canvas_text, typography
+            page.emulate_media(forced_colors='none')
+            set_clock(page, '2026-10-29T21:01:00')
+            assert center.locator('text').all_text_contents() == [rows[0]]
+            assert center.get_attribute('aria-label') == 'October 29th'
+            assert not page.locator('.nautilus-log-now-needle').count()
+            assert state(page)['writes'] == 0
+            report[f'{lang}-{context}-{width}'] = {'date': rows[0], 'time': '08:02', 'visibleCaption': False,
+                'accessibleTimeRetained': True, 'clockRangePreserved': True, 'typography': typography, 'graphWrites': 0}
+    return report
+
+
 def continuous_shell_contract(page):
     report = {}
     for context, width in [('main', 720), ('embed', 520), ('sidebar', 280)]:
@@ -1378,6 +1439,7 @@ def main():
             report['tipSurface'] = tip_surface_contract(page)
             report['continuousShell'] = continuous_shell_contract(page)
             report['currentOnlyLabels'] = current_only_labels_contract(page)
+            report['centerClock'] = center_clock_contract(page)
             report['timeflowRecovery'] = timeflow_recovery(page)
             report['lifecycle'] = lifecycle(page)
             report['nativeMinuteTimer'] = native_minute_contract(page)

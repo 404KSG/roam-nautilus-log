@@ -975,7 +975,7 @@
                    :else [first-row])
         two? (= 2 (count rows))
         date-size (if center-now-label (if small? 8.5 9) (if small? 9.5 11))
-        time-size (min 21 (max 9 (/ (- (* 2 snail-inner-radius scale) 8) 3.2)))
+        time-size (min 16 (max 9 (/ (- (* 2 snail-inner-radius scale) 8) 3.2)))
         common {:x center-x :text-anchor "middle" :dominant-baseline "central"}]
     [:g {:class "nautilus-log-center-date" :aria-label (str first-row (when center-now-label (str " " center-now-label)))}
      (for [[index row] (map-indexed vector rows)]
@@ -985,12 +985,8 @@
                      :font-size (str (/ date-size scale))) row])
      (when center-now-label
        [:text (assoc common :y (+ center-y (/ (if small? 6 3) scale))
-                     :class "nautilus-log-center-now" :font-weight "500"
-                     :font-size (str (/ time-size scale))) center-now-label])
-     (when (and center-now-label (>= scale 0.7))
-       [:text (assoc common :y (+ center-y (/ 22 scale)) :class "nautilus-log-center-caption"
-                     :font-size (str (/ 7 scale)))
-        (or (get-in copy [:tooltips :currentTime]) "Current time")])]))
+                     :class "nautilus-log-center-now" :font-weight "400"
+                     :font-size (str (/ time-size scale))) center-now-label])]))
 
 (defn calculate-slice-params [event index elapsed-page? interactive? timeline-minute settings]
   (let [outer-radius (spiral-outer-radius (:start event) settings)
