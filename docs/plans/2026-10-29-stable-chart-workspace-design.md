@@ -14,7 +14,8 @@ colors and native controls remain; completion and hover are part of the same des
 - Past unfinished work and genuinely unscheduled work belong in a default-collapsed queue,
   not in arbitrary diagram positions. Native Desk masonry is verified and retained.
 - Every timed record is one continuous surface. Diagram labels are title-only, except for
-  **Current** under a currently active task/event. Duration, Actual and Estimate stay in Tips.
+  **Current task** or **Current event** under the corresponding active record. Duration,
+  Actual and Estimate stay in Tips.
   Hover/focus emphasizes the surface, leader and colored title together.
 - English remains the default UI language; an explicit stored Chinese preference still works.
   Source task titles are never translated or rewritten.
@@ -101,11 +102,13 @@ width. A source-sized column budget handles their possible sides without reservi
 empty lower band. Diagram labels remain on the same side as their time anchors; ordinary
 labels wrap fully, while pathological text retains an explicit full-text route.
 
-Only a current task/event renders the small **Current** indicator. Other diagram titles have
-no duration or completion-status sublabel; those details remain complete in Tips and the
+Only the active task or event renders its typed indicator: **Current task** or **Current event**.
+Other diagram titles have no duration or completion-status sublabel; those details remain complete in Tips and the
 accessible record claim. Potentially current unfinished records keep a fixed 14-unit line
 allowance so a minute transition cannot resize the frame. Completed and out-of-window
-records do not reserve that line. Title leading stays 16/15 units; Current uses 10px/9px text.
+records do not reserve that line. Title leading stays 16/15 units; the indicator uses 10px/9px
+text. Compact columns budget the measured localized task/event phrases before sizing the plot,
+so the full words fit without abbreviation, clipping or reducing the text size.
 The existing label hit area is retained. Only the title ink gets the subtle hover field;
 a separate anchor joins the label and its continuous surface.
 

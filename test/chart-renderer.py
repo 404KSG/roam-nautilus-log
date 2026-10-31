@@ -1245,13 +1245,13 @@ def continuous_shell_contract(page):
         proof = page.evaluate('''()=>{
           const scene=__chartHarness.scene(),input=__chartHarness.sceneInput(),svg=document.querySelector('svg.nautilus-log-svg');
           const options={startMinutes:input.startMinutes,endMinutes:input.endMinutes,centerX:scene.frame.center.x,centerY:scene.frame.center.y,innerRadius:50,radiusScale:1};
-          const records=scene.records.filter(r=>r.kind==='timed').map(r=>{const node=document.querySelector(`svg [data-task-uid="${r.uid}"]`),paths=[...node.querySelectorAll('.nautilus-log-slice')],indicator=node.querySelector('.nautilus-log-record-current'),hit=node.querySelector('.nautilus-log-label-hit').getBoundingClientRect(),mr=indicator?.getBoundingClientRect();return {uid:r.uid,count:paths.length,path:paths[0].getAttribute('d'),expected:nautilusLogCore.shellInterval({...options,start:r.event.start,end:r.event.end}).path,current:node.getAttribute('aria-current')==='true',indicator:indicator?.textContent??null,indicatorInside:!mr||(mr.left>=hit.left-1&&mr.right<=hit.right+1&&mr.bottom<=hit.bottom+1),legacyMetadata:node.querySelectorAll('.nautilus-log-record-meta').length};});
+          const records=scene.records.filter(r=>r.kind==='timed').map(r=>{const node=document.querySelector(`svg [data-task-uid="${r.uid}"]`),paths=[...node.querySelectorAll('.nautilus-log-slice')],indicator=node.querySelector('.nautilus-log-record-current'),hit=node.querySelector('.nautilus-log-label-hit').getBoundingClientRect(),mr=indicator?.getBoundingClientRect();return {uid:r.uid,count:paths.length,path:paths[0].getAttribute('d'),expected:nautilusLogCore.shellInterval({...options,start:r.event.start,end:r.event.end}).path,current:node.getAttribute('aria-current')==='true',category:node.dataset.category,indicator:indicator?.textContent??null,indicatorInside:!mr||(mr.left>=hit.left-1&&mr.right<=hit.right+1&&mr.bottom<=hit.bottom+1),legacyMetadata:node.querySelectorAll('.nautilus-log-record-meta').length};});
           const gradients=[...svg.querySelectorAll('radialGradient')].map(g=>({id:g.id,stops:[...g.querySelectorAll('stop')].map(s=>getComputedStyle(s).stopColor)}));
           const fill=getComputedStyle(document.querySelector('[data-task-uid="task-long"] .nautilus-log-slice')).fill;
           return {records,gradients,fill,inlineMaterial:svg.style.getPropertyValue('--nautilus-log-task-future-fill'),oldHourSectors:svg.querySelectorAll('.nautilus-log-grid .nautilus-log-slice').length,outline:svg.querySelector('.nautilus-log-shell-outline').getAttribute('d'),base:svg.querySelector('.nautilus-log-shell-base').getAttribute('d')};
         }''')
         assert all(r['count'] == 1 and r['path'] == r['expected'] and r['path'].count('M') == 1 and r['path'].endswith('Z') and r['indicatorInside'] for r in proof['records']), proof
-        assert all(r['legacyMetadata'] == 0 and r['indicator'] == ('Current' if r['current'] else None) for r in proof['records']), proof
+        assert all(r['legacyMetadata'] == 0 and r['indicator'] == (('Current event' if r['category'] == 'event' else 'Current task') if r['current'] else None) for r in proof['records']), proof
         assert len(proof['gradients']) == 4 and len({g['id'] for g in proof['gradients']}) == 4, proof
         assert proof['inlineMaterial'].startswith('url(#nautilus-shell-') and 'url(' in proof['fill'], 'Reagent CSS variables must use string keys and actually paint the gradients'
         assert proof['oldHourSectors'] == 0 and proof['outline'] == proof['base'], proof
@@ -1295,10 +1295,10 @@ def current_only_labels_contract(page):
     report = {}
     for width, language in [(720, 'en'), (280, 'en'), (280, 'zh')]:
         load(page, 'mixed', 'main' if width == 720 else 'sidebar', width, lang=language)
-        word = 'Current' if language == 'en' else '当前'
+        words = {'task': 'Current task', 'event': 'Current event'} if language == 'en' else {'task': '当前任务', 'event': '当前事件'}
         def indicators():
-            values = page.locator('.nautilus-log-record-current').evaluate_all('nodes=>nodes.map(e=>({uid:e.closest("[data-task-uid]").dataset.taskUid,text:e.textContent,current:e.closest("[data-task-uid]").getAttribute("aria-current")}))')
-            assert all(v['text'] == word and v['current'] == 'true' for v in values), values
+            values = page.locator('.nautilus-log-record-current').evaluate_all('''nodes=>nodes.map(e=>{const owner=e.closest('[data-task-uid]'),r=e.getBoundingClientRect(),h=owner.querySelector('.nautilus-log-label-hit').getBoundingClientRect();return {uid:owner.dataset.taskUid,category:owner.dataset.category,text:e.textContent,current:owner.getAttribute('aria-current'),inside:r.left>=h.left-1&&r.right<=h.right+1&&r.bottom<=h.bottom+1};})''')
+            assert all(v['text'] == words[v['category']] and v['current'] == 'true' and v['inside'] for v in values), values
             assert not page.locator('svg .nautilus-log-record-meta').count()
             return values
         initial = indicators()
@@ -1313,7 +1313,7 @@ def current_only_labels_contract(page):
         for iso in ['2026-10-29T04:59:00', '2026-10-29T21:00:00', '2026-10-30T08:01:00', '2026-10-28T08:01:00']:
             set_clock(page, iso); assert indicators() == [], iso
         assert state(page)['writes'] == 0
-        report[f'{width}-{language}'] = {'taskAndEventCurrent': True, 'hoverIndependent': True, 'nonCurrentHasNoSublabel': True, 'detailsRetainedInTips': True}
+        report[f'{width}-{language}'] = {'taskAndEventCurrent': True, 'typedCurrent': True, 'hoverIndependent': True, 'nonCurrentHasNoSublabel': True, 'detailsRetainedInTips': True}
     load(page, 'empty', 'main', 720, window='flow')
     set_clock(page, '2026-10-29T17:47:00')
     gap = page.locator('[data-past-gap-key]').first

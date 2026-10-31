@@ -3,6 +3,8 @@ let canvasContext;
 const validRange = item => Number.isFinite(item?.start) && Number.isFinite(item?.end) && item.end > item.start;
 const finite = (value, fallback) => Number.isFinite(value) ? value : fallback;
 const round = value => Math.round(value * 1000) / 1000;
+const canBeCurrent = (item, start, end) => !item.done && (item.todo || item.meeting)
+  && (!validRange(item) || (item.end > start && item.start < end));
 
 function sourceItems(items) {
   const seen = new Set();
@@ -18,8 +20,12 @@ function textMeasure(font, supplied) {
   if (typeof document !== 'undefined') {
     canvasContext ||= document.createElement('canvas').getContext('2d');
     if (canvasContext) {
-      canvasContext.font = font;
-      return text => canvasContext.measureText(text).width;
+      // Different title/indicator/Tip measurers share this canvas. Restore the
+      // requested font on each call so one measurer cannot silently resize another.
+      return text => {
+        canvasContext.font = font;
+        return canvasContext.measureText(text).width;
+      };
     }
   }
   return text => [...text].reduce((sum, ch) => sum + (/[^\x00-\xff]/.test(ch) ? 13 : 7), 0);
@@ -76,7 +82,7 @@ function wrapTitle(text, width, measure) {
 
 /** Only source data and local geometry size the frame, never the moving clock. */
 function chartPresentationFrame({ containerWidth, items = [], timeRadius = 150,
-  startMinutes = 300, endMinutes = 1260, font = '500 13px Inter, system-ui, sans-serif', measure } = {}) {
+  startMinutes = 300, endMinutes = 1260, font = '500 13px Inter, system-ui, sans-serif', measure, currentLabels = [] } = {}) {
   const rawWidth = finite(containerWidth, 720), width = rawWidth > 0 ? rawWidth : 720;
   const compact = width <= 520, source = sourceItems(items);
   const viewWidth = compact ? Math.max(160, Math.round(width)) : 720;
@@ -89,6 +95,14 @@ function chartPresentationFrame({ containerWidth, items = [], timeRadius = 150,
   let labelWidth = compact ? (viewWidth - 56 - plotDiameter) / 2 : 148;
   const fontAt = size => font.replace(/\b\d+(?:\.\d+)?px/, `${size}px`).replace(/^\d+\s/, '500 ');
   let measured = textMeasure(fontAt(fontSize), measure);
+  if (compact && Array.isArray(currentLabels) && currentLabels.length && source.some(item => canBeCurrent(item, startMinutes, endMinutes))) {
+    const currentMeasure = textMeasure(fontAt(9).replace(/^500 /, '400 '),
+      measure ? text => measure(text) * 9 / fontSize : undefined);
+    const needed = Math.ceil(Math.max(0, ...currentLabels.slice(0, 2).map(text => currentMeasure(String(text))))) + 2;
+    const available = (viewWidth - 56 - Math.min(96, viewWidth * .4)) / 2;
+    labelWidth = Math.max(labelWidth, Math.min(needed, available));
+    plotDiameter = viewWidth - 56 - 2 * labelWidth;
+  }
   if (compact && !measure) {
     const words = source.flatMap(item => item.description.slice(0, 512).match(/[A-Za-z]+/g) || []).filter(word => word.length <= 24);
     const longest = Math.max(0, ...words.map(measured));
@@ -105,9 +119,7 @@ function chartPresentationFrame({ containerWidth, items = [], timeRadius = 150,
     const wrapped = wrapTitle(title, labelWidth, measured);
     // Reserve a small, stable Current allowance only for records that can
     // become current. No duration/status sublabel is rendered for other records.
-    const canBeCurrent = !item.done && (item.todo || item.meeting)
-      && (!validRange(item) || (item.end > startMinutes && item.start < endMinutes));
-    const metadataHeight = canBeCurrent ? 14 : 0;
+    const metadataHeight = canBeCurrent(item, startMinutes, endMinutes) ? 14 : 0;
     const height = wrapped.lines.length * lineHeight + 4 + metadataHeight;
     // This side assignment has no time input, including for pending tasks that
     // might later become unplaced. A loose record never gets a fake angle.
@@ -209,10 +221,10 @@ function labelLayout(frame, records) {
 
 /** Draw observed intervals and explicit planned allocations with distinct claims. */
 function chartScene({ items = [], events = [], containerWidth, startMinutes = 300, endMinutes = 1260,
-  timeRadius = 150, radiusForMinute, font, measure } = {}) {
+  timeRadius = 150, radiusForMinute, font, measure, currentLabels } = {}) {
   const source = sourceItems(items);
   const start = finite(startMinutes, 300), end = finite(endMinutes, 1260);
-  const frame = chartPresentationFrame({ items: source, containerWidth, timeRadius, startMinutes: start, endMinutes: end, font, measure });
+  const frame = chartPresentationFrame({ items: source, containerWidth, timeRadius, startMinutes: start, endMinutes: end, font, measure, currentLabels });
   const within = item => validRange(item) && item.end > start && item.start < end;
   const plotted = new Map((Array.isArray(events) ? events : []).filter(event => event?.uid && within(event)).map(event => [event.uid, event]));
   const records = source.map((item, order) => {

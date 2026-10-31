@@ -1343,7 +1343,8 @@
       (when (or (:current? params) (:current-event? params))
         [:text {:class "nautilus-log-record-current" :x (:textX label) :y (:metadataY label)
                 :text-anchor (:align label) :font-size (:metadataFontSize label) :pointer-events "none"}
-         (or (get-in copy [:tooltips :current]) "Current")])]]))
+         (or (get-in copy [:tooltips (if (:current-event? params) :currentEvent :currentTask)])
+             (if (:current-event? params) "Current event" "Current task"))])]]))
 
 (defn estimated-completion? [event]
   (contains? #{"estimated-allocation" "completion-estimate"} (:time-claim event)))
@@ -1453,6 +1454,8 @@
                              :containerWidth container-width :timeRadius time-radius
                              :defaultDuration (:default-duration settings) :relation (:relation timeline-state)
                              :font (str "500 13px " font-family)
+                             :currentLabels [(or (get-in copy [:tooltips :currentTask]) "Current task")
+                                             (or (get-in copy [:tooltips :currentEvent]) "Current event")]
                              :radiusForMinute (fn [minute] (spiral-outer-radius minute settings))
                              :startMinutes (:workday-start settings) :endMinutes (:workday-end settings)})
         frame (:frame scene)

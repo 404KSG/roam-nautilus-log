@@ -16,6 +16,36 @@ test('potentially current labels keep a stable indicator allowance across minute
   assert.ok(label.metadataY <= label.y + label.height);
 });
 
+test('compact columns fit typed Current labels without shrinking text or clock-driven reflow', () => {
+  const input = { items: [task], startMinutes: 360, endMinutes: 1200, containerWidth: 280,
+    measure: text => text.length * 5.5, currentLabels: ['Current task', 'Current event'] };
+  const a = chartScene({ ...input, events: [{ ...task, start: 810, end: 855 }] });
+  const b = chartScene({ ...input, events: [{ ...task, start: 811, end: 856 }] });
+  assert.ok(a.frame.labelWidth >= 61);
+  assert.equal(a.frame.labels[0].metadataFontSize, 9);
+  assert.ok(a.frame.timeRadius * a.frame.plotScale * 2 >= 96);
+  assert.deepEqual(a.frame, b.frame);
+  const completed = chartScene({ ...input, items: [{ ...task, done: true }] });
+  assert.equal(completed.frame.labelWidth, 56, 'no indicator width is reserved for completed-only content');
+  assert.doesNotThrow(() => chartScene({ ...input, currentLabels: null }));
+});
+
+test('measuring current indicators cannot change the font used to wrap titles', () => {
+  const previous = global.document;
+  const context = { font: '', measureText(text) { return { width: Number(this.font.match(/([\d.]+)px/)[1]) * text.length * .5 }; } };
+  global.document = { createElement: () => ({ getContext: () => context }) };
+  try {
+    const item = { ...task, description: 'Expected font' };
+    const scene = chartScene({ items: [item], events: [{ ...item, start: 810, end: 855 }],
+      containerWidth: 520, startMinutes: 360, endMinutes: 1200, currentLabels: ['Current task', 'Current event'] });
+    const label = scene.records[0].label;
+    assert.equal(label.inkWidth, item.description.length * label.fontSize * .5);
+  } finally {
+    if (previous === undefined) delete global.document;
+    else global.document = previous;
+  }
+});
+
 test('duration provenance stays available to inspectors, including actual, estimates and zero', () => {
   assert.deepEqual(chartRecordMetadata({ ...task }), { duration: '45m', status: null });
   assert.deepEqual(chartRecordMetadata({ ...task, done: true, duration: 30, 'actual-minutes': 30, 'planned-duration': 45, 'time-claim': 'actual' }), { duration: '30m', status: 'actual' });

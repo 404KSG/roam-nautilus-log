@@ -1147,6 +1147,8 @@ test('paint and hit regions share the fold-safe continuous shell geometry', () =
   assert.match(drawing, /data-estimate-outline-for/);
   assert.match(drawing, /nautilus-log-record-current/);
   assert.match(drawing, /when \(or \(:current\? params\) \(:current-event\? params\)\)/);
+  assert.match(drawing, /if \(:current-event\? params\) :currentEvent :currentTask/);
+  assert.doesNotMatch(drawing, /get-in copy \[:tooltips :current\]/);
   assert.doesNotMatch(drawing, /nautilus-log-record-meta|chart-record-meta-text/);
   assert.match(component, /:style \{"--nautilus-log-task-future-fill"/);
   assert.doesNotMatch(component, /:--nautilus-log-task-future-fill/);

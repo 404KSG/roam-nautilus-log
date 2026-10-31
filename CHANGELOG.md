@@ -18,7 +18,8 @@
   convex C2 smoothing to soften the left-side shoulder/apex without changing time boundaries.
   Source times and scheduling are unchanged; the new curves do not claim pixel-area equivalence
   to the old step profile.
-- Simplify diagram labels to titles plus **Current** only for active tasks/events. Remove
+- Simplify diagram labels to titles plus **Current task** or **Current event** only for
+  the corresponding active record. Bare “Current” is no longer shown. Remove
   duration, Actual and Estimate sublabels; their complete information stays in hover/focus
   Tips. Potentially current records retain a small stable line allowance; completed records
   no longer reserve an unused metadata row. Completion styles remain distinct and readable,
