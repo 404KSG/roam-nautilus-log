@@ -2,9 +2,9 @@
 
 ## Current decision
 
-Revised October 31, 2026. The latest color decision is red/yellow/blue, with a yellow
-Unfinished cue. It supersedes warm orange and purple without changing the integrated
-wide-content tips, past-gap inspection, semantic title colors, queues or icon-only Desk switch:
+Revised October 31, 2026. Red/yellow/blue roles remain, calibrated against the existing
+Roam switch blue and Free green. The brighter royal blue and lemon yellow are superseded;
+wide-content tips, past-gap inspection, semantic titles, queues and the Desk switch remain:
 
 - Roomy tips show their full current content, wrapping rather than using ellipses. Only a
   compressed local width may use a compact preview and More for clipped text.
@@ -137,12 +137,18 @@ must coexist with complete wide-view content and narrow expansion.
 
 ## Category colors and native Desk
 
-Legend/category colors are Urgent `#ea0f0f`, Event yellow `#facc15` and Task blue `#3b82f6`.
-Light-theme text uses Event `#806600` and Task `#1d4ed8` for readability; dark text uses
-`#fde047` and `#93c5fd`. Event fills use `#fef3a6`, with `#facc15` for the current event;
-task fills use the blue family. Completion stays neutral gray, explicit urgency still
-overrides ordinary fill, and no title gets a deletion line. Detail names use the matching
-semantic text colors, with no gradient.
+Legend/category colors are Urgent `#c24b4b`, Event golden yellow `#ad8b24` and Task Roam blue
+`#137cbd`. The existing switch blue `#137cbd` and Free green `#277a59` remain unchanged.
+Light text uses deeper Task `#106ba3` and Event `#7b651a`; dark text uses `#8ec0de` and
+`#d7bf70`. Event fills use `#f0e8cd`, with `#d1b965` for the current event; task fills use
+`rgba(19,124,189,0.22)`, with `#8cbad7` for current work. Elapsed and dark fills follow the
+same restrained families rather than retaining the old bright blue/yellow materials.
+
+Actual tagged urgency uses `rgba(194,75,75,0.72)`, not just a recolored legend. The now
+indicator uses the same red family, lightened to `#e58f8c` in dark themes. Completion stays
+neutral gray unless explicit urgency overrides the fill; no title gets a deletion line.
+Detail names retain semantic text colors without gradients. Typography, geometry, behavior,
+non-category warning/positive colors and native focus controls are unchanged.
 
 The Unfinished heading uses the readable event-text token and its disclosure arrow uses
 the yellow event-category token. Counts and total duration stay muted, expanded task rows
@@ -163,7 +169,9 @@ are authoritative. These dimensions are Nautilus choices, not official Linear to
 
 Use exact production CLJS/JS in the isolated renderer. Verify ordinary CJK title width,
 More/展开 line count under font and inherited word-break pressure, hidden Desk text with
-hover/focus labels, computed category colors and readable title contrast. Add wide content
+hover/focus labels, computed category colors and readable title contrast. Check actual tagged
+urgency fills across all dark-theme selectors, not only the legend; preserve the native switch
+blue and Free green references. Add wide content
 beyond 280px, automatically wrapped/unbroken text without a title-unlocking More action,
 compact expansion, width transitions, unchanged SVG geometry, and yellow Unfinished cues
 versus muted counts/totals, blue task rows and a neutral Unscheduled heading. Preserve default

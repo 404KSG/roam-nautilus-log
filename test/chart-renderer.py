@@ -460,7 +460,7 @@ def four_corrections_contract(page):
             coverage(page)  # Full-mode metadata may wrap rather than be truncated.
         pressure_style.evaluate('e=>e.remove()'); settle_renderer(page)
         colors = page.locator('.nautilus-log-html-legend').first.locator('.nautilus-log-legend-dot').evaluate_all('els=>els.map(e=>getComputedStyle(e).backgroundColor)')
-        assert colors == ['rgb(234, 15, 15)', 'rgb(250, 204, 21)', 'rgb(59, 130, 246)'], colors
+        assert colors == ['rgb(194, 75, 75)', 'rgb(173, 139, 36)', 'rgb(19, 124, 189)'], colors
         switch = page.get_by_role('switch', name='Desk', exact=True)
         assert switch.inner_text().strip() == '' and not switch.locator('.nautilus-log-desk-switch-label').count()
         switch.hover()
@@ -525,19 +525,22 @@ def full_tip_palette_contract(page):
         if toggle.get_attribute('aria-checked') != 'true': toggle.click()
         page.wait_for_function('document.querySelector(".nautilus-desk")?.dataset.status==="ready"')
         settle_renderer(page); before = state(page)['svg']; select(page, 'connection-done-0'); after = coverage(page)
+        page.wait_for_function('''()=>document.querySelector('.nautilus-log-desk-switch-track').getAnimations().every(a=>a.playState==='finished')''')
         data = page.evaluate('''()=>{
           const region=document.querySelector('.nautilus-log-detail-region'),tip=region.querySelector('.nautilus-log-detail-content'),title=region.querySelector('.nautilus-log-detail-title');
           const queue=document.querySelector('.nautilus-log-pending-queue'),summary=queue.querySelector('summary'),toolbar=document.querySelector('.nautilus-desk .rm-desk-page__toolbar');
           return {mode:region.dataset.tipContent,width:tip.getBoundingClientRect().width,title:title.textContent,titleWidth:title.clientWidth,titleScroll:title.scrollWidth,titleHeight:title.clientHeight,titleScrollHeight:title.scrollHeight,textOverflow:getComputedStyle(title).textOverflow,gradient:getComputedStyle(title).backgroundImage,
             unfinishedAccent:getComputedStyle(queue).getPropertyValue('--nautilus-log-event').trim(),heading:getComputedStyle(queue.querySelector('.nautilus-log-queue-title')).color,marker:getComputedStyle(summary,'::marker').color,count:getComputedStyle(queue.querySelector('.nautilus-log-queue-count')).color,total:getComputedStyle(queue.querySelector('.nautilus-log-queue-total')).color,row:getComputedStyle(queue.querySelector('.nautilus-log-queue-item')).color,
+            positive:getComputedStyle(queue).getPropertyValue('--nautilus-log-positive').trim(),switchColor:getComputedStyle(document.querySelector('.nautilus-log-desk-switch-track')).backgroundColor,
             tipBottom:tip.getBoundingClientRect().bottom,queueTop:queue.getBoundingClientRect().top,deskTop:toolbar.getBoundingClientRect().top,
             colors:[...document.querySelectorAll('.nautilus-log-html-legend .nautilus-log-legend-dot')].slice(0,3).map(e=>getComputedStyle(e).backgroundColor)};
         }''')
-        assert data['title'] == text and data['colors'] == ['rgb(234, 15, 15)', 'rgb(250, 204, 21)', 'rgb(59, 130, 246)'], data
+        assert data['title'] == text and data['colors'] == ['rgb(194, 75, 75)', 'rgb(173, 139, 36)', 'rgb(19, 124, 189)'], data
+        assert data['positive'] == '#277a59' and data['switchColor'] == 'rgb(19, 124, 189)', 'preserve the user-selected native blue and positive green references'
         assert data['gradient'] == 'none', 'full-width content must use semantic text colors, not a gradient'
         assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).color') == page.locator('[data-task-uid="connection-done-0"] .nautilus-log-record-title').evaluate('e=>getComputedStyle(e).fill')
-        assert data['heading'] == 'rgb(128, 102, 0)' and data['marker'] == 'rgb(250, 204, 21)', data
-        assert data['count'] == data['total'] and data['count'] != data['heading'] and data['row'] == 'rgb(29, 78, 216)', data
+        assert data['heading'] == 'rgb(123, 101, 26)' and data['marker'] == 'rgb(173, 139, 36)', data
+        assert data['count'] == data['total'] and data['count'] != data['heading'] and data['row'] == 'rgb(16, 107, 163)', data
         assert data['queueTop'] >= data['tipBottom'] and data['deskTop'] >= data['tipBottom'], data
         assert all(abs(before[k]-after['svg'][k]) < .5 for k in ['width','height'])
         if width > 360:
@@ -554,8 +557,8 @@ def full_tip_palette_contract(page):
     load(page, 'connections', 'main', 720, window='flow'); set_clock(page, '2026-10-30T08:00:00')
     page.locator('body').evaluate('e=>{e.classList.add("bp3-dark");e.style.background="#1d1e21";e.style.color="#ecedef"}')
     dark = page.evaluate('''()=>({colors:[...document.querySelectorAll('.nautilus-log-html-legend .nautilus-log-legend-dot')].slice(0,3).map(e=>getComputedStyle(e).backgroundColor),title:getComputedStyle(document.querySelector('.nautilus-log-queue-title')).color,marker:getComputedStyle(document.querySelector('.nautilus-log-pending-queue > summary'),'::marker').color,row:getComputedStyle(document.querySelector('.nautilus-log-queue-item')).color})''')
-    assert dark['colors'] == ['rgb(234, 15, 15)', 'rgb(250, 204, 21)', 'rgb(59, 130, 246)'], dark
-    assert dark['title'] == 'rgb(253, 224, 71)' and dark['marker'] == 'rgb(250, 204, 21)' and dark['row'] == 'rgb(147, 197, 253)', dark
+    assert dark['colors'] == ['rgb(194, 75, 75)', 'rgb(173, 139, 36)', 'rgb(19, 124, 189)'], dark
+    assert dark['title'] == 'rgb(215, 191, 112)' and dark['marker'] == 'rgb(173, 139, 36)' and dark['row'] == 'rgb(142, 192, 222)', dark
     reports['darkPalette'] = dark
     load(page, 'long', 'main', 640)
     before = state(page)['svg']; select(page, 'long-unbroken'); wide = coverage(page)
@@ -573,6 +576,27 @@ def full_tip_palette_contract(page):
     assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text()
     reports['unbrokenAndResize'] = {'wideAutomaticFullText': True, 'svgUnchanged': True, 'narrowExpansion': True, 'graphWrites': state(page)['writes']}
     return reports
+
+
+def tagged_urgency_palette_contract(page):
+    report = {}
+    for theme, classes in [('light', ''), ('bp3', 'bp3-dark'), ('roam', 'roam-app rm-dark-theme'), ('dark', 'dark')]:
+        load(page, 'mixed')
+        page.locator('body').evaluate('''(e,c)=>{e.className=c;e.style.background=c?'#1d1e21':'#fff';e.style.color=c?'#ecedef':'#222326'}''', classes)
+        page.evaluate('''()=>{window.nautilusLogExtensionData.settings['color-1-trigger']='#Priority';
+          window.dispatchEvent(new Event('nautilus-log:settings-changed'));
+          __chartHarness.updateChild('task-reference','{{[[TODO]]}} Priority task #Priority 30m');
+          __chartHarness.updateChild('event-standup','09:00-09:30 Priority event #Priority');}''')
+        page.wait_for_function('''()=>['task-reference','event-standup'].every(uid=>__chartHarness.scene().records.find(r=>r.uid===uid)?.event['bg-color']==='rgba(194,75,75,0.72)')''')
+        page.wait_for_function('''()=>[...document.querySelectorAll('.nautilus-log-slice')].every(e=>e.getAnimations().every(a=>a.playState==='finished'))''')
+        paint = page.evaluate('''()=>({legend:getComputedStyle(document.querySelector('.nautilus-log-legend-dot--urgent')).backgroundColor,
+          slices:['task-reference','event-standup'].map(uid=>getComputedStyle(document.querySelector(`[data-task-uid="${uid}"] .nautilus-log-slice`)).fill),
+          needle:getComputedStyle(document.querySelector('.nautilus-log-now-needle-line')).stroke})''')
+        assert paint['legend'] == 'rgb(194, 75, 75)' and paint['slices'] == ['rgba(194, 75, 75, 0.72)'] * 2, paint
+        assert paint['needle'] == ('rgb(229, 143, 140)' if classes else 'rgb(194, 75, 75)'), paint
+        assert state(page)['writes'] == 0
+        report[theme] = paint
+    return report
 
 
 def tip_surface_contract(page):
@@ -1214,6 +1238,7 @@ def main():
             report['densityAndControl'] = density_and_control_contract(page)
             report['fourCorrections'] = four_corrections_contract(page)
             report['fullTipPalette'] = full_tip_palette_contract(page)
+            report['taggedUrgencyPalette'] = tagged_urgency_palette_contract(page)
             report['afternoonFlow'] = afternoon_flow_contract(page)
             report['materialsAndTips'] = material_and_tip_contract(page)
             report['pastGapInspection'] = past_gap_inspection_contract(page)

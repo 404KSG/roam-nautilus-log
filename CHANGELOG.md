@@ -45,8 +45,11 @@
   Dashed gray outlines identify estimated placement and remain visible over pending
   forecasts. Genuine capacity overflow retains the title and duration. The rejected
   Completed / No timestamp node and its upper connection band are removed.
-- Red urgency, yellow events and blue tasks form the current category palette. Separate
-  darker text tokens keep light-theme labels readable without turning the legend dots brown.
+- Calibrate the red/yellow/blue palette against the existing Roam switch blue and Free green,
+  leaving both references unchanged. Tasks use `#137cbd` with deeper `#106ba3` text; events use
+  muted golden yellow `#ad8b24`; urgency uses softer red `#c24b4b`. Tagged task/event fills,
+  the now indicator, phase fills, leaders, Unfinished cues and dark-theme text follow the palette.
+  Separate readable text tokens retain contrast without restoring bright royal blue or lemon yellow.
   Readable neutral completion text without
   strike-through, and whole-connection focus replace the disconnected, faded
   presentation. Other text is not dimmed. No completion time is inferred from

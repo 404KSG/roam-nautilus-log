@@ -9,7 +9,7 @@
 
 (def init-len-limit 22) ;; value used when no legend length limit is specified as a render parameter
 
-(def custom-color-1 "rgba(234,15,15,0.72)")
+(def custom-color-1 "rgba(194,75,75,0.72)")
 
 (def init-custom-color-1-tag "")
 

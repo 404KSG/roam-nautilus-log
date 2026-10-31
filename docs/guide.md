@@ -59,13 +59,18 @@ small flame marks whether the current minute is consuming Available or Event tim
 
 ## Visual language
 
-- Blue: flexible tasks; the current task has a stronger fill and outline
-- Yellow: fixed events
+- Roam blue: flexible tasks; the current task has a stronger fill and outline
+- Muted golden yellow: fixed events
 - Solid gray: completion history with a local time anchor
 - Gray with dashed outlines: completed tasks placed by estimate, not recorded completion times
 - Pale hatching: past gaps not covered by a task or event interval, not future availability
 - Red needle: current time and the starting boundary for pending work
 - Red task color: an explicit urgency override
+
+The palette uses the existing switch blue (`#137cbd`) and Free green (`#277a59`) as references;
+those controls remain unchanged. Task text uses a deeper blue (`#106ba3`), events use a calmer
+yellow (`#ad8b24`), and urgency uses a softer red (`#c24b4b`). Fills, leaders, Unfinished cues
+and dark-theme text follow these color families without changing their meanings.
 
 Completed tasks without actual timing use their explicit estimate, or Default Todo Duration
 (15 minutes by default). They receive spiral slices and connected labels without requiring

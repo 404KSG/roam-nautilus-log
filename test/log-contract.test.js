@@ -1167,14 +1167,14 @@ test('current diagram labels have individually routed leaders without track-budg
   assert.doesNotMatch(css, /\.nautilus-log-event-slice-group\s*\{[^}]*opacity:/s);
 });
 
-test('the chart uses red/yellow/blue and gives Unfinished a readable yellow cue', () => {
+test('the chart uses Roam-blue, deeper yellow and muted red with a readable Unfinished cue', () => {
   assert.match(component, /def task-fill-color "var\(--nautilus-log-task-fill\)"/);
   assert.doesNotMatch(component, /todo-color-palette/);
-  assert.match(css, /--nautilus-log-task:\s*#3b82f6/);
-  assert.match(css, /--nautilus-log-event:\s*#facc15/);
-  assert.match(css, /--nautilus-log-event-text:\s*#806600/);
-  assert.doesNotMatch(css, /#d99a48|#8b5cf6/);
-  assert.match(css, /\.nautilus-log-legend-dot--urgent\s*\{\s*background:\s*#ea0f0f/);
+  assert.match(css, /--nautilus-log-task:\s*#137cbd/);
+  assert.match(css, /--nautilus-log-event:\s*#ad8b24/);
+  assert.match(css, /--nautilus-log-event-text:\s*#7b651a/);
+  assert.doesNotMatch(css, /#d99a48|#8b5cf6|#3b82f6|#facc15|#ea0f0f/);
+  assert.match(css, /\.nautilus-log-legend-dot--urgent\s*\{\s*background:\s*#c24b4b/);
   assert.match(css, /\.nautilus-log-pending-queue\[data-queue-kind="unfinished"\] > summary\s*\{[^}]*var\(--nautilus-log-event-text\)/s);
   assert.match(css, /\.nautilus-log-pending-queue\[data-queue-kind="unfinished"\] > summary::marker\s*\{[^}]*var\(--nautilus-log-event\)/s);
   assert.match(css, /--nautilus-log-completed-fill:\s*#c7d0e1/);
@@ -1184,6 +1184,16 @@ test('the chart uses red/yellow/blue and gives Unfinished a readable yellow cue'
   assert.match(css, /\.nautilus-log-estimated-outline path[^}]*stroke-dasharray:\s*3 2/s);
   assert.match(css, /\.nautilus-log-record-title\s*\{[^}]*fill:\s*var\(--nautilus-log-task-text\)/s);
   assert.match(css, /\.nautilus-log-legend-dot--task\s*\{\s*background:\s*var\(--nautilus-log-task\);\s*\}/);
+});
+
+test('native blue and positive green stay intact while actual tagged urgency uses the new red', () => {
+  assert.match(css, /\.nautilus-log-container\s*\{[^}]*--nautilus-log-chart-focus:\s*#137cbd/s);
+  assert.match(css, /\.nautilus-log-container\s*\{[^}]*--nautilus-log-positive:\s*#277a59/s);
+  assert.match(css, /\.nautilus-log-desk-btn\[aria-checked="true"\] \.nautilus-log-desk-switch-track\s*\{\s*background:\s*var\(--nautilus-log-chart-focus\)/);
+  assert.match(css, /--nautilus-log-task-text:\s*#106ba3/);
+  assert.match(component, /\(def custom-color-1 "rgba\(194,75,75,0\.72\)"\)/);
+  assert.match(css, /\.nautilus-log-compact-dot--urgent\s*\{\s*background:\s*#c24b4b/);
+  assert.match(css, /--nautilus-log-now:\s*#c24b4b/);
 });
 
 test('the current planned task is outlined and its label receives stronger emphasis', () => {

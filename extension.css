@@ -9,20 +9,20 @@
   --nautilus-log-hover: rgba(25, 25, 25, 0.05);
   --nautilus-log-positive: #4f9f7b;
   --nautilus-log-warning: #c96c00;
-  --nautilus-log-event: #facc15;
-  --nautilus-log-event-text: #806600;
-  --nautilus-log-event-fill: #fef3a6;
-  --nautilus-log-task: #3b82f6;
-  --nautilus-log-task-text: #1d4ed8;
-  --nautilus-log-task-fill: rgba(59, 130, 246, 0.22);
+  --nautilus-log-event: #ad8b24;
+  --nautilus-log-event-text: #7b651a;
+  --nautilus-log-event-fill: #f0e8cd;
+  --nautilus-log-task: #137cbd;
+  --nautilus-log-task-text: #106ba3;
+  --nautilus-log-task-fill: rgba(19, 124, 189, 0.22);
   --nautilus-log-control-icon: #888;
   --nautilus-log-roam-toolbar-icon: #5c7080;
-  --nautilus-log-now: #d44b4b;
+  --nautilus-log-now: #c24b4b;
   --nautilus-log-past-overlay: rgba(86, 101, 116, 0.08);
   --nautilus-log-unplanned-fill: #f0f1f2;
   --nautilus-log-completed: #77818c;
   --nautilus-log-completed-fill: rgba(86, 101, 116, 0.22);
-  --nautilus-log-past-event-fill: rgba(250, 204, 21, 0.24);
+  --nautilus-log-past-event-fill: rgba(173, 139, 36, 0.24);
   --nautilus-log-slot-hover: rgba(86, 101, 116, 0.08);
   --nautilus-log-slot-stroke: rgba(86, 101, 116, 0.5);
 }
@@ -36,20 +36,20 @@
   --nautilus-log-hover: rgba(255, 255, 255, 0.08);
   --nautilus-log-positive: #70c49f;
   --nautilus-log-warning: #f4b75d;
-  --nautilus-log-event: #facc15;
-  --nautilus-log-event-text: #fde047;
-  --nautilus-log-event-fill: #514717;
-  --nautilus-log-task: #3b82f6;
-  --nautilus-log-task-text: #93c5fd;
-  --nautilus-log-task-fill: rgba(59, 130, 246, 0.28);
+  --nautilus-log-event: #ad8b24;
+  --nautilus-log-event-text: #d7bf70;
+  --nautilus-log-event-fill: #403a23;
+  --nautilus-log-task: #137cbd;
+  --nautilus-log-task-text: #8ec0de;
+  --nautilus-log-task-fill: rgba(19, 124, 189, 0.28);
   --nautilus-log-control-icon: #aaa;
   --nautilus-log-roam-toolbar-icon: #bfccd6;
-  --nautilus-log-now: #ff8b78;
+  --nautilus-log-now: #e58f8c;
   --nautilus-log-past-overlay: rgba(255, 255, 255, 0.06);
   --nautilus-log-unplanned-fill: #26272a;
   --nautilus-log-completed: #aeb8c2;
   --nautilus-log-completed-fill: rgba(199, 207, 214, 0.2);
-  --nautilus-log-past-event-fill: rgba(250, 204, 21, 0.23);
+  --nautilus-log-past-event-fill: rgba(173, 139, 36, 0.23);
   --nautilus-log-slot-hover: rgba(199, 207, 214, 0.09);
   --nautilus-log-slot-stroke: rgba(199, 207, 214, 0.54);
 }
@@ -292,7 +292,7 @@
   border-radius: 50%;
 }
 
-.nautilus-log-legend-dot--urgent { background: #ea0f0f; }
+.nautilus-log-legend-dot--urgent { background: #c24b4b; }
 .nautilus-log-legend-dot--event { background: var(--nautilus-log-event); }
 .nautilus-log-legend-dot--task { background: var(--nautilus-log-task); }
 
@@ -468,7 +468,7 @@
   border-radius: 50%;
 }
 
-.nautilus-log-compact-dot--urgent { background: #ea0f0f; }
+.nautilus-log-compact-dot--urgent { background: #c24b4b; }
 .nautilus-log-compact-dot--event { background: #fcc200; }
 .nautilus-log-compact-dot--task { background: var(--nautilus-log-task); }
 
@@ -1085,28 +1085,28 @@
   --nautilus-log-chart-hairline: #e3e5eb;
   --nautilus-log-chart-focus: #137cbd;
   --nautilus-log-chart-leader: #7785a3;
-  --nautilus-log-task: #3b82f6;
-  --nautilus-log-task-text: #1d4ed8;
+  --nautilus-log-task: #137cbd;
+  --nautilus-log-task-text: #106ba3;
   --nautilus-log-positive: #277a59;
   --nautilus-log-completed: #5d677b;
   --nautilus-log-completed-fill: #c7d0e1;
-  --nautilus-log-record-hover: rgba(59, 130, 246, 0.07);
-  --nautilus-log-past-event-fill: #f4df84;
+  --nautilus-log-record-hover: rgba(19, 124, 189, 0.07);
+  --nautilus-log-past-event-fill: #e1d3a0;
   --nautilus-log-unplanned-fill: #f8f9fc;
   --nautilus-log-unplanned-stripe: #d9dfea;
-  --nautilus-log-now: #df4357;
+  --nautilus-log-now: #c24b4b;
   --nautilus-log-spiral: #8992a4;
   --nautilus-log-slot-stroke: #137cbd;
-  --nautilus-log-task-fill: rgba(59, 130, 246, 0.22);
-  --nautilus-log-event: #facc15;
-  --nautilus-log-event-text: #806600;
-  --nautilus-log-event-fill: #fef3a6;
+  --nautilus-log-task-fill: rgba(19, 124, 189, 0.22);
+  --nautilus-log-event: #ad8b24;
+  --nautilus-log-event-text: #7b651a;
+  --nautilus-log-event-fill: #f0e8cd;
   --nautilus-log-task-future-fill: var(--nautilus-log-task-fill);
-  --nautilus-log-task-current-fill: #93c5fd;
+  --nautilus-log-task-current-fill: #8cbad7;
   --nautilus-log-task-completed-fill: var(--nautilus-log-completed-fill);
-  --nautilus-log-task-elapsed-fill: #dbeafe;
+  --nautilus-log-task-elapsed-fill: #dae7ef;
   --nautilus-log-event-future-fill: var(--nautilus-log-event-fill);
-  --nautilus-log-event-current-fill: #facc15;
+  --nautilus-log-event-current-fill: #d1b965;
   --nautilus-log-event-completed-fill: #d2d5df;
   --nautilus-log-event-elapsed-fill: var(--nautilus-log-past-event-fill);
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -1321,25 +1321,25 @@
   --nautilus-log-chart-hairline: #303440;
   --nautilus-log-chart-focus: #69b9ea;
   --nautilus-log-chart-leader: #8c99b5;
-  --nautilus-log-task: #3b82f6;
-  --nautilus-log-task-text: #93c5fd;
+  --nautilus-log-task: #137cbd;
+  --nautilus-log-task-text: #8ec0de;
   --nautilus-log-positive: #77d7ab;
   --nautilus-log-completed: #b9c3d6;
   --nautilus-log-completed-fill: #48546c;
-  --nautilus-log-record-hover: rgba(59, 130, 246, 0.1);
-  --nautilus-log-past-event-fill: #514717;
+  --nautilus-log-record-hover: rgba(19, 124, 189, 0.1);
+  --nautilus-log-past-event-fill: #403a23;
   --nautilus-log-unplanned-fill: #1c1f25;
   --nautilus-log-unplanned-stripe: #3a4354;
-  --nautilus-log-now: #ed8790;
+  --nautilus-log-now: #e58f8c;
   --nautilus-log-spiral: #a7b2c7;
   --nautilus-log-slot-stroke: #69b9ea;
-  --nautilus-log-task-fill: #213f6d;
-  --nautilus-log-event: #facc15;
-  --nautilus-log-event-text: #fde047;
-  --nautilus-log-event-fill: #655414;
-  --nautilus-log-task-current-fill: #326ab0;
-  --nautilus-log-task-elapsed-fill: #253b59;
-  --nautilus-log-event-current-fill: #947713;
+  --nautilus-log-task-fill: #244358;
+  --nautilus-log-event: #ad8b24;
+  --nautilus-log-event-text: #d7bf70;
+  --nautilus-log-event-fill: #514724;
+  --nautilus-log-task-current-fill: #356888;
+  --nautilus-log-task-elapsed-fill: #233844;
+  --nautilus-log-event-current-fill: #7b682f;
   --nautilus-log-event-completed-fill: #56566a;
 }
 
