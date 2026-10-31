@@ -70,6 +70,34 @@ surface stroke beneath that dashed border.
 Source timestamps and edit metadata are not borrowed. Zero duration stays zero. DONE
 estimate overflow keeps its title and duration in the diagram, not in an unfinished queue.
 
+## Elapsed texture
+
+Colors retain their existing category/state meanings; diagonal texture means only that the
+rendered time interval has elapsed. Keep the gap pattern and all record fills, gradients,
+opacity and appearance rules unchanged. Do not infer execution, CLOCK Actual or wasted time.
+
+Each mounted chart owns a stable transparent line pattern and elapsed clip. The colored-record
+pattern matches the gap's 45-degree direction, 6 CSS pixel pitch and 0.6px line width. It uses
+existing theme-aware secondary ink at 12% opacity: the gap stripe color nearly matches the
+composited gray estimate fill, so reusing that color would make completed textures invisible.
+There is no background rectangle or additional gray wash in this new pattern.
+
+Reuse the exact record surface path and clip it to the existing shell geometry from START to
+`min(END, elapsedThroughMinutes)`. This preserves the rounded contour, 12-hour fold and
+normalized overnight coordinates. Render only for timed records with a nonempty elapsed
+intersection on `showElapsed` days. Future/undated charts and unfinished queues gain no texture.
+
+The decorative path is pointer-inert and hidden from accessibility APIs. It inherits the
+record's visibility and is painted before labels, estimate outlines, grid and the now needle.
+Eye hides the completion texture with its record without changing occupied-gap calculations.
+Per-chart resource IDs must not collide when the same plan is mounted more than once.
+
+Renderer checks cover partial/complete events, unchanged future-fill interior pixels, transparent
+spaces between lines, light/dark/narrow layouts, Actual/stamped/unanchored estimates, hidden
+occupancy, historical/future days, fold crossings, repeated clock angles, midnight and instance
+isolation. Pixel comparisons exclude separately painted border/needle antialias fringes; their
+geometry and the underlying fill/gradient attributes are checked independently.
+
 ## Pending-work disposition
 
 `chartTaskDisposition` runs after completed-estimate allocation and before the geometry

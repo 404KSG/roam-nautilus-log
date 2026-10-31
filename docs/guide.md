@@ -61,9 +61,10 @@ small flame marks whether the current minute is consuming Available or Event tim
 
 - Roam blue: flexible tasks; the current task has a stronger fill and outline
 - Muted golden yellow: fixed events
-- Solid gray: completed local CLOCK Actual or an explicit fixed range
+- Gray with a solid outline: completed local CLOCK Actual or an explicit fixed range
 - Gray with dashed outlines: completed flexible tasks using estimated durations; Tips distinguish stamped from estimated placement
-- Pale hatching: past gaps not covered by a task or event interval, not future availability
+- Pale neutral hatching: past gaps not covered by a task or event interval, not future availability
+- Fine hatching over an existing color: the elapsed part of that interval, not proof of execution or actual timing
 - Red needle: current time and the starting boundary for pending work
 - Red task color: an explicit urgency override
 
@@ -71,6 +72,12 @@ The palette uses the existing switch blue (`#137cbd`) and Free green (`#277a59`)
 those controls remain unchanged. Task text uses a deeper blue (`#106ba3`), events use a calmer
 yellow (`#ad8b24`), and urgency uses a softer red (`#c24b4b`). Fills, leaders, Unfinished cues
 and dark-theme text follow these color families without changing their meanings.
+
+Hatching leaves existing fills, gradients and opacity intact. Only the portion before the
+current time is striped; the future portion stays plain. Yellow stripes mark elapsed event
+time, not confirmed attendance. Gray stripes do not turn an estimate into Actual. Estimated
+outlines remain dashed above the texture, and labels, the pointer and interactions stay clear.
+Hidden completions still occupy their intervals; they do not become empty gaps.
 
 The **continuous shell** draws each timed record as one surface, with rounded transitions
 through the radius profile. Hour marks remain as edge ticks rather than lines that visually
