@@ -4,6 +4,15 @@
 
 ### Added
 
+- Past blank intervals can be inspected with hover, click, or keyboard focus. The existing
+  detail panel shows their complete range, duration, and a neutral explanation; contiguous
+  gaps remain one selection across hour boundaries. Click or Enter/Space pins the details,
+  Escape dismisses them, and changed intervals invalidate stale selections. Hidden completed
+  estimates still occupy their intervals; unfinished past-day tasks remain in their queue.
+- Task and event names in the detail panel use a static multicolor gradient with separate
+  light/dark palettes. Dates, category dots, timing metadata, and gap explanations retain
+  their existing colors. Forced-color and print modes fall back to solid readable text.
+
 - Tips now give the title its own first row instead of letting metadata squeeze it into
   a narrow single-line track. Metadata and More occupy the second row; More uses its actual
   text width and cannot break into letters. The compact content is 42px in a stable 44px

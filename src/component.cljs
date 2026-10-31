@@ -453,17 +453,36 @@
   (select-keys event [:description :start :end :meeting :todo :done :done-at :bg-color :status-origin
                       :chart-kind :time-claim :full-start :full-end :duration :planned-duration :estimate-unplaced-reason]))
 
-(defn reconcile-detail-state! [detail-state event-signatures available-slot-keys]
+(defn reconcile-detail-state! [detail-state event-signatures available-slot-keys past-gap-keys]
   (swap! detail-state
          (fn [owners]
            (reduce-kv (fn [next-state owner info]
                         (let [valid? (case (:detail-kind info)
                                        :event (contains? event-signatures [(:uid info) (:detail-signature info)])
                                        :available (contains? available-slot-keys (:uid info))
-                                       true)]
+                                       :past-gap (contains? past-gap-keys (:uid info))
+                                       false)]
                           (assoc next-state owner (if valid? info nil))))
                       owners
                       owners))))
+
+(defn activate-detail! [detail-state info event]
+  (.preventDefault event)
+  (.stopPropagation event)
+  (swap! detail-state assoc :expanded info :focus info :pointer nil)
+  (some-> event .-currentTarget .focus))
+
+(defn dismiss-inspection! [detail-state event]
+  (.preventDefault event)
+  (.stopPropagation event)
+  (clear-detail-state! detail-state)
+  (some-> event .-target .blur))
+
+(defn inspection-keydown! [detail-state info event]
+  (case (.-key event)
+    ("Enter" " ") (activate-detail! detail-state info event)
+    "Escape" (dismiss-inspection! detail-state event)
+    nil))
 
 (defn locate-plan-task! [uid hover-info-state event]
   (when (and (seq uid) event)
@@ -539,7 +558,8 @@
                          (when (:more layout) " has-more"))
               :style {:width (str (if expanded? (:expandedWidth layout) (:width layout)) "px")}}
         [:span {:class (str "nautilus-log-detail-tone nautilus-log-detail-tone--" tone) :aria-hidden "true"}]
-        [:strong {:class "nautilus-log-detail-title"} title]
+        [:strong {:class (str "nautilus-log-detail-title"
+                              (when (= :event (:detail-kind info)) " nautilus-log-detail-title--record"))} title]
         (when (or (:more layout) expanded?)
           [:button {:type "button" :class "nautilus-log-detail-expand" :aria-expanded expanded?
                     :aria-label (get-in copy [:panels (if expanded? :collapseDetails :expandDetails)])
@@ -1259,6 +1279,50 @@
      :tone "available"
      :aria-label (str slot-label ". " time-range ". " duration)}))
 
+(defn past-gap-tooltip-info [gap copy]
+  (let [title (get-in copy [:tooltips :pastGap])
+        summary (get-in copy [:tooltips :pastGapSummary])
+        explanation (get-in copy [:tooltips :pastGapExplanation])
+        time-range (str (minutes->time (:start gap)) "–" (minutes->time (:end gap)))
+        duration (duration-label (:duration gap))]
+    {:title title
+     :summary-meta (str summary " · " time-range " · " duration)
+     :meta (str summary " · " time-range " · " duration " · " explanation)
+     :uid (:key gap)
+     :detail-kind :past-gap
+     :tone "past-gap"
+     :aria-label (str title ". " summary ". " time-range ". " duration ". " explanation)}))
+
+(defn past-gap-hit-component [gaps inner-radius center settings hover-info-state copy active-uid]
+  [:g {:class "nautilus-log-past-gap-hits"}
+   (for [gap gaps
+         :let [tooltip-info (past-gap-tooltip-info gap copy)]]
+     ^{:key (:key gap)}
+     [:g {:class (str "nautilus-log-past-gap"
+                      (when (= (:key gap) active-uid) " nautilus-log-past-gap--active"))
+          :data-past-gap-key (:key gap)
+          :data-past-gap-start (:start gap)
+          :data-past-gap-end (:end gap)
+          :aria-label (:aria-label tooltip-info)
+          :aria-pressed (if (= (:key gap) (get-in @hover-info-state [:expanded :uid])) "true" "false")
+          :role "button"
+          :tab-index 0
+          :focusable "true"
+          :on-mouse-enter #(show-hover-tooltip! hover-info-state :pointer tooltip-info %)
+          :on-focus #(show-hover-tooltip! hover-info-state :focus tooltip-info %)
+          :on-click #(activate-detail! hover-info-state tooltip-info %)
+          :on-key-down #(inspection-keydown! hover-info-state tooltip-info %)}
+      (for [{:keys [start end]} (:segments gap)]
+        ^{:key (str (:key gap) ":" start ":" end)}
+        [:path {:class "nautilus-log-past-gap-hit"
+                :d (create-arc-path
+                    (min->angle start)
+                    (min->angle end)
+                    (spiral-cell-inner-radius start settings inner-radius)
+                    (spiral-outer-radius start settings)
+                    center)
+                :vector-effect "non-scaling-stroke"}])])])
+
 (defn available-slot-component [slots inner-radius center settings hover-info-state copy]
   [:g {:class "nautilus-log-available-slots"}
      (for [slot slots
@@ -1421,9 +1485,16 @@
                                              {:events events :startMinutes (:workday-start settings)
                                               :endMinutes (:workday-end settings) :nowMinutes timeline-minute
                                               :clampToNow interactive?})) [])
+        past-gaps (or (when elapsed-page?
+                        (log-core-call "pastUnplannedGroups"
+                                       {:startMinutes (:workday-start settings)
+                                        :endMinutes (:workday-end settings)
+                                        :nowMinutes timeline-minute
+                                        :occupiedEvents timed-events})) [])
         _detail-reconciled (reconcile-detail-state! hover-info-state
                                                    (set (map (juxt :uid event-detail-signature) all-events))
-                                                   (set (map :key available-slots)))
+                                                   (set (map :key available-slots))
+                                                   (set (map :key past-gaps)))
         active-uid (:uid (active-detail hover-info-state))
         conflicts (set (log-core-call "overlappingFixedEventUids" {:events timed-events}))
         now-visible? (:showNow timeline-state)
@@ -1432,7 +1503,11 @@
            :data-active-connection (when active-uid "true")
            :on-mouse-leave #(clear-detail-on-workspace-exit! hover-info-state %)
            :on-mouse-out #(clear-detail-on-workspace-exit! hover-info-state %)
-           :on-blur #(clear-detail-on-workspace-exit! hover-info-state %)}
+           :on-blur #(clear-detail-on-workspace-exit! hover-info-state %)
+           :on-key-down (fn [event]
+                          (when (and (= "Escape" (.-key event))
+                                     (= :past-gap (:detail-kind (active-detail hover-info-state))))
+                            (dismiss-inspection! hover-info-state event)))}
      [:div {:class "nautilus-log-chart-stage"
             :style {:aspect-ratio (str frame-width " / " frame-height)}}
       [:svg {:viewBox (str "0 0 " frame-width " " frame-height)
@@ -1440,7 +1515,9 @@
              :class "nautilus-log-svg" :font-family font-family :font-size font-size}
        [:g {:transform transform}
         (when elapsed-page? [past-time-overlay-component snail-inner-radius center settings timeline-minute])
-        (when elapsed-page? [past-unplanned-overlay-component timed-events snail-inner-radius center settings timeline-minute scale])]
+        (when elapsed-page? [past-unplanned-overlay-component timed-events snail-inner-radius center settings timeline-minute scale])
+        (when elapsed-page?
+          [past-gap-hit-component past-gaps snail-inner-radius center settings hover-info-state copy active-uid])]
        (for [[index record] (map-indexed vector records)]
          ^{:key (:uid record)}
          [chart-scene-record record index frame settings timeline-state @show-done-atom? hover-info-state copy conflicts active-uid])
@@ -1820,6 +1897,8 @@
        :panels {:overview "Overview" :overflow "Unscheduled today" :warnings "Schedule warnings" :schedule "Schedule" :item "item" :items "items"
                 :untimedCompleted "Completed · No time recorded"}
        :tooltips {:task "Task" :event "Event" :available "Available slot" :availableNow "Available now"
+                  :pastGap "Past gap" :pastGapSummary "Uncovered"
+                  :pastGapExplanation "No task or event in the chart covers this interval; actual activity is unknown."
                   :completed "Completed" :noCompletionTime "No completion time recorded"
                   :inheritedCompletion "Completion status from reference" :locateTask "Click to locate · ⇧ Sidebar"}
        :warnings {:overnight "Continues into the next day"

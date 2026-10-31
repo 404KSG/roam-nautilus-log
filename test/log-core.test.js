@@ -7,6 +7,7 @@ const {
   hourlyGridSegments,
   pastTimelineSegments,
   pastUnplannedSegments,
+  pastUnplannedGroups,
   availableSlotGroups,
   pastItemStatus,
   spiralCellInnerHour,
@@ -353,6 +354,61 @@ test('past unplanned segments subtract real work and ignore generated free-time 
   );
 });
 
+test('past gaps stay one logical range while their paths split at hour cells', () => {
+  assert.deepEqual(
+    pastUnplannedGroups({
+      startMinutes: 300,
+      endMinutes: 720,
+      nowMinutes: 690,
+      occupiedEvents: [
+        { freetime: true, start: 300, end: 330 },
+        { uid: 'completed-estimate', todo: true, done: true, start: 330, end: 390, 'estimated-allocation': true },
+        { uid: 'event', meeting: true, start: 510, end: 540 },
+      ],
+    }),
+    [
+      {
+        key: 'past-gap:300:330', start: 300, end: 330, duration: 30,
+        segments: [{ start: 300, end: 330 }],
+      },
+      {
+        key: 'past-gap:390:510', start: 390, end: 510, duration: 120,
+        segments: [{ start: 390, end: 420 }, { start: 420, end: 480 }, { start: 480, end: 510 }],
+      },
+      {
+        key: 'past-gap:540:690', start: 540, end: 690, duration: 150,
+        segments: [{ start: 540, end: 600 }, { start: 600, end: 660 }, { start: 660, end: 690 }],
+      },
+    ],
+  );
+});
+
+test('past gap groups clip to elapsed bounds, support overnight windows, and omit fully occupied time', () => {
+  assert.deepEqual(
+    pastUnplannedGroups({
+      startMinutes: 1260,
+      endMinutes: 1560,
+      nowMinutes: 1515,
+      occupiedEvents: [{ uid: 'night-event', meeting: true, start: 1320, end: 1440 }],
+    }),
+    [
+      { key: 'past-gap:1260:1320', start: 1260, end: 1320, duration: 60,
+        segments: [{ start: 1260, end: 1320 }] },
+      { key: 'past-gap:1440:1515', start: 1440, end: 1515, duration: 75,
+        segments: [{ start: 1440, end: 1500 }, { start: 1500, end: 1515 }] },
+    ],
+  );
+  assert.deepEqual(
+    pastUnplannedGroups({
+      startMinutes: 300,
+      endMinutes: 420,
+      nowMinutes: 390,
+      occupiedEvents: [{ uid: 'estimated-done', todo: true, done: true, start: 300, end: 420, 'estimated-allocation': true }],
+    }),
+    [],
+  );
+});
+
 test('past unplanned segments follow spiral hour-cell boundaries', () => {
   assert.deepEqual(
     pastUnplannedSegments({
@@ -658,6 +714,9 @@ test('English UI settings localize all extension-owned status labels', () => {
     invalidEstimateWindow: 'Invalid chart window',
     available: 'Available slot',
     availableNow: 'Available now',
+    pastGap: 'Past gap',
+    pastGapSummary: 'Uncovered',
+    pastGapExplanation: 'No task or event in the chart covers this interval; actual activity is unknown.',
     locateTask: 'Click to locate · ⇧ Sidebar',
   });
   assert.deepEqual(uiCopy('zh').tooltips, {
@@ -681,6 +740,9 @@ test('English UI settings localize all extension-owned status labels', () => {
     invalidEstimateWindow: '图表时段无效',
     available: '可用空档',
     availableNow: '当前可用',
+    pastGap: '过去的空白时段',
+    pastGapSummary: '未覆盖',
+    pastGapExplanation: '图上没有任务或事件覆盖该时段，实际活动未知。',
     locateTask: '单击定位 · ⇧ 侧边栏',
   });
   assert.deepEqual(

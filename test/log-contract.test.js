@@ -301,6 +301,10 @@ test('the spiral uses a local fixed detail region above an inert grid', () => {
 
   assert.match(gridComponent, /\[:g \{:class "nautilus-log-grid" :aria-hidden "true"\}/);
   assert.match(component, /nautilus-log-available-slot-hit/);
+  assert.match(component, /nautilus-log-past-gap-hit/);
+  assert.match(component, /pastUnplannedGroups/);
+  assert.match(component, /:detail-kind :past-gap/);
+  assert.match(component, /inspection-keydown!/);
   assert.match(component, /nautilus-log-detail-region/);
   assert.match(component, /clear-detail-on-workspace-exit!/);
   assert.match(component, /:on-mouse-enter/);
@@ -315,6 +319,8 @@ test('the spiral uses a local fixed detail region above an inert grid', () => {
   assert.match(css, /\.nautilus-log-detail-region\.is-expanded\s*\{[^}]*height:\s*auto;/s);
   assert.match(css, /\.nautilus-log-grid\s*\{[^}]*pointer-events:\s*none;/s);
   assert.match(css, /\.nautilus-log-available-slot-hit/);
+  assert.match(css, /\.nautilus-log-past-gap-hits\s*\{[^}]*pointer-events:\s*none;/s);
+  assert.match(css, /\.nautilus-log-past-gap-hit\s*\{[^}]*pointer-events:\s*all;/s);
   assert.doesNotMatch(css, /nautilus-log-hover-tooltip|nautilus-log-compact-hover-context/);
   assert.match(component, /defn reconcile-detail-state!/);
   assert.match(component, /:detail-kind :event/);

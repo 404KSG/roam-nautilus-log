@@ -577,8 +577,29 @@
   pointer-events: none;
 }
 
-.nautilus-log-unplanned-overlay {
+.nautilus-log-unplanned-overlay,
+.nautilus-log-past-gap-hits {
   pointer-events: none;
+}
+
+.nautilus-log-past-gap {
+  outline: none;
+}
+
+.nautilus-log-past-gap-hit {
+  fill: transparent;
+  pointer-events: all;
+  stroke: transparent;
+  stroke-width: 1.25px;
+  transition: fill 0.14s ease, stroke 0.14s ease;
+}
+
+.nautilus-log-past-gap:hover .nautilus-log-past-gap-hit,
+.nautilus-log-past-gap:focus .nautilus-log-past-gap-hit,
+.nautilus-log-past-gap--active .nautilus-log-past-gap-hit {
+  fill: var(--nautilus-log-slot-hover);
+  stroke: var(--nautilus-log-chart-muted);
+  stroke-dasharray: 3 3;
 }
 
 .nautilus-log-grid .nautilus-log-slice {
@@ -1053,6 +1074,7 @@
 .nautilus-log-container {
   --nautilus-log-chart-paper: #fff;
   --nautilus-log-chart-panel: #f7f8fa;
+  --nautilus-log-detail-name-gradient: linear-gradient(100deg, #7952b3 0%, #aa3773 25%, #8a6200 50%, #08797a 75%, #3566bc 100%);
   --nautilus-log-chart-ink: #222326;
   --nautilus-log-chart-muted: #666b78;
   --nautilus-log-text-main: var(--nautilus-log-chart-ink);
@@ -1157,8 +1179,34 @@
 .nautilus-log-detail-tone--task { background: var(--nautilus-log-task); }
 .nautilus-log-detail-tone--event { background: var(--nautilus-log-event); }
 .nautilus-log-detail-tone--available { background: var(--nautilus-log-positive); }
+.nautilus-log-detail-tone--past-gap { background: var(--nautilus-log-chart-muted); }
 .nautilus-log-detail-tone--completed { background: var(--nautilus-log-completed); }
 .nautilus-log-detail-title { grid-column: 2 / -1; grid-row: 1; min-width: 0; font-size: 12px; line-height: 16px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A static accent for real names only; status text and category dots stay semantic. */
+.nautilus-log-detail-title--record { width: fit-content; max-width: 100%; }
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .nautilus-log-detail-title--record {
+    background-image: var(--nautilus-log-detail-name-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+}
+@media (forced-colors: active) {
+  .nautilus-log-detail-title--record {
+    background-image: none;
+    color: CanvasText;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+@media print {
+  .nautilus-log-detail-title--record {
+    background-image: none;
+    color: #222326;
+    -webkit-text-fill-color: currentColor;
+  }
+}
 .nautilus-log-detail-meta { grid-column: 2; grid-row: 2; align-self: center; min-width: 0; color: var(--nautilus-log-chart-muted); font-size: 11px; font-weight: 400; line-height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nautilus-log-detail-region.is-expanded .nautilus-log-detail-title,
 .nautilus-log-detail-region.is-expanded .nautilus-log-detail-meta { display: block; overflow: visible; white-space: normal; overflow-wrap: anywhere; }
@@ -1258,6 +1306,7 @@
 .dark .nautilus-log-container {
   --nautilus-log-chart-paper: #101113;
   --nautilus-log-chart-panel: #181a20;
+  --nautilus-log-detail-name-gradient: linear-gradient(100deg, #d4a6ff 0%, #f2a2ca 25%, #efcd75 50%, #7bd6c2 75%, #9dc6ff 100%);
   --nautilus-log-chart-ink: #ebecef;
   --nautilus-log-chart-muted: #b8bdca;
   --nautilus-log-chart-hairline: #303440;

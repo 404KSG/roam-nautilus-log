@@ -359,14 +359,14 @@ function timelineDayState({
 }
 
 /**
- * Return elapsed intervals that have no recorded item occupying them.
+ * Return logical elapsed gaps that have no recorded item occupying them.
  *
  * `fill-day` supplies synthetic free-time rows to the renderer; those are
  * deliberately ignored here because they describe the absence of a plan.
- * Gaps are split at hour boundaries so every result maps to exactly one
- * spiral cell, including the partial current hour.
+ * Each logical gap keeps its full range and duration while `segments` splits
+ * its drawing geometry at hour boundaries, including the partial current hour.
  */
-function pastUnplannedSegments({
+function pastUnplannedGroups({
   startMinutes,
   endMinutes,
   nowMinutes,
@@ -405,13 +405,17 @@ function pastUnplannedSegments({
   }
   if (cursor < elapsedEnd) gaps.push([cursor, elapsedEnd]);
 
-  const cells = pastTimelineSegments({ startMinutes: start, endMinutes: end, nowMinutes: elapsedEnd });
-  return gaps.flatMap(([gapStart, gapEnd]) => cells
-    .map((cell) => ({
-      start: Math.max(gapStart, cell.start),
-      end: Math.min(gapEnd, cell.end),
-    }))
-    .filter((segment) => segment.end > segment.start));
+  return gaps.map(([gapStart, gapEnd]) => ({
+    key: `past-gap:${gapStart}:${gapEnd}`,
+    start: gapStart,
+    end: gapEnd,
+    duration: gapEnd - gapStart,
+    segments: splitIntervalAtHourBoundaries(gapStart, gapEnd),
+  }));
+}
+
+function pastUnplannedSegments(options = {}) {
+  return pastUnplannedGroups(options).flatMap((group) => group.segments);
 }
 
 function splitIntervalAtHourBoundaries(start, end) {
@@ -1032,6 +1036,9 @@ const UI_COPY = {
       invalidEstimateWindow: 'Invalid chart window',
       available: 'Available slot',
       availableNow: 'Available now',
+      pastGap: 'Past gap',
+      pastGapSummary: 'Uncovered',
+      pastGapExplanation: 'No task or event in the chart covers this interval; actual activity is unknown.',
       locateTask: 'Click to locate · ⇧ Sidebar',
     },
     warnings: {
@@ -1134,6 +1141,9 @@ const UI_COPY = {
       invalidEstimateWindow: '图表时段无效',
       available: '可用空档',
       availableNow: '当前可用',
+      pastGap: '过去的空白时段',
+      pastGapSummary: '未覆盖',
+      pastGapExplanation: '图上没有任务或事件覆盖该时段，实际活动未知。',
       locateTask: '单击定位 · ⇧ 侧边栏',
     },
     warnings: {
@@ -1827,6 +1837,7 @@ module.exports = {
   pastTimelineSegments,
   timelineDayState,
   pastUnplannedSegments,
+  pastUnplannedGroups,
   availableSlotGroups,
   pastItemStatus,
   spiralCellInnerHour,
