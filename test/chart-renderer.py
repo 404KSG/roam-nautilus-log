@@ -193,14 +193,19 @@ def coverage(page, hidden=False):
         assert box['x'] >= svg['x'] - 1 and box['y'] >= svg['y'] - 1, (box, svg)
         assert box['x'] + box['width'] <= svg['x'] + svg['width'] + 1 and box['bottom'] <= svg['bottom'] + 1, (box, svg)
     detail = page.locator('.nautilus-log-detail-region')
-    if 'is-expanded' not in detail.get_attribute('class'):
+    expanded = 'is-expanded' in detail.get_attribute('class')
+    full_content = detail.get_attribute('data-tip-content') == 'full'
+    if not expanded and (not full_content or detail.get_attribute('data-nautilus-detail') == 'idle'):
         assert abs(s['detail']['height'] - 44) < .5
     if detail.get_attribute('data-nautilus-detail') == 'active':
         tip = page.locator('.nautilus-log-detail-content').bounding_box()
-        assert tip['width'] <= min(280, s['workspace']['width'] - 32) + 1, tip
+        assert tip['width'] <= s['workspace']['width'] - 32 + 1, tip
         assert abs(tip['x'] + tip['width'] / 2 - s['workspace']['x'] - s['workspace']['width'] / 2) <= 1
-        if 'is-expanded' not in detail.get_attribute('class'):
+        if not expanded and not full_content:
             assert tip['height'] <= 42.5, tip
+        if full_content:
+            for selector in ['.nautilus-log-detail-title', '.nautilus-log-detail-meta']:
+                assert page.locator(selector).evaluate('e=>getComputedStyle(e).textOverflow!=="ellipsis" && e.scrollWidth<=e.clientWidth+1 && e.scrollHeight<=e.clientHeight+1'), selector
         if detail.get_attribute('data-tip-more') == 'false':
             assert not page.locator('.nautilus-log-detail-expand').count()
             assert page.locator('.nautilus-log-detail-title').evaluate('e=>e.scrollWidth<=e.clientWidth')
@@ -445,10 +450,13 @@ def four_corrections_contract(page):
         pressure_style = page.add_style_tag(content='.nautilus-log-content{overflow-wrap:anywhere;word-break:break-word}.nautilus-log-detail-expand{font-size:13px!important;letter-spacing:.4px}')
         settle_renderer(page); pressure = tip_metrics()
         assert pressure['titleScroll'] <= pressure['titleWidth'] and pressure['moreScroll'] <= pressure['moreWidth'] + 1 and len(pressure['rows']) == 1, pressure
-        assert pressure['height'] <= 42.5, pressure
+        if width <= 360:
+            assert pressure['height'] <= 42.5, pressure
+        else:
+            coverage(page)  # Full-mode metadata may wrap rather than be truncated.
         pressure_style.evaluate('e=>e.remove()'); settle_renderer(page)
         colors = page.locator('.nautilus-log-html-legend').first.locator('.nautilus-log-legend-dot').evaluate_all('els=>els.map(e=>getComputedStyle(e).backgroundColor)')
-        assert colors == ['rgb(234, 15, 15)', 'rgb(249, 115, 22)', 'rgb(8, 153, 200)'], colors
+        assert colors == ['rgb(234, 15, 15)', 'rgb(217, 154, 72)', 'rgb(139, 92, 246)'], colors
         switch = page.get_by_role('switch', name='Desk', exact=True)
         assert switch.inner_text().strip() == '' and not switch.locator('.nautilus-log-desk-switch-label').count()
         switch.hover()
@@ -498,6 +506,59 @@ def four_corrections_contract(page):
     set_clock(page, '2026-10-30T02:00:00'); coverage(page)
     assert state(page)['lastTimeline']['result']['relation'] == 'past' and state(page)['queueKind'] == 'unfinished'
     reports['dayBoundaries'] = {'beforeEndOverflow': True, 'futureFromStart': True, 'overnightCarryover': True, 'logicalEndBecomesPast': True}
+    return reports
+
+
+def full_tip_palette_contract(page):
+    reports = {}
+    text = '复核项目文档与交付材料并确认全部细节都能够完整阅读而不是省略'
+    for context, width in [('main', 720), ('embed', 520), ('sidebar', 280)]:
+        load(page, 'connections', context, width, window='flow', real_desk=True)
+        set_clock(page, '2026-10-30T08:00:00')
+        page.evaluate('s=>__chartHarness.updateChild("connection-done-0","{{[[DONE]]}} "+s+" 30m")', text)
+        page.wait_for_function('s=>document.querySelector("[data-task-uid=connection-done-0]").dataset.recordTitle===s', arg=text)
+        toggle = page.get_by_role('switch', name='Desk', exact=True)
+        if toggle.get_attribute('aria-checked') != 'true': toggle.click()
+        page.wait_for_function('document.querySelector(".nautilus-desk")?.dataset.status==="ready"')
+        settle_renderer(page); before = state(page)['svg']; select(page, 'connection-done-0'); after = coverage(page)
+        data = page.evaluate('''()=>{
+          const region=document.querySelector('.nautilus-log-detail-region'),tip=region.querySelector('.nautilus-log-detail-content'),title=region.querySelector('.nautilus-log-detail-title');
+          const queue=document.querySelector('.nautilus-log-pending-queue'),summary=queue.querySelector('summary'),toolbar=document.querySelector('.nautilus-desk .rm-desk-page__toolbar');
+          return {mode:region.dataset.tipContent,width:tip.getBoundingClientRect().width,title:title.textContent,titleWidth:title.clientWidth,titleScroll:title.scrollWidth,titleHeight:title.clientHeight,titleScrollHeight:title.scrollHeight,textOverflow:getComputedStyle(title).textOverflow,
+            warning:getComputedStyle(queue).getPropertyValue('--nautilus-log-warning').trim(),heading:getComputedStyle(queue.querySelector('.nautilus-log-queue-title')).color,marker:getComputedStyle(summary,'::marker').color,count:getComputedStyle(queue.querySelector('.nautilus-log-queue-count')).color,total:getComputedStyle(queue.querySelector('.nautilus-log-queue-total')).color,row:getComputedStyle(queue.querySelector('.nautilus-log-queue-item')).color,
+            tipBottom:tip.getBoundingClientRect().bottom,queueTop:queue.getBoundingClientRect().top,deskTop:toolbar.getBoundingClientRect().top,
+            colors:[...document.querySelectorAll('.nautilus-log-html-legend .nautilus-log-legend-dot')].slice(0,3).map(e=>getComputedStyle(e).backgroundColor)};
+        }''')
+        assert data['title'] == text and data['colors'] == ['rgb(234, 15, 15)', 'rgb(217, 154, 72)', 'rgb(139, 92, 246)'], data
+        assert data['heading'] == data['marker'] == 'rgb(201, 108, 0)', data
+        assert data['count'] == data['total'] and data['count'] != data['heading'] and data['row'] == 'rgb(109, 40, 217)', data
+        assert data['queueTop'] >= data['tipBottom'] and data['deskTop'] >= data['tipBottom'], data
+        assert all(abs(before[k]-after['svg'][k]) < .5 for k in ['width','height'])
+        if width > 360:
+            assert data['mode'] == 'full' and data['width'] > 280 and data['textOverflow'] != 'ellipsis', data
+            assert data['titleScroll'] <= data['titleWidth'] + 1 and data['titleScrollHeight'] <= data['titleHeight'] + 1, data
+        else:
+            assert data['mode'] == 'compact' and data['width'] <= width - 32 and data['textOverflow'] == 'ellipsis', data
+            assert page.get_by_role('button', name='Full text', exact=True).count() == 1
+        page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/f'full-tip-{context}-{width}.png'))
+        set_clock(page, '2026-10-29T20:30:00'); coverage(page)
+        assert state(page)['queueKind'] == 'unscheduled'
+        assert page.locator('.nautilus-log-queue-title').evaluate('e=>getComputedStyle(e).color') != data['heading']
+        reports[f'{context}-{width}'] = data
+    load(page, 'long', 'main', 640)
+    before = state(page)['svg']; select(page, 'long-unbroken'); wide = coverage(page)
+    assert page.locator('.nautilus-log-detail-title').inner_text() == page.evaluate('()=>__chartHarness.longTitles()["long-unbroken"]')
+    assert page.get_by_role('button', name='Full text', exact=True).count() == 0, 'wide title must not require More'
+    assert wide['detail']['height'] > 44
+    assert all(abs(before[k]-wide['svg'][k]) < .5 for k in ['width','height'])
+    page.evaluate('()=>__chartHarness.setWidth(280)')
+    page.wait_for_function('document.querySelector(".nautilus-log-detail-region").dataset.nautilusDetail==="idle"')
+    page.locator('svg [data-task-uid="long-unbroken"]').evaluate('e=>e.blur()')
+    select(page, 'long-unbroken'); coverage(page)
+    assert page.locator('.nautilus-log-detail-region').get_attribute('data-tip-content') == 'compact'
+    page.get_by_role('button', name='Full text', exact=True).click(); settle_renderer(page); coverage(page)
+    assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text()
+    reports['unbrokenAndResize'] = {'wideAutomaticFullText': True, 'svgUnchanged': True, 'narrowExpansion': True, 'graphWrites': state(page)['writes']}
     return reports
 
 
@@ -652,8 +713,13 @@ def material_and_tip_contract(page):
         page.locator('[data-task-uid="routine-0"]').evaluate('e=>e.blur()')
         select(page,'routine-0');coverage(page)
         long=page.locator('.nautilus-log-detail-content').bounding_box()
-        assert long['width'] <= min(280,width-32)+1 and long['height'] <= 42.5
-        assert page.get_by_role('button',name='Full text',exact=True).count()==1
+        assert long['width'] <= min(720,width)-32+1
+        if width <= 360:
+            assert long['height'] <= 42.5
+            assert page.get_by_role('button',name='Full text',exact=True).count()==1
+        else:
+            assert page.locator('.nautilus-log-detail-title').evaluate('e=>e.scrollWidth<=e.clientWidth && e.scrollHeight<=e.clientHeight')
+            assert page.get_by_role('button',name='Full text',exact=True).count()==0
         page.screenshot(path=str(OUT/'screenshots'/f'compact-tip-{context}-{width}.png'),full_page=True)
         result['tips'][f'{context}-{width}']={'short':short,'long':long}
     return result
@@ -725,6 +791,10 @@ def lifecycle(page):
 
 def full_text(page, context, width):
     load(page, 'long', context, width)
+    # Extra provenance legitimately offers More; the wide title itself is
+    # already complete and must not depend on that action.
+    page.evaluate('()=>__chartHarness.updateChild("long-unbroken","{{[[DONE]]}} "+__chartHarness.longTitles()["long-unbroken"]+" 30m")')
+    page.wait_for_function('document.querySelector("[data-task-uid=long-unbroken]").dataset.timeClaim==="estimated-allocation"')
     select(page, 'long-unbroken')
     before = coverage(page)
     scroll_before = page.evaluate('() => scrollY')
@@ -741,7 +811,11 @@ def full_text(page, context, width):
     assert hit == 'long-cjk', 'multiline label gaps must belong to their own interactive record'
     assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text(), 'expanded reading must be pinned'
     page.get_by_role('button', name='Collapse text', exact=True).click(); page.mouse.move(1180, 980); settle_renderer(page)
-    assert abs(state(page)['detail']['height'] - 44) < .5
+    if width <= 360:
+        assert abs(state(page)['detail']['height'] - 44) < .5
+    else:
+        assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text()
+        assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).textOverflow!=="ellipsis" && e.scrollHeight<=e.clientHeight')
     page.screenshot(path=str(OUT / 'screenshots' / f'fulltext-{context}-{width}.png'), full_page=True)
     return {'closed': compact_record(before), 'expandedHeight': expanded['detail']['height'], 'pinned': True, 'noInternalScroll': True}
 
@@ -852,6 +926,7 @@ def main():
             report['completionConnections'] = completion_connections_contract(page)
             report['densityAndControl'] = density_and_control_contract(page)
             report['fourCorrections'] = four_corrections_contract(page)
+            report['fullTipPalette'] = full_tip_palette_contract(page)
             report['afternoonFlow'] = afternoon_flow_contract(page)
             report['materialsAndTips'] = material_and_tip_contract(page)
             report['timeflowRecovery'] = timeflow_recovery(page)

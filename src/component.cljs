@@ -528,15 +528,13 @@
                                    {:title (or title "") :summary (or summary-meta meta "") :meta (or meta "")
                                     :containerWidth container-width :fontFamily font-family
                                     :moreLabel (get-in copy [:panels :more])})
-                   {:mode "stacked" :width 280 :expandedWidth 280 :more true})]
+                   {:mode "stacked" :contentMode "compact" :width 280 :expandedWidth 280 :more true})]
     [:aside {:class (str "nautilus-log-detail-region" (when expanded? " is-expanded"))
              :aria-label (get-in copy [:panels :details]) :aria-hidden (not active?) :aria-live "polite"
-             :data-tip-mode (:mode layout) :data-tip-more (str (:more layout))
+             :data-tip-mode (:mode layout) :data-tip-content (:contentMode layout) :data-tip-more (str (:more layout))
              :data-nautilus-detail (if active? "active" "idle")}
      (when active?
-       [:div {:class (str "nautilus-log-detail-content"
-                         (when (and (= "inline" (:mode layout)) (not expanded?)) " is-inline")
-                         (when (:more layout) " has-more"))
+       [:div {:class (str "nautilus-log-detail-content" (when (:more layout) " has-more"))
               :style {:width (str (if expanded? (:expandedWidth layout) (:width layout)) "px")}}
         [:span {:class (str "nautilus-log-detail-tone nautilus-log-detail-tone--" tone) :aria-hidden "true"}]
         [:strong {:class "nautilus-log-detail-title"} title]

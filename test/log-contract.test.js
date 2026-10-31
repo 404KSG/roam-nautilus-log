@@ -1161,13 +1161,14 @@ test('current diagram labels have individually routed leaders without track-budg
   assert.doesNotMatch(css, /\.nautilus-log-event-slice-group\s*\{[^}]*opacity:/s);
 });
 
-test('the chart restores red/orange/blue categories with readable text and no completion strike-through', () => {
+test('the chart uses red, ordinary warm orange and purple with readable category text', () => {
   assert.match(component, /def task-fill-color "var\(--nautilus-log-task-fill\)"/);
   assert.doesNotMatch(component, /todo-color-palette/);
-  assert.match(css, /--nautilus-log-task:\s*#0899c8/);
-  assert.match(css, /--nautilus-log-event:\s*#f97316/);
-  assert.match(css, /--nautilus-log-event-text:\s*#c2410c/);
-  assert.doesNotMatch(css, /#4f46c6|#8a5a00/);
+  assert.match(css, /--nautilus-log-task:\s*#8b5cf6/);
+  assert.match(css, /--nautilus-log-event:\s*#d99a48/);
+  assert.match(css, /--nautilus-log-event-text:\s*#8f5d2c/);
+  assert.doesNotMatch(css, /#f97316|#fed7aa|#0899c8/);
+  assert.match(css, /\.nautilus-log-pending-queue\[data-queue-kind="unfinished"\] > summary\s*\{[^}]*var\(--nautilus-log-warning\)/s);
   assert.match(css, /--nautilus-log-completed-fill:\s*#c7d0e1/);
   assert.match(css, /\.nautilus-log-record--done \.nautilus-log-record-title[^}]*text-decoration:\s*none/s);
   assert.doesNotMatch(component, /completion-node-component|data-status-node "untimed-completed"/);

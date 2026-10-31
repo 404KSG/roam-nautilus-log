@@ -4,10 +4,12 @@
 
 ### Added
 
-- Tips now give the title its own first row instead of letting metadata squeeze it into
-  a narrow single-line track. Metadata and More occupy the second row; More uses its actual
-  text width and cannot break into letters. The compact content is 42px in a stable 44px
-  slot, with explicit full text still expanding in page flow.
+- Roomy tips now use available local width instead of a universal 280px cap. At widths
+  above 360px, titles and displayed metadata are complete and wrap naturally, including
+  unbroken strings; More only reveals extra information. Compressed views retain a bounded
+  preview and explicit full text. Ordinary tips keep their compact 42px content/44px slot;
+  wrapping grows the detail region in page flow without resizing the SVG or covering Desk.
+  More retains intrinsic width and never breaks into letters.
 - Desk uses only the sliding control; its name appears on hover or keyboard focus and
   remains available to screen readers. Checked state follows the actual view and saved
   preference through Hide Desk, reload, fold/expand and replacement controls. Click,
@@ -16,6 +18,8 @@
   or counted as active Planned demand. They remain in a default-collapsed Unfinished
   queue. Today/future tasks without a fitting whole slot enter Unscheduled. Queues preserve
   full titles, estimates, original UIDs and navigation; no task is moved or completed.
+  Unfinished headings and disclosure arrows now use the existing orange reminder color;
+  counts, duration, task rows and the neutral Unscheduled heading keep their own roles.
 - Source-sized frames stay stable for ordinary motion of the same diagram members, hover
   and Eye. Genuine queue membership changes (including before END), day relation changes
   and source edits may relayout. Queue expansion does not resize the SVG. No empty duplicate
@@ -31,7 +35,7 @@
   Dashed gray outlines identify estimated placement and remain visible over pending
   forecasts. Genuine capacity overflow retains the title and duration. The rejected
   Completed / No timestamp node and its upper connection band are removed.
-- Red urgency, bright-orange events and blue tasks restore the category palette. Separate
+- Red urgency, ordinary warm-orange events and purple tasks form the current category palette. Separate
   darker text tokens keep light-theme labels readable without turning the legend dots brown.
   Readable neutral completion text without
   strike-through, and whole-connection focus replace the disconnected, faded
@@ -42,13 +46,13 @@
   page show and CLOCK updates, including a same-minute next-day resume. The new
   integration gate verifies scheduler intervals and actual SVG path movement;
   fixed events remain anchored and still block pending work.
-- The chart retains its time vocabulary: blue tasks, orange fixed events,
+- The chart retains its time vocabulary: purple tasks, orange fixed events,
   solid gray completion history and pale hatching for unrecorded past time. Current
   tasks and events remain outlined. The spiral is the only time geometry; the rejected
   outer track and its status badges are removed. Explicit urgency remains authoritative.
-- Short tips fit their content up to 280px, without a redundant full-text action.
-  The title-first closed slot is 44px and surrounding spacing remains tight. Longer content
-  can still explicitly expand in page flow, without internal scrollbars or overlays.
+- Short tips fit their content without stretching across the workspace. Roomy views show
+  the full title and current metadata without a redundant title-unlocking action. Narrow
+  previews and extra metadata can explicitly expand, without internal scrollbars or overlays.
 
 - Every titled source record remains in the diagram or the pending queue. Completed
   estimates connect to their slices; DONE estimate overflow and out-of-window ranges keep
@@ -60,8 +64,8 @@
   Schedule. Frame height follows the diagram membership, its source titles and local width,
   not pointer movement or ordinary minute motion within the same membership. The spiral,
   whole-task scheduler, Actual and completed-estimate allocation remain intact.
-- Details fit a centered, at-most-280px area. Full text explicitly expands in
-  page flow without an internal scrollbar and stays pinned while reading. The closed
+- Details stay centered within the local workspace. Wide content wraps in page flow;
+  explicit expansion can pin additional information or narrow-view full text. The compact
   44px slot is invisible when idle. The rejected below-chart completion list, its reserved
   gap, and wheel-based text reading are removed.
 - Narrow charts keep side labels, readable major hour ticks and a compact center date.

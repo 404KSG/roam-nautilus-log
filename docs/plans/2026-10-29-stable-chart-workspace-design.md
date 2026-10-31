@@ -2,12 +2,14 @@
 
 ## Current decision
 
-Revised October 31, 2026. The latest four corrections take precedence over the earlier
-single-line tip, labeled Desk switch, indigo/gold palette and all-records-in-SVG rule:
+Revised October 31, 2026. The latest refinements supersede bright-orange events, blue tasks
+and the universal 280px tip cap, while preserving the earlier queue and icon-only switch fixes:
 
-- The tip prioritizes the title; metadata must not squeeze an ordinary title into an ellipsis.
+- Roomy tips show their full current content, wrapping rather than using ellipses. Only a
+  compressed local width may use a compact preview and More for clipped text.
 - Desk shows only its slider, with a hover/focus label.
-- Categories are red urgency, bright-orange events and blue tasks.
+- Categories are red urgency, ordinary warm-orange events and purple tasks. Unfinished
+  headings and disclosure arrows use the existing orange warning token.
 - Past unfinished work and genuinely unscheduled work belong in a default-collapsed queue,
   not in arbitrary diagram positions. Native Desk masonry is verified and retained.
 
@@ -83,16 +85,23 @@ compact center date. Hour sizing remains explicit in SVG output.
 
 ## Tip and control layout
 
-The closed tip has two rows in a stable 44px slot. Its 42px content places the 12px/16px title
-across the whole first row after the tone dot. The second row contains 11px/14px metadata
-and an intrinsically sized More action with at least a 24px hit height. More uses nowrap,
-normal word breaking and its actual text width, not a fixed 24px column. The panel remains
-at most 280px wide, with 16px narrow-container insets.
+`chartTipLayout` separates content mode from its two-layer layout. At a local width above
+360px, `contentMode=full`: natural content width is capped only by workspace width minus
+32px, not 280px. The title and displayed metadata use normal wrapping, including unbroken
+strings, without ellipsis, line clamp or hidden overflow. More only reveals extra provenance
+or timing explanation; it is not required to read a wide-view title.
 
-Ordinary titles that fit the title row are complete. Text exceeding that width, or extra
-metadata, exposes More. Expanded text stays in normal page flow and is never internally
-scrollable. Pointer, focus and pinned expansion remain distinct owners; changed or removed
-records, Eye, folding and unload invalidate stale detail. The tip never covers the plot or Desk.
+At 360px or narrower, `contentMode=compact` keeps bounded rows and offers More for clipped
+content. Text that fits still remains complete. In both modes the title has its own first
+row, metadata and More occupy the second, and More uses intrinsic width and nowrap.
+
+Ordinary short tips retain 42px content and a 44px minimum slot. Full-mode wrapping grows
+only the detail region in normal page flow, so following content may move but SVG size and
+time geometry do not. Idle tips reserve only the compact slot. This content-driven height
+is intentional under the latest completeness request; do not reintroduce a fixed-height
+clip or a large empty reservation. Explicit expansion also remains in page flow without
+internal scrolling. Pointer, focus and pinned expansion are separate owners; changed or
+removed records, Eye, folding and unload invalidate stale detail. Nothing covers Desk.
 
 The Desk switch has a 40×32px hit area, a 28×16px track and 12px thumb travel. There is no
 visible name span. Its `aria-label`, `role=switch` and `aria-checked` remain, while the existing
@@ -103,11 +112,15 @@ No second React state or new preference is introduced.
 
 ## Category colors and native Desk
 
-Legend/category colors are Urgent `#ea0f0f`, Event `#f97316`, and Task `#0899c8`. Light-theme
-text uses darker family members (`#c2410c` for events, `#087b9f` for tasks) for readability;
-legend dots do not reuse these darker text tokens. Events use orange rather than gold fills,
-and tasks use blue rather than purple. Completion stays neutral gray, explicit urgency
-continues to override ordinary fill, and no title gets a deletion line.
+Legend/category colors are Urgent `#ea0f0f`, ordinary warm-orange Event `#d99a48`, and purple
+Task `#8b5cf6`. Light-theme text tokens are Event `#8f5d2c` and Task `#6d28d9`; dark text uses
+`#f0c98a` and `#c4b5fd`. Legend dots retain category colors. Event fills use `#f6e6cf`, with
+`#e8c48a` for current work; task fills use the purple family. Completion remains neutral gray,
+explicit urgency still overrides ordinary fill, and no title gets a deletion line.
+
+Only the Unfinished summary heading and disclosure arrow use `--nautilus-log-warning`.
+Counts and total duration remain muted, expanded task rows retain task color, and Unscheduled
+keeps its existing neutral heading. No new marker, action or queue behavior is added.
 
 Masonry remains Roam's measured grid-span layout: four-pixel rows, zero row gap, spans based
 on card height plus column gap, and native auto-fill columns. A shorter column can receive
@@ -124,7 +137,10 @@ are authoritative. These dimensions are Nautilus choices, not official Linear to
 
 Use exact production CLJS/JS in the isolated renderer. Verify ordinary CJK title width,
 More/展开 line count under font and inherited word-break pressure, hidden Desk text with
-hover/focus labels, computed category colors and readable title contrast. Preserve default
+hover/focus labels, computed category colors and readable title contrast. Add wide content
+beyond 280px, automatically wrapped/unbroken text without a title-unlocking More action,
+compact expansion, width transitions, unchanged SVG geometry, and orange Unfinished heading
+versus neutral count/total/task rows. Preserve default
 15/explicit 45 completion tests, source-reference ownership and optional local CLOCK updates.
 
 Assert every source UID appears exactly once across SVG and queue, with no false pending

@@ -255,7 +255,9 @@ function chartRecordAppearance({ event = {}, nowMinutes, interactive = false, sh
 /** Closed tips fit content, but always remain within the local workspace. */
 function chartTipLayout({ title = '', summary = '', meta = summary, containerWidth = 720,
   fontFamily = 'Inter, system-ui, sans-serif', moreLabel = 'More', measureTitle, measureMeta } = {}) {
-  const maxWidth = Math.min(280, Math.max(96, finite(containerWidth, 720) - 32));
+  const localWidth = finite(containerWidth, 720);
+  const compact = localWidth <= 360;
+  const maxWidth = Math.max(96, localWidth - 32);
   // CSS uses tabular numerals; Canvas defaults to proportional digits. The
   // zero advance gives the tabular width and avoids clipping short time ranges.
   const titleWidth = textMeasure(`500 12px ${fontFamily}`, measureTitle)(String(title).replace(/[0-9]/g, '0'));
@@ -265,12 +267,12 @@ function chartTipLayout({ title = '', summary = '', meta = summary, containerWid
   // tolerance that lets a supposedly complete short tip paint an ellipsis.
   const metaWidth = textMeasure(`400 11px ${fontFamily}`, measureMeta)(String(summary).replace(/[0-9]/g, '0'))
     + 2 + metaDigits * .4;
-  const more = String(meta) !== String(summary) || titleWidth > maxWidth - 27 || metaWidth > maxWidth - 27;
+  const more = String(meta) !== String(summary) || (compact && (titleWidth > maxWidth - 27 || metaWidth > maxWidth - 27));
   const actionWidth = Math.max(28, Math.ceil(textMeasure(`500 10px ${fontFamily}`)(moreLabel)) + 10);
   const width = Math.max(titleWidth + 27, metaWidth + 27 + (more ? actionWidth + 6 : 0));
-  return { mode: 'stacked', width: Math.max(60, Math.min(maxWidth, Math.ceil(width))), maxWidth,
+  return { mode: 'stacked', contentMode: compact ? 'compact' : 'full',
+    width: Math.max(60, Math.min(maxWidth, Math.ceil(width))), maxWidth,
     expandedWidth: maxWidth, more, actionWidth, slotHeight: 44 };
-
 }
 
 module.exports = { chartScene, chartPresentationFrame, chartRecordAppearance, chartTipLayout };

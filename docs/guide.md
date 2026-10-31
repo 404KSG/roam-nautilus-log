@@ -59,8 +59,8 @@ small flame marks whether the current minute is consuming Available or Event tim
 
 ## Visual language
 
-- Blue: flexible tasks; the current task has a stronger fill and outline
-- Bright orange: fixed events; elapsed events use a lighter orange
+- Purple: flexible tasks; the current task has a stronger fill and outline
+- Warm orange: fixed events, without the previous bright red-orange saturation
 - Solid gray: completion history with a local time anchor
 - Gray with dashed outlines: completed tasks placed by estimate, not recorded completion times
 - Pale hatching: past gaps not covered by a task or event interval, not future availability
@@ -75,7 +75,7 @@ identifies this as **Estimated allocation**, not a recorded completion time.
 
 Estimated allocations do not move with the clock or change pending-task scheduling. They can
 extend past now and overlap a pending forecast; dashed gray outlines distinguish them while
-the pending task keeps its blue fill. If the configured window cannot hold a whole estimate,
+the pending task keeps its purple fill. If the configured window cannot hold a whole estimate,
 its title and duration remain visible with a capacity-overflow endpoint. No task is split,
 no later short task overtakes it, and no extra time is added beyond END. Unscheduled pending
 work belongs in the collapsed **Unscheduled** queue below the chart, not at an arbitrary
@@ -125,7 +125,9 @@ inventory of completed history. It has no internal scrollbar.
 
 On a **past** Daily Note, unfinished tasks are not replanned from START and are not counted
 as active Planned demand or overload. They remain under **Unfinished**, collapsed by default,
-with their original titles, estimates and local UIDs. Nothing is moved to today or marked
+with their original titles, estimates and local UIDs. Its orange heading and disclosure arrow
+mark work that still needs attention; counts, duration and task-row colors stay distinct.
+Nothing is moved to today or marked
 complete. Completed estimates and real fixed ranges remain in the diagram.
 
 Today, future days and undated views keep their existing scheduling order. Tasks that do
@@ -140,16 +142,19 @@ Inherited completion is identified as coming from its reference. Source timestam
 last-edit metadata are never used as today's wrapper completion time. Estimated allocations
 write no timestamps, add no Actual, and leave pending scheduling and capacity unchanged.
 
-Hover or keyboard-focus a record or available slot to read its context in a centered
-tip that fits its content, capped at 280px and inset by 16px in narrower workspaces.
-Closed tips use two compact rows in a stable 44px slot, invisible when idle. The title
-owns the first row; metadata and **More** occupy the second. More has its own intrinsic
-width and never breaks into letters. Ordinary titles that fit the available title row
-remain complete; oversized text can expand. No internal scrollbar is used. **More** appears
-only when text is clipped
-or additional metadata exists; it explicitly expands that content in page flow and pins
-it while you read. Collapse
-it to resume the compact view. Changed or removed records invalidate the pinned text.
+Hover or keyboard-focus a record or available slot to read its context in a centered,
+content-sized tip with 16px side insets. In workspaces wider than 360px, the tip can use
+the available local width instead of stopping at 280px. Its title and displayed metadata
+remain complete, wrapping naturally when necessary; neither uses an ellipsis. Short tips
+stay compact rather than stretching across the chart. **More** reveals additional metadata,
+not a hidden wide-view title.
+
+At 360px or narrower, the tip may use compact rows and offer More for clipped text. Content
+that fits still remains complete. More has intrinsic width and never splits into letters.
+The normal two-row tip retains its 42px content and 44px minimum slot. Wide text that needs
+more lines grows in normal page flow without resizing the SVG, covering Desk or adding an
+internal scrollbar. Idle tips reserve only the compact slot. Explicit expansion pins the
+record while reading; changed or removed records invalidate it.
 The area does not follow the pointer or cover the plot. Click or Enter on a flexible task's
 mark or label locates its original block; Shift opens it in the sidebar. These actions
 never rewrite the task or its time. If the block is folded, navigation uses Roam's official
