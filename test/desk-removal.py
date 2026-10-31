@@ -88,7 +88,7 @@ def run():
             button=card('pure-wrapper').get_by_role('button',name='Remove from Desk',exact=True)
             expect(button).to_be_disabled();button.evaluate('el=>el.dispatchEvent(new MouseEvent("click",{bubbles:true}))')
             assert page.evaluate('()=>deskHarness.api.stats.writes.length')==1
-            page.get_by_role('button',name='Hide Desk',exact=True).click()
+            page.get_by_role('button',name='Open Desk',exact=True).click()
             page.evaluate('()=>deskHarness.api.release()')
             page.wait_for_function('deskHarness.api.text("pure-wrapper")===undefined')
             expect(page.locator('.nautilus-desk')).to_have_count(0)

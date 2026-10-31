@@ -117,7 +117,7 @@ def run():
                 expect(owner.locator('.fixture-raw')).to_be_hidden()
                 owner.get_by_role('button',name='Expand Nautilus Log',exact=True).click()
                 expect(owner.locator('.nautilus-desk')).to_be_visible()
-                page.get_by_role('button',name='Hide Desk',exact=True).click()
+                page.get_by_role('button',name='Open Desk',exact=True).click()
                 expect(owner.locator('.fixture-raw')).to_be_visible()
                 owner.get_by_role('button',name='Collapse Nautilus Log',exact=True).click()
                 assert_layout(expect_desk=False)

@@ -45,7 +45,7 @@ export function createDeskExternalDrop({
     if (toast) { toastText.textContent = text || ''; toast.hidden = !text; }
     statusRegion?.classList.toggle('nautilus-desk__title--status', Boolean(text));
     // A native tooltip exposes any visually ellipsized message without taking
-    // space from Search/New note/Hide Desk or introducing a new control row.
+    // space from Search/New note or introducing a new control row.
     if (text) statusRegion?.setAttribute('title', text);
     else statusRegion?.removeAttribute('title');
     if (text && terminal) messageTimer = host.setTimeout(() => {

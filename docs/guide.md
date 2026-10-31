@@ -61,9 +61,10 @@ small flame marks whether the current minute is consuming Available or Event tim
 
 - Roam blue: flexible tasks; the current task has a stronger fill and outline
 - Muted golden yellow: fixed events
-- Solid gray: completed local CLOCK Actual or an explicit fixed range
+- Gray with a solid outline: completed local CLOCK Actual or an explicit fixed range
 - Gray with dashed outlines: completed flexible tasks using estimated durations; Tips distinguish stamped from estimated placement
-- Pale hatching: past gaps not covered by a task or event interval, not future availability
+- Pale neutral hatching: past gaps not covered by a task or event interval, not future availability
+- Fine hatching over an existing color: the elapsed part of that interval, not proof of execution or actual timing
 - Red needle: current time and the starting boundary for pending work
 - Red task color: an explicit urgency override
 
@@ -71,6 +72,12 @@ The palette uses the existing switch blue (`#137cbd`) and Free green (`#277a59`)
 those controls remain unchanged. Task text uses a deeper blue (`#106ba3`), events use a calmer
 yellow (`#ad8b24`), and urgency uses a softer red (`#c24b4b`). Fills, leaders, Unfinished cues
 and dark-theme text follow these color families without changing their meanings.
+
+Hatching leaves existing fills, gradients and opacity intact. Only the portion before the
+current time is striped; the future portion stays plain. Yellow stripes mark elapsed event
+time, not confirmed attendance. Gray stripes do not turn an estimate into Actual. Estimated
+outlines remain dashed above the texture, and labels, the pointer and interactions stay clear.
+Hidden completions still occupy their intervals; they do not become empty gaps.
 
 The **continuous shell** draws each timed record as one surface, with rounded transitions
 through the radius profile. Hour marks remain as edge ticks rather than lines that visually
@@ -110,7 +117,7 @@ Past gaps describe the chart allocation, not proof that time was idle or wasted.
 
 ## Chart controls
 
-- **Desk switch:** show or hide unfinished-task cards below the chart. Only the slider is visible; hover or keyboard focus shows its Desk label. The thumb slides right and the track turns blue when open. Click, Space or Enter toggles it; the state also follows Hide Desk, fold/expand restoration and saved preferences.
+- **Desk switch:** show or hide unfinished-task cards below the chart. Only the slider is visible; hover or keyboard focus shows its Desk label. The thumb slides right and the track turns blue when open. Click, Space or Enter toggles it; the state also follows fold/expand restoration, control remounts and saved preferences.
 - **Eye:** show or hide completed slices, estimate outlines and their connected titles.
   It defaults to showing them and does not affect the pending queue or Desk, which only shows unfinished tasks.
 - **Calendar:** after Google Calendar reports Connected in Settings, import
@@ -205,9 +212,17 @@ image loading trigger remeasurement without changing DOM or task order. Native a
 determines the column count; there is no fixed two-column layout or three-column cap. The embedded root does
 not use Roam's full-page `rm-desk-page` marker: current host styles use that marker
 to change ancestor padding and impose a viewport-sized canvas. Only native card
-sizes are retained locally; opening this component must not change page spacing. Search, New note and Hide Desk
-share one flex-aligned tool group, so the close X stays aligned with the plus
-control at wide and narrow widths, with the same keyboard order.
+sizes are retained locally; opening this component must not change page spacing.
+Search and New note share one flex-aligned tool group, with New note at the trailing
+edge. The overview has no duplicate close X; use the chart's Desk switch to hide it.
+Tab moves from Search to New note, then directly to the cards. The focus dialog's
+Close button, backdrop dismissal and existing Escape behavior are unchanged.
+
+Read-only card previews keep updating while a task editor or new-note draft is open.
+Committed graph changes, including descendant folds, text and images, refresh the
+background card and its masonry height without closing or remounting the editor.
+The background stays inert. These reads do not save an unfinished input composition
+or copy the editor's uncommitted buffer into the graph.
 
 - **Unfinished tasks only.** Each direct task becomes a card, including unscheduled
   work. Events, DONE blocks, and dividers are excluded. Implicit tasks and referenced
@@ -318,8 +333,8 @@ state resolves the reservation and a later confirmed removal may re-add it. A
 different wrapper does not resolve the reservation. Reload checks the same
 reserved UID and never allocates a second UID for that source and plan. Imports require the public
 `data.pull` and `data.block.create` APIs and a verifiable graph/type/user context.
-Progress temporarily uses the existing title area, leaving Search, New note, and
-Hide Desk unobstructed. Hover over a truncated message to read it in full. The
+Progress temporarily uses the existing title area, leaving Search and New note
+unobstructed. Hover over a truncated message to read it in full. The
 full message is also announced to assistive technology; terminal feedback clears
 after five seconds and restores the title without moving the cards.
 
@@ -347,8 +362,8 @@ in place. Without that viewer, Desk's normal Escape behavior is unchanged.
 A host API response alone is not confirmation. An uncertain create is checked
 using its reserved UID, never blindly repeated with a new UID. Locks do not cover
 other devices or manual writers; concurrent changes fail conservatively. Read
-failures retain visibly stale cards and pause writes. Hide Desk to inspect the
-original outline.
+failures retain visibly stale cards and pause writes. Turn off the Desk switch to
+inspect the original outline.
 
 ### Temporary Desk diagnostics (Draft preview)
 

@@ -184,12 +184,7 @@ export function createDeskView({
     const add = button('New note', 'plus', () => showDraft(), 'rm-desk-page__new-note');
     add.classList.remove('bp3-small');
     add.append(el('span', 'bp3-button-text', 'New note'));
-    const hide = button('Hide Desk', 'cross', () => {
-      preferences.write(graph, planUid, false);
-      close(true, 'hide-button');
-    }, 'nautilus-desk__hide');
-    hide.classList.remove('bp3-small');
-    tools.append(searchGroup, add, hide);
+    tools.append(searchGroup, add);
     toolbar.append(title, tools);
     const message = el('div', 'nautilus-desk__notice');
     message.setAttribute('role', 'status');
@@ -669,10 +664,12 @@ export function createDeskView({
       }
     }
     function schedulePreviews() {
-      if (closed || folded || mode !== 'overview' || previewFrame !== null || !previewQueue.size) return;
+      // The inert overview remains visible behind the editor. Its read-only
+      // previews must keep consuming graph changes in task and draft modes.
+      if (closed || folded || previewFrame !== null || !previewQueue.size) return;
       previewFrame = host.requestAnimationFrame(() => {
         previewFrame = null;
-        if (!checkScope() || folded || mode !== 'overview') return;
+        if (!checkScope() || folded) return;
         const uid = previewQueue.values().next().value;
         previewQueue.delete(uid);
         loadPreview(uid);

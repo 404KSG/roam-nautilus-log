@@ -43,6 +43,8 @@ def run():
                 assert toggle.evaluate('e=>e.matches(":focus-visible") && getComputedStyle(e).outlineStyle === "solid" && parseFloat(getComputedStyle(e).outlineWidth) >= 2')
                 expect(owner.locator('.nautilus-desk')).to_have_attribute('data-status', 'ready')
                 expect(other).to_have_attribute('aria-checked', 'false')
+                expect(owner.locator('.rm-desk-page__toolbar .bp3-icon-cross')).to_have_count(0)
+                expect(owner.get_by_role('button', name='Hide Desk', exact=True)).to_have_count(0)
                 settle(page)
                 on = toggle.locator('.nautilus-log-desk-switch-thumb').bounding_box()
                 assert abs(on['x'] - off['x'] - 12) < .5
@@ -66,12 +68,12 @@ def run():
                 page.keyboard.up('Alt'); toggle.press('Alt+1')
                 expect(page.get_by_role('dialog', name='Desk', exact=True)).to_be_visible()
                 page.get_by_role('dialog', name='Desk', exact=True).get_by_role('button', name='Close', exact=True).click()
-                owner.get_by_role('button', name='Hide Desk', exact=True).click()
+                toggle.click()
                 expect(toggle).to_have_attribute('aria-checked', 'false'); expect(toggle).to_be_focused()
                 expect(owner.locator('.nautilus-desk')).to_have_count(0)
                 toggle.click(); expect(toggle).to_have_attribute('aria-checked', 'true')
                 other.click(); expect(other).to_have_attribute('aria-checked', 'true')
-                owner.get_by_role('button', name='Hide Desk', exact=True).click()
+                toggle.click()
                 expect(toggle).to_have_attribute('aria-checked', 'false'); expect(other).to_have_attribute('aria-checked', 'true')
                 toggle.click(); settle(page)
                 if motion == 'reduce':

@@ -5,6 +5,7 @@ The former footer/scroll acceptance was explicitly rejected. Frame height now
 uses the full source titles, never the clock's scheduled subset. This remains
 an isolated synthetic renderer, not a live Roam Desktop certification.
 """
+import base64
 import hashlib
 import json
 import os
@@ -449,7 +450,8 @@ def density_and_control_contract(page):
     assert 2 <= composed['tipToQueue'] <= 8 and 0 <= composed['queueToDesk'] <= 10, composed
     assert composed['cardUids'] == ['connection-pending-0', 'connection-pending-1'], composed
     page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/'density-with-native-desk.png'))
-    page.get_by_role('button', name='Hide Desk', exact=True).click(); settle_renderer(page)
+    assert page.locator('.nautilus-desk .rm-desk-page__toolbar .bp3-icon-cross').count() == 0
+    toggle.click(); settle_renderer(page)
     assert toggle.get_attribute('aria-checked') == 'false' and not page.locator('.nautilus-desk').count()
     assert state(page)['writes'] == 0
     reports['nativeDeskComposition'] = composed
@@ -907,6 +909,186 @@ def past_gap_inspection_contract(page):
     return {'todayKeyboardAndClockInvalidation': True, 'crossHourRange': target,
             'pinDismissInvalidate': True, 'hiddenCompletedOccupancy': True,
             'overnight': True, 'narrowDarkLanguages': ['en', 'zh'], 'interactionGraphReads': 0, 'graphWrites': 0}
+
+
+def past_record_texture_contract(page):
+    report = {'matrix': {}}
+
+    def settled_paint():
+        page.mouse.move(1180, 980)
+        page.wait_for_function('''()=>[...document.querySelectorAll('.nautilus-log-slice')].every(e=>e.getAnimations().every(a=>a.playState==='finished'))''')
+
+    def pixel_probe(uid):
+        # Compare native browser screenshots, not a re-rendered SVG or a guessed
+        # color. Hide only this decorative layer to establish its actual base.
+        settled_paint()
+        texture = page.locator(f'[data-past-texture-for="{uid}"]')
+        texture.evaluate("e=>e.style.visibility='hidden'")
+        before = base64.b64encode(page.screenshot(full_page=True)).decode()
+        texture.evaluate("e=>e.style.removeProperty('visibility')")
+        after = base64.b64encode(page.screenshot(full_page=True)).decode()
+        return page.evaluate('''async ({uid,before,after})=>{
+          const decode=async text=>{const bytes=Uint8Array.from(atob(text),c=>c.charCodeAt(0)),image=await createImageBitmap(new Blob([bytes],{type:'image/png'})),
+            canvas=new OffscreenCanvas(image.width,image.height),c=canvas.getContext('2d');c.drawImage(image,0,0);
+            const result={width:image.width,height:image.height,data:c.getImageData(0,0,image.width,image.height).data};image.close();return result;};
+          const [a,b]=await Promise.all([decode(before),decode(after)]);
+          if(a.width!==b.width||a.height!==b.height)throw Error('Texture changed screenshot geometry');
+          const texture=document.querySelector(`[data-past-texture-for="${uid}"]`),owner=texture.closest('[data-task-uid]'),surface=owner.querySelector('.nautilus-log-slice'),
+            clipId=texture.getAttribute('clip-path').slice(5,-1),clip=document.getElementById(clipId).querySelector('path'),
+            inverse=surface.getScreenCTM().inverse(),r=surface.getBoundingClientRect(),inside=(path,x,y)=>path.isPointInFill(new DOMPoint(x,y).matrixTransform(inverse));
+          const counts={past:0,pastChanged:0,pastUnchanged:0,future:0,futureChanged:0},futureChanges=[];let hit=null;
+          for(let y=Math.ceil(r.top);y<Math.floor(r.bottom);y++)for(let x=Math.ceil(r.left);x<Math.floor(r.right);x++){
+            const p=[x+.5,y+.5],corners=[[-2,-2],[-2,2],[2,-2],[2,2]].map(([dx,dy])=>[p[0]+dx,p[1]+dy]);
+            // Compare fill interiors, away from the separately painted border
+            // and needle antialias fringes. Past samples can reach the cut so
+            // narrow elapsed wedges still have measurable texture pixels.
+            if(!corners.every(q=>inside(surface,...q)))continue;
+            const pastCorners=[[-.5,-.5],[-.5,.5],[.5,-.5],[.5,.5]].map(([dx,dy])=>[p[0]+dx,p[1]+dy]);
+            const past=pastCorners.every(q=>inside(clip,...q)),future=corners.every(q=>!inside(clip,...q));if(!past&&!future)continue;
+            const xx=x+window.scrollX,yy=y+window.scrollY;if(xx<0||yy<0||xx>=a.width||yy>=a.height)continue;
+            const i=(yy*a.width+xx)*4,changed=[0,1,2,3].some(k=>Math.abs(a.data[i+k]-b.data[i+k])>1);
+            if(past){counts.past++;counts.pastChanged+=Number(changed);counts.pastUnchanged+=Number(!changed);
+              if(changed&&!hit){const e=document.elementFromPoint(...p);hit={x:p[0],y:p[1],uid:e?.closest('[data-task-uid]')?.dataset.taskUid,
+                decorative:Boolean(e?.closest('.nautilus-log-past-record-texture'))};}}
+            else {counts.future++;counts.futureChanged+=Number(changed);if(changed&&futureChanges.length<20)futureChanges.push({x,y,before:[...a.data.slice(i,i+4)],after:[...b.data.slice(i,i+4)]});}
+          }
+          return {...counts,hit,futureChanges};
+        }''', {'uid': uid, 'before': before, 'after': after})
+
+    for theme in ['light', 'dark']:
+        for context, width, lang in [('main', 960, 'en'), ('embed', 520, 'en'), ('sidebar', 280, 'zh')]:
+            load(page, 'mixed', context, width, lang=lang)
+            set_clock(page, '2026-10-29T09:12:00')
+            if theme == 'dark':
+                page.locator('body').evaluate("e=>{e.classList.add('bp3-dark');e.style.background='#1d1e21';e.style.color='#ecedef'}")
+            record = page.locator('svg [data-task-uid="event-standup"]')
+            texture = record.locator('.nautilus-log-past-record-texture')
+            expect(texture).to_have_count(1)
+            assert texture.get_attribute('d') == record.locator('.nautilus-log-slice').get_attribute('d')
+            assert texture.evaluate('e=>getComputedStyle(e).pointerEvents') == 'none'
+            assert texture.get_attribute('aria-hidden') == 'true'
+            pattern = page.locator('.nautilus-log-past-record-pattern')
+            assert pattern.locator('rect').count() == 0, 'colored records must not inherit the gap background'
+            assert pattern.locator('line').count() == 1
+            gap_pattern = page.locator('.nautilus-log-unplanned-overlay pattern')
+            for attr in ['width', 'height', 'patternUnits', 'patternTransform']:
+                assert pattern.get_attribute(attr) == gap_pattern.get_attribute(attr), attr
+            assert pattern.locator('line').evaluate('e=>getComputedStyle(e).stroke') == page.locator('.nautilus-log-center-date text').first.evaluate('e=>getComputedStyle(e).fill')
+            assert pattern.locator('line').get_attribute('stroke-opacity') == '0.12'
+            clip = page.locator('.nautilus-log-past-record-clip')
+            expect(clip).to_have_attribute('data-start', '300')
+            expect(clip).to_have_attribute('data-end', '552')
+            ids = [pattern.get_attribute('id'), clip.get_attribute('id')]
+            assert page.locator('[data-task-uid="task-reference"] .nautilus-log-past-record-texture').count() == 0, 'future TODOs must not be painted as past'
+            pixels = pixel_probe('event-standup')
+            assert pixels['pastChanged'] > 0 and pixels['pastUnchanged'] > 0, pixels
+            assert pixels['future'] > 0 and pixels['futureChanged'] == 0, pixels
+            assert pixels['hit'] and pixels['hit']['uid'] == 'event-standup' and not pixels['hit']['decorative'], pixels
+            page.mouse.move(pixels['hit']['x'], pixels['hit']['y']); settle_renderer(page)
+            expect(page.locator('.nautilus-log-detail-region')).to_contain_text('Stand-up')
+            settled_paint()
+            page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/f'past-texture-{theme}-{context}-{width}.png'))
+            set_clock(page, '2026-10-29T09:13:00')
+            expect(clip).to_have_attribute('data-end', '553')
+            assert [pattern.get_attribute('id'), clip.get_attribute('id')] == ids, 'minute updates must reuse mounted resources'
+            set_clock(page, '2026-10-29T09:00:00')
+            expect(texture).to_have_count(0)
+            set_clock(page, '2026-10-29T09:30:00')
+            expect(texture).to_have_count(1)
+            complete = pixel_probe('event-standup')
+            assert complete['pastChanged'] > 0 and complete['future'] == 0, complete
+            assert state(page)['writes'] == 0
+            report['matrix'][f'{theme}-{context}-{width}'] = {'partialPixels': pixels, 'completePixels': complete, 'stableResourceIds': True}
+
+    # Actual CLOCK, stamped estimates and unanchored estimates keep their
+    # provenance and existing dashed outlines. Hiding them cannot create gaps.
+    load(page, 'untimed', 'main', 960)
+    for uid, claim in [('clock-done', 'actual'), ('timed-done', 'completion-estimate'), ('untimed-local', 'estimated-allocation')]:
+        record = page.locator(f'svg [data-task-uid="{uid}"]')
+        expect(record).to_have_attribute('data-time-claim', claim)
+        expect(record.locator('.nautilus-log-past-record-texture')).to_have_count(1)
+        pixels = pixel_probe(uid)
+        assert pixels['pastChanged'] > 0 and pixels['futureChanged'] == 0, (uid, pixels)
+        select(page, uid)
+        expect(page.locator('.nautilus-log-detail-meta')).to_contain_text('Actual' if claim == 'actual' else 'Estimate')
+        if claim != 'actual':
+            outline = page.locator(f'[data-estimate-outline-for="{uid}"] path')
+            assert outline.evaluate('e=>getComputedStyle(e).strokeDasharray') != 'none'
+            assert record.locator('.nautilus-log-slice').evaluate('e=>getComputedStyle(e).stroke') == 'none'
+            assert record.evaluate('e=>Boolean(e.compareDocumentPosition(document.querySelector(".nautilus-log-estimated-outlines"))&Node.DOCUMENT_POSITION_FOLLOWING)')
+    settled_paint()
+    page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/'past-texture-completions.png'))
+    gap_keys = page.locator('.nautilus-log-past-gap').evaluate_all('nodes=>nodes.map(n=>n.dataset.pastGapKey)')
+    page.get_by_role('button', name='Hide completed on chart', exact=True).click(); settle_renderer(page)
+    assert page.locator('svg .nautilus-log-record--done .nautilus-log-past-record-texture').evaluate_all('nodes=>nodes.length>0&&nodes.every(e=>getComputedStyle(e).visibility==="hidden")')
+    assert page.locator('.nautilus-log-past-gap').evaluate_all('nodes=>nodes.map(n=>n.dataset.pastGapKey)') == gap_keys
+    assert state(page)['writes'] == 0
+    report['completionAndHiddenOccupancy'] = True
+
+    load(page, 'mixed', 'main', 720)
+    set_clock(page, '2026-10-29T04:59:00')
+    expect(page.locator('.nautilus-log-past-record-texture')).to_have_count(0)
+    set_clock(page, '2026-10-28T08:01:00')
+    expect(page.locator('.nautilus-log-past-record-texture')).to_have_count(0)
+    expect(page.locator('.nautilus-log-past-record-pattern')).to_have_count(0)
+    set_clock(page, '2026-10-30T08:01:00')
+    expect(page.locator('[data-past-texture-for="event-standup"]')).to_have_count(1)
+    expect(page.locator('.nautilus-log-past-record-clip')).to_have_attribute('data-end', '1260')
+    assert state(page)['queueKind'] == 'unfinished'
+    assert not page.locator('.nautilus-log-pending-queue .nautilus-log-past-record-texture').count()
+    assert state(page)['writes'] == 0
+    load(page, 'mixed', 'main', 720, window='undated')
+    assert state(page)['lastTimeline']['result']['relation'] == 'other'
+    expect(page.locator('.nautilus-log-past-record-texture')).to_have_count(0)
+    expect(page.locator('.nautilus-log-past-record-pattern')).to_have_count(0)
+    load(page, 'outside', 'main', 720)
+    assert all(r['kind'] == 'outside-window' for r in state(page)['records'])
+    expect(page.locator('.nautilus-log-past-record-texture')).to_have_count(0)
+    report['pastFutureUndatedAndUnfinished'] = True
+
+    report['foldAndRepeatedAngle'] = {}
+    for text, iso in [('08:30-09:30 Fold-crossing event', '2026-10-29T08:45:00'),
+                      ('08:30-09:30 Fold-crossing event', '2026-10-29T09:05:00'),
+                      ('18:45-19:30 Later-turn event', '2026-10-29T19:05:00')]:
+        load(page, 'mixed', 'main', 960)
+        page.evaluate('text=>__chartHarness.updateChild("event-standup",text)', text)
+        expect(page.locator('svg [data-task-uid="event-standup"]')).to_have_attribute('data-record-title', text.split(' ', 1)[1])
+        set_clock(page, iso)
+        pixels = pixel_probe('event-standup')
+        assert pixels['pastChanged'] > 0 and pixels['future'] > 0 and pixels['futureChanged'] == 0, (iso, pixels)
+        report['foldAndRepeatedAngle'][iso] = pixels
+
+    load(page, 'overnight', 'main', 960, window='overnight')
+    set_clock(page, '2026-10-29T23:55:00')
+    night = pixel_probe('night-event')
+    assert night['pastChanged'] > 0 and night['future'] > 0 and night['futureChanged'] == 0, night
+    set_clock(page, '2026-10-30T00:05:00')
+    expect(page.locator('.nautilus-log-past-record-clip')).to_have_attribute('data-end', '1445')
+    night_after_midnight = pixel_probe('night-event')
+    assert night_after_midnight['pastChanged'] > 0 and night_after_midnight['future'] > 0 and night_after_midnight['futureChanged'] == 0, night_after_midnight
+    assert state(page)['writes'] == 0
+    report['overnight'] = [night, night_after_midnight]
+
+    # Two real mounted chart components may share a plan UID, but never the
+    # pattern/clip resources used to paint elapsed time.
+    page.evaluate('''()=>{
+      const host=document.createElement('div');host.id='texture-proof';host.style.width='960px';document.body.append(host);
+      scittle.core.eval_string('(rdom/render [nautilus-log-v1/main {:block-uid "baseline-plan"}] (.getElementById js/document "texture-proof"))');
+    }''')
+    expect(page.locator('.nautilus-log-past-record-pattern')).to_have_count(2)
+    settle_renderer(page)
+    resources = page.evaluate('''()=>{
+      const svgs=[...document.querySelectorAll('svg.nautilus-log-svg')],resources=svgs.flatMap(s=>[...s.querySelectorAll('.nautilus-log-past-record-pattern,.nautilus-log-past-record-clip')].map(e=>e.id));
+      return {resources,owned:svgs.every(svg=>[...svg.querySelectorAll('.nautilus-log-past-record-texture')].every(e=>
+        ['fill','clip-path'].every(attr=>svg.contains(document.getElementById(e.getAttribute(attr).slice(5,-1))))))};
+    }''')
+    assert len(resources['resources']) == len(set(resources['resources'])) == 4 and resources['owned'], resources
+    page.evaluate('''()=>{const host=document.getElementById('texture-proof');ReactDOM.unmountComponentAtNode(host);host.remove();}''')
+    expect(page.locator('.nautilus-log-past-record-pattern')).to_have_count(1)
+    page.wait_for_function('__chartHarness.state().activeClockIntervals===1')
+    assert state(page)['writes'] == 0
+    report['instanceIsolation'] = resources
+    return report
 
 
 def native_minute_contract(page):
@@ -1435,6 +1617,7 @@ def main():
             report['afternoonFlow'] = afternoon_flow_contract(page)
             report['materialsAndTips'] = material_and_tip_contract(page)
             report['pastGapInspection'] = past_gap_inspection_contract(page)
+            report['pastRecordTexture'] = past_record_texture_contract(page)
             report['detailNameSemantics'] = detail_name_semantics_contract(page)
             report['tipSurface'] = tip_surface_contract(page)
             report['continuousShell'] = continuous_shell_contract(page)
