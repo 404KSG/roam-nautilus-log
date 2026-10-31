@@ -986,11 +986,7 @@
      (when center-now-label
        [:text (assoc common :y (+ center-y (/ (if small? 6 3) scale))
                      :class "nautilus-log-center-now" :font-weight "500"
-                     :font-size (str (/ time-size scale))) center-now-label])
-     (when (and center-now-label (>= scale 0.7))
-       [:text (assoc common :y (+ center-y (/ 22 scale)) :class "nautilus-log-center-caption"
-                     :font-size (str (/ 7 scale)))
-        (or (get-in copy [:tooltips :currentTime]) "Current time")])]))
+                     :font-size (str (/ time-size scale))) center-now-label])]))
 
 (defn calculate-slice-params [event index elapsed-page? interactive? timeline-minute settings]
   (let [outer-radius (spiral-outer-radius (:start event) settings)

@@ -1169,6 +1169,33 @@ def full_text(page, context, width):
     return {'closed': compact_record(before), 'expandedHeight': expanded['detail']['height'], 'pinned': True, 'noInternalScroll': True}
 
 
+def center_clock_contract(page):
+    report = {}
+    for lang in ['en', 'zh']:
+        for context, width in [('main', 960), ('embed', 520), ('sidebar', 280)]:
+            before = load(page, 'mixed', context, width, lang=lang)
+            center = page.locator('.nautilus-log-center-date')
+            rows = center.locator('text').all_text_contents()
+            assert len(rows) == 2 and rows[0] in ['October 29th', 'Oct 29'] and rows[1] == '08:01', rows
+            assert not page.locator('.nautilus-log-center-caption').count()
+            assert center.get_attribute('aria-label') == 'October 29th 08:01'
+            now_name = 'Current time' if lang == 'en' else '当前时间'
+            expect(page.locator('.nautilus-log-now-needle')).to_have_attribute('aria-label', f'{now_name} 08:01')
+            current = set_clock(page, '2026-10-29T08:02:00')
+            assert center.locator('text').all_text_contents() == [rows[0], '08:02']
+            assert center.get_attribute('aria-label') == 'October 29th 08:02'
+            assert_rect_equal(before, current, 'caption-free center retains the clock and stable frame')
+            page.locator('.nautilus-log-container').screenshot(path=str(OUT / 'screenshots' / f'center-clock-{lang}-{context}-{width}.png'))
+            set_clock(page, '2026-10-29T21:01:00')
+            assert center.locator('text').all_text_contents() == [rows[0]]
+            assert center.get_attribute('aria-label') == 'October 29th'
+            assert not page.locator('.nautilus-log-now-needle').count()
+            assert state(page)['writes'] == 0
+            report[f'{lang}-{context}-{width}'] = {'date': rows[0], 'time': '08:02', 'visibleCaption': False,
+                'accessibleTimeRetained': True, 'clockRangePreserved': True, 'graphWrites': 0}
+    return report
+
+
 def continuous_shell_contract(page):
     report = {}
     for context, width in [('main', 720), ('embed', 520), ('sidebar', 280)]:
@@ -1337,6 +1364,7 @@ def main():
             report['detailNameSemantics'] = detail_name_semantics_contract(page)
             report['tipSurface'] = tip_surface_contract(page)
             report['continuousShell'] = continuous_shell_contract(page)
+            report['centerClock'] = center_clock_contract(page)
             report['timeflowRecovery'] = timeflow_recovery(page)
             report['lifecycle'] = lifecycle(page)
             report['nativeMinuteTimer'] = native_minute_contract(page)

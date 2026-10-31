@@ -4,6 +4,9 @@
 
 ### Added
 
+- Remove the redundant `Current time` caption below the center clock. The date, digital
+  time, current-time needle, accessible labels and chart geometry remain unchanged.
+
 - Implement the approved B continuous shell: one smooth surface per timed record, rather
   than a separate visible slice at each hour. Fine edge ticks replace internal hour-sector
   dividers. One pure geometry module serves paint, hit regions, completion outlines and the
