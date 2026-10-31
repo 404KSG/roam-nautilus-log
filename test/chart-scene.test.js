@@ -47,7 +47,10 @@ test('out-of-window fixed ranges stay visible without a false visible clock posi
   const source = { uid: 'night', description: 'Night appointment', meeting: true, start: 60, end: 90, done: false };
   const s = scene({ items: [source], events: [], startMinutes: 300, endMinutes: 1260 });
   assert.equal(s.records[0].kind, 'outside-window');
-  assert.ok(s.records[0].markerPath);
+  assert.equal(s.records[0].markerPath, undefined);
+  assert.equal(s.records[0].anchor, undefined);
+  assert.equal(s.records[0].boundaryAnchor.edge, 'start');
+  assert.equal(s.records[0].boundaryAnchor.minute, 300);
   assert.equal(s.records[0].event['full-start'], 60);
   assert.equal(s.records[0].event['full-end'], 90);
   assert.equal(s.records[0].event['time-claim'], 'none');

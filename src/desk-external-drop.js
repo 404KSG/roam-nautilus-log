@@ -131,9 +131,10 @@ export function createDeskExternalDrop({
       request.then(result => {
         if (operations.get(key) !== operation || operation.epoch !== epoch || suspended || !canAccept()) return;
         say(result?.status === 'added' ? 'Added reference. Original kept.' : 'Already in this plan.', true);
-      }, () => {
+      }, error => {
         if (operations.get(key) !== operation || operation.epoch !== epoch || suspended) return;
-        say('Could not confirm the reference. Check this plan before retrying.', true);
+        say(error?.code === 'source-completed' ? 'Completed source. Desk only shows unfinished items.'
+          : 'Could not confirm the reference. Check this plan before retrying.', true);
       }).finally(() => { if (operations.get(key) === operation) operations.delete(key); });
     }
     clearCandidate();

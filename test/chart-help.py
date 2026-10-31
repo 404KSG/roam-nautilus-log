@@ -146,6 +146,29 @@ def run():
             assert page.evaluate('applicationEscapes') == [False]
             results['outsideAndIme'] = True
 
+            # The concurrently published native-image fix requires modal input
+            # priority even when Roam leaves focus on the underlying chrome.
+            f.load(page, 'untimed'); track_listeners(page)
+            panel = open_help(page)
+            modal = panel.evaluate('''panel => {
+              const portal=document.createElement('div');portal.id='rm-modal-portal';
+              const viewer=document.createElement('div');viewer.className='rm-enhanced-image-modal-container';portal.append(viewer);document.body.append(portal);
+              let received=false, preventedBeforeNative=null;
+              const native=e=>{if(e.key==='Escape'){received=true;preventedBeforeNative=e.defaultPrevented;portal.remove();}};
+              document.addEventListener('keydown',native);
+              panel.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+              document.removeEventListener('keydown',native);
+              return {received,preventedBeforeNative,viewerStillOpen:portal.isConnected};
+            }''')
+            assert modal == {'received': True, 'preventedBeforeNative': False, 'viewerStillOpen': False}, modal
+            no_help(page)
+            open_help(page)
+            page.evaluate("()=>{const p=document.createElement('div');p.id='rm-modal-portal';p.innerHTML='<div class=\"rm-enhanced-image-modal-container\"></div>';document.body.append(p);}")
+            page.wait_for_function('!document.querySelector(".nautilus-log-help-layer")'); no_help(page)
+            page.locator('.nautilus-log-help-btn').click(); no_help(page)
+            page.evaluate('document.getElementById("rm-modal-portal").remove()')
+            results['nativeImagePriority'] = modal
+
             # Changed settings close the old snapshot; reopening reflects the resolved chart settings.
             panel = open_help(page)
             page.evaluate("()=>{Object.assign(nautilusLogExtensionData.settings,{language:'zh','workday-start':21,'workday-end':2,'todo-duration':25});window.dispatchEvent(new Event('nautilus-log:settings-changed'));}")

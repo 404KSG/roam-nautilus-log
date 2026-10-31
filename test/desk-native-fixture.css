@@ -63,6 +63,11 @@ body { margin: 0; font-family: Inter, sans-serif; font-size: 15px; line-height: 
 .rm-desk-tile__actions { display:flex;justify-content:flex-end;gap:2px;margin-left:auto;opacity:0; }
 .rm-desk-tile:hover .rm-desk-tile__actions { opacity:1; }
 .rm-desk-tile__preview:focus-visible { outline:2px solid #2b95d6;outline-offset:2px;border-radius:3px; }
+.roam-lift-modal { position:relative;z-index:1; }
+.bp3-overlay { z-index:20; }
+.rm-enhanced-image-modal-container { position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(16,22,26,.7); }
+.rm-enhanced-image-modal-container img { max-width:70vw;max-height:70vh; }
+.rm-image-zoom-controls { position:fixed;z-index:1000;bottom:24px;left:50%;transform:translateX(-50%);display:flex;gap:8px; }
 .rm-desk-backdrop { position:fixed;inset:0;z-index:19;background:rgba(16,22,26,.3); }
 .rm-desk { position:fixed;right:24px;bottom:24px;width:470px;height:560px;max-height:calc(100vh - 48px);display:flex;flex-direction:column;background:white;border-radius:10px;border:1px solid #d8e1e8;z-index:19;overflow:hidden; }
 .rm-desk.rm-desk--dialog { inset:0;margin:auto;width:min(600px,calc(100vw - 32px));height:min(760px,80vh);max-height:none; }

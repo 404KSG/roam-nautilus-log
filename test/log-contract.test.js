@@ -1174,7 +1174,8 @@ test('current diagram labels have individually routed leaders without track-budg
   assert.match(sceneCore, /function labelLayout/);
   assert.match(sceneCore, /record\.label =/);
   assert.match(sceneCore, /const controlX =/);
-  assert.match(sceneCore, /const side = record\.anchor\.x < frame\.center\.x \? 'left' : 'right'/);
+  assert.match(sceneCore, /const labelAnchor = record => record\.anchor \|\| record\.boundaryAnchor/);
+  assert.match(sceneCore, /const side = labelAnchor\(record\)\.x < frame\.center\.x \? 'left' : 'right'/);
   assert.doesNotMatch(sceneCore, /side = side ===|outsideY/);
   assert.doesNotMatch(sceneCore, /maxTracks|records\.slice/);
   assert.match(component, /:d \(:connector label\)/);

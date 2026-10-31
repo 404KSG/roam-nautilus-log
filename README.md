@@ -26,7 +26,7 @@ time that remains, and overload never disappears from view.
   plan. Full-page-style previews stay within the chart's width. Remove from Desk
   deletes only childless plain reference wrappers; other cards move intact to the
   owning Daily Note. An eligible outside block from the same window and graph
-  can be added as a local TODO reference, leaving its original intact. Native-editor Escape stays
+  can be added as a bare local block reference, without adding a task marker or changing its original. Native-editor Escape stays
   with Roam; Close or Escape from Desk chrome returns to the cards. This does not
   change Roam's own Desk collection. See the [validation limits](./docs/guide.md#safe-outside-block-references).
 - **A useful daily review.** Compare Planned and Actual time without leaving your

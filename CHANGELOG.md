@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Fixed
+
+- Known out-of-window records now use ordinary boundary-connected labels rather than a
+  special square icon. Earlier intervals connect to START; later intervals connect to END.
+  Tips keep the real range and outside-hours explanation. No time slice, changed timestamp,
+  scheduling allocation or graph write is introduced.
+
+- Outside-block drops now create a bare native reference instead of prepending TODO.
+  Plain notes stay plain and existing checkboxes are not duplicated. Completed sources
+  are not silently reopened. Preserve legacy-wrapper deduplication, exact readback,
+  uncertain-create protection and removal/re-entry; do not migrate saved note text.
+
+- Re-adding an outside-block reference after its confirmed childless-wrapper removal reuses the same wrapper ID; a later source edit is no longer treated as an unresolved create.
+- The focus dialog no longer paints over Roam's enhanced image viewer or takes its pointer, wheel, Tab, or Escape behavior.
+
 ### Added
 
 - Add a native-style Help question mark to the left of the Desk switch. Its read-only
@@ -9,6 +24,8 @@
   resolved chart hours/default duration, core actions and completion styles, with a
   localized full-guide link. Outside click and owned Escape dismiss it; settings,
   folding, navigation, anchor removal and unload release its transient resources.
+  Roam's native image viewer dismisses Help and retains immediate keyboard priority,
+  including when focus remains on the underlying chrome.
 - Remove the Eye button and its completed-visibility state. Completed records, labels,
   estimated outlines and elapsed texture remain visible; Desk still shows unfinished
   tasks. Scheduling, occupied intervals and source data are unchanged.
@@ -154,7 +171,7 @@
   compensating write, or destructive shortcut is added. Tests use synthetic graphs.
 
 - Desk accepts one ordinary same-window, same-graph native Roam block drop as a
-  local TODO reference while preserving the original. Files, pages, renderers,
+  bare local reference while preserving the original. Files, pages, renderers,
   events, ambiguous payloads, and cross-graph sources are rejected. Modifier
   gestures are ignored by Nautilus and remain Roam-owned. Repeated drops and
   reloads use the same reserved UID rather than allocating another wrapper UID.

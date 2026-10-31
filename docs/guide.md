@@ -107,7 +107,11 @@ the pending task keeps its blue fill. If the configured window cannot hold a who
 its title and duration remain visible with a capacity-overflow endpoint. No task is split,
 no later short task overtakes it, and no extra time is added beyond END. Unscheduled pending
 work belongs in the collapsed **Unscheduled** queue below the chart, not at an arbitrary
-point in the spiral. Known ranges outside chart hours keep their square.
+point in the spiral. Known ranges entirely outside chart hours use the ordinary label
+and curved leader, without a special icon: before START connects to START, and after END
+connects to END. This is a boundary attachment only, not an allocated interval or a changed
+completion time. For example, a 20:43–21:28 completion connects to a configured END of 20:00,
+while hover/focus Tips retain its original range and the outside-hours explanation.
 
 Hover or focus a title to emphasize its whole connection and slice.
 Completed titles retain their neutral color without a deletion line; other titles stay
@@ -142,7 +146,8 @@ Unlike the in-flow segment Tips, Help is a temporary button-anchored popover. It
 resize the SVG or change Desk width. Short viewports may scroll the Help card so its full
 content and guide link remain reachable. Folding closes Help and retains the existing
 expand-only compact control. Settings changes close the old Help snapshot; reopening shows
-the updated resolved configuration. Help adds no graph reads, writes or saved preference.
+the updated resolved configuration. Roam's native image viewer dismisses Help and keeps
+keyboard priority even when focus has not moved. Help adds no graph reads, writes or saved preference.
 
 Every titled source record remains available either in the diagram or in the pending queue.
 Fixed events, completed history and estimates, and genuinely scheduled tasks keep their
@@ -327,17 +332,31 @@ built-in starred/Desk collection.
 ### Safe outside-block references
 
 Drag one ordinary native Roam block from the same window and graph onto a Desk card
-(or the background). Desk preserves the original block and creates one local
-`TODO` reference wrapper under the current plan. Left/right card halves choose
+(or the background). Desk preserves the original block and creates one bare native
+reference, `((source-uid))`, under the current plan. It adds no TODO marker: plain text
+stays plain, and an existing task checkbox is not duplicated. The source text, parent
+and children stay untouched; the reference follows the source's state. New drops of
+already-completed sources are declined with a clear message instead of reopening them
+or silently adding an invisible card to this unfinished-items view.
+Left/right card halves choose
 before/after (mirrored in RTL), with the same native insertion rail and number.
 Background adds after the last unfiltered active task (or first in an empty plan).
 Accepted native transfers use the copy cursor; move-only or link-only transfers
 are not imported. Files, pages, queries, embeds/renderers, events, ambiguous/multi-block and
 cross-graph payloads are rejected. Nautilus ignores modifier gestures and leaves
 those events entirely to Roam; it does not suppress Roam's own modifier behavior.
-Repeated drops reuse the same deterministic wrapper. An unconfirmed attempt in
-that running view is verification-only; reload checks the same reserved UID and
-never allocates a second UID for that source and plan. Imports require the public
+Repeated drops reuse the same deterministic wrapper. Existing legacy TODO wrappers
+are recognized read-only for deduplication; this update does not rewrite or remove their
+saved markers. Strict receipt adoption recognizes the exact bare or legacy wrapper at
+its reserved ID, but a new create is confirmed only against the requested bare string.
+After a confirmed add,
+Remove from Desk of its childless local wrapper permits the source to be dropped
+again with that same ID. A promoted wrapper still occupies the ID, so Desk does
+not create another. An unconfirmed attempt in that running view is
+verification-only; if its exact childless wrapper is later observed, that graph
+state resolves the reservation and a later confirmed removal may re-add it. A
+different wrapper does not resolve the reservation. Reload checks the same
+reserved UID and never allocates a second UID for that source and plan. Imports require the public
 `data.pull` and `data.block.create` APIs and a verifiable graph/type/user context.
 Progress temporarily uses the existing title area, leaving Search and New note
 unobstructed. Hover over a truncated message to read it in full. The
@@ -362,6 +381,9 @@ late completion removes the card. There is no compensating rollback or blind ret
 These reservations are not durable transactions across extension/browser restarts.
 
 Other moves and creation also check parent and task state before writing; UID, text, and order are read back afterward.
+A native image zoom opened from the focus editor remains Roam's viewer: it takes
+pointer, wheel, Tab, and Escape first while the mounted editor and its scroll stay
+in place. Without that viewer, Desk's normal Escape behavior is unchanged.
 A host API response alone is not confirmation. An uncertain create is checked
 using its reserved UID, never blindly repeated with a new UID. Locks do not cover
 other devices or manual writers; concurrent changes fail conservatively. Read

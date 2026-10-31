@@ -65,6 +65,7 @@ let sequence = 0;
 /** A transient native-style reader. No graph API, settings write or timer polling. */
 function createChartHelp({ host = globalThis.window, document = host?.document, revision = '' } = {}) {
   let active = null, destroyed = false;
+  const nativeImageViewerOpen = () => Boolean(document?.querySelector('#rm-modal-portal .rm-enhanced-image-modal-container'));
   const el = (tag, className, text) => {
     const node = document.createElement(tag); node.className = className;
     if (text !== undefined) node.textContent = text;
@@ -83,6 +84,7 @@ function createChartHelp({ host = globalThis.window, document = host?.document, 
   }
   function toggle({ anchor, ...settings } = {}) {
     if (destroyed || !document?.body || !anchor?.isConnected || anchor.ownerDocument !== document) return false;
+    if (nativeImageViewerOpen()) { close(); return false; }
     if (active?.anchor === anchor) { close(); return false; }
     close();
     const model = chartHelpModel({ ...settings, revision });
@@ -113,7 +115,7 @@ function createChartHelp({ host = globalThis.window, document = host?.document, 
     };
     const position = () => {
       if (active !== record) return;
-      if (!anchor.isConnected || !anchor.getClientRects().length || anchor.closest('[inert],[aria-hidden="true"]')) { close(); return; }
+      if (nativeImageViewerOpen() || !anchor.isConnected || !anchor.getClientRects().length || anchor.closest('[inert],[aria-hidden="true"]')) { close(); return; }
       const rect = anchor.getBoundingClientRect(), viewportWidth = host.innerWidth, viewportHeight = host.innerHeight;
       if (rect.bottom <= 0 || rect.top >= viewportHeight || rect.right <= 0 || rect.left >= viewportWidth) { close(); return; }
       const width = helpPopoverPosition({ anchor: rect, viewportWidth, viewportHeight });
@@ -135,6 +137,9 @@ function createChartHelp({ host = globalThis.window, document = host?.document, 
     listen(document, 'pointerdown', event => { if (!owns(event.target)) close(); }, true);
     listen(document, 'focusin', event => { if (!owns(event.target)) close(); });
     listen(document, 'keydown', event => {
+      // Native images can open without moving focus off the underlying chrome.
+      // Dismiss Help, but let the viewer's own handler receive this same key.
+      if (nativeImageViewerOpen()) { close(); return; }
       // Never take Escape from a native editor or another overlay.
       if (event.key !== 'Escape' || event.isComposing || event.defaultPrevented || !owns(event.target)) return;
       event.preventDefault(); event.stopPropagation(); close(true);

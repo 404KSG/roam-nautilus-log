@@ -111,10 +111,11 @@ export function createDeskActions({
       };
       const sourceUid = claim.sourceUid;
       const canonical = canonicalDeskReference(sourceUid);
-      const simpleReference = (row) => {
-        const value = String(row?.string || '').trim();
-        return value === canonical || value === `((${sourceUid}))`;
-      };
+      // Older releases emitted a local TODO before this reference. Recognize
+      // that exact legacy shape for read-only deduplication/receipt adoption,
+      // but never rewrite it or use it for new creates.
+      const knownReference = string => string === canonical || string === `{{[[TODO]]}} ${canonical}`;
+      const simpleReference = row => knownReference(String(row?.string || '').trim());
       const validSource = (source) => {
         if (!source || source.uid !== sourceUid || sourceUid === planUid || typeof source.string !== 'string' || !source.string.trim()
           || typeof source.title === 'string' || source.parentUids.length !== 1 || !source.parentUids[0] || !source.pageUid
@@ -123,38 +124,69 @@ export function createDeskActions({
           throw new DeskReferenceImportError('The source block is no longer a readable ordinary block.', 'invalid-source');
         }
         const instance = resolveTaskInstance({ uid: `preview-${sourceUid}`, localString: canonical, readString: uid => uid === sourceUid ? source.string : '' });
-        if (instance.kind !== 'task' || instance.status !== 'TODO' || !instance.title || instance.title === '(untitled)') {
+        if (instance.kind !== 'task' || !instance.title || instance.title === '(untitled)') {
           throw new DeskReferenceImportError('This block cannot become a visible unfinished Desk task.', 'not-a-task');
         }
         return instance;
+      };
+      const requireUnfinished = instance => {
+        if (instance.status !== 'TODO') {
+          throw new DeskReferenceImportError('This block is completed. Desk will not add a task marker or reopen it.', 'source-completed');
+        }
       };
 
       assertContext();
       let rows = readStrictReferenceOutline(adapter, planUid);
       const source = await entity(sourceUid);
       assertContext();
-      validSource(source);
+      const sourceInstance = validSource(source);
       const sourceFingerprint = fingerprintDeskReferenceSource(source);
       if (!sourceFingerprint) throw new DeskReferenceImportError('The source block is unreadable.', 'invalid-source');
-      if (reservation.attempted && reservation.sourceFingerprint && reservation.sourceFingerprint !== sourceFingerprint) {
-        throw new DeskReferenceImportError('The source changed while the reference was being created. Check this plan before retrying.', 'unconfirmed');
+      let wrapperUid = null;
+      const reserveWrapperUid = async () => {
+        if (!wrapperUid) {
+          wrapperUid = await stableReferenceUid({ graphName: originContext.graphName, graphType: originContext.graphType || '', planUid, sourceUid });
+          assertContext();
+          if (!isSafeDeskReferenceUid(wrapperUid)) throw new DeskReferenceImportError('Could not reserve a safe reference ID.', 'uid-unavailable');
+        }
+        return wrapperUid;
+      };
+      const adoptReservedReference = (candidateRows, candidate) => {
+        if (candidate?.uid !== wrapperUid || !knownReference(candidate.string) || candidate.parentUids.length !== 1
+          || candidate.parentUids[0] !== planUid || candidate.children.length !== 0) return null;
+        const row = candidateRows.find(value => value.uid === wrapperUid && value.string === candidate.string);
+        if (!row) return null;
+        // Once this exact graph wrapper is observed, it is no longer an
+        // unresolved private write. A later confirmed removal may re-add it.
+        imports.delete(reservationKey);
+        return { status: 'existing-reference', sourceUid, wrapperUid, order: row.order };
+      };
+      const observeReservedReference = async (candidateRows) => {
+        const candidate = await entity(await reserveWrapperUid());
+        assertContext();
+        return adoptReservedReference(candidateRows, candidate);
+      };
+      // An external edit may put the source itself alongside a late wrapper.
+      // Observe the issued create before either duplicate no-op can return.
+      if (reservation.attempted) {
+        const adopted = await observeReservedReference(rows);
+        if (adopted) return adopted;
       }
       if (rows.some(row => row.uid === sourceUid)) return { status: 'existing-source', sourceUid };
       const duplicate = rows.find(row => simpleReference(row) && activeTask(row));
+      // A different visible reference is a safe no-op, but cannot resolve
+      // an earlier ambiguous create for this deterministic ID.
       if (duplicate) return { status: 'existing-reference', sourceUid, wrapperUid: duplicate.uid, order: duplicate.order };
+      // Resolve known prior writes/no-ops first, even if the source has since
+      // completed. A fresh create must never reopen that source as a TODO.
+      requireUnfinished(sourceInstance);
 
-      const wrapperUid = await stableReferenceUid({ graphName: originContext.graphName, graphType: originContext.graphType || '', planUid, sourceUid });
-      assertContext();
-      if (!isSafeDeskReferenceUid(wrapperUid)) throw new DeskReferenceImportError('Could not reserve a safe reference ID.', 'uid-unavailable');
+      await reserveWrapperUid();
       const reservedEntity = await entity(wrapperUid);
       assertContext();
       if (reservedEntity) {
-        if (reservedEntity.uid === wrapperUid && reservedEntity.string === canonical && reservedEntity.parentUids.length === 1
-          && reservedEntity.parentUids[0] === planUid && reservedEntity.children.length === 0
-          && rows.some(row => row.uid === wrapperUid && row.string === canonical)) {
-          const row = rows.find(candidate => candidate.uid === wrapperUid);
-          return { status: 'existing-reference', sourceUid, wrapperUid, order: row.order };
-        }
+        const adopted = adoptReservedReference(rows, reservedEntity);
+        if (adopted) return adopted;
         throw new DeskReferenceImportError('Reference ID collision: the reserved ID belongs to another block. Nothing was changed.', 'uid-collision');
       }
       // Re-read both plan and source after asynchronous ID/collision checks.
@@ -163,7 +195,11 @@ export function createDeskActions({
       rows = readStrictReferenceOutline(adapter, planUid);
       const refreshedSource = await entity(sourceUid);
       assertContext();
-      validSource(refreshedSource);
+      // Check the deterministic graph state before rejecting an asynchronous
+      // source edit: the host may have completed the prior create late.
+      const adopted = await observeReservedReference(rows);
+      if (adopted) return adopted;
+      requireUnfinished(validSource(refreshedSource));
       if (fingerprintDeskReferenceSource(refreshedSource) !== sourceFingerprint) {
         throw new DeskReferenceImportError('The source changed before the reference could be created.', 'source-changed');
       }
@@ -191,11 +227,12 @@ export function createDeskActions({
       }
       const expected = rows.map(row => row.uid);
       expected.splice(order, 0, wrapperUid);
-      reservation.attempted = true;
-      reservation.sourceFingerprint = sourceFingerprint;
       let failure = null;
       try {
         assertContext();
+        // Once the host create starts, an absent wrapper is ambiguous. Retain
+        // this reservation until readback resolves; do not retry or mint a UID.
+        reservation.attempted = true;
         await adapter.create({ uid: wrapperUid, parentUid: planUid, order, string: canonical, open: true });
       } catch (error) { failure = error; }
       assertContext();
@@ -207,7 +244,15 @@ export function createDeskActions({
       const confirmed = wrapper && wrapper.uid === wrapperUid && wrapper.string === canonical
         && wrapper.parentUids.length === 1 && wrapper.parentUids[0] === planUid && wrapper.children.length === 0
         && sameOrder(rows, expected) && sourceAfter === sourceFingerprint;
+      // Observing this exact wrapper resolves the receipt even if concurrent
+      // edits invalidate the requested order or source snapshot. Still report
+      // that mismatch: confirming identity is not confirmation of the action.
+      adoptReservedReference(rows, wrapper);
       if (!confirmed) throw failure || new DeskReferenceImportError('Could not confirm the reference. Check this plan before retrying.', 'unconfirmed');
+      // A confirmed wrapper is graph state, not a private import latch. A
+      // later drop will find it as a duplicate, or create this same ID after a
+      // confirmed childless-wrapper removal.
+      imports.delete(reservationKey);
       return { status: 'added', sourceUid, wrapperUid, order };
     }, signal);
     reservation.pending = pending;
