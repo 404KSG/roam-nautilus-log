@@ -534,7 +534,7 @@
                   (when (= "completion-estimate" (:time-claim event))
                     (str " · " (get-in copy [:tooltips :completionEstimate]))))]
     {:title title :meta meta :summary-meta summary :uid (:uid event)
-     :tone (cond (:meeting event) "event" (:done event) "completed" :else "task")
+     :tone (cond (:done event) "completed" (:meeting event) "event" :else "task")
      :detail-kind :event :detail-signature (event-detail-signature event)
      :aria-label (str title ". " meta (when (:todo event) (str ". " (get-in copy [:tooltips :locateTask]))))}))
 
@@ -557,15 +557,15 @@
               :style {:width (str (if expanded? (:expandedWidth layout) (:width layout)) "px")}}
         [:span {:class (str "nautilus-log-detail-tone nautilus-log-detail-tone--" tone) :aria-hidden "true"}]
         [:strong {:class (str "nautilus-log-detail-title"
-                              (when (= :event (:detail-kind info)) " nautilus-log-detail-title--record"))} title]
+                              (when (= :event (:detail-kind info)) (str " nautilus-log-detail-title--" tone)))} title]
+        [:span {:class "nautilus-log-detail-meta"} (if expanded? meta (or summary-meta meta))]
         (when (or (:more layout) expanded?)
           [:button {:type "button" :class "nautilus-log-detail-expand" :aria-expanded expanded?
                     :aria-label (get-in copy [:panels (if expanded? :collapseDetails :expandDetails)])
                     :on-click (fn [event]
                                 (.stopPropagation event)
                                 (swap! detail-state assoc :expanded (if expanded? nil info)))}
-           (get-in copy [:panels (if expanded? :less :more)])])
-        [:span {:class "nautilus-log-detail-meta"} (if expanded? meta (or summary-meta meta))]])]))
+           (get-in copy [:panels (if expanded? :less :more)])])])]))
 
 ;; ---------------- helpers ----------------------
 

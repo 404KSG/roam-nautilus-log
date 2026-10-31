@@ -1077,7 +1077,6 @@
   --nautilus-log-detail-surface: #fbfbfb;
   --nautilus-log-detail-border: rgba(20, 20, 20, 0.06);
   --nautilus-log-detail-action-hover: rgba(20, 20, 20, 0.05);
-  --nautilus-log-detail-name-gradient: linear-gradient(100deg, #7952b3 0%, #aa3773 25%, #8a6200 50%, #08797a 75%, #3566bc 100%);
   --nautilus-log-chart-ink: #222326;
   --nautilus-log-chart-muted: #666b78;
   --nautilus-log-text-main: var(--nautilus-log-chart-ink);
@@ -1157,15 +1156,15 @@
   width: 100%;
   margin: 0;
   min-width: 0;
-  /* Two text rows need only 36px, with 2px below; no tall card-sized band. */
-  height: 38px;
-  padding-bottom: 2px;
+  /* Slight breathing room: 38px note plus 2px above and below. */
+  height: 42px;
+  padding: 2px 0;
   color: var(--nautilus-log-chart-ink);
 }
 .nautilus-log-detail-region[data-nautilus-detail="idle"] { visibility: hidden; }
-.nautilus-log-detail-region.is-expanded { height: auto; min-height: 38px; align-items: flex-start; }
+.nautilus-log-detail-region.is-expanded { height: auto; min-height: 42px; align-items: flex-start; }
 /* Compact note chrome does not truncate roomy content or cover following UI. */
-.nautilus-log-detail-region[data-tip-content="full"][data-nautilus-detail="active"] { height: auto; min-height: 38px; }
+.nautilus-log-detail-region[data-tip-content="full"][data-nautilus-detail="active"] { height: auto; min-height: 42px; }
 .nautilus-log-detail-region[data-tip-content="full"] .nautilus-log-detail-title,
 .nautilus-log-detail-region[data-tip-content="full"] .nautilus-log-detail-meta { display: block; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; word-break: normal; -webkit-line-clamp: unset; }
 .nautilus-log-detail-region[data-tip-content="full"] .nautilus-log-detail-tone,
@@ -1174,12 +1173,12 @@
   box-sizing: border-box;
   display: grid;
   grid-template-columns: 5px minmax(0, 1fr);
-  grid-template-rows: minmax(16px, auto) minmax(14px, auto);
+  grid-template-rows: repeat(2, minmax(14px, auto));
   column-gap: 4px;
   row-gap: 0;
   max-width: calc(100% - 32px);
-  min-height: 36px;
-  padding: 2px 6px;
+  min-height: 38px;
+  padding: 4px 6px;
   border: 1px solid var(--nautilus-log-detail-border);
   border-radius: 4px;
   background: var(--nautilus-log-detail-surface);
@@ -1191,31 +1190,15 @@
 .nautilus-log-detail-tone--available { background: var(--nautilus-log-positive); }
 .nautilus-log-detail-tone--past-gap { background: var(--nautilus-log-chart-muted); }
 .nautilus-log-detail-tone--completed { background: var(--nautilus-log-completed); }
-.nautilus-log-detail-title { grid-column: 2; grid-row: 1; min-width: 0; font-size: 12px; line-height: 16px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* A static accent for real names only; status text and category dots stay semantic. */
-.nautilus-log-detail-title--record { width: fit-content; max-width: 100%; }
-@supports (background-clip: text) or (-webkit-background-clip: text) {
-  .nautilus-log-detail-title--record {
-    background-image: var(--nautilus-log-detail-name-gradient);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    -webkit-text-fill-color: transparent;
-  }
-}
+.nautilus-log-detail-title { grid-column: 2; grid-row: 1; min-width: 0; font-size: 11px; line-height: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nautilus-log-detail-title--task { color: var(--nautilus-log-task-text); }
+.nautilus-log-detail-title--event { color: var(--nautilus-log-event-text); }
+.nautilus-log-detail-title--completed { color: var(--nautilus-log-completed); }
 @media (forced-colors: active) {
-  .nautilus-log-detail-title--record {
-    background-image: none;
-    color: CanvasText;
-    -webkit-text-fill-color: currentColor;
-  }
+  .nautilus-log-detail-title { color: CanvasText; }
 }
 @media print {
-  .nautilus-log-detail-title--record {
-    background-image: none;
-    color: #222326;
-    -webkit-text-fill-color: currentColor;
-  }
+  .nautilus-log-detail-title { color: #222326; }
 }
 .nautilus-log-detail-meta { grid-column: 2; grid-row: 2; align-self: center; min-width: 0; color: var(--nautilus-log-chart-muted); font-size: 11px; font-weight: 400; line-height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nautilus-log-detail-region.is-expanded .nautilus-log-detail-title { grid-column: 2 / -1; }
@@ -1224,7 +1207,12 @@
 .nautilus-log-container .nautilus-log-detail-expand {
   grid-column: 3;
   grid-row: 1 / 3;
-  align-self: center;
+  /* Align the label with metadata, without stretching the hit area over long titles. */
+  align-self: end;
+  height: 24px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
   border: 0;
   padding: 0 3px;
   width: auto;
@@ -1239,10 +1227,10 @@
   font: inherit;
   font-size: 11px;
   font-weight: 400;
-  line-height: 16px;
+  line-height: 14px;
   cursor: pointer;
 }
-.nautilus-log-detail-region.is-expanded .nautilus-log-detail-expand { grid-row: 2; align-self: start; }
+.nautilus-log-detail-region.is-expanded .nautilus-log-detail-expand { grid-row: 2; align-self: start; display: block; }
 .nautilus-log-container .nautilus-log-detail-expand:hover,
 .nautilus-log-container .nautilus-log-detail-expand:focus-visible {
   color: var(--nautilus-log-chart-ink);
@@ -1328,7 +1316,6 @@
   --nautilus-log-detail-surface: #1c1c1e;
   --nautilus-log-detail-border: rgba(255, 255, 255, 0.06);
   --nautilus-log-detail-action-hover: rgba(255, 255, 255, 0.06);
-  --nautilus-log-detail-name-gradient: linear-gradient(100deg, #d4a6ff 0%, #f2a2ca 25%, #efcd75 50%, #7bd6c2 75%, #9dc6ff 100%);
   --nautilus-log-chart-ink: #ebecef;
   --nautilus-log-chart-muted: #b8bdca;
   --nautilus-log-chart-hairline: #303440;

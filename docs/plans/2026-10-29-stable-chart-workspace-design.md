@@ -90,18 +90,18 @@ compact center date. Hour sizing remains explicit in SVG output.
 universal 280px cap. Titles and displayed metadata wrap completely, including unbroken strings.
 More reveals extra information rather than unlocking a wide-view title.
 
-Normal content is 36px high in a 38px minimum slot, including 2px below it. Padding is 2px
+Normal content is 38px high in a 42px minimum slot, including 2px above and below. Padding is 4px
 vertical/6px horizontal, column gap 4px, with no extra row gap, a faint border and 4px corners.
-The 12px/16px gradient title and 11px/14px metadata share the text column; intrinsic More spans
-both rows on the right so its 24px hit height does not inflate the second row. Measurement
-uses a 23px content gutter plus action width and a small host-font allowance. Expansion lets
-the title span the full row and moves More beside metadata, retaining the same padding.
+Title and metadata use the same 11px/14px text metrics. More's label aligns with the metadata row;
+its separate right-hand target stays 24px high rather than stretching over a long title. Measurement
+uses the matching 11px title font, 23px content gutter, action width and a small host-font allowance.
+Expansion lets the title span the full row and moves More beside metadata, retaining the padding.
 
 At 360px or narrower, `contentMode=compact` keeps bounded rows and offers More for clipped
 content. Text that fits still remains complete. More uses intrinsic width and nowrap and
 must not overlap either text row.
 
-Ordinary short tips retain 36px content and a 38px minimum slot. Full-mode wrapping grows
+Ordinary short tips retain 38px content and a 42px minimum slot. Full-mode wrapping grows
 only the detail region in normal page flow, so following content may move but SVG size and
 time geometry do not. Idle tips reserve only the compact slot. This content-driven height
 is intentional under the latest completeness request; do not reintroduce a fixed-height
@@ -128,9 +128,11 @@ keys invalidate stale selection. Gap hits sit below item records, so task naviga
 wins. Hidden completed estimates remain occupied in the underlying data. No graph reads
 or writes are added by inspection.
 
-Only real task/event names receive the static light/dark gradient. Dates, semantic category
-dots, metadata and explanatory labels stay unchanged. Forced-color and print modes use solid
-text. Gradient styling must coexist with complete wide-view titles and narrow expansion.
+Detail names use the same semantic text tokens as the chart: purple tasks, warm-orange events
+and neutral gray completed records. Completed state takes precedence, including completed fixed
+events. The gradient and its transparent text-fill rules are removed. Dates, metadata and gap
+explanations retain their colors. Forced-color and print modes remain readable. Semantic titles
+must coexist with complete wide-view content and narrow expansion.
 
 ## Category colors and native Desk
 

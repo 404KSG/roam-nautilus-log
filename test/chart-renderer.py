@@ -200,13 +200,13 @@ def coverage(page, hidden=False):
     expanded = 'is-expanded' in detail.get_attribute('class')
     full_content = detail.get_attribute('data-tip-content') == 'full'
     if not expanded and (not full_content or detail.get_attribute('data-nautilus-detail') == 'idle'):
-        assert abs(s['detail']['height'] - 38) < .5
+        assert abs(s['detail']['height'] - 42) < .5
     if detail.get_attribute('data-nautilus-detail') == 'active':
         tip = page.locator('.nautilus-log-detail-content').bounding_box()
         assert tip['width'] <= s['workspace']['width'] - 32 + 1, tip
         assert abs(tip['x'] + tip['width'] / 2 - s['workspace']['x'] - s['workspace']['width'] / 2) <= 1
         if not expanded and not full_content:
-            assert tip['height'] <= 36.5, tip
+            assert tip['height'] <= 38.5, tip
         if full_content:
             for selector in ['.nautilus-log-detail-title', '.nautilus-log-detail-meta']:
                 assert page.locator(selector).evaluate('e=>getComputedStyle(e).textOverflow!=="ellipsis" && e.scrollWidth<=e.clientWidth+1 && e.scrollHeight<=e.clientHeight+1'), selector
@@ -377,8 +377,8 @@ def density_and_control_contract(page):
         }''')
         # Compact font/anchor placement can leave a few extra pixels inside
         # the source-stable frame; it must not reserve another label band.
-        assert 0 <= measure['beforeTip'] <= (12 if width >= 640 else 18), (context, width, measure)
-        assert 2 <= measure['afterTip'] <= 5 and measure['tipHeight'] <= 36.5, measure
+        assert 0 <= measure['beforeTip'] <= (14 if width >= 640 else 20), (context, width, measure)
+        assert 2 <= measure['afterTip'] <= 5 and measure['tipHeight'] <= 38.5, measure
         if width == 720: assert before['presentation']['viewBox']['height'] <= 340
         for iso in ['2026-10-29T08:01:00', '2026-10-29T13:30:00', '2026-10-29T20:30:00']:
             after = set_clock(page, iso); coverage(page); geometry_audit(page)
@@ -455,7 +455,7 @@ def four_corrections_contract(page):
         settle_renderer(page); pressure = tip_metrics()
         assert pressure['titleScroll'] <= pressure['titleWidth'] and pressure['moreScroll'] <= pressure['moreWidth'] + 1 and len(pressure['rows']) == 1, pressure
         if width <= 360:
-            assert pressure['height'] <= 36.5, pressure
+            assert pressure['height'] <= 38.5, pressure
         else:
             coverage(page)  # Full-mode metadata may wrap rather than be truncated.
         pressure_style.evaluate('e=>e.remove()'); settle_renderer(page)
@@ -534,7 +534,8 @@ def full_tip_palette_contract(page):
             colors:[...document.querySelectorAll('.nautilus-log-html-legend .nautilus-log-legend-dot')].slice(0,3).map(e=>getComputedStyle(e).backgroundColor)};
         }''')
         assert data['title'] == text and data['colors'] == ['rgb(234, 15, 15)', 'rgb(217, 154, 72)', 'rgb(139, 92, 246)'], data
-        assert 'linear-gradient(' in data['gradient'], 'full-width content must retain the remote detail-name gradient'
+        assert data['gradient'] == 'none', 'full-width content must use semantic text colors, not a gradient'
+        assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).color') == page.locator('[data-task-uid="connection-done-0"] .nautilus-log-record-title').evaluate('e=>getComputedStyle(e).fill')
         assert data['heading'] == data['marker'] == 'rgb(201, 108, 0)', data
         assert data['count'] == data['total'] and data['count'] != data['heading'] and data['row'] == 'rgb(109, 40, 217)', data
         assert data['queueTop'] >= data['tipBottom'] and data['deskTop'] >= data['tipBottom'], data
@@ -554,8 +555,8 @@ def full_tip_palette_contract(page):
     before = state(page)['svg']; select(page, 'long-unbroken'); wide = coverage(page)
     assert page.locator('.nautilus-log-detail-title').inner_text() == page.evaluate('()=>__chartHarness.longTitles()["long-unbroken"]')
     assert page.get_by_role('button', name='Full text', exact=True).count() == 0, 'wide title must not require More'
-    assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).backgroundImage.includes("linear-gradient(")')
-    assert wide['detail']['height'] > 38
+    assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).backgroundImage==="none"')
+    assert wide['detail']['height'] > 42
     assert all(abs(before[k]-wide['svg'][k]) < .5 for k in ['width','height'])
     page.evaluate('()=>__chartHarness.setWidth(280)')
     page.wait_for_function('document.querySelector(".nautilus-log-detail-region").dataset.nautilusDetail==="idle"')
@@ -587,17 +588,20 @@ def tip_surface_contract(page):
                   const title=content.querySelector('.nautilus-log-detail-title'),meta=content.querySelector('.nautilus-log-detail-meta'),button=content.querySelector('.nautilus-log-detail-expand');
                   const s=getComputedStyle(content),m=getComputedStyle(meta),b=getComputedStyle(button),r=content.getBoundingClientRect();
                   const tr=title.getBoundingClientRect(),mr=meta.getBoundingClientRect(),br=button.getBoundingClientRect();
-                  return {padding:[s.paddingTop,s.paddingRight,s.paddingBottom,s.paddingLeft].map(parseFloat),rowGap:parseFloat(s.rowGap),columnGap:parseFloat(s.columnGap),radius:parseFloat(s.borderRadius),shadow:s.boxShadow,background:s.backgroundColor,border:s.borderTopColor,
+                  const textBox=e=>{const range=document.createRange();range.selectNodeContents(e);return range.getBoundingClientRect()};
+                  const mt=textBox(meta),bt=textBox(button);
+                  return {titleFont:getComputedStyle(title).fontSize,metaFont:m.fontSize,metaTextTop:mt.top,buttonTextTop:bt.top,topSpace:r.top-region.getBoundingClientRect().top,padding:[s.paddingTop,s.paddingRight,s.paddingBottom,s.paddingLeft].map(parseFloat),rowGap:parseFloat(s.rowGap),columnGap:parseFloat(s.columnGap),radius:parseFloat(s.borderRadius),shadow:s.boxShadow,background:s.backgroundColor,border:s.borderTopColor,
                     titleLeft:tr.left-r.left,metaLeft:mr.left-r.left,titleTop:tr.top-r.top,buttonHeight:br.height,buttonWidth:br.width,buttonLeft:br.left,textRight:Math.max(tr.right,mr.right),panelCenter:r.top+r.height/2,buttonCenter:br.top+br.height/2,buttonColor:b.color,metaColor:m.color,
                     bottomSpace:region.getBoundingClientRect().bottom-r.bottom,height:r.height,titleFits:title.scrollWidth<=title.clientWidth,buttonFits:button.scrollWidth<=button.clientWidth,metaLineHeight:m.lineHeight};
                 }''')
             normal = metrics()
-            assert normal['padding'] == [2, 6, 2, 6] and normal['rowGap'] == 0 and normal['columnGap'] == 4, normal
+            assert normal['padding'] == [4, 6, 4, 6] and normal['rowGap'] == 0 and normal['columnGap'] == 4, normal
             assert normal['radius'] == 4 and normal['shadow'] == 'none', normal
-            assert abs(normal['titleLeft'] - normal['metaLeft']) < .5 and abs(normal['titleTop'] - 3) < .5, normal
-            assert abs(normal['height'] - 36) < .5 and abs(normal['bottomSpace'] - 2) < .5, normal
+            assert abs(normal['titleLeft'] - normal['metaLeft']) < .5 and abs(normal['titleTop'] - 5) < .5, normal
+            assert abs(normal['height'] - 38) < .5 and abs(normal['bottomSpace'] - 2) < .5 and abs(normal['topSpace'] - 2) < .5, normal
+            assert normal['titleFont'] == normal['metaFont'] == '11px', normal
             assert normal['buttonHeight'] >= 24 and normal['buttonWidth'] >= 28 and normal['buttonFits'] and normal['titleFits'], normal
-            assert abs(normal['buttonCenter'] - normal['panelCenter']) < .5 and normal['metaLineHeight'] == '14px', normal
+            assert abs(normal['buttonTextTop'] - normal['metaTextTop']) < .5 and normal['metaLineHeight'] == '14px', normal
             assert normal['buttonLeft'] - normal['textRight'] >= 3.5, 'the 24px action must not overlap either text row'
             assert normal['buttonColor'] == normal['metaColor'], normal
             background = [float(n) for n in re.findall(r'[\d.]+', normal['background'])]
@@ -627,52 +631,41 @@ def tip_surface_contract(page):
     return report
 
 
-def detail_name_gradient_contract(page):
+def detail_name_semantics_contract(page):
     title = page.locator('.nautilus-log-detail-title')
     report = {}
 
     def paint():
         return title.evaluate('''e=>{const s=getComputedStyle(e),panel=getComputedStyle(e.closest('.nautilus-log-detail-content'));
-          return {image:s.backgroundImage,clip:s.backgroundClip,fill:s.webkitTextFillColor,color:s.color,
-            animation:s.animationName,panel:panel.backgroundColor,width:e.getBoundingClientRect().width};}''')
+          return {image:s.backgroundImage,fill:s.webkitTextFillColor,color:s.color,font:s.fontSize,
+            animation:s.animationName,panel:panel.backgroundColor};}''')
 
-    def plain_title():
-        expect(title).not_to_have_class(re.compile(r'nautilus-log-detail-title--record'))
+    def semantic_name(uid, tone):
+        select(page, uid); coverage(page)
+        expect(title).to_have_class(re.compile('nautilus-log-detail-title--' + tone))
         p = paint()
-        assert p['image'] == 'none' and p['fill'] not in ('transparent', 'rgba(0, 0, 0, 0)'), p
+        original = page.locator(f'[data-task-uid="{uid}"] .nautilus-log-record-title').evaluate('e=>getComputedStyle(e).fill')
+        assert p['color'] == p['fill'] == original and p['image'] == 'none', p
+        assert p['font'] == page.locator('.nautilus-log-detail-meta').evaluate('e=>getComputedStyle(e).fontSize') == '11px', p
+        foreground = [float(n) for n in re.findall(r'[\d.]+', p['color'])]
+        background = [float(n) for n in re.findall(r'[\d.]+', p['panel'])]
+        score = ratio(foreground, background)
+        assert score >= 4.5, (uid, p, score)
+        return {'color': p['color'], 'contrast': score}
 
     for theme, classes in [('light', ''), ('bp3', 'bp3-dark'), ('roam', 'roam-app rm-dark-theme'), ('dark', 'dark')]:
         for context, width in [('main', 720), ('sidebar', 280)]:
             load(page, 'mixed', context, width)
             page.locator('body').evaluate('''(e,c)=>{e.className=c;e.style.background=c?'#1d1e21':'#fff';e.style.color=c?'#ecedef':'#222326'}''', classes)
             center_before = page.locator('.nautilus-log-center-date text').evaluate_all('nodes=>nodes.map(e=>({text:e.textContent,fill:getComputedStyle(e).fill}))')
-            for uid in ['task-reference', 'event-standup', 'task-completed', 'task-long']:
-                select(page, uid); coverage(page)
-                expect(title).to_have_class(re.compile(r'nautilus-log-detail-title--record'))
-                p = paint()
-                assert 'linear-gradient(' in p['image'] and p['clip'] == 'text', p
-                assert p['fill'] == 'rgba(0, 0, 0, 0)' and p['animation'] == 'none', p
-                # Only the name is decorative; category dots, times and chart labels keep their own colors.
-                assert page.locator('.nautilus-log-detail-meta,.nautilus-log-detail-tone,.nautilus-log-record-title').evaluate_all('''nodes=>nodes.every(e=>{
-                  const s=getComputedStyle(e);return s.backgroundImage==='none'&&s.webkitTextFillColor!=='rgba(0, 0, 0, 0)';})''')
-                assert page.locator('.nautilus-log-center-date text').evaluate_all('nodes=>nodes.map(e=>({text:e.textContent,fill:getComputedStyle(e).fill}))') == center_before
-            colors = [[float(n) for n in re.findall(r'[\d.]+', c)] for c in re.findall(r'rgba?\([^)]+\)', p['image'])]
-            background = [float(n) for n in re.findall(r'[\d.]+', p['panel'])]
-            assert len(colors) == 5, p
-            samples = [[a + (b - a) * step / 20 for a, b in zip(left, right)]
-                       for left, right in zip(colors, colors[1:]) for step in range(21)]
-            minimum = min(ratio(color, background) for color in samples)
-            assert minimum >= 4.5, (theme, minimum)
-            # The accent must not perturb the existing layout or title truncation.
-            before = state(page)
-            title.evaluate('e=>e.classList.remove("nautilus-log-detail-title--record")')
-            settle_renderer(page)
-            assert_rect_equal(before, state(page), 'detail name color cannot change layout')
-            title.evaluate('e=>e.classList.add("nautilus-log-detail-title--record")')
-            if theme in ('light', 'bp3'):
-                page.locator('.nautilus-log-container').screenshot(path=str(OUT / 'screenshots' / f'detail-name-{theme}-{width}.png'))
-                page.locator('.nautilus-log-detail-content').screenshot(path=str(OUT / 'screenshots' / f'detail-name-closeup-{theme}-{width}.png'))
-            select(page, 'task-unbroken')
+            colors = {}
+            for uid, tone in [('task-reference', 'task'), ('event-standup', 'event'), ('task-completed', 'completed'), ('task-long', 'task')]:
+                colors[uid] = semantic_name(uid, tone)
+                if theme in ('light', 'bp3'):
+                    page.locator('.nautilus-log-detail-content').screenshot(path=str(OUT / 'screenshots' / f'detail-name-{theme}-{width}-{uid}.png'))
+            assert len({colors[uid]['color'] for uid in ['task-reference', 'event-standup', 'task-completed']}) == 3
+            assert page.locator('.nautilus-log-center-date text').evaluate_all('nodes=>nodes.map(e=>({text:e.textContent,fill:getComputedStyle(e).fill}))') == center_before
+            semantic_name('task-unbroken', 'task')
             if width <= 360:
                 page.get_by_role('button', name='Full text', exact=True).click()
             else:
@@ -680,8 +673,8 @@ def detail_name_gradient_contract(page):
                 assert title.evaluate('e=>getComputedStyle(e).textOverflow!=="ellipsis" && e.scrollHeight<=e.clientHeight')
             expect(title).to_contain_text('XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX')
             coverage(page)
-            assert 'linear-gradient(' in paint()['image'] and state(page)['writes'] == 0
-            report[f'{theme}-{width}'] = {'minimumContrast': minimum, 'completeLongTitle': True}
+            assert paint()['image'] == 'none' and state(page)['writes'] == 0
+            report[f'{theme}-{width}'] = {'colors': colors, 'completeLongTitle': True}
 
     for media in [{'forced_colors': 'active'}, {'media': 'print'}]:
         page.emulate_media(**media)
@@ -692,18 +685,19 @@ def detail_name_gradient_contract(page):
     assert paint()['animation'] == 'none'
     page.emulate_media(reduced_motion='no-preference')
 
-    # Explanatory/status labels are not task names and must never gain the accent.
+    # A completed fixed event follows the chart's neutral completion styling too.
+    load(page, 'untimed')
+    semantic_name('fixed-done', 'completed')
     load(page, 'empty', 'main', 720)
-    page.locator('.nautilus-log-available-slot').first.focus()
-    expect(title).to_contain_text('Available')
-    plain_title()
-    gap = page.locator('.nautilus-log-past-gap').first
-    gap.focus(); gap.press('Enter')
-    expect(title).to_have_text('Past gap')
-    plain_title()
+    for target, text in [('.nautilus-log-available-slot', 'Available'), ('.nautilus-log-past-gap', 'Past gap')]:
+        page.locator(target).first.focus()
+        expect(title).to_contain_text(text)
+        expect(title).to_have_class('nautilus-log-detail-title')
+        p = paint()
+        assert p['image'] == 'none' and p['fill'] not in ('transparent', 'rgba(0, 0, 0, 0)'), p
     assert state(page)['writes'] == 0
-    return {'themesAndWidths': report, 'static': True, 'statusLabelsUnchanged': True,
-            'forcedColorsAndPrintFallback': True, 'graphWrites': 0}
+    return {'themesAndWidths': report, 'noGradient': True, 'statusLabelsUnchanged': True,
+            'forcedColorsAndPrintReadable': True, 'graphWrites': 0}
 
 
 def past_gap_inspection_contract(page):
@@ -983,7 +977,7 @@ def material_and_tip_contract(page):
         page.wait_for_function('document.querySelector("[data-task-uid=routine-0]").dataset.recordTitle==="Review"')
         select(page,'routine-0');coverage(page)
         short=page.locator('.nautilus-log-detail-content').bounding_box()
-        assert short['width'] < 250 and short['height'] <= 36.5, short
+        assert short['width'] < 250 and short['height'] <= 38.5, short
         assert not page.locator('.nautilus-log-detail-expand').count()
         before=state(page)
         page.evaluate('()=>__chartHarness.updateChild("routine-0","18:30-19:00 核对项目全部材料并完成交付内容的逐项检查和验收确认工作")')
@@ -997,7 +991,7 @@ def material_and_tip_contract(page):
         long=page.locator('.nautilus-log-detail-content').bounding_box()
         assert long['width'] <= min(720,width)-32+1
         if width <= 360:
-            assert long['height'] <= 36.5
+            assert long['height'] <= 38.5
             assert page.get_by_role('button',name='Full text',exact=True).count()==1
         else:
             assert page.locator('.nautilus-log-detail-title').evaluate('e=>e.scrollWidth<=e.clientWidth && e.scrollHeight<=e.clientHeight')
@@ -1079,6 +1073,7 @@ def full_text(page, context, width):
     page.wait_for_function('document.querySelector("[data-task-uid=long-unbroken]").dataset.timeClaim==="estimated-allocation"')
     select(page, 'long-unbroken')
     before = coverage(page)
+    assert page.locator('.nautilus-log-detail-expand').bounding_box()['height'] <= 24.5, 'More must not stretch over a long wide title'
     scroll_before = page.evaluate('() => scrollY')
     page.get_by_role('button', name='Full text', exact=True).click(); settle_renderer(page)
     expanded = coverage(page)
@@ -1098,7 +1093,7 @@ def full_text(page, context, width):
     assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text(), 'expanded reading must be pinned'
     page.get_by_role('button', name='Collapse text', exact=True).click(); page.mouse.move(1180, 980); settle_renderer(page)
     if width <= 360:
-        assert abs(state(page)['detail']['height'] - 38) < .5
+        assert abs(state(page)['detail']['height'] - 42) < .5
     else:
         assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text()
         assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).textOverflow!=="ellipsis" && e.scrollHeight<=e.clientHeight')
@@ -1216,7 +1211,7 @@ def main():
             report['afternoonFlow'] = afternoon_flow_contract(page)
             report['materialsAndTips'] = material_and_tip_contract(page)
             report['pastGapInspection'] = past_gap_inspection_contract(page)
-            report['detailNameGradient'] = detail_name_gradient_contract(page)
+            report['detailNameSemantics'] = detail_name_semantics_contract(page)
             report['tipSurface'] = tip_surface_contract(page)
             report['timeflowRecovery'] = timeflow_recovery(page)
             report['lifecycle'] = lifecycle(page)
