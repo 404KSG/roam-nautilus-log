@@ -59,8 +59,8 @@ small flame marks whether the current minute is consuming Available or Event tim
 
 ## Visual language
 
-- Purple: flexible tasks; the current task has a stronger fill and outline
-- Warm orange: fixed events, without the previous bright red-orange saturation
+- Blue: flexible tasks; the current task has a stronger fill and outline
+- Yellow: fixed events
 - Solid gray: completion history with a local time anchor
 - Gray with dashed outlines: completed tasks placed by estimate, not recorded completion times
 - Pale hatching: past gaps not covered by a task or event interval, not future availability
@@ -75,7 +75,7 @@ identifies this as **Estimated allocation**, not a recorded completion time.
 
 Estimated allocations do not move with the clock or change pending-task scheduling. They can
 extend past now and overlap a pending forecast; dashed gray outlines distinguish them while
-the pending task keeps its purple fill. If the configured window cannot hold a whole estimate,
+the pending task keeps its blue fill. If the configured window cannot hold a whole estimate,
 its title and duration remain visible with a capacity-overflow endpoint. No task is split,
 no later short task overtakes it, and no extra time is added beyond END. Unscheduled pending
 work belongs in the collapsed **Unscheduled** queue below the chart, not at an arbitrary
@@ -125,8 +125,9 @@ inventory of completed history. It has no internal scrollbar.
 
 On a **past** Daily Note, unfinished tasks are not replanned from START and are not counted
 as active Planned demand or overload. They remain under **Unfinished**, collapsed by default,
-with their original titles, estimates and local UIDs. Its orange heading and disclosure arrow
-mark work that still needs attention; counts, duration and task-row colors stay distinct.
+with their original titles, estimates and local UIDs. Its yellow disclosure arrow and
+readable yellow-family heading mark work that still needs attention; counts and duration
+remain muted, and task rows use blue.
 Nothing is moved to today or marked
 complete. Completed estimates and real fixed ranges remain in the diagram.
 

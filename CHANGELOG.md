@@ -28,8 +28,8 @@
   or counted as active Planned demand. They remain in a default-collapsed Unfinished
   queue. Today/future tasks without a fitting whole slot enter Unscheduled. Queues preserve
   full titles, estimates, original UIDs and navigation; no task is moved or completed.
-  Unfinished headings and disclosure arrows now use the existing orange reminder color;
-  counts, duration, task rows and the neutral Unscheduled heading keep their own roles.
+  Unfinished uses a yellow disclosure arrow and a readable yellow-family heading;
+  counts and duration remain muted, task rows use blue, and Unscheduled remains neutral.
 - Source-sized frames stay stable for ordinary motion of the same diagram members, hover
   and Eye. Genuine queue membership changes (including before END), day relation changes
   and source edits may relayout. Queue expansion does not resize the SVG. No empty duplicate
@@ -45,7 +45,7 @@
   Dashed gray outlines identify estimated placement and remain visible over pending
   forecasts. Genuine capacity overflow retains the title and duration. The rejected
   Completed / No timestamp node and its upper connection band are removed.
-- Red urgency, ordinary warm-orange events and purple tasks form the current category palette. Separate
+- Red urgency, yellow events and blue tasks form the current category palette. Separate
   darker text tokens keep light-theme labels readable without turning the legend dots brown.
   Readable neutral completion text without
   strike-through, and whole-connection focus replace the disconnected, faded
@@ -56,7 +56,7 @@
   page show and CLOCK updates, including a same-minute next-day resume. The new
   integration gate verifies scheduler intervals and actual SVG path movement;
   fixed events remain anchored and still block pending work.
-- The chart retains its time vocabulary: purple tasks, orange fixed events,
+- The chart retains its time vocabulary: blue tasks, yellow fixed events,
   solid gray completion history and pale hatching for unrecorded past time. Current
   tasks and events remain outlined. The spiral is the only time geometry; the rejected
   outer track and its status badges are removed. Explicit urgency remains authoritative.

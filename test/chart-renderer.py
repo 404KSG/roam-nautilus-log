@@ -460,7 +460,7 @@ def four_corrections_contract(page):
             coverage(page)  # Full-mode metadata may wrap rather than be truncated.
         pressure_style.evaluate('e=>e.remove()'); settle_renderer(page)
         colors = page.locator('.nautilus-log-html-legend').first.locator('.nautilus-log-legend-dot').evaluate_all('els=>els.map(e=>getComputedStyle(e).backgroundColor)')
-        assert colors == ['rgb(234, 15, 15)', 'rgb(217, 154, 72)', 'rgb(139, 92, 246)'], colors
+        assert colors == ['rgb(234, 15, 15)', 'rgb(250, 204, 21)', 'rgb(59, 130, 246)'], colors
         switch = page.get_by_role('switch', name='Desk', exact=True)
         assert switch.inner_text().strip() == '' and not switch.locator('.nautilus-log-desk-switch-label').count()
         switch.hover()
@@ -529,14 +529,14 @@ def full_tip_palette_contract(page):
           const region=document.querySelector('.nautilus-log-detail-region'),tip=region.querySelector('.nautilus-log-detail-content'),title=region.querySelector('.nautilus-log-detail-title');
           const queue=document.querySelector('.nautilus-log-pending-queue'),summary=queue.querySelector('summary'),toolbar=document.querySelector('.nautilus-desk .rm-desk-page__toolbar');
           return {mode:region.dataset.tipContent,width:tip.getBoundingClientRect().width,title:title.textContent,titleWidth:title.clientWidth,titleScroll:title.scrollWidth,titleHeight:title.clientHeight,titleScrollHeight:title.scrollHeight,textOverflow:getComputedStyle(title).textOverflow,gradient:getComputedStyle(title).backgroundImage,
-            warning:getComputedStyle(queue).getPropertyValue('--nautilus-log-warning').trim(),heading:getComputedStyle(queue.querySelector('.nautilus-log-queue-title')).color,marker:getComputedStyle(summary,'::marker').color,count:getComputedStyle(queue.querySelector('.nautilus-log-queue-count')).color,total:getComputedStyle(queue.querySelector('.nautilus-log-queue-total')).color,row:getComputedStyle(queue.querySelector('.nautilus-log-queue-item')).color,
+            unfinishedAccent:getComputedStyle(queue).getPropertyValue('--nautilus-log-event').trim(),heading:getComputedStyle(queue.querySelector('.nautilus-log-queue-title')).color,marker:getComputedStyle(summary,'::marker').color,count:getComputedStyle(queue.querySelector('.nautilus-log-queue-count')).color,total:getComputedStyle(queue.querySelector('.nautilus-log-queue-total')).color,row:getComputedStyle(queue.querySelector('.nautilus-log-queue-item')).color,
             tipBottom:tip.getBoundingClientRect().bottom,queueTop:queue.getBoundingClientRect().top,deskTop:toolbar.getBoundingClientRect().top,
             colors:[...document.querySelectorAll('.nautilus-log-html-legend .nautilus-log-legend-dot')].slice(0,3).map(e=>getComputedStyle(e).backgroundColor)};
         }''')
-        assert data['title'] == text and data['colors'] == ['rgb(234, 15, 15)', 'rgb(217, 154, 72)', 'rgb(139, 92, 246)'], data
+        assert data['title'] == text and data['colors'] == ['rgb(234, 15, 15)', 'rgb(250, 204, 21)', 'rgb(59, 130, 246)'], data
         assert 'linear-gradient(' in data['gradient'], 'full-width content must retain the remote detail-name gradient'
-        assert data['heading'] == data['marker'] == 'rgb(201, 108, 0)', data
-        assert data['count'] == data['total'] and data['count'] != data['heading'] and data['row'] == 'rgb(109, 40, 217)', data
+        assert data['heading'] == 'rgb(128, 102, 0)' and data['marker'] == 'rgb(250, 204, 21)', data
+        assert data['count'] == data['total'] and data['count'] != data['heading'] and data['row'] == 'rgb(29, 78, 216)', data
         assert data['queueTop'] >= data['tipBottom'] and data['deskTop'] >= data['tipBottom'], data
         assert all(abs(before[k]-after['svg'][k]) < .5 for k in ['width','height'])
         if width > 360:
@@ -550,6 +550,12 @@ def full_tip_palette_contract(page):
         assert state(page)['queueKind'] == 'unscheduled'
         assert page.locator('.nautilus-log-queue-title').evaluate('e=>getComputedStyle(e).color') != data['heading']
         reports[f'{context}-{width}'] = data
+    load(page, 'connections', 'main', 720, window='flow'); set_clock(page, '2026-10-30T08:00:00')
+    page.locator('body').evaluate('e=>{e.classList.add("bp3-dark");e.style.background="#1d1e21";e.style.color="#ecedef"}')
+    dark = page.evaluate('''()=>({colors:[...document.querySelectorAll('.nautilus-log-html-legend .nautilus-log-legend-dot')].slice(0,3).map(e=>getComputedStyle(e).backgroundColor),title:getComputedStyle(document.querySelector('.nautilus-log-queue-title')).color,marker:getComputedStyle(document.querySelector('.nautilus-log-pending-queue > summary'),'::marker').color,row:getComputedStyle(document.querySelector('.nautilus-log-queue-item')).color})''')
+    assert dark['colors'] == ['rgb(234, 15, 15)', 'rgb(250, 204, 21)', 'rgb(59, 130, 246)'], dark
+    assert dark['title'] == 'rgb(253, 224, 71)' and dark['marker'] == 'rgb(250, 204, 21)' and dark['row'] == 'rgb(147, 197, 253)', dark
+    reports['darkPalette'] = dark
     load(page, 'long', 'main', 640)
     before = state(page)['svg']; select(page, 'long-unbroken'); wide = coverage(page)
     assert page.locator('.nautilus-log-detail-title').inner_text() == page.evaluate('()=>__chartHarness.longTitles()["long-unbroken"]')

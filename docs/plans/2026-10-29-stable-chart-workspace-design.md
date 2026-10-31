@@ -2,14 +2,15 @@
 
 ## Current decision
 
-Revised October 31, 2026. The latest refinements supersede bright-orange events, blue tasks
-and the universal 280px tip cap, while preserving the earlier queue and icon-only switch fixes:
+Revised October 31, 2026. The latest color decision is red/yellow/blue, with a yellow
+Unfinished cue. It supersedes warm orange and purple without changing the integrated
+wide-content tips, past-gap inspection, gradient names, queues or icon-only Desk switch:
 
 - Roomy tips show their full current content, wrapping rather than using ellipses. Only a
   compressed local width may use a compact preview and More for clipped text.
 - Desk shows only its slider, with a hover/focus label.
-- Categories are red urgency, ordinary warm-orange events and purple tasks. Unfinished
-  headings and disclosure arrows use the existing orange warning token.
+- Categories are red urgency, yellow events and blue tasks. Unfinished uses a yellow
+  disclosure arrow and readable yellow-family heading.
 - Past unfinished work and genuinely unscheduled work belong in a default-collapsed queue,
   not in arbitrary diagram positions. Native Desk masonry is verified and retained.
 
@@ -134,15 +135,16 @@ text. Gradient styling must coexist with complete wide-view titles and narrow ex
 
 ## Category colors and native Desk
 
-Legend/category colors are Urgent `#ea0f0f`, ordinary warm-orange Event `#d99a48`, and purple
-Task `#8b5cf6`. Light-theme text tokens are Event `#8f5d2c` and Task `#6d28d9`; dark text uses
-`#f0c98a` and `#c4b5fd`. Legend dots retain category colors. Event fills use `#f6e6cf`, with
-`#e8c48a` for current work; task fills use the purple family. Completion remains neutral gray,
-explicit urgency still overrides ordinary fill, and no title gets a deletion line.
+Legend/category colors are Urgent `#ea0f0f`, Event yellow `#facc15` and Task blue `#3b82f6`.
+Light-theme text uses Event `#806600` and Task `#1d4ed8` for readability; dark text uses
+`#fde047` and `#93c5fd`. Event fills use `#fef3a6`, with `#facc15` for the current event;
+task fills use the blue family. Completion stays neutral gray, explicit urgency still
+overrides ordinary fill, and no title gets a deletion line. Detail-name gradients remain
+an independent presentation feature, not a replacement for these category colors.
 
-Only the Unfinished summary heading and disclosure arrow use `--nautilus-log-warning`.
-Counts and total duration remain muted, expanded task rows retain task color, and Unscheduled
-keeps its existing neutral heading. No new marker, action or queue behavior is added.
+The Unfinished heading uses the readable event-text token and its disclosure arrow uses
+the yellow event-category token. Counts and total duration stay muted, expanded task rows
+use blue, and Unscheduled keeps its neutral heading. No marker, action or behavior is added.
 
 Masonry remains Roam's measured grid-span layout: four-pixel rows, zero row gap, spans based
 on card height plus column gap, and native auto-fill columns. A shorter column can receive
@@ -161,7 +163,7 @@ Use exact production CLJS/JS in the isolated renderer. Verify ordinary CJK title
 More/展开 line count under font and inherited word-break pressure, hidden Desk text with
 hover/focus labels, computed category colors and readable title contrast. Add wide content
 beyond 280px, automatically wrapped/unbroken text without a title-unlocking More action,
-compact expansion, width transitions, unchanged SVG geometry, and orange Unfinished heading
+compact expansion, width transitions, unchanged SVG geometry, and yellow Unfinished cues
 versus neutral count/total/task rows. Preserve default
 15/explicit 45 completion tests, source-reference ownership and optional local CLOCK updates.
 
