@@ -260,15 +260,15 @@ function chartTipLayout({ title = '', summary = '', meta = summary, containerWid
   const maxWidth = Math.max(96, localWidth - 32);
   // CSS uses tabular numerals; Canvas defaults to proportional digits. The
   // zero advance gives the tabular width and avoids clipping short time ranges.
-  const titleWidth = textMeasure(`500 12px ${fontFamily}`, measureTitle)(String(title).replace(/[0-9]/g, '0'));
+  const titleWidth = textMeasure(`500 11px ${fontFamily}`, measureTitle)(String(title).replace(/[0-9]/g, '0'));
   const metaDigits = (String(summary).match(/[0-9]/g) || []).length;
   // Inter's tnum zero can itself be wider than its proportional zero. Include
   // the measured native-font allowance plus subpixel grid rounding, not a
   // tolerance that lets a supposedly complete short tip paint an ellipsis.
   const metaWidth = textMeasure(`400 11px ${fontFamily}`, measureMeta)(String(summary).replace(/[0-9]/g, '0'))
     + 2 + metaDigits * .4;
-  // Two tight rows share an intrinsic action. Wide content still wraps in full;
-  // only compact previews use More to reveal clipped text.
+  // Equal-size text rows share an action whose label aligns with metadata.
+  // Wide content wraps in full; only compact views require expansion for clipped text.
   const contentGutter = 6 * 2 + 2 + 5 + 4;
   const more = String(meta) !== String(summary) || (compact && (titleWidth > maxWidth - contentGutter || metaWidth > maxWidth - contentGutter));
   const actionWidth = Math.max(28, Math.ceil(textMeasure(`400 11px ${fontFamily}`)(moreLabel)) + 6);
@@ -276,7 +276,7 @@ function chartTipLayout({ title = '', summary = '', meta = summary, containerWid
   const width = Math.max(titleWidth, metaWidth) + contentGutter + actionRoom;
   return { mode: 'stacked', contentMode: compact ? 'compact' : 'full',
     width: Math.max(60, Math.min(maxWidth, Math.ceil(width))), maxWidth,
-    expandedWidth: maxWidth, more, actionWidth, slotHeight: 38 };
+    expandedWidth: maxWidth, more, actionWidth, slotHeight: 42 };
 }
 
 module.exports = { chartScene, chartPresentationFrame, chartRecordAppearance, chartTipLayout };

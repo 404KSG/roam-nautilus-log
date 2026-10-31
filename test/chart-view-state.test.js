@@ -37,7 +37,7 @@ test('short Review tips fit their content and do not offer redundant full text',
   assert.equal(tip.mode, 'stacked');
   assert.equal(tip.more, false);
   assert.ok(tip.width < 240 && tip.width >= input.summary.length * 5.2 + 23, tip);
-  assert.equal(tip.slotHeight, 38);
+  assert.equal(tip.slotHeight, 42);
   const narrow = chartTipLayout({ ...input, containerWidth: 280 });
   assert.ok(narrow.width <= 248);
 });
@@ -58,5 +58,5 @@ test('clipped or additional detail can explicitly expand without a scroll model'
   assert.equal(tip.mode, 'stacked');
   assert.equal(tip.width, 248);
   assert.equal(tip.expandedWidth, 248);
-  assert.equal(tip.slotHeight, 38);
+  assert.equal(tip.slotHeight, 42);
 });

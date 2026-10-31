@@ -4,7 +4,7 @@
 
 Revised October 31, 2026. The latest color decision is red/yellow/blue, with a yellow
 Unfinished cue. It supersedes warm orange and purple without changing the integrated
-wide-content tips, past-gap inspection, gradient names, queues or icon-only Desk switch:
+wide-content tips, past-gap inspection, semantic title colors, queues or icon-only Desk switch:
 
 - Roomy tips show their full current content, wrapping rather than using ellipses. Only a
   compressed local width may use a compact preview and More for clipped text.
@@ -91,18 +91,18 @@ compact center date. Hour sizing remains explicit in SVG output.
 universal 280px cap. Titles and displayed metadata wrap completely, including unbroken strings.
 More reveals extra information rather than unlocking a wide-view title.
 
-Normal content is 36px high in a 38px minimum slot, including 2px below it. Padding is 2px
+Normal content is 38px high in a 42px minimum slot, including 2px above and below. Padding is 4px
 vertical/6px horizontal, column gap 4px, with no extra row gap, a faint border and 4px corners.
-The 12px/16px gradient title and 11px/14px metadata share the text column; intrinsic More spans
-both rows on the right so its 24px hit height does not inflate the second row. Measurement
-uses a 23px content gutter plus action width and a small host-font allowance. Expansion lets
-the title span the full row and moves More beside metadata, retaining the same padding.
+Title and metadata use the same 11px/14px text metrics. More's label aligns with the metadata row;
+its separate right-hand target stays 24px high rather than stretching over a long title. Measurement
+uses the matching 11px title font, 23px content gutter, action width and a small host-font allowance.
+Expansion lets the title span the full row and moves More beside metadata, retaining the padding.
 
 At 360px or narrower, `contentMode=compact` keeps bounded rows and offers More for clipped
 content. Text that fits still remains complete. More uses intrinsic width and nowrap and
 must not overlap either text row.
 
-Ordinary short tips retain 36px content and a 38px minimum slot. Full-mode wrapping grows
+Ordinary short tips retain 38px content and a 42px minimum slot. Full-mode wrapping grows
 only the detail region in normal page flow, so following content may move but SVG size and
 time geometry do not. Idle tips reserve only the compact slot. This content-driven height
 is intentional under the latest completeness request; do not reintroduce a fixed-height
@@ -129,9 +129,11 @@ keys invalidate stale selection. Gap hits sit below item records, so task naviga
 wins. Hidden completed estimates remain occupied in the underlying data. No graph reads
 or writes are added by inspection.
 
-Only real task/event names receive the static light/dark gradient. Dates, semantic category
-dots, metadata and explanatory labels stay unchanged. Forced-color and print modes use solid
-text. Gradient styling must coexist with complete wide-view titles and narrow expansion.
+Detail names use the same semantic text tokens as the chart: blue tasks, yellow events
+and neutral gray completed records. Completed state takes precedence, including completed fixed
+events. The gradient and its transparent text-fill rules are removed. Dates, metadata and gap
+explanations retain their colors. Forced-color and print modes remain readable. Semantic titles
+must coexist with complete wide-view content and narrow expansion.
 
 ## Category colors and native Desk
 
@@ -139,8 +141,8 @@ Legend/category colors are Urgent `#ea0f0f`, Event yellow `#facc15` and Task blu
 Light-theme text uses Event `#806600` and Task `#1d4ed8` for readability; dark text uses
 `#fde047` and `#93c5fd`. Event fills use `#fef3a6`, with `#facc15` for the current event;
 task fills use the blue family. Completion stays neutral gray, explicit urgency still
-overrides ordinary fill, and no title gets a deletion line. Detail-name gradients remain
-an independent presentation feature, not a replacement for these category colors.
+overrides ordinary fill, and no title gets a deletion line. Detail names use the matching
+semantic text colors, with no gradient.
 
 The Unfinished heading uses the readable event-text token and its disclosure arrow uses
 the yellow event-category token. Counts and total duration stay muted, expanded task rows
@@ -164,7 +166,7 @@ More/展开 line count under font and inherited word-break pressure, hidden Desk
 hover/focus labels, computed category colors and readable title contrast. Add wide content
 beyond 280px, automatically wrapped/unbroken text without a title-unlocking More action,
 compact expansion, width transitions, unchanged SVG geometry, and yellow Unfinished cues
-versus neutral count/total/task rows. Preserve default
+versus muted counts/totals, blue task rows and a neutral Unscheduled heading. Preserve default
 15/explicit 45 completion tests, source-reference ownership and optional local CLOCK updates.
 
 Assert every source UID appears exactly once across SVG and queue, with no false pending
@@ -177,5 +179,5 @@ Retain real Desk controller/state tests and multi-card masonry geometry, resize,
 IME, Escape, import/drag, previews, strict Remove and all graph-write guards. Queue testing
 uses synthetic graph data. Native CSS and private screenshots remain outside the repository.
 No dependency, font installation, global rule, network configuration, memory/Wiki record,
-merge or marketplace release is introduced. Isolated tests do not certify an authenticated
+Depot merge or marketplace release is introduced. Isolated tests do not certify an authenticated
 Desktop reload, private-host lifecycle, physical drag or real clipboard/macro/send behavior.
