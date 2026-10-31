@@ -22,6 +22,12 @@
   never translated. Native toolbar paths, Desk switch behavior and safe graph operations
   remain intact. Materials use mounted-instance gradient IDs and native/local font stacks.
 
+- Desk focus editing now uses up to 880 CSS pixels, centered in the viewport with 16px
+  side gutters on smaller windows. The editor grows with the frame without changing native
+  height or typography, closing background sidebars, or resizing the chart/card overview.
+  The focus counter shows the current task and total (for example, `1 / 4`); drafts retain
+  `new`. Scoped responsive CSS preserves the active editor instance during width changes.
+
 - Past blank intervals can be inspected with hover, click or keyboard focus. Contiguous
   gaps keep their complete range and duration across hour boundaries, with a neutral
   explanation that actual activity is unknown. Click or Enter/Space pins details; Escape

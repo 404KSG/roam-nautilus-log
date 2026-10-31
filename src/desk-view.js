@@ -392,7 +392,7 @@ export function createDeskView({
     function updateControls() {
       updateEscapeHint();
       const index = tasks.findIndex((task) => task.uid === selectedUid);
-      counter.textContent = mode === 'draft' ? 'new' : String(Math.max(0, index + 1));
+      counter.textContent = mode === 'draft' ? 'new' : `${Math.max(0, index + 1)} / ${tasks.length}`;
       next.disabled = busy || status !== 'ready' || (mode === 'draft' ? !tasks.length : index < 0 || index === tasks.length - 1);
       previous.disabled = busy || status !== 'ready' || mode === 'draft';
       const previousLabel = index === 0 && mode === 'task' ? 'New note' : 'Previous';
@@ -413,9 +413,8 @@ export function createDeskView({
       drag.cancel();
       externalDrop?.suspend();
       menu.hidden = true;
-      const left = Math.max(0, document.querySelector('.roam-main')?.getBoundingClientRect().left || 0);
-      focus.style.left = `${left}px`;
-      focus.style.width = `min(600px, calc(100vw - ${left + 32}px))`;
+      // Viewport geometry belongs to the scoped focus CSS, not the chart or
+      // background columns. Resizing must not recreate the native editor.
       document.body.append(layer);
       focus.focus({ preventScroll: true });
       root.inert = true;

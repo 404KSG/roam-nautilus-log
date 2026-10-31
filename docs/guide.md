@@ -239,7 +239,13 @@ control at wide and narrow widths, with the same keyboard order.
   not written before composition ends. No TODO marker is forced. Content classified
   as an event or DONE is saved but excluded from active cards.
 - **Native focus editing.** Click a card to edit its original UID, path, and children
-  with `renderBlock`; Shift-click opens it in the sidebar. **Option/Alt + comma** is
+  with `renderBlock`; Shift-click opens it in the sidebar. The focus dialog is centered
+  in the viewport, up to 880 CSS pixels wide, with 16px side gutters on smaller windows.
+  The editor uses that wider space; background sidebars are not closed or allowed to
+  squeeze it back into a narrow column. Native height and typography are unchanged.
+  The header shows the selected task and collection count, such as **1 / 4**; drafts
+  still show **new**. Responsive width changes do not remount the editor or create notes.
+  The chart and card overview keep their existing widths. **Option/Alt + comma** is
   Next and **Option/Alt + period** is Previous. Navigation stops at the last card;
   Previous from the first card opens the new-note slot, as native Desk does.
   Esc within the mounted native editor belongs to Roam, including the tested

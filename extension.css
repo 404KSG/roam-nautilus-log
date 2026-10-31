@@ -2676,6 +2676,22 @@ button.nautilus-log-timing__plan-heading:focus-visible {
 .nautilus-desk [hidden], .nautilus-desk__focus-layer [hidden] { display: none !important; }
 .nautilus-desk__notice { padding: 8px 12px; }
 .nautilus-desk__menu { position: absolute; right: 8px; top: 36px; z-index: 2; }
+/* The body-mounted focus dialog uses the viewport, not the card/main column.
+   Keep native height and typography; do not restyle Roam-owned Desk dialogs. */
+.nautilus-desk__focus-layer > .rm-desk.rm-desk--dialog {
+  left: 16px;
+  right: 16px;
+  width: calc(100vw - 32px);
+  max-width: 880px;
+  margin-inline: auto;
+}
+.nautilus-desk__focus-layer .nautilus-desk__focus-body { min-width: 0; }
+.nautilus-desk__focus-layer .nautilus-desk__editor,
+.nautilus-desk__focus-layer .nautilus-desk__native {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
 .nautilus-log-container .nautilus-log-desk-btn {
   width: 40px !important; min-width: 40px !important; max-width: 40px !important;
   padding: 4px 6px !important;
