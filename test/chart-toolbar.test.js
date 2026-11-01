@@ -6,7 +6,7 @@ const icons = require('./fixtures/blueprint-toolbar-icons.json');
 const component = fs.readFileSync(path.join(__dirname, '../src/component.cljs'), 'utf8');
 const section = (start, end) => component.slice(component.indexOf(start), component.indexOf(end));
 
-test('toolbar uses the exact official Blueprint Sweep and Eye glyph geometry', () => {
+test('toolbar uses the exact official Blueprint Clean and Eye glyph geometry', () => {
   const renderer = section('(defn blueprint-toolbar-icon', '(defn tidy-button');
   assert.match(renderer, /:width "18" :height "18" :viewBox "0 0 20 20"/);
   assert.match(renderer, /:fill "currentColor" :stroke "none"/);
@@ -15,7 +15,7 @@ test('toolbar uses the exact official Blueprint Sweep and Eye glyph geometry', (
     assert.ok(renderer.includes(JSON.stringify(name)) && renderer.includes(JSON.stringify(geometry)), name);
   }
   const tidy = section('(defn tidy-button', '(defn calendar-result-popover');
-  assert.match(tidy, /\[blueprint-toolbar-icon "sweep"\]/);
+  assert.match(tidy, /\[blueprint-toolbar-icon "clean"\]/);
   assert.doesNotMatch(tidy, /translate\(1 1\)|m16 22-1-4/);
 });
 

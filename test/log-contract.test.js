@@ -910,7 +910,7 @@ test('folding retains the scoped outline claim while Desk hides its UI', () => {
 
 test('Tidy is a stable, reversible direct-child action that does not rewrite schedule inputs', () => {
   assert.match(component, /nautilus-log-tidy-btn/);
-  assert.match(component, /\[blueprint-toolbar-icon "sweep"\]/);
+  assert.match(component, /\[blueprint-toolbar-icon "clean"\]/);
   assert.match(component, /Official Blueprint 20px glyphs on the existing 18px toolbar canvas/);
   assert.doesNotMatch(component, /translate\(1 1\) scale\(0\.9166667\)|m16 22-1-4/);
   const helpSource = component.slice(
@@ -960,7 +960,7 @@ test('Log keeps a hover-labeled Desk switch and four quiet icon controls without
   assert.match(css, /\.nautilus-log-toggle-btn\[data-nautilus-tooltip\]:focus-visible::after/);
 });
 
-test('Log orders Desk, Help, Sweep and whole-widget Eye before optional Calendar', () => {
+test('Log orders Desk, Help, Clean and whole-widget Eye before optional Calendar', () => {
   const controls = component.slice(
     component.indexOf('(defn log-controls'),
     component.indexOf('(defn render-context-probe'),

@@ -123,7 +123,7 @@ Past gaps describe the chart allocation, not proof that time was idle or wasted.
 
 ## Chart controls
 
-The four main controls are **Desk → Help → Sweep/Tidy → Eye**. A connected Calendar
+The four main controls are **Desk → Help → Clean/Tidy → Eye**. A connected Calendar
 appears after them, without taking the fourth position.
 
 - **Desk switch:** show or hide unfinished-task cards below the chart. Only the slider is visible; hover or keyboard focus shows its Desk label. The thumb slides right and the track turns blue when open. Click, Space or Enter toggles it; the state also follows fold/expand restoration, control remounts and saved preferences.
@@ -132,7 +132,7 @@ appears after them, without taking the fourth position.
   Events, Planned and `left`, and summarizes scheduling, Desk/Tidy and completion styles.
   It also points to the main settings and the full guide. Help is read-only, not a second
   settings editor. Click again, click outside or press Escape inside Help to close it.
-- **Sweep / Tidy:** the Blueprint Sweep glyph runs the existing Tidy action: move completed
+- **Clean / Tidy:** the Blueprint Clean glyph runs the existing Tidy action: move completed
   tasks and elapsed fixed events to the front while preserving active-work order. It moves
   direct-child wrappers by UID, never changes task text, times, references or descendants,
   and offers one Undo unless the Plan is edited again first.

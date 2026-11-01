@@ -8,7 +8,7 @@ colors and native controls remain; completion and hover are part of the same des
 
 - Roomy tips show their full current content, wrapping rather than using ellipses. Only a
   compressed local width may use a compact preview and More for clipped text.
-- Main controls are Desk, Help, Sweep/Tidy, then whole-widget visibility. Help opens
+- Main controls are Desk, Help, Clean/Tidy, then whole-widget visibility. Help opens
   a transient quick guide. Eye off offers to hide the expanded widget; Eye offers to
   show it again. The completed-only visibility filter remains removed.
 - Desk shows only its slider, with a hover/focus label.
@@ -260,7 +260,7 @@ No second React state or new preference is introduced.
 
 The user's Help request supersedes the earlier proposal to explain capacity through
 segment Tips. Keep Tips unchanged. Place Help immediately after Desk, followed by
-Sweep/Tidy and the whole-widget Eye control. Use the official Blueprint 20px Sweep,
+Clean/Tidy and the whole-widget Eye control. Use the official Blueprint 20px Clean,
 Eye off and Eye SVG paths on the existing 18px control canvas; no dependency or font
 installation is needed. Connected Calendar is an additional control after these four.
 Do not restore the completed-only visibility atom or filtering branches. Completed
@@ -363,7 +363,7 @@ bounded control-envelope rounding and unchanged interval/queue data. Pointer tes
 center can belong to the other turn. Verify SVG containment and browser hit-testing rather
 than forcing clicks through overlapping bounding boxes.
 
-Toolbar checks cover Desk/Help/Sweep/Eye order, exact official glyphs, Eye off while
+Toolbar checks cover Desk/Help/Clean/Eye order, exact official glyphs, Eye off while
 expanded, Eye while hidden, persisted collapse state and optional Calendar placement.
 Help checks cover absence of completed-only filtering, live minute stability,
 English/Chinese settings, native light/dark styling, small viewports, keyboard access,

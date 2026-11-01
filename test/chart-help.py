@@ -101,10 +101,10 @@ def run():
                 expect(button).to_have_attribute('aria-expanded', 'false')
                 toolbar = page.locator('.nautilus-log-controls-top')
                 controls = toolbar.locator('button')
-                assert controls.evaluate_all('nodes=>nodes.map(e=>e.getAttribute("role")==="switch"?"desk":e.querySelector("svg")?.getAttribute("data-icon"))') == ['desk', 'help', 'sweep', 'eye-off']
+                assert controls.evaluate_all('nodes=>nodes.map(e=>e.getAttribute("role")==="switch"?"desk":e.querySelector("svg")?.getAttribute("data-icon"))') == ['desk', 'help', 'clean', 'eye-off']
                 positions = controls.evaluate_all('nodes=>nodes.map(e=>e.getBoundingClientRect().x)')
                 assert positions == sorted(positions) and len(set(positions)) == 4
-                assert_toolbar_icon(page.locator('.nautilus-log-tidy-btn'), 'sweep')
+                assert_toolbar_icon(page.locator('.nautilus-log-tidy-btn'), 'clean')
                 assert_toolbar_icon(page.locator('.nautilus-log-collapse-btn'), 'eye-off')
                 expect(page.locator('.nautilus-log-collapse-btn')).to_have_attribute('aria-expanded', 'true')
                 assert page.locator('[aria-label="Hide completed on chart"],[aria-label="Show completed on chart"],[aria-label="在海螺中隐藏已完成"],[aria-label="在海螺中显示已完成"]').count() == 0

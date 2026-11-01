@@ -26,8 +26,8 @@
 
 ### Added
 
-- Order the main toolbar as Desk, Help, Sweep/Tidy, then whole-widget visibility.
-  Use the official Blueprint Sweep glyph, Eye off while expanded (hide action), and
+- Order the main toolbar as Desk, Help, Clean/Tidy, then whole-widget visibility.
+  Use the official Blueprint Clean sparkle glyph, Eye off while expanded (hide action), and
   Eye while hidden (expand action). Connected Calendar stays available after these four.
   Keep the existing Tidy action, collapse preferences, keyboard access and permanent
   completed-record visibility; do not restore the former completed-only Eye filter.
