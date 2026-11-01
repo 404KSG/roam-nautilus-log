@@ -106,6 +106,11 @@ def run(page):
     f.load(page, 'reference-completion', 'sidebar', 280, window='flow')
     f.set_clock(page, '2026-10-29T23:55:00')
     page.evaluate('()=>__chartHarness.updateReferenceSource("completion-source",{pageUid:"project-page"})')
+    page.wait_for_function('document.querySelector("[data-task-uid=completion-wrapper]")?.dataset.chartKind==="outside-window"')
+    # A project page is valid plan-clock evidence. Exercise genuine unavailable
+    # timing instead of the retired source-page date gate to keep this long-
+    # metadata layout regression meaningful under the corrected policy.
+    page.evaluate('()=>__chartHarness.setClockReadAvailable(false)')
     page.wait_for_function('document.querySelector("[data-task-uid=completion-wrapper]")?.dataset.chartKind==="unverified-completion"')
     f.select(page, 'completion-wrapper')
     clipped=page.evaluate(MEASURE)
@@ -116,6 +121,7 @@ def run(page):
     page.get_by_role('button',name='Full text',exact=True).click();f.settle_renderer(page)
     expanded=page.evaluate(MEASURE)
     assert '23:54' in expanded['meta']['text'] and 'unverified' in expanded['meta']['text'].lower()
+    assert 'Local CLOCK history unavailable' in expanded['meta']['text']
     assert expanded['meta']['scrollWidth']<=expanded['meta']['width']+1
     assert expanded['svg']==clipped['svg'] and expanded['writes']==0
     report['metadata-only-overflow']={'preview':clipped,'expanded':expanded}
