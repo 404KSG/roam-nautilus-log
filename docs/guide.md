@@ -30,6 +30,18 @@ Their Roam block order is the task priority.
 - Legacy `dNN%` text has no scheduling meaning. Nautilus Log keeps it as ordinary
   block text and always schedules the full estimate.
 
+## Optional completion timestamps
+
+**Completion timestamp** is a separate Settings switch, off by default. It works while the Execution Layer is off. A confirmed user completion can append one local `dHH:MM`. The chart can combine that time with a task's planned duration to estimate its interval. The stamp does not measure Actual or start CLOCK/POMO.
+
+Supported actions include native checkboxes and Cmd/Ctrl+Enter in the main outline, right sidebar, and Nautilus Desk, plus Nautilus's own completion command. A reference checkbox follows the source that Roam actually changes; an explicit outer task marker belongs to its wrapper. A shortcut can commit your current editor text before the stamp is added. Uncommitted or composing text is never overwritten. Ambiguous targets, selections above 20 blocks, unavailable reads, and changes of graph, user, or provider skip the stamp.
+
+Reopening removes only the exact suffix that Nautilus can still identify as its own. Completing that task again records a new time. Manual, legacy, calendar, duplicate, malformed, and code-literal time fields stay intact. Ownership uses SHA-256 metadata in extension settings, with at most 64 recent receipts and a 32 KiB size limit. It stores no task text or completion history. A changed body, missing or corrupt receipt, eviction, or stale settings on another client can prevent removal of an older suffix. A persistence failure leaves the confirmed suffix in place and warns you. An unconfirmed host write is not retried automatically; inspect the block before trying again.
+
+Startup, rendering, navigation, imports, sync, and already-completed tasks never trigger backfill. Undo/Redo remains available to Roam, and native completion plus its later suffix may take two Undo steps. Browser acceptance uses an isolated graph and native-shaped DOM; it does not certify live Roam Desktop, OS-level IME, or atomic native Undo.
+
+A detected running Todo Trigger blocks Nautilus stamping because it can append independently. Nautilus does not inspect or change its configuration. Disable Todo Trigger on every client before enabling this switch; turning off only its Append Text option does not clear the detected conflict.
+
 ## Scheduling rules
 
 1. Fixed events claim their written time ranges.

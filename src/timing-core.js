@@ -325,6 +325,15 @@ function taskStatus(string) {
   return match ? (match[1] || match[2]).toUpperCase() : null;
 }
 
+// Shared with completion timestamps so the direct command and the legacy
+// completion path keep exactly the same marker semantics.
+function doneMarkerString(before) {
+  if (typeof before !== 'string') throw new TypeError('A block string is required.');
+  return taskStatus(before) === 'TODO'
+    ? before.replace(/\{\{\[\[TODO\]\]\}\}|\{\{TODO\}\}/i, '{{[[DONE]]}}')
+    : `{{[[DONE]]}} ${before}`.trim();
+}
+
 function resolveBlockReferences(string, readString) {
   if (typeof string !== 'string' || typeof readString !== 'function') return string;
   return string.replace(BLOCK_REF_RE, (reference, uid) => {
@@ -906,6 +915,7 @@ module.exports = {
   chooseFocusedEntry,
   compactMinutes,
   durationMetadata,
+  doneMarkerString,
   energyBarModel,
   executionCopy,
   executionProjection,

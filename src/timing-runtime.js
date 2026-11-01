@@ -55,6 +55,7 @@ export function createTimingRuntime({
   scheduleMutationStart = scheduleNextTask,
   watchPlan = null,
   readPlan = null,
+  completionStampWriter = null,
 }) {
   let destroyed = false;
   let initializationPromise = null;
@@ -674,6 +675,11 @@ export function createTimingRuntime({
       uid: taskUid, localString: readBlockString(taskUid), readString: readBlockString,
     });
     if (liveTask.status !== 'TODO') throw new Error('This daily task instance is no longer unfinished.');
+    const statusOwnerUid = liveTask.statusOwnerUid || taskUid;
+    // Freeze the optional writer's identity before CLOCK awaits. Its editor
+    // and unresolved-write preflight must also precede any CLOCK closure.
+    const stampContext = completionStampWriter?.enabled?.() ? completionStampWriter.freezeContext() : null;
+    if (stampContext) completionStampWriter.assertCanComplete(statusOwnerUid, stampContext);
     const instant = now();
     const entries = readCurrentClockEntries([taskUid]);
     const ownedRunning = entries.filter((entry) => entry.running && entry.taskUid === taskUid);
@@ -683,7 +689,14 @@ export function createTimingRuntime({
       (entry) => entry.taskUid === taskUid,
     );
     assertActive();
-    await completeTask(taskUid, liveTask.statusOwnerUid || taskUid);
+    if (stampContext && !completionStampWriter.contextCurrent(stampContext)) throw new Error('The completion user or graph changed.');
+    if (stampContext && completionStampWriter.enabled()) {
+      // enqueue already holds the same clock lock. Re-entering the graph guard
+      // here would deadlock, so the optional writer receives the locked path.
+      await completionStampWriter.finishDirect({ uid: statusOwnerUid, instant, locked: true, frozenContext: stampContext });
+    } else {
+      await completeTask(taskUid, statusOwnerUid);
+    }
     assertActive();
     if (ownedRunning.length > 0 && !timingCore.chooseFocusedEntry(updatedEntries)) await setPomodoro(null);
     return refresh({

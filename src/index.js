@@ -26,6 +26,8 @@ import {
   showToast,
 } from "./timing-roam";
 import { createTimingRuntime } from "./timing-runtime";
+import { createCompletionStampWriter } from "./completion-stamp-writer";
+import { createCompletionStampAdapter } from "./completion-stamp-adapter";
 import { changedClockOwners, createRendererClockReader } from "./clock-reader";
 import { createTimingTopbar } from "./timing-topbar";
 import { createPlanWatchBridge } from "./plan-watch";
@@ -84,6 +86,12 @@ const executionDefaults = {
   "forgotten-timer-minutes": 120,
 };
 
+const completionStampDefaults = {
+  // Deliberately separate from template defaults: this is extension-local
+  // opt-in metadata, never a renderer argument or graph block field.
+  "completion-stamps-enabled": false,
+};
+
 const calendarDefaults = {
   "google-calendar-enabled": false,
   "google-calendar-connection": "",
@@ -110,6 +118,8 @@ let deskDiagnosticCommands = null;
 let planTidy = null;
 let tidyCommands = null;
 let calendarRuntime = null;
+let completionStampWriter = null;
+let completionStampAdapter = null;
 let calendarPanelState = { action: "", error: "" };
 let unsubscribeClockRender = null;
 const rendererClockCache = createRendererClockReader({
@@ -219,6 +229,7 @@ function runtimeSettings(extensionAPI) {
     "google-calendar-enabled": calendarEnabled,
     "google-calendar-configured": calendarConfigured,
     "google-calendar-tasks-configured": Number(calendarConnection?.version) >= 2,
+    "completion-stamps-enabled": extensionAPI.settings.get("completion-stamps-enabled") === true,
     language: extensionAPI.settings.get("language") || "en",
   };
 }
@@ -262,7 +273,7 @@ async function generateTemplateString(extensionAPI, renderCore = activeRenderStr
 }
 
 async function setDefaultSettings(extensionAPI, recoveredTemplateSettings = null) {
-  await Promise.all(Object.entries({ ...defaults, ...executionDefaults, ...calendarDefaults }).map(async ([key, fallback]) => {
+  await Promise.all(Object.entries({ ...defaults, ...executionDefaults, ...completionStampDefaults, ...calendarDefaults }).map(async ([key, fallback]) => {
     const current = extensionAPI.settings.get(key);
     const hasRecovered = recoveredTemplateSettings
       && Object.prototype.hasOwnProperty.call(recoveredTemplateSettings, key);
@@ -318,6 +329,7 @@ async function startTiming(extensionAPI) {
     extensionAPI,
     readPlan: planWatchBridge?.read,
     watchPlan: planWatchBridge?.subscribe,
+    completionStampWriter,
   });
   const startup = { runtime, promise: null };
   timingStartup = startup;
@@ -468,6 +480,8 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
       durationDesc: "没有写时长的弹性任务默认占用的分钟数。",
       color: "紧急触发词",
       colorDesc: "使任务显示为紧急红色的关键词（不可包含空格，例如：重要）。",
+      completionStamps: "完成时间戳",
+      completionStampsDesc: "可选，默认关闭。在大纲、侧栏和 Desk 完成任务后添加 dHH:MM，不启动 CLOCK/POMO，也不计入 Actual。请先停用 Todo Trigger；手写、旧插件及归属不明的时间戳会保留。",
       tracking: "执行层 · 进阶",
       trackingDesc: "可选功能。将计划转化为行动：支持任务聚焦、CLOCK 计时、多任务切换、一键完成和每日复盘。启用后会在下方显示执行设置；默认关闭。",
       energyBar: "用精力槽显示剩余容量",
@@ -513,6 +527,8 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
       durationDesc: "Default minutes for an untimed flexible task.",
       color: "Urgent Trigger Word",
       colorDesc: "Keyword that colors a task urgent red (no spaces, for example urgent).",
+      completionStamps: "Completion timestamp",
+      completionStampsDesc: "Off by default. Adds dHH:MM after completion in the outline, sidebar, and Desk. It does not start CLOCK/POMO or measure Actual. Disable Todo Trigger first. Manual, legacy, and unverified timestamps stay intact.",
       tracking: "Execution Layer · Advanced",
       trackingDesc: "Optional. Turn your plan into action with focus, CLOCK timing, task switching, one-click completion, and daily Review. Enable to reveal execution settings; disabled by default.",
       energyBar: "Show capacity as an energy bar",
@@ -803,6 +819,32 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
         },
       },
       {
+        id: "completion-stamps-enabled",
+        name: labels.completionStamps,
+        description: labels.completionStampsDesc,
+        action: {
+          type: "switch",
+          defaultValue: extensionAPI.settings.get("completion-stamps-enabled") === true,
+          onChange: async (value) => {
+            const enabled = typeof value === "boolean" ? value : Boolean(value?.target?.checked);
+            // Cancel before awaiting persistence: rapid off/on changes must not
+            // revive an older gesture or direct completion after async work.
+            const writer = completionStampWriter, adapter = completionStampAdapter;
+            const settle = writer?.beginSettingsChange?.();
+            adapter?.sync?.();
+            try { await extensionAPI.settings.set("completion-stamps-enabled", enabled); }
+            finally {
+              settle?.();
+              if (writer === completionStampWriter && adapter === completionStampAdapter) {
+                publishRuntimeSettings(extensionAPI);
+                adapter?.sync?.();
+                if (writer?.enabled?.()) writer.refuseConflict();
+              }
+            }
+          },
+        },
+      },
+      {
         id: "actual-time-tracking",
         name: labels.tracking,
         description: labels.trackingDesc,
@@ -833,6 +875,10 @@ async function onload({ extensionAPI }) {
   activeCodeBlockUID = codeBlockUID;
   activeRenderStringCore = renderStringCore;
   calendarPanelState = { action: "", error: "" };
+  completionStampAdapter?.destroy();
+  completionStampAdapter = null;
+  completionStampWriter?.destroy();
+  completionStampWriter = null;
   chartHelp?.destroy();
   chartHelp = createChartHelp({
     revision: typeof __NAUTILUS_SOURCE_REVISION__ === 'string' ? __NAUTILUS_SOURCE_REVISION__ : 'unknown',
@@ -905,6 +951,12 @@ async function onload({ extensionAPI }) {
   }
   await setDefaultSettings(extensionAPI, recoveredTemplateState?.settings);
   if (!currentLoad()) return;
+  completionStampWriter = createCompletionStampWriter({
+    extensionAPI,
+    notify: (message) => showToast(message, 'warning'),
+  });
+  completionStampAdapter = createCompletionStampAdapter({ writer: completionStampWriter });
+  if (completionStampWriter.enabled()) completionStampWriter.refuseConflict();
   await migratePreviewDefaults(extensionAPI, recoveredTemplateState?.settings);
   if (!currentLoad()) return;
   const language = await initializeLanguage(extensionAPI);
@@ -1010,6 +1062,10 @@ function onunload() {
   tidyCommands = null;
   calendarRuntime?.destroy();
   calendarRuntime = null;
+  completionStampAdapter?.destroy();
+  completionStampAdapter = null;
+  completionStampWriter?.destroy();
+  completionStampWriter = null;
   calendarPanelState = { action: "", error: "" };
   rendererClockCache.clear();
   if (typeof window !== "undefined") {
@@ -1037,6 +1093,8 @@ export {
   createDeskView,
   createDeskActions,
   createTimingRuntime,
+  createCompletionStampWriter,
+  createCompletionStampAdapter,
   createRendererClockReader,
   changedClockOwners,
   createRendererPlanSession,
@@ -1060,6 +1118,7 @@ export {
   defaults,
   executionDefaults,
   calendarDefaults,
+  completionStampDefaults,
   normalizeGoogleCalendarEvents,
   normalizeGoogleTasks,
   decideCalendarManagedChange,

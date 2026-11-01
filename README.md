@@ -31,6 +31,8 @@ time that remains, and overload never disappears from view.
   change Roam's own Desk collection. See the [validation limits](./docs/guide.md#safe-outside-block-references).
 - **A useful daily review.** Compare Planned and Actual time without leaving your
   ordinary Roam blocks.
+- **Optional completion timestamps.** Default off; append a local `dHH:MM` after
+  verified native completion without treating it as Actual or starting CLOCK/POMO.
 
 Scheduling is deterministic: events claim their ranges first, then whole tasks
 fill suitable gaps from the current moment. Tasks that cannot fit appear in

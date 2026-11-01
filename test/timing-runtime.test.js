@@ -1656,3 +1656,74 @@ test('queued source reconciliation cannot overwrite a newer foreign CLOCK with c
   await foreign;
   assert.equal((await reconciled).activeWork.focused?.taskUid, 'task-b');
 });
+
+async function stampedRuntime(t, { bare = false, enabled = true } = {}) {
+  const bundle = fs.readFileSync(path.join(__dirname, '..', 'extension.js'));
+  const extension = await import(`data:text/javascript;base64,${bundle.toString('base64')}#stamp-runtime-${Math.random()}`);
+  const { roam, blocks } = graphMock({ taskAString: bare ? '((source-a))' : '{{[[TODO]]}} ((source-a)) 25m', taskBString: '{{[[DONE]]}} Beta 45m' });
+  blocks.set('source-a', { uid: 'source-a', parentUid: 'outside-plan', order: 0, string: '{{[[TODO]]}} Reusable source 25m' });
+  roam.graph.type = 'hosted'; roam.user = { uid: () => 'fixture-user' };
+  let current = new Date(2026, 7, 22, 10, 0), advanceOnClose = false;
+  const updates = [], acquisitions = [], held = new Set(), locks = exclusiveLocks();
+  const originalUpdate = roam.updateBlock;
+  roam.updateBlock = async payload => {
+    updates.push({ ...payload.block }); await originalUpdate(payload);
+    if (advanceOnClose && /^CLOCK:/.test(payload.block.string) && payload.block.string.includes('--')) current = new Date(2026, 7, 22, 10, 32);
+  };
+  global.window = { roamAlphaAPI: roam, setTimeout, clearTimeout, setInterval: () => 99, clearInterval() {},
+    navigator: { locks: { request(name, options, operation) {
+      assert.ok(!held.has(name), 'completion writer must not reacquire a CLOCK lock held by finishTask');
+      acquisitions.push(name);
+      return locks.request(name, options, async () => { held.add(name); try { return await operation(); } finally { held.delete(name); } });
+    } } } };
+  const values = new Map([['completion-stamps-enabled', enabled], ['timing-line-sidebar', false], ['todo-duration', 15]]);
+  const extensionAPI = { settings: { get: key => values.get(key), set: async (key, value) => values.set(key, value) } };
+  const writer = extension.createCompletionStampWriter({ extensionAPI });
+  const runtime = extension.createTimingRuntime({ extensionAPI, completionStampWriter: writer, now: () => new Date(current) });
+  t.after(() => { runtime.destroy(); writer.destroy(); delete global.window; });
+  await runtime.initialize(); await runtime.startTask('task-a');
+  current = new Date(2026, 7, 22, 10, 31); acquisitions.length = updates.length = 0;
+  return { extension, runtime, writer, blocks, updates, acquisitions, values,
+    advanceWhileClosing() { advanceOnClose = true; } };
+}
+
+for (const bare of [false, true]) test(`enabled completion stamps ${bare ? 'source owner' : 'local wrapper'} with the CLOCK instant and one lock`, { timeout: 3000 }, async t => {
+  const f = await stampedRuntime(t, { bare });
+  const beforeWrapper = f.blocks.get('task-a').string, beforeSource = f.blocks.get('source-a').string;
+  f.advanceWhileClosing(); await f.runtime.completeTask('task-a');
+  const owner = bare ? 'source-a' : 'task-a';
+  assert.ok(f.blocks.get(owner).string.endsWith(' d10:31'), 'later wall time must not change the accepted completion instant');
+  assert.equal(f.updates.filter(row => row.uid === owner).length, 1);
+  assert.equal(f.acquisitions.length, 1);
+  assert.match(f.acquisitions[0], /^nautilus-log:clock:/);
+  const entry = f.runtime.getSnapshot().entries.find(row => row.taskUid === 'task-a');
+  assert.equal(entry.running, false); assert.equal(entry.end.getHours(), 10); assert.equal(entry.end.getMinutes(), 31);
+  assert.equal(entry.minutes, 31);
+  assert.equal(f.blocks.get(bare ? 'task-a' : 'source-a').string, bare ? beforeWrapper : beforeSource);
+  assert.equal([...f.blocks.values()].some(row => row.parentUid === 'source-a' && row.string === 'LOGBOOK::'), false);
+  assert.equal(f.values.get('completion-stamp-receipts').items[0].uid, owner);
+});
+
+test('enabled completion refuses uncommitted or composing owner before closing CLOCK', { timeout: 3000 }, async t => {
+  const f = await stampedRuntime(t);
+  const running = [...f.blocks.values()].find(row => /^CLOCK:/.test(row.string));
+  const clockBefore = running.string;
+  window.document = { querySelectorAll: () => [{ id: 'block-input-main-window-task-a', value: '{{[[TODO]]}} Unsaved body', matches: () => true }] };
+  await assert.rejects(f.runtime.completeTask('task-a'), /editing|composing/);
+  assert.equal(f.blocks.get(running.uid).string, clockBefore); assert.equal(f.updates.length, 0);
+  window.document = undefined; f.writer.setComposing('task-a', true);
+  await assert.rejects(f.runtime.completeTask('task-a'), /editing|composing/);
+  assert.equal(f.blocks.get(running.uid).string, clockBefore); assert.equal(f.updates.length, 0);
+});
+
+test('default-off completion remains legacy-only and the new setting is outside advanced tracking', { timeout: 3000 }, async t => {
+  const f = await stampedRuntime(t, { enabled: false });
+  await f.runtime.completeTask('task-a');
+  assert.equal(f.blocks.get('task-a').string, '{{[[DONE]]}} ((source-a)) 25m');
+  assert.equal(f.values.has('completion-stamp-receipts'), false);
+  assert.equal(f.extension.completionStampDefaults['completion-stamps-enabled'], false);
+  const panel = f.extension.panelConfig({ settings: { get: key => f.values.get(key), set: async () => {} } }, 'en');
+  const option = panel.settings.find(row => row.id === 'completion-stamps-enabled');
+  assert.equal(option.action.defaultValue, false);
+  assert.ok(panel.settings.indexOf(option) < panel.settings.findIndex(row => row.id === 'actual-time-tracking'));
+});

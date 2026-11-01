@@ -843,9 +843,7 @@ export async function completeTask(taskUid, statusOwnerUid = taskUid) {
   const before = readBlockString(targetUid);
   const status = timingCore.taskStatus(before);
   if (status === 'DONE') throw new Error('This daily task instance is already complete.');
-  const after = status === 'TODO'
-    ? before.replace(/\{\{\[\[TODO\]\]\}\}|\{\{TODO\}\}/i, '{{[[DONE]]}}')
-    : `{{[[DONE]]}} ${before}`.trim();
+  const after = timingCore.doneMarkerString(before);
   await updateGraphBlock(targetUid, after);
   if (timingCore.taskStatus(readBlockString(targetUid)) !== 'DONE') {
     throw new Error('Task completion could not be confirmed.');
