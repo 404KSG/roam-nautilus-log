@@ -1587,7 +1587,12 @@ def reference_completion_contract(page):
     page.evaluate('()=>__chartHarness.updateReferenceSource("completion-chain",{string:"((completion-source)) 10m"})')
     page.evaluate('()=>__chartHarness.updateChild("completion-wrapper","((completion-chain)) 30m")')
     expect(record).to_have_attribute('data-time-claim', 'completion-estimate')
-    assert [event()['start'], event()['end'], event()['duration']] == [637, 667, 30]
+    # The intermediate inherited 10m and final local 30m use the same claim.
+    # Wait for the current model, not an attribute that can already match.
+    page.wait_for_function('''()=>{const e=__chartHarness.scene().records.find(r=>r.uid==='completion-wrapper')?.event;
+      return e?.start===637&&e.end===667&&e.duration===30}''')
+    value = event()
+    assert [value['start'], value['end'], value['duration']] == [637, 667, 30], value
     page.evaluate('()=>__chartHarness.updateReferenceSource("completion-chain",{string:"((completion-source))"})')
     assert state(page)['writes'] == 0
     report['contextualAndNestedTimeHoldsWithoutStateChanges'] = True
