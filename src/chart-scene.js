@@ -91,9 +91,10 @@ function wrapTitle(text, width, measure) {
   return { lines, truncated };
 }
 
-/** Only source data and local geometry size the frame, never the moving clock. */
-function chartPresentationFrame({ containerWidth, items = [], timeRadius = 150,
-  startMinutes = 300, endMinutes = 1260, font = '500 13px Inter, system-ui, sans-serif', measure, currentLabels = [] } = {}) {
+/** Size the frame from the currently displayed columns, not a worst-case future stack. */
+function chartPresentationFrame({ containerWidth, items = [], events = [], timeRadius = 150,
+  startMinutes = 300, endMinutes = 1260, font = '500 13px Inter, system-ui, sans-serif', measure, currentLabels = [],
+  nowMinutes, interactive = false } = {}) {
   const rawWidth = finite(containerWidth, 720), width = rawWidth > 0 ? rawWidth : 720;
   const compact = width <= 520, source = sourceItems(items);
   const viewWidth = compact ? Math.max(160, Math.round(width)) : 720;
@@ -125,43 +126,46 @@ function chartPresentationFrame({ containerWidth, items = [], timeRadius = 150,
     }
   }
   const scale = plotDiameter / (radius * 2), sides = { left: 0, right: 0 };
+  const within = item => validRange(item) && item.end > startMinutes && item.start < endMinutes;
+  const plotted = new Map((Array.isArray(events) ? events : []).filter(within).map(event => [event.uid, event]));
+  const placement = item => unverifiedCompletion(item) ? null
+    : plotted.get(item.uid) || ((item.meeting || item.done) && within(item) ? item : null);
   const labels = source.map((item, order) => {
     const title = item.description.replace(/\s+/g, ' ').trim();
     const wrapped = wrapTitle(title, labelWidth, measured);
-    // Reserve a small, stable Current allowance only for records that can
-    // become current. No duration/status sublabel is rendered for other records.
-    const metadataHeight = canBeCurrent(item, startMinutes, endMinutes) ? 14 : 0;
-    const height = wrapped.lines.length * lineHeight + 4 + metadataHeight;
+    // Only a visible Current indicator needs a second row. Potential future
+    // indicators must not leave a blank line under every title.
+    const interval = placement(item);
+    const current = interval && !interval.done && (interval.todo || interval.meeting) && interactive
+      && Number.isFinite(nowMinutes) && interval.start <= nowMinutes && nowMinutes < interval.end;
+    const metadataHeight = current ? 14 : 0;
+    const titleHeight = wrapped.lines.length * lineHeight + 4;
+    const height = titleHeight + metadataHeight;
     // Unknown-time records keep this stable source-side fallback. Known
     // out-of-window ranges instead connect to their actual display boundary.
     const sourceSide = sides.left <= sides.right ? 'left' : 'right';
-    sides[sourceSide] += height;
+    sides[sourceSide] += titleHeight;
     return { uid: item.uid, order, ...wrapped, width: labelWidth, height,
       inkWidth: Math.max(0, ...wrapped.lines.map(measured)), sourceSide, fontSize, lineHeight,
       metadataHeight, metadataFontSize: compact ? 9 : 10 };
   });
-  // One source-sized column budget covers both timed and unplaced states.
-  // Flexible titles may all move to either side, but never need two copies of space.
-  const fixed = { left: 0, right: 0 }, loose = { left: 0, right: 0 };
-  let flexible = 0;
+  const columnHeights = { left: 0, right: 0 };
   source.forEach((item, index) => {
-    const label = labels[index];
-    const boundary = outsideBoundary(item, startMinutes, endMinutes);
-    if ((item.meeting || item.done) && validRange(item) && !unverifiedCompletion(item)
-      && (boundary || (item.end > startMinutes && item.start < endMinutes))) {
-      const minute = boundary ? boundary.minute : (Math.max(startMinutes, item.start) + Math.min(endMinutes, item.end)) / 2;
+    const label = labels[index], interval = placement(item);
+    const boundary = !interval && !unverifiedCompletion(item) ? outsideBoundary(item, startMinutes, endMinutes) : null;
+    if (interval || boundary) {
+      const minute = boundary ? boundary.minute : (Math.max(startMinutes, interval.start) + Math.min(endMinutes, interval.end)) / 2;
       const angle = (180 - (((minute - 540) / 2 % 360 + 360) % 360)) * Math.PI / 180;
-      fixed[Math.cos(angle) < 0 ? 'left' : 'right'] += label.height;
-    } else if (!item.done && !item.meeting) flexible += label.height;
-    else loose[label.sourceSide] += label.height;
+      columnHeights[Math.cos(angle) < 0 ? 'left' : 'right'] += label.height;
+    } else columnHeights[label.sourceSide] += label.height;
   });
   const timedTop = 12;
-  const timedHeight = Math.max(plotDiameter + 16, flexible + Math.max(fixed.left + loose.left, fixed.right + loose.right));
+  const timedHeight = Math.max(plotDiameter + 16, columnHeights.left, columnHeights.right);
   const timedBottom = timedTop + timedHeight;
   const height = timedBottom + 2;
   return { viewBox: { width: viewWidth, height }, center: { x: viewWidth / 2, y: timedTop + timedHeight / 2 },
     timeRadius: radius, plotScale: scale, compact, density: compact ? 'compact' : 'regular',
-    inspector: 'wrapped', compactHeader: width <= 640, columnCapacity: timedHeight,
+    inspector: 'wrapped', compactHeader: width <= 640, columnCapacity: timedHeight, columnHeights,
     timedTop, timedBottom,
     labelWidth, fontSize, lineHeight, hourStep: compact && plotDiameter < 180 ? 3 : 1, labels };
 }
@@ -222,6 +226,16 @@ function labelLayout(frame, records) {
   }
   for (const side of ['left', 'right']) {
     const { connected, loose } = sides[side];
+    const column = [...connected, ...loose];
+    if (column.length >= 4) {
+      // Dense columns read as one compact stack, rather than several distant
+      // clusters stretched toward their angular anchors. Keep angular order
+      // and the real connection endpoints; only the label positions tighten.
+      const height = column.reduce((sum, record) => sum + record.label.height, 0);
+      let cursor = Math.max(frame.timedTop, Math.min(frame.timedBottom - height, frame.center.y - height / 2));
+      for (const record of column) { position(record, side, cursor); cursor += record.label.height; }
+      continue;
+    }
     const low = frame.timedTop;
     const high = frame.timedBottom - loose.reduce((sum, record) => sum + record.label.height, 0);
     let cursor = high;
@@ -239,10 +253,11 @@ function labelLayout(frame, records) {
 
 /** Draw observed intervals and explicit planned allocations with distinct claims. */
 function chartScene({ items = [], events = [], containerWidth, startMinutes = 300, endMinutes = 1260,
-  timeRadius = 150, radiusForMinute, font, measure, currentLabels } = {}) {
+  timeRadius = 150, radiusForMinute, font, measure, currentLabels, nowMinutes, interactive = false } = {}) {
   const source = sourceItems(items);
   const start = finite(startMinutes, 300), end = finite(endMinutes, 1260);
-  const frame = chartPresentationFrame({ items: source, containerWidth, timeRadius, startMinutes: start, endMinutes: end, font, measure, currentLabels });
+  const frame = chartPresentationFrame({ items: source, events, containerWidth, timeRadius, startMinutes: start, endMinutes: end,
+    font, measure, currentLabels, nowMinutes, interactive });
   const within = item => validRange(item) && item.end > start && item.start < end;
   const plotted = new Map((Array.isArray(events) ? events : []).filter(event => event?.uid && within(event)).map(event => [event.uid, event]));
   const records = source.map((item, order) => {

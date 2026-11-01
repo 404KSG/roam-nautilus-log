@@ -187,27 +187,35 @@ on the time axis; Desk remains the user's optional editing surface for unfinishe
 
 ## Frame and labels
 
-The frame uses the current diagram members, their source titles/status/ranges and local
-width. A source-sized column budget handles their possible sides without reserving a second
-empty lower band. Diagram labels remain on the same side as their time anchors; ordinary
-labels wrap fully, while pathological text retains an explicit full-text route.
+The latest density correction replaces the hypothetical single-side budget with the height
+of each actually occupied column. The frame fits the larger column or the existing plot extent,
+plus its small insets. Read scheduled placements only to choose the displayed side; do not
+change allocation, intervals, reference qualification or Actual. Unknown-time labels retain
+their source-assigned sides, balanced by title height rather than a moving Current row.
+
+Columns with four or more records form contiguous, vertically centered stacks. Preserve
+angular order, true connector endpoints, text size, line height and wrapping; do not spread
+rows across unused space. Smaller columns retain their anchor-oriented layout. Timed labels
+stay on their time anchor's side. Ordinary titles wrap fully; pathological text retains its
+existing full-text route. Height follows real content rather than a fixed cap.
 
 Only the active task or event renders its typed indicator: **Current task** or **Current event**.
 Other diagram titles have no duration or completion-status sublabel; those details remain complete in Tips and the
-accessible record claim. Potentially current unfinished records keep a fixed 14-unit line
-allowance so a minute transition cannot resize the frame. Completed and out-of-window
-records do not reserve that line. Title leading stays 16/15 units; the indicator uses 10px/9px
+accessible record claim. Only a currently displayed indicator receives the 14-unit subtitle
+row. Use the same interactive/show-now and interval conditions as the painted indicator;
+noncurrent, completed and out-of-window records reserve no such row. Title leading stays
+16/15 units; the indicator uses 10px/9px
 text. Compact columns budget the measured localized task/event phrases before sizing the plot,
 so the full words fit without abbreviation, clipping or reducing the text size.
 The existing label hit area is retained. Only the title ink gets the subtle hover field;
 a separate anchor joins the label and its continuous surface.
 
-The correct stability boundary is **unchanged diagram membership**. Ordinary minute motion,
-hover and opening Help preserve the SVG frame. A task can cease to fit before END: for example, a 45-minute
-task fits at 19:15 with END 20:00, but not at 19:16. A truthful queue must change then. Queue
-membership, day relation or source edits may therefore reflow the diagram. Queue open/close
-only changes content below it, not SVG geometry. Tests must not freeze stale placement to
-satisfy an obsolete unconditional END/clock assertion.
+The stability boundary is **unchanged occupied column budgets**. Ordinary minute motion that
+preserves those budgets, hover and opening Help keep SVG dimensions stable. Real column
+redistribution, Current-row changes, queue membership, day relation or source edits may reflow
+it. A 45-minute task fits at 19:15 with END 20:00 but not at 19:16; the queue must reflect that
+change. Queue open/close only changes content below the SVG. Tests must not restore hypothetical
+height reservations or stale placement to satisfy the former unchanged-membership assertion.
 
 Wide views devote up to 336 of their 720 view units to the shell, matching B's larger
 surface-to-label proportion. Compact views keep the existing source-aware column budget.
@@ -240,9 +248,10 @@ must not overlap either text row.
 
 Ordinary short tips retain 38px content and a 42px minimum slot. Full-mode wrapping grows
 only the detail region in normal page flow, so following content may move but SVG size and
-time geometry do not. Idle tips reserve only the compact slot. This content-driven height
-is intentional under the latest completeness request; do not reintroduce a fixed-height
-clip or a large empty reservation. Explicit expansion also remains in page flow without
+time geometry do not. Idle tips have zero height, minimum height and padding, with hidden
+content. Showing or dismissing a tip changes only its own flow height and moves following
+content by that amount; it cannot resize or move the SVG. Do not restore the empty 42px band,
+a fixed-height clip or a large empty reservation. Explicit expansion also remains in page flow without
 internal scrolling. Pointer, focus and pinned expansion are separate owners; changed or
 removed records, folding and unload invalidate stale detail. Less keeps the inspected
 record as the focused preview and clears pointer state accumulated behind the expanded panel;
@@ -340,7 +349,15 @@ are authoritative. These dimensions are Nautilus choices, not official Linear to
 
 ## Verification and boundaries
 
-Use exact production CLJS/JS in the isolated renderer. Verify ordinary CJK title width,
+Use exact production CLJS/JS in the isolated renderer. The density fixture has six fixed events
+and fourteen tasks, including long CJK text. Check main/embed/sidebar widths 280–960px,
+light/dark themes and both UI languages: no title overlap, leaders through titles, missing
+UIDs or graph writes. Bound top/bottom voids and dense-label gaps independently of frame
+metadata. Verify zero idle-Tip height, content-driven shrinking without interval changes,
+and one mounted SVG/clock timer across host moves and resizing. These checks supersede the
+former hypothetical-column and invisible-idle-slot expectations.
+
+Verify ordinary CJK title width,
 More/展开 line count under font and inherited word-break pressure, hidden Desk text with
 hover/focus labels, computed category colors and readable title contrast. Check actual tagged
 urgency fills across all dark-theme selectors, not only the legend; preserve the native switch

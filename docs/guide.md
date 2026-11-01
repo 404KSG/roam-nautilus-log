@@ -161,11 +161,15 @@ connected diagram labels. Ordinary titles wrap rather than disappearing when a l
 budget is full. Narrow views retain side labels, major hours and a compact center date.
 Timed labels stay on their slice's side.
 
-The frame uses the current diagram members' source titles, status/ranges and local width.
-Ordinary minute motion of the same members, hover and opening Help do not resize it. A task entering
-or leaving the pending queue, a change of day relation, or an explicit source edit may
-change the layout. A whole task can cease to fit before END; the queue must reflect that
-change rather than keeping a stale slice. Expanding the queue does not resize the SVG.
+The frame fits the titles actually displayed in each column and adapts to the local width.
+Dense columns form compact stacks without spreading labels apart. Only the active task or event
+needs a Current subtitle row; other titles leave no blank row. Text size, wrapping, time anchors
+and the shell's relative geometry remain unchanged.
+
+Height can adjust when column occupancy, visible Current rows, source text or queue membership
+changes. Minute motion with unchanged column budgets, hovering and opening Help keep the SVG
+size stable. A whole task can cease to fit before END; the queue must reflect that change rather
+than keeping a stale slice. Expanding the queue adds only content below the SVG.
 
 The spiral is the only time geometry. There is no completion-status node, separate upper
 connection band or outer track. The lower queue is only for unfinished work, not an
@@ -220,8 +224,8 @@ border, 4px corners and 4px vertical/6px horizontal padding add slight breathing
 title and metadata use 11px text with a 14px line height. More's visible text aligns with the
 metadata row; its independent 24px hit area does not stretch over long titles. It stays neutral
 until hover/focus and never breaks into letters. Wide wrapping and explicit expansion grow
-only the text region in page flow, without resizing SVG or covering Desk. The SVG's empty
-bottom padding remains 2px; its center, paths and label positions are unchanged.
+only the text region in page flow, without resizing SVG or covering Desk. Idle tips collapse
+to zero height and padding instead of leaving an empty 42px band.
 
 Names match the chart's semantic colors: blue tasks, yellow events and neutral gray
 completed records, without text gradients. Actual appears in a recorded completion's first

@@ -1524,6 +1524,8 @@
                             {:items source-events :events (vec (concat events done-todos))
                              :containerWidth container-width :timeRadius time-radius
                              :defaultDuration (:default-duration settings) :relation (:relation timeline-state)
+                             :nowMinutes (:elapsedThroughMinutes timeline-state)
+                             :interactive (and (:interactive timeline-state) (:showNow timeline-state))
                              :font (str "500 13px " font-family)
                              :currentLabels [(or (get-in copy [:tooltips :currentTask]) "Current task")
                                              (or (get-in copy [:tooltips :currentEvent]) "Current event")]

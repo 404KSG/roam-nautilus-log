@@ -4,6 +4,12 @@
 
 ### Fixed
 
+- Fit chart height to the actually occupied label columns instead of reserving a hypothetical
+  single-side stack. Dense columns pack closely without changing text size, wrapping, angular
+  order or real time anchors. Only visible Current indicators need a subtitle row. Idle Tips
+  collapse completely; active Tips keep their normal-flow layout without moving the SVG or
+  covering Desk. Main, embed and sidebar layouts adapt to real content without graph writes.
+
 - Match Help, Clean, Eye and Calendar icon colors to Roam's native toolbar in light
   and dark themes, including hover and keyboard focus. Keep chart text and category
   colors, Desk switch states, icon geometry and actions unchanged.
@@ -77,8 +83,8 @@
 - Simplify diagram labels to titles plus **Current task** or **Current event** only for
   the corresponding active record. Bare “Current” is no longer shown. Remove
   duration, Actual and Estimate sublabels; their complete information stays in hover/focus
-  Tips. Potentially current records retain a small stable line allowance; completed records
-  no longer reserve an unused metadata row. Completion styles remain distinct and readable,
+  Tips. Only the currently active record reserves its indicator row; other records
+  no longer reserve unused metadata space. Completion styles remain distinct and readable,
   without strike-through. Hover/focus emphasizes the surface,
   leader, anchor and colored title together, without moving the SVG or making Tips follow
   the pointer. Actual appears in the first completion summary; More retains extra provenance.
@@ -167,12 +173,12 @@
   independent unfinished-task projection.
 - Source-sized frames replace the rejected finite label budget. Ordinary titles wrap,
   including CJK, and narrow views retain connected diagram labels instead of a scrolling
-  Schedule. Frame height follows the diagram membership, its source titles and local width,
-  not pointer movement or ordinary minute motion within the same membership. The spiral,
+  Schedule. Frame height follows actual column occupancy, visible Current rows, source titles
+  and local width, not pointer movement or minute motion with unchanged column budgets. The spiral,
   whole-task scheduler, Actual and completed-estimate allocation remain intact.
 - Details stay centered within the local workspace. Wide content wraps in page flow;
   explicit expansion can pin additional information or narrow-view full text. The minimum
-  42px slot is invisible when idle. The rejected below-chart completion list, its reserved
+  42px active slot collapses to zero height and padding when idle. The rejected below-chart completion list, its reserved
   gap, and wheel-based text reading are removed.
 - Narrow charts keep side labels, readable major hour ticks and a compact center date.
   Hour sizes are applied directly to SVG text instead of relying on a CSS variable that

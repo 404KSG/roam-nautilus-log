@@ -1148,7 +1148,7 @@
 
 .nautilus-log-chart-stage {
   min-width: 0;
-  /* The inline ratio comes from the full source-sized frame, never the clock. */
+  /* The inline ratio follows the currently occupied label columns. */
 }
 
 .nautilus-log-svg {
@@ -1172,7 +1172,12 @@
   padding: 2px 0;
   color: var(--nautilus-log-chart-ink);
 }
-.nautilus-log-detail-region[data-nautilus-detail="idle"] { visibility: hidden; }
+.nautilus-log-workspace .nautilus-log-detail-region[data-nautilus-detail="idle"] {
+  visibility: hidden;
+  height: 0;
+  min-height: 0;
+  padding: 0;
+}
 .nautilus-log-detail-region.is-expanded { height: auto; min-height: 42px; align-items: flex-start; }
 /* Compact note chrome does not truncate roomy content or cover following UI. */
 .nautilus-log-detail-region[data-tip-content="full"][data-nautilus-detail="active"] { height: auto; min-height: 42px; }

@@ -4,10 +4,12 @@ const { chartScene, chartRecordMetadata } = require('../src/log-core');
 
 const task = { uid: 'work', description: 'Write', todo: true, duration: 45 };
 
-test('potentially current labels keep a stable indicator allowance across minute positions', () => {
-  const input = { items: [task], startMinutes: 360, endMinutes: 1200, containerWidth: 720 };
-  const early = chartScene({ ...input, events: [{ ...task, start: 810, end: 855 }] });
-  const late = chartScene({ ...input, events: [{ ...task, start: 811, end: 856 }] });
+test('the visible Current label has room without reserving inactive subtitle rows', () => {
+  const input = { items: [task], startMinutes: 360, endMinutes: 1200, containerWidth: 720, interactive: true };
+  const early = chartScene({ ...input, nowMinutes: 810, events: [{ ...task, start: 810, end: 855 }] });
+  const late = chartScene({ ...input, nowMinutes: 811, events: [{ ...task, start: 811, end: 856 }] });
+  const inactive = chartScene({ ...input, nowMinutes: 809, events: [{ ...task, start: 810, end: 855 }] });
+  assert.equal(inactive.records[0].label.metadataHeight, 0);
   assert.deepEqual(early.frame, late.frame);
   const label = early.records[0].label;
   assert.ok(label.metadataHeight >= 12);

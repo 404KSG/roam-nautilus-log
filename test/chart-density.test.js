@@ -19,17 +19,22 @@ test('a small plan does not reserve a second empty band for potentially unplaced
 });
 
 for (const width of [280, 320, 520, 640, 960]) {
-  test(`shared columns preserve every label and a clock-stable frame at ${width}px`, () => {
+  test(`shared columns preserve every label in a content-sized frame at ${width}px`, () => {
     const source = [...items, ...Array.from({ length: 12 }, (_, i) => ({ uid: `extra-${i}`, description: `核对交付资料 ${i}`, todo: true, duration: 30 }))];
     const states = [[], source.filter(r => r.todo && !r.done).map((r, i) => ({ ...r, start: 780 + i * 5, end: 810 + i * 5 })),
       source.filter(r => r.todo && !r.done).map((r, i) => ({ ...r, start: 420 + i * 5, end: 450 + i * 5 }))];
     const scenes = states.map(events => build({ items: source, events, containerWidth: width }));
-    assert.deepEqual(scenes[1].frame, scenes[2].frame, 'same members, different clock positions');
+    assert.equal(scenes[1].frame.plotScale, scenes[2].frame.plotScale, 'time does not resize the spiral');
+    assert.equal(scenes[1].frame.labelWidth, scenes[2].frame.labelWidth);
     for (const scene of scenes) {
       const represented = [...scene.records.map(r => r.uid), ...(scene.pendingQueue?.items || []).map(r => r.uid)];
       assert.equal(represented.length, source.length);
       assert.deepEqual(new Set(represented), new Set(source.map(r => r.uid)));
       const f = scene.frame;
+      const occupied = {left: 0, right: 0};
+      for (const r of scene.records) occupied[r.label.side] += r.label.height;
+      assert.deepEqual(f.columnHeights, occupied);
+      assert.ok(f.viewBox.height <= 14 + Math.max(f.timeRadius*f.plotScale*2+16, occupied.left, occupied.right) + .01);
       for (const r of scene.records) {
         const b = r.label;
         assert.ok(b.y >= f.timedTop && b.y + b.height <= f.timedBottom, r.uid);
