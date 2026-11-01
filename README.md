@@ -56,9 +56,10 @@ fill suitable gaps from the current moment. Tasks that cannot fit appear in
 ```
 
 Durations support `30m`, `30min`, `1h`, and `1h30m`. Untimed tasks use the
-configured default. Click **?**, to the left of Desk, for the current chart settings,
-a plain explanation of `left`, and a quick feature guide. Completed chart records
-remain visible; the former Eye filter has been removed.
+configured default. The main controls are **Desk → Help → Sweep (Tidy) → Eye off
+(hide)**. A hidden widget shows **Eye** to expand again. Click **?**, just after Desk,
+for the current chart settings, `left` and a quick feature guide. Completed records
+remain visible whenever the chart is expanded; there is no completed-only filter.
 
 ## Optional Google Calendar sync
 

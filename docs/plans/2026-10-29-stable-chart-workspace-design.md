@@ -2,14 +2,15 @@
 
 ## Current decision
 
-Revised October 31, 2026. The approved B continuous-shell design replaces the stepped,
+Revised November 1, 2026. The approved B continuous-shell design replaces the stepped,
 hour-sliced presentation. The thin-ribbon alternative was not selected. Task/event title
 colors and native controls remain; completion and hover are part of the same design:
 
 - Roomy tips show their full current content, wrapping rather than using ellipses. Only a
   compressed local width may use a compact preview and More for clipped text.
-- Help is a native-style question mark to the left of Desk. It opens a transient
-  quick guide; the Eye control and completed-visibility filter are removed.
+- Main controls are Desk, Help, Sweep/Tidy, then whole-widget visibility. Help opens
+  a transient quick guide. Eye off offers to hide the expanded widget; Eye offers to
+  show it again. The completed-only visibility filter remains removed.
 - Desk shows only its slider, with a hover/focus label.
 - Categories are red urgency, yellow events and blue tasks. Unfinished uses a yellow
   disclosure arrow and readable yellow-family heading.
@@ -219,10 +220,14 @@ No second React state or new preference is introduced.
 ## Help instead of completion filtering
 
 The user's Help request supersedes the earlier proposal to explain capacity through
-segment Tips. Keep Tips unchanged. Place the native Blueprint help glyph before Desk;
-remove the Eye button, its local atom and visibility branches, not merely its icon.
-All existing completed records, labels, estimated outlines and elapsed texture stay visible.
-The existing folded state remains expand-only, and folding dismisses an open Help card.
+segment Tips. Keep Tips unchanged. Place Help immediately after Desk, followed by
+Sweep/Tidy and the whole-widget Eye control. Use the official Blueprint 20px Sweep,
+Eye off and Eye SVG paths on the existing 18px control canvas; no dependency or font
+installation is needed. Connected Calendar is an additional control after these four.
+Do not restore the completed-only visibility atom or filtering branches. Completed
+records, labels, estimates and texture remain visible whenever the chart is expanded.
+The same collapsed-state owner drives the icon and aria-expanded. The folded state
+keeps only Eye (Expand), and folding dismisses an open Help card.
 
 `src/chart-help.js` owns a read-only body-mounted popover. It receives resolved hours,
 default duration and language from the renderer, never task text or graph data. English is
@@ -319,7 +324,9 @@ bounded control-envelope rounding and unchanged interval/queue data. Pointer tes
 center can belong to the other turn. Verify SVG containment and browser hit-testing rather
 than forcing clicks through overlapping bounding boxes.
 
-Help checks cover placement before Desk, absent Eye controls, live minute stability,
+Toolbar checks cover Desk/Help/Sweep/Eye order, exact official glyphs, Eye off while
+expanded, Eye while hidden, persisted collapse state and optional Calendar placement.
+Help checks cover absence of completed-only filtering, live minute stability,
 English/Chinese settings, native light/dark styling, small viewports, keyboard access,
 outside interaction, native-editor Escape, IME, multiple charts, cleanup and zero graph reads/writes.
 

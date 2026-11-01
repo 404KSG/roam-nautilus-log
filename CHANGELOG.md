@@ -19,14 +19,20 @@
 
 ### Added
 
-- Add a native-style Help question mark to the left of the Desk switch. Its read-only
+- Order the main toolbar as Desk, Help, Sweep/Tidy, then whole-widget visibility.
+  Use the official Blueprint Sweep glyph, Eye off while expanded (hide action), and
+  Eye while hidden (expand action). Connected Calendar stays available after these four.
+  Keep the existing Tidy action, collapse preferences, keyboard access and permanent
+  completed-record visibility; do not restore the former completed-only Eye filter.
+
+- Add a native-style Help question mark beside the Desk switch. Its read-only
   popover explains capacity labels (including the full-day denominator for `left`),
   resolved chart hours/default duration, core actions and completion styles, with a
   localized full-guide link. Outside click and owned Escape dismiss it; settings,
   folding, navigation, anchor removal and unload release its transient resources.
   Roam's native image viewer dismisses Help and retains immediate keyboard priority,
   including when focus remains on the underlying chrome.
-- Remove the Eye button and its completed-visibility state. Completed records, labels,
+- Remove the completed-only visibility filter and its state. Completed records, labels,
   estimated outlines and elapsed texture remain visible; Desk still shows unfinished
   tasks. Scheduling, occupied intervals and source data are unchanged.
 

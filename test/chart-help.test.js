@@ -16,7 +16,8 @@ test('Help replaces the completed-visibility control in both languages', () => {
   }
   const source = fs.readFileSync(path.join(__dirname, '../src/component.cljs'), 'utf8');
   assert.doesNotMatch(source, /show-done-state|show-done-atom\?|switch-done-visibility-button/);
-  assert.match(source, /\[help-button settings \(:controls copy\)\][\s\S]*\[desk-button block-uid/);
+  const controls = source.slice(source.indexOf('(defn log-controls'), source.indexOf('(defn render-context-probe'));
+  assert.ok(controls.indexOf('[desk-button') < controls.indexOf('[help-button'));
 });
 
 test('Help is English by default and explains the real left denominator', () => {

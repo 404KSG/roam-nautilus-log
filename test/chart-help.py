@@ -13,6 +13,18 @@ spec = importlib.util.spec_from_file_location('chart_fixture', ROOT / 'test/char
 f = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(f)
 OUT = f.OUT
+ICONS = json.loads((ROOT / 'test/fixtures/blueprint-toolbar-icons.json').read_text())
+
+
+def assert_toolbar_icon(button, name):
+    svg = button.locator('svg')
+    expect(svg).to_have_attribute('data-icon', name)
+    expect(svg).to_have_attribute('viewBox', ICONS['viewBox'])
+    expect(svg.locator('path')).to_have_attribute('d', ICONS['icons'][name])
+    expect(svg.locator('path')).to_have_attribute('fill-rule', ICONS['fillRule'])
+    assert svg.evaluate('e=>getComputedStyle(e).stroke') == 'none'
+    box = svg.bounding_box()
+    assert abs(box['width'] - 18) < .5 and abs(box['height'] - 18) < .5, box
 
 
 def track_listeners(page):
@@ -87,7 +99,14 @@ def run():
                 button = page.get_by_role('button', name=label, exact=True)
                 expect(button).to_have_attribute('aria-haspopup', 'dialog')
                 expect(button).to_have_attribute('aria-expanded', 'false')
-                assert button.bounding_box()['x'] + button.bounding_box()['width'] <= page.get_by_role('switch', name='Desk', exact=True).bounding_box()['x']
+                toolbar = page.locator('.nautilus-log-controls-top')
+                controls = toolbar.locator('button')
+                assert controls.evaluate_all('nodes=>nodes.map(e=>e.getAttribute("role")==="switch"?"desk":e.querySelector("svg")?.getAttribute("data-icon"))') == ['desk', 'help', 'sweep', 'eye-off']
+                positions = controls.evaluate_all('nodes=>nodes.map(e=>e.getBoundingClientRect().x)')
+                assert positions == sorted(positions) and len(set(positions)) == 4
+                assert_toolbar_icon(page.locator('.nautilus-log-tidy-btn'), 'sweep')
+                assert_toolbar_icon(page.locator('.nautilus-log-collapse-btn'), 'eye-off')
+                expect(page.locator('.nautilus-log-collapse-btn')).to_have_attribute('aria-expanded', 'true')
                 assert page.locator('[aria-label="Hide completed on chart"],[aria-label="Show completed on chart"],[aria-label="在海螺中隐藏已完成"],[aria-label="在海螺中显示已完成"]').count() == 0
                 button.hover(); expect(page.locator('.nautilus-log-help-popover')).to_have_count(0)
                 before = f.coverage(page)
@@ -121,7 +140,55 @@ def run():
                 assert page.evaluate('() => __chartHarness.sourceRows()') == source_before
                 assert page.evaluate('() => JSON.stringify({...localStorage})') == storage_before
                 assert f.state(page)['writes'] == 0
+                # Space hides the whole widget, Enter shows it again. Completed
+                # history is never independently filtered by the Eye glyph.
+                before_fold = f.coverage(page)
+                collapse = page.locator('.nautilus-log-collapse-btn')
+                collapse.press('Space'); no_help(page)
+                expect(page.locator('svg.nautilus-log-svg')).to_have_count(0)
+                expect(collapse).to_have_attribute('aria-expanded', 'false')
+                assert_toolbar_icon(collapse, 'eye-open')
+                expect(page.locator('.nautilus-log-help-btn')).to_be_hidden()
+                page.screenshot(path=str(OUT / 'screenshots' / f'eye-collapsed-{context}-{width}-{language}-{dark}.png'))
+                collapse.press('Enter'); f.settle_renderer(page)
+                expect(collapse).to_have_attribute('aria-expanded', 'true')
+                assert_toolbar_icon(collapse, 'eye-off')
+                f.assert_rect_equal(before_fold, f.coverage(page), 'whole-widget Eye round trip')
+                assert page.evaluate('() => __chartHarness.sourceRows()') == source_before
+                assert f.state(page)['writes'] == 0
+                page.locator('.nautilus-log-controls-top').screenshot(path=str(OUT / 'screenshots' / f'toolbar-{context}-{width}-{language}-{dark}.png'))
                 results['matrix'][f'{context}-{width}-{language}-{dark}'] = measurements
+
+            # Connected Calendar remains available after the four requested
+            # controls. Rendering/focusing it must not trigger a sync.
+            f.load(page, 'untimed', 'sidebar', 280); track_listeners(page)
+            page.evaluate("()=>{Object.assign(nautilusLogExtensionData.settings,{'google-calendar-enabled':true,'google-calendar-configured':true});window.dispatchEvent(new Event('nautilus-log:settings-changed'));}")
+            calendar = page.locator('.nautilus-log-calendar-btn')
+            expect(calendar).to_be_visible()
+            controls = page.locator('.nautilus-log-controls-top button')
+            assert controls.count() == 5
+            assert controls.nth(4).evaluate('e=>e.classList.contains("nautilus-log-calendar-btn")')
+            page.get_by_role('switch', name='Desk', exact=True).focus()
+            for selector in ['.nautilus-log-help-btn', '.nautilus-log-tidy-btn', '.nautilus-log-collapse-btn', '.nautilus-log-calendar-btn']:
+                page.keyboard.press('Tab'); expect(page.locator(selector)).to_be_focused()
+            assert f.state(page)['writes'] == 0
+            results['toolbarOrderAndEye'] = {'default': ['Desk', 'Help', 'Sweep', 'Eye off'], 'calendarIsFifth': True, 'officialGlyphs': True, 'keyboardRoundTrip': True}
+
+            # Existing collapsed preferences survive reload with the correct
+            # Show/Eye glyph; expanding restores all completed records too.
+            f.load(page, 'untimed'); track_listeners(page)
+            page.locator('.nautilus-log-collapse-btn').press('Space'); no_help(page)
+            page.reload()
+            page.wait_for_function('() => window.__chartEvaluator?.completed || window.__chartEvaluator?.error')
+            expect(page.get_by_role('button', name='Expand Nautilus Log', exact=True)).to_be_visible()
+            expect(page.locator('svg.nautilus-log-svg')).to_have_count(0)
+            assert_toolbar_icon(page.locator('.nautilus-log-collapse-btn'), 'eye-open')
+            expect(page.locator('.nautilus-log-collapse-btn')).to_have_attribute('aria-expanded', 'false')
+            page.locator('.nautilus-log-collapse-btn').press('Enter'); f.settle_renderer(page)
+            assert_toolbar_icon(page.locator('.nautilus-log-collapse-btn'), 'eye-off')
+            assert all(row['visible'] for row in f.coverage(page)['records'])
+            assert f.state(page)['writes'] == 0
+            results['persistedEyeState'] = True
 
             # Help owns Escape before application bubbling handlers, but never
             # takes the same key from an outside/native editor.

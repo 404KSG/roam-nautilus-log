@@ -862,9 +862,9 @@ test('execution lists stay scrollable without visible scrollbar chrome', () => {
   assert.match(css, /\.nautilus-log-timing__list::-webkit-scrollbar\s*\{[^}]*display:\s*none;[^}]*width:\s*0;[^}]*height:\s*0;/s);
 });
 
-test('Log owns the previously tested controls and collapses without reserving chart space', () => {
-  assert.match(component, /M3 9h18/);
-  assert.match(component, /m9 13 3 3 3-3/);
+test('Log uses state-driven Eye controls and collapses without reserving chart space', () => {
+  assert.match(component, /blueprint-toolbar-icon \(if @collapsed-state "eye-open" "eye-off"\)/);
+  assert.match(component, /:aria-expanded \(not @collapsed-state\)/);
   assert.doesNotMatch(component, /"▸" "▾"/);
   assert.match(
     component,
@@ -910,12 +910,9 @@ test('folding retains the scoped outline claim while Desk hides its UI', () => {
 
 test('Tidy is a stable, reversible direct-child action that does not rewrite schedule inputs', () => {
   assert.match(component, /nautilus-log-tidy-btn/);
-  assert.match(component, /Keep one 18px control canvas while optically reducing this dense glyph/);
-  assert.match(component, /translate\(1 1\) scale\(0\.9166667\)/);
-  assert.match(component, /m16 22-1-4/);
-  assert.match(component, /M19 14a1 1 0 0 0 1-1v-1a2 2/);
-  assert.match(component, /M19 14H5l-1\.973 6\.767/);
-  assert.match(component, /m8 22 1-4/);
+  assert.match(component, /\[blueprint-toolbar-icon "sweep"\]/);
+  assert.match(component, /Official Blueprint 20px glyphs on the existing 18px toolbar canvas/);
+  assert.doesNotMatch(component, /translate\(1 1\) scale\(0\.9166667\)|m16 22-1-4/);
   const helpSource = component.slice(
     component.indexOf('(defn help-button'),
     component.indexOf('(defn plan-writes-allowed?')
@@ -926,8 +923,8 @@ test('Tidy is a stable, reversible direct-child action that does not rewrite sch
   );
   assert.doesNotMatch(helpSource, /:width "16" :height "16"/);
   assert.match(helpSource, /:width "18" :height "18"/);
-  assert.doesNotMatch(collapseSource, /:width "16" :height "16"/);
-  assert.match(collapseSource, /:width "18" :height "18"/);
+  assert.match(collapseSource, /blueprint-toolbar-icon \(if @collapsed-state "eye-open" "eye-off"\)/);
+  assert.match(component, /:width "18" :height "18" :viewBox "0 0 20 20"/);
   assert.match(component, /:settledUids settled-uids/);
   assert.match(component, /log-core-call "partitionChartEvents" filtered/);
   assert.match(component, /\(:completedUids history\)/);
@@ -963,7 +960,7 @@ test('Log keeps a hover-labeled Desk switch and four quiet icon controls without
   assert.match(css, /\.nautilus-log-toggle-btn\[data-nautilus-tooltip\]:focus-visible::after/);
 });
 
-test('Log puts Help before Desk, Tidy, Calendar, and collapse', () => {
+test('Log orders Desk, Help, Sweep and whole-widget Eye before optional Calendar', () => {
   const controls = component.slice(
     component.indexOf('(defn log-controls'),
     component.indexOf('(defn render-context-probe'),
@@ -973,10 +970,10 @@ test('Log puts Help before Desk, Tidy, Calendar, and collapse', () => {
   const tidy = controls.indexOf('[tidy-button');
   const calendar = controls.indexOf('[calendar-button');
   const collapse = controls.indexOf('[collapse-button');
-  assert.ok(help >= 0 && help < desk);
-  assert.ok(desk < tidy);
-  assert.ok(tidy < calendar);
-  assert.ok(calendar < collapse);
+  assert.ok(desk >= 0 && desk < help);
+  assert.ok(help < tidy);
+  assert.ok(tidy < collapse);
+  assert.ok(collapse < calendar);
 });
 
 test('Log uses an action-first two-row capacity ledger with controls plus legend right', () => {

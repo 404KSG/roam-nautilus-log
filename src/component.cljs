@@ -1646,6 +1646,18 @@
       [:path {:d "M8 0C3.58 0 0 3.58 0 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm1 13H7v-2h2v2zm1.93-6.52c-.14.32-.35.64-.62.97L9.25 8.83c-.12.15-.24.29-.28.42-.04.13-.09.3-.09.52V10H7.12V8.88s.05-.51.21-.71L8.4 6.73c.22-.26.35-.49.44-.68.09-.19.12-.38.12-.58 0-.3-.1-.55-.28-.75-.18-.19-.44-.28-.76-.28-.33 0-.59.1-.78.29-.19.19-.33.46-.4.81-.03.11-.1.15-.2.14l-1.7-.25c-.12-.01-.16-.08-.14-.19.12-.82.46-1.47 1.03-1.94.57-.48 1.32-.72 2.25-.72.47 0 .9.07 1.29.22s.72.34 1 .59c.28.25.49.55.65.89.15.35.22.72.22 1.12s-.07.75-.21 1.08z"}]]]
     (finally (when @button-node (close-help! @button-node)))))
 
+;; Official Blueprint 20px glyphs on the existing 18px toolbar canvas.
+;; Source: https://blueprintjs.com/docs/#icons/icons-list
+(defn blueprint-toolbar-icon [icon-name]
+  (when-let [path (case icon-name
+                   "sweep" "M12.25 0C11.56 0 11 .56 11 1.25V11H7.25C6.56 11 6 11.56 6 12.25v1.5q0 .127-.004.25H19v-1.75c0-.69-.56-1.25-1.25-1.25H14V1.25C14 .56 13.44 0 12.75 0zM4.5 3a.5.5 0 0 1 0-1h4a.5.5 0 0 1 0 1zm-2 3a.5.5 0 0 1 0-1h6a.5.5 0 0 1 0 1zm2 3a.5.5 0 0 1 0-1h4a.5.5 0 0 1 0 1zM3 19c.55 0 2.457-1.163 2.905-4h13.032c-.168 1.895-.757 5-2.687 5H15v-2l-3 2h-2v-2l-3 2H3z"
+                   "eye-off" "M20 9.96v-.08a.8.8 0 0 0-.21-.43c-.55-.69-1.19-1.3-1.85-1.87l-3.93 2.62a3.966 3.966 0 0 1-3.96 3.77c-.47 0-.91-.1-1.33-.24l-2.24 1.49c.52.21 1.05.39 1.6.51 1.21.27 2.43.28 3.64.05 1.11-.21 2.17-.64 3.17-1.18 1.56-.84 2.99-2 4.23-3.3.23-.24.46-.49.67-.75a.87.87 0 0 0 .21-.43zm-.46-5.14c.27-.18.46-.47.46-.82 0-.55-.45-1-1-1-.21 0-.39.08-.54.18l-.01-.02L15 5.46c-.95-.53-1.95-.96-3.01-1.2a9.2 9.2 0 0 0-3.65-.04c-1.11.21-2.17.64-3.17 1.18-1.56.84-2.99 2-4.23 3.3-.23.24-.46.48-.67.75-.27.34-.27.76 0 1.1.64.79 1.39 1.5 2.16 2.15.26.21.52.41.79.61L.44 15.16l.01.02A1 1 0 0 0 0 16c0 .55.45 1 1 1 .21 0 .39-.08.54-.18l.01.02 18-12zm-8.67 3.4c-.25-.12-.53-.2-.83-.2-1.1 0-1.99.89-1.99 1.99 0 .03.02.06.02.09l-1.78 1.19c-.14-.4-.22-.83-.22-1.28 0-2.19 1.78-3.97 3.98-3.97 1.01 0 1.91.38 2.61 1z"
+                   "eye-open" "M10.01 7.984A2.01 2.01 0 0 0 8.012 9.99c0 1.103.9 2.006 1.998 2.006a2.01 2.01 0 0 0 1.998-2.006c0-1.103-.9-2.006-1.998-2.006M20 9.96v-.08a.83.83 0 0 0-.21-.442c-.64-.802-1.398-1.514-2.168-2.166-1.658-1.404-3.566-2.587-5.664-3.058a9 9 0 0 0-3.656-.05c-1.11.2-2.178.641-3.177 1.183-1.569.852-2.997 2.016-4.246 3.33-.23.25-.46.49-.67.761-.279.351-.279.773 0 1.124.64.802 1.4 1.514 2.169 2.166 1.658 1.404 3.566 2.577 5.664 3.058a9 9 0 0 0 3.656.05c1.11-.21 2.178-.651 3.177-1.193 1.569-.852 2.997-2.016 4.246-3.33.23-.24.46-.49.67-.751A.86.86 0 0 0 20 10.12zM10.01 14a4.003 4.003 0 0 1-3.996-4.01 4.003 4.003 0 0 1 3.996-4.011 4.003 4.003 0 0 1 3.996 4.011 4.003 4.003 0 0 1-3.996 4.011"
+                   nil)]
+    [:svg {:width "18" :height "18" :viewBox "0 0 20 20"
+           :fill "currentColor" :stroke "none" :aria-hidden "true" :data-icon icon-name}
+     [:path {:d path :fill-rule "evenodd"}]]))
+
 (defn plan-writes-allowed? [plan-status-state]
   (let [status @plan-status-state]
     (boolean (and (:writesAllowed status)
@@ -1691,16 +1703,7 @@
     :aria-label (:tidy copy)
     :aria-busy (if @tidy-state "true" "false")
     :disabled (or @tidy-state (not (plan-writes-allowed? plan-status-state)))}
-   ;; Keep one 18px control canvas while optically reducing this dense glyph to
-   ;; 16.5px. The supplied Lucide paths remain unchanged and centered.
-   [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none"
-          :stroke "currentColor" :stroke-width "2" :stroke-linecap "round"
-          :stroke-linejoin "round" :aria-hidden "true"}
-    [:g {:transform "translate(1 1) scale(0.9166667)"}
-     [:path {:d "m16 22-1-4"}]
-     [:path {:d "M19 14a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2h-3a1 1 0 0 1-1-1V4a2 2 0 0 0-4 0v5a1 1 0 0 1-1 1H6a2 2 0 0 0-2 2v1a1 1 0 0 0 1 1"}]
-     [:path {:d "M19 14H5l-1.973 6.767A1 1 0 0 0 4 22h16a1 1 0 0 0 .973-1.233z"}]
-     [:path {:d "m8 22 1-4"}]]]])
+   [blueprint-toolbar-icon "sweep"]])
 
 (defn calendar-result-popover [result settings copy]
   (let [model (or (log-core-call "calendarSyncResultModel"
@@ -1817,15 +1820,12 @@
    {:on-click #(let [next (not @collapsed-state)]
                  (reset! collapsed-state next)
                  (write-collapsed-state block-uid render-context next))
+    :type "button"
     :class "nautilus-log-toggle-btn nautilus-log-collapse-btn"
     :data-nautilus-tooltip (if @collapsed-state (:expand copy) (:collapse copy))
-    :aria-label (if @collapsed-state (:expand copy) (:collapse copy))}
-   [:svg {:width "18" :height "18" :viewBox "0 0 24 24" :fill "none"
-          :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"
-          :aria-hidden "true"}
-    [:rect {:x "3" :y "4" :width "18" :height "16" :rx "2.5"}]
-    [:path {:d "M3 9h18"}]
-    [:path {:d (if @collapsed-state "m9 13 3 3 3-3" "m9 16 3-3 3 3")}]]])
+    :aria-label (if @collapsed-state (:expand copy) (:collapse copy))
+    :aria-expanded (not @collapsed-state)}
+   [blueprint-toolbar-icon (if @collapsed-state "eye-open" "eye-off")]])
 
 (defn switch-debug-button [] ;; debug button
   [:button {:on-click #(swap! debug-state-atom not)    
@@ -2068,11 +2068,11 @@
 
 (defn log-controls [settings collapsed-state block-uid page-title-val render-context settled-uids tidy-state calendar-state copy show-debug-button? plan-status-state]
   [:div {:class "nautilus-log-controls-top"}
-   [help-button settings (:controls copy)]
    [desk-button block-uid page-title-val (:controls copy)]
+   [help-button settings (:controls copy)]
    [tidy-button block-uid settled-uids tidy-state settings (:controls copy) plan-status-state]
-   [calendar-button block-uid page-title-val calendar-state settings (:controls copy) plan-status-state]
    [collapse-button collapsed-state block-uid render-context (:controls copy)]
+   [calendar-button block-uid page-title-val calendar-state settings (:controls copy) plan-status-state]
    (when show-debug-button? [switch-debug-button])])
 
 (defn render-context-probe [render-context-state compact-list-open-state collapsed-state block-uid]
