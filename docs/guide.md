@@ -136,7 +136,7 @@ Past gaps describe the chart allocation, not proof that time was idle or wasted.
 
 ## Chart controls
 
-The four main controls are **Desk → Help → Clean/Tidy → Eye**. A connected Calendar
+The four main controls are **Desk → Help → Tidy → Eye**. A connected Calendar
 appears after them, without taking the fourth position. The icons use Roam's native
 toolbar colors in light and dark themes, including hover and keyboard focus.
 
@@ -146,7 +146,7 @@ toolbar colors in light and dark themes, including hover and keyboard focus.
   Events, Planned and `left`, and summarizes scheduling, Desk/Tidy and completion styles.
   It also points to the main settings and the full guide. Help is read-only, not a second
   settings editor. Click again, click outside or press Escape inside Help to close it.
-- **Clean / Tidy:** the Blueprint Clean glyph runs the existing Tidy action: move completed
+- **Tidy:** the Blueprint `crystal-ball` glyph runs the existing Tidy action: move completed
   tasks and elapsed fixed events to the front while preserving active-work order. It moves
   direct-child wrappers by UID, never changes task text, times, references or descendants,
   and offers one Undo unless the Plan is edited again first.

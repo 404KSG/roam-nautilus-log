@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- Replace Tidy's glyph with the official Blueprint `crystal-ball` icon. Keep its 18px canvas,
+  native toolbar colors, accessible label, tooltip, button states and Tidy action unchanged.
+
 - Keep Tips previews at two fixed rows across main, embed and sidebar views. Longer content
   grows horizontally to the local limit, then uses ellipses instead of a third row. Retain
   the small 42px slot while idle so hover/focus transitions cannot move the queue or Desk.
@@ -16,7 +19,7 @@
   embed and sidebar diagrams adapt to real content without graph writes; the later fixed-Tips
   correction retains only its small stable preview slot.
 
-- Match Help, Clean, Eye and Calendar icon colors to Roam's native toolbar in light
+- Match Help, Tidy, Eye and Calendar icon colors to Roam's native toolbar in light
   and dark themes, including hover and keyboard focus. Keep chart text and category
   colors, Desk switch states, icon geometry and actions unchanged.
 
@@ -44,8 +47,8 @@
 
 - Add an independent, default-off completion timestamp switch. Verified native TODO completion in the main outline, right sidebar, and body-mounted Desk can append local `dHH:MM` without writing Actual or starting CLOCK/POMO. It uses bounded public reads/watches and latest-only SHA-256 ownership receipts in extension settings; foreign/manual timestamps, uncertain receipts, and Todo Trigger conflicts preserve text. Native Undo is not promised as one step.
 
-- Order the main toolbar as Desk, Help, Clean/Tidy, then whole-widget visibility.
-  Use the official Blueprint Clean sparkle glyph, Eye off while expanded (hide action), and
+- Order the main toolbar as Desk, Help, Tidy, then whole-widget visibility.
+  Use the official Blueprint crystal-ball glyph, Eye off while expanded (hide action), and
   Eye while hidden (expand action). Connected Calendar stays available after these four.
   Keep the existing Tidy action, collapse preferences, keyboard access and permanent
   completed-record visibility; do not restore the former completed-only Eye filter.

@@ -101,10 +101,23 @@ def run():
                 expect(button).to_have_attribute('aria-expanded', 'false')
                 toolbar = page.locator('.nautilus-log-controls-top')
                 controls = toolbar.locator('button')
-                assert controls.evaluate_all('nodes=>nodes.map(e=>e.getAttribute("role")==="switch"?"desk":e.querySelector("svg")?.getAttribute("data-icon"))') == ['desk', 'help', 'clean', 'eye-off']
+                assert controls.evaluate_all('nodes=>nodes.map(e=>e.getAttribute("role")==="switch"?"desk":e.querySelector("svg")?.getAttribute("data-icon"))') == ['desk', 'help', 'crystal-ball', 'eye-off']
                 positions = controls.evaluate_all('nodes=>nodes.map(e=>e.getBoundingClientRect().x)')
                 assert positions == sorted(positions) and len(set(positions)) == 4
-                assert_toolbar_icon(page.locator('.nautilus-log-tidy-btn'), 'clean')
+                tidy = page.locator('.nautilus-log-tidy-btn')
+                assert_toolbar_icon(tidy, 'crystal-ball')
+                tidy_name = 'Tidy completed and elapsed items' if language == 'en' else '整理已完成任务与已过去事件'
+                expect(tidy).to_have_attribute('aria-label', tidy_name)
+                expect(tidy).to_have_attribute('data-nautilus-tooltip', tidy_name)
+                expected_ink = 'rgb(167, 182, 194)' if dark else 'rgb(92, 112, 128)'
+                for phase in ['idle', 'hover', 'focus']:
+                    if phase == 'hover': tidy.hover()
+                    if phase == 'focus': tidy.focus()
+                    f.settle_renderer(page)
+                    page.wait_for_function('document.querySelector(".nautilus-log-tidy-btn").getAnimations().every(a=>a.playState==="finished")')
+                    actual_ink = tidy.locator('path').evaluate('e=>getComputedStyle(e).fill')
+                    assert actual_ink == expected_ink, (context, width, dark, phase, actual_ink)
+                tidy.evaluate('e=>e.blur()'); page.mouse.move(1, 1)
                 assert_toolbar_icon(page.locator('.nautilus-log-collapse-btn'), 'eye-off')
                 expect(page.locator('.nautilus-log-collapse-btn')).to_have_attribute('aria-expanded', 'true')
                 assert page.locator('[aria-label="Hide completed on chart"],[aria-label="Show completed on chart"],[aria-label="在海螺中隐藏已完成"],[aria-label="在海螺中显示已完成"]').count() == 0
@@ -172,7 +185,7 @@ def run():
             for selector in ['.nautilus-log-help-btn', '.nautilus-log-tidy-btn', '.nautilus-log-collapse-btn', '.nautilus-log-calendar-btn']:
                 page.keyboard.press('Tab'); expect(page.locator(selector)).to_be_focused()
             assert f.state(page)['writes'] == 0
-            results['toolbarOrderAndEye'] = {'default': ['Desk', 'Help', 'Sweep', 'Eye off'], 'calendarIsFifth': True, 'officialGlyphs': True, 'keyboardRoundTrip': True}
+            results['toolbarOrderAndEye'] = {'default': ['Desk', 'Help', 'Tidy (crystal-ball)', 'Eye off'], 'calendarIsFifth': True, 'officialGlyphs': True, 'keyboardRoundTrip': True}
 
             # Existing collapsed preferences survive reload with the correct
             # Show/Eye glyph; expanding restores all completed records too.

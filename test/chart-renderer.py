@@ -309,12 +309,12 @@ def contrast(page):
         now:paint('.nautilus-log-now-needle-line','stroke'),
         clock:paint('.nautilus-log-center-now','fill'),
         control:paint('.nautilus-log-collapse-btn svg path','fill'),
-        cleanControl:paint('.nautilus-log-tidy-btn svg path','fill'),
+        tidyControl:paint('.nautilus-log-tidy-btn svg path','fill'),
         helpControl:paint('.nautilus-log-help-btn svg path','fill')};
     }''')
     scores = {k: ratio(v, paints['background']) for k, v in paints.items() if k != 'background'}
     assert min(scores[k] for k in ('task', 'event', 'completed', 'clock')) >= 4.5, scores
-    assert min(scores[k] for k in ('estimateOutline', 'focus', 'now', 'control', 'cleanControl', 'helpControl')) >= 3, scores
+    assert min(scores[k] for k in ('estimateOutline', 'focus', 'now', 'control', 'tidyControl', 'helpControl')) >= 3, scores
     return {'paint': paints, 'ratios': scores}
 
 
