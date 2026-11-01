@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed
+
+- Move the managed renderer to r2 (`nautilus-log-r2`, an r2 source UID, and an isolated bridge). Legacy renderer blocks remain readable and discoverable but are not rewritten; mismatched or newer renderer contracts fail closed rather than being downgraded.
+- Keep future fixed-event reservations, including DONE events, until their written end. Later tasks use a cumulative outline-order floor; Tidy leaves those future reservations in place.
+- Clarify completion-anchored Actual projections, planned-now wording, unassigned capacity, and Desk **New task / 新任务** without changing task insertion or CLOCK ownership.
+
 ### Fixed
 
 - Replace Tidy's glyph with the official Blueprint `crystal-ball` icon. Keep its 18px canvas,

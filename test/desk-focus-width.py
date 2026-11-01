@@ -156,11 +156,11 @@ def run():
             page.evaluate('()=>deskHarness.api.setString("task-0","{{[[DONE]]}} Completed fixture task")')
             expect(page.locator('.nautilus-desk__native')).to_have_attribute('data-task-uid', 'reference-wrapper')
             expect(dialog.locator('.rm-desk__counter')).to_have_text('1 / 3')
-            dialog.locator('.rm-desk__side--end').get_by_role('button', name='New note', exact=True).click()
+            dialog.locator('.rm-desk__side--end').get_by_role('button', name='New task', exact=True).click()
             expect(dialog.locator('.rm-desk__counter')).to_have_text('new')
             page.set_viewport_size({'width': 700, 'height': 800})
             page.wait_for_function('Math.abs(document.querySelector(".nautilus-desk__focus-layer .rm-desk--dialog").getBoundingClientRect().width-668)<.5')
-            expect(dialog.get_by_role('textbox', name='New note', exact=True)).to_be_focused()
+            expect(dialog.get_by_role('textbox', name='New task', exact=True)).to_be_focused()
             assert abs(dialog.bounding_box()['height'] - native.evaluate('e=>e.getBoundingClientRect().height')) < .5
             dialog.get_by_role('button', name='Close', exact=True).click()
             expect(dialog).to_have_count(0)

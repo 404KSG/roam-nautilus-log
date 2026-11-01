@@ -38,7 +38,36 @@ const {
   stripGoogleCalendarSourceSuffix,
   alignIntervalToWindow,
   timelineDayState,
+  eventStartFloors,
+  resolveActiveWorkday,
 } = require('../src/log-core');
+
+test('event floors are cumulative, including future DONE reservations, without overtaking', () => {
+  const outline = eventStartFloors([
+    { uid: 'late', meeting: true, start: 840, end: 900, done: false },
+    { uid: 'a', todo: true, duration: 30, done: false },
+    { uid: 'early-done', meeting: true, start: 720, end: 780, done: true },
+    { uid: 'nap', todo: true, duration: 30, done: false },
+  ]);
+  assert.equal(outline[1].earliestStart, 900);
+  assert.equal(outline[3].earliestStart, 900);
+  const plan = scheduleTasks({ startMinutes: 480, endMinutes: 960, nowMinutes: 480,
+    tasks: outline.filter((item) => item.todo), fixedEvents: outline.filter((item) => item.meeting) });
+  assert.deepEqual(plan.scheduledTasks.map(({ uid, start }) => [uid, start]), [['a', 900], ['nap', 930]]);
+});
+
+test('active overnight workday keeps its owner and full-day evidence bounds', () => {
+  const context = resolveActiveWorkday({
+    now: new Date(2026, 10, 2, 0, 30), runtime: {},
+    yesterday: { date: new Date(2026, 10, 1), pageTitle: 'November 1st, 2026', pageUid: 'nov1', planUid: 'plan1', args: [22, 15, 21, '', 2], plan: { uid: 'plan1' } },
+    today: { date: new Date(2026, 10, 2), pageTitle: 'November 2nd, 2026', pageUid: 'nov2', planUid: 'plan2', plan: { uid: 'plan2' } },
+  });
+  assert.equal(context.state, 'active');
+  assert.equal(context.ownerPageTitle, 'November 1st, 2026');
+  assert.equal(context.logicalNowMinutes, 1470);
+  assert.equal(context.endMinutes, 1560);
+  assert.equal(context.endMinutes - context.logicalNowMinutes, 90);
+});
 
 test('Calendar provenance stays visible in Roam but is removed from chart labels', () => {
   assert.equal(
@@ -1169,7 +1198,7 @@ test('burning bucket uses half-open event boundaries and workday bounds', () => 
   assert.equal(burningCapacityBucket({ ...options, nowMinutes: 1500 }), null);
 });
 
-test('burning bucket ignores completed/non-meeting events and treats overlaps as Events', () => {
+test('burning bucket retains a future DONE reservation and treats overlaps as Events', () => {
   const fixedEvents = [
     { uid: 'done', meeting: true, done: true, start: 500, end: 620 },
     { uid: 'task', meeting: false, start: 520, end: 640 },
@@ -1177,7 +1206,7 @@ test('burning bucket ignores completed/non-meeting events and treats overlaps as
     { uid: 'overlap', meeting: true, start: 640, end: 720 },
   ];
 
-  assert.equal(burningCapacityBucket({ startMinutes: 300, endMinutes: 900, nowMinutes: 599, fixedEvents }), 'available');
+  assert.equal(burningCapacityBucket({ startMinutes: 300, endMinutes: 900, nowMinutes: 599, fixedEvents }), 'events');
   assert.equal(burningCapacityBucket({ startMinutes: 300, endMinutes: 900, nowMinutes: 600, fixedEvents }), 'events');
   assert.equal(burningCapacityBucket({ startMinutes: 300, endMinutes: 900, nowMinutes: 659, fixedEvents }), 'events');
   assert.equal(burningCapacityBucket({ startMinutes: 300, endMinutes: 900, nowMinutes: 660, fixedEvents }), 'events');

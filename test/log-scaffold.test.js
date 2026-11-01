@@ -121,7 +121,7 @@ test('built extension creates Log scaffolding sequentially and unload is graph-s
 
   assert.ok(pages.has('roam/render'));
   assert.equal(blocks.get('roam-render-Nautilus-Log').string, 'Nautilus Log');
-  assert.match(blocks.get('roam-render-Nautilus-Log-cljs').string, /nautilus-log-v1/);
+  assert.match(blocks.get('roam-render-Nautilus-Log-r2-cljs').string, /nautilus-log-r2/);
   assert.equal(window.nautilusLogExtensionData.settings['workday-end'], 21);
   assert.equal(window.nautilusLogExtensionData.settings.language, 'en');
 
@@ -153,7 +153,8 @@ test('built extension creates Log scaffolding sequentially and unload is graph-s
   await extension.onunload();
   assert.equal(blocks.size, blockCount);
   assert.equal(window.nautilusLogExtensionData.running, false);
-  assert.equal(window.nautilusLogCore, undefined);
+  assert.equal(window.nautilusLogR2, undefined);
+  assert.equal(typeof window.nautilusLogCore, 'object', 'legacy history keeps a read-only render facade');
 });
 
 test('a fresh install defaults the settings panel and rendered UI to English', async (t) => {
@@ -458,10 +459,11 @@ test('a new shorthand reuses one customized legacy template without rewriting hi
   assert.equal(activeTemplates[0].string, 'Nautilus Log [[roam/templates]]');
   assert.match(
     blocks.get('legacy-template-render').string,
-    /^\[\[log\]\] \{\{\[\[roam\/render\]\]:\(\(roam-render-Nautilus-Flow-cljs\)\) 28 30 9 "" 2\}\}$/,
+    /^\[\[log\]\] \{\{\[\[roam\/render\]\]:\(\(roam-render-Nautilus-Log-r2-cljs\)\) 28 30 9 "" 2\}\}$/,
   );
-  assert.match(blocks.get('roam-render-Nautilus-Flow-cljs').string, /nautilus-log-v1/);
-  assert.match(blocks.get('roam-render-Nautilus-Log-cljs').string, /nautilus-log-v1/);
+  assert.equal(blocks.get('roam-render-Nautilus-Flow-cljs').string, 'old legacy code');
+  assert.equal(blocks.get('roam-render-Nautilus-Log-cljs').string, 'old code');
+  assert.match(blocks.get('roam-render-Nautilus-Log-r2-cljs').string, /nautilus-log-r2/);
   assert.equal(blocks.get('historical-log').string, historicalString);
   assert.equal(blocks.get('duplicate-template').string, 'Nautilus Log · Previous template');
   assert.equal(blocks.get('enhanced-template').string, 'Nautilus Log · Previous template');

@@ -59,7 +59,7 @@ test('Tidy command registration is optional in command-palette-free shells', asy
   assert.doesNotThrow(() => commands.destroy());
 });
 
-test('Tidy command projection includes completed tasks and elapsed or completed events', async () => {
+test('Tidy command projection keeps future DONE reservations in place', async () => {
   const extension = await loadExtension();
   const settled = extension.settledUidsForTidy({
     reviewCandidates: [
@@ -74,7 +74,7 @@ test('Tidy command projection includes completed tasks and elapsed or completed 
     ],
   }, 720);
 
-  assert.deepEqual(settled, ['done-a', 'done-source', 'past-event', 'done-event']);
+  assert.deepEqual(settled, ['done-a', 'done-source', 'past-event']);
 });
 
 const PLAN_STRING = '[[Nautilus Log]] {{[[roam/render]]:((roam-render-Nautilus-Log-cljs))}}';

@@ -15,14 +15,32 @@ const TEMPLATE_GENERATION_PRIORITY = new Map([
   [`Nautilus Flow ${TEMPLATE_MARKER}`, 20],
   [`Nautilus Enhanced ${TEMPLATE_MARKER}`, 10],
 ]);
-const CURRENT_CODE_BLOCK_UID = "roam-render-Nautilus-Log-cljs";
-const LEGACY_CODE_BLOCK_UIDS = [
+// Renderer identities are a compatibility contract, not a source-version
+// heuristic.  A later embedded source must bump all three values together.
+export const RENDERER_REVISION = 2;
+export const CURRENT_CODE_BLOCK_UID = `roam-render-Nautilus-Log-r${RENDERER_REVISION}-cljs`;
+export const LEGACY_CODE_BLOCK_UIDS = [
+  "roam-render-Nautilus-Log-cljs",
   "roam-render-Nautilus-Flow-cljs",
   "roam-render-Nautilus-cljs",
 ];
 const LEGACY_RENDER_STRING_CORES = LEGACY_CODE_BLOCK_UIDS.map(
   (uid) => `{{[[roam/render]]:((${uid}))`,
 );
+const RENDER_UID_RE = /\{\{\s*\[\[roam\/render\]\]\s*:\s*\(\((roam-render-Nautilus(?:-Log(?:-r\d+)?|-Flow)?-cljs)\)\)/ig;
+
+export function rendererIdentity(value) {
+  const match = /roam-render-Nautilus(?:-Log(?:-r(\d+))?|-Flow)?-cljs/.exec(String(value || ''));
+  if (!match) return { kind: 'unsupported', revision: null, uid: null };
+  const uid = match[0];
+  const revision = match[1] ? Number(match[1]) : 1;
+  return { kind: revision === RENDERER_REVISION ? 'current' : revision > RENDERER_REVISION ? 'newer' : 'legacy', revision, uid };
+}
+
+function rendererInvocation(string) {
+  const matches = [...String(string || '').matchAll(RENDER_UID_RE)];
+  return matches.length === 1 ? { uid: matches[0][1], identity: rendererIdentity(matches[0][1]) } : null;
+}
 
 const SUPPRESSED_RENDER_CONTEXT_SELECTOR = [
   ".rm-zoom-path",
@@ -182,6 +200,8 @@ function pageBlocksContaining(searchString, strict = false) {
 }
 
 function managedRenderCores(renderStringCore) {
+  // rN is recognized for discovery and deduplication even when this bundle
+  // cannot own it.  Never turn that recognition into permission to rewrite it.
   return [...new Set([renderStringCore, ...LEGACY_RENDER_STRING_CORES].filter(Boolean))];
 }
 
@@ -220,10 +240,13 @@ function managedTemplateCandidates(renderStringCore, strict = false) {
         || LEGACY_TEMPLATE_NAMES.has(template.string);
       if (!knownTemplate) return null;
       const renderBlock = childBlocks(template.uid, strict).find((child) => (
-        renderStringCores.some((core) => child.string?.includes(core))
+        rendererInvocation(child.string)?.identity.kind !== 'unsupported'
       ));
       const parsed = renderBlock
-        ? parseTemplateSettings(renderBlock.string, renderStringCores)
+        ? parseTemplateSettings(renderBlock.string, [
+          `{{[[roam/render]]:((${rendererInvocation(renderBlock.string)?.uid}))`,
+          ...renderStringCores,
+        ])
         : null;
       return { template, renderBlock, parsed, index };
     })
@@ -394,7 +417,8 @@ export async function createRenderBlock(
   }
 
   const blockString = `\`\`\`clojure\n ${cljsFile} \`\`\``;
-  if (!blockByUid(codeBlockUID)) {
+  const existingCode = blockByUid(codeBlockUID);
+  if (!existingCode) {
     const codeHeader = children.find((child) => child.string === "code");
     let codeHeaderUID = codeHeader?.uid;
     if (!codeHeaderUID) {
@@ -404,18 +428,15 @@ export async function createRenderBlock(
     await createBlock(codeHeaderUID, 0, blockString, codeBlockUID);
   }
 
-  // Keep every already-existing renderer identity current. This preserves old
-  // Daily Note blocks without a graph-wide string migration or duplicate data.
-  const managedCodeBlockUIDs = [...new Set([
-    codeBlockUID,
-    CURRENT_CODE_BLOCK_UID,
-    ...LEGACY_CODE_BLOCK_UIDS,
-  ])];
-  await Promise.all(
-    managedCodeBlockUIDs
-      .filter((uid) => blockByUid(uid))
-      .map((uid) => updateBlockIfChanged(uid, blockString)),
-  );
+  // A matching r2 body is already current.  A mismatched same revision, an
+  // unknown body, or a newer contract is deliberately visible but never
+  // overwritten: SHA text is display metadata, not an ordering relation.
+  if (existingCode && existingCode.string !== blockString) {
+    console.warn('[Nautilus Log] Renderer source mismatch; keeping the existing renderer block.');
+    return false;
+  }
+  // Legacy code blocks are read-only historical dependencies.  In particular,
+  // do not update them here: an old renderer can coexist with r2 in one graph.
   return true;
 }
 

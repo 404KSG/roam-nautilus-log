@@ -62,7 +62,7 @@ use the same wall-clock snapshot, including its calendar day.
 
 | Metric | Meaning |
 | --- | --- |
-| Planned | Remaining flexible-task demand; `left` percentage = `current free time ÷ full-day Available` |
+| Planned | Remaining flexible-task demand; `open` is unassigned budget ÷ full-day flexible capacity, not clock time left or energy |
 | Remaining | Available time left after Planned demand |
 | Overload | Demand beyond available time |
 | No fitting slot | Time exists in total, but no continuous gap can hold an atomic task |
@@ -97,7 +97,7 @@ Completed records and estimates remain visible and occupy their intervals; they 
 The **continuous shell** draws each timed record as one surface, with rounded transitions
 through the radius profile. Hour marks remain as edge ticks rather than lines that visually
 split a task. Titles have no duration/status sublabel: only the active task or event shows
-**Current task** or **Current event**, respectively, underneath. Hover/focus Tips retain the
+**Planned now** or **Planned event**, respectively, underneath. Hover/focus Tips retain the
 full duration, Actual and Estimate details.
 The center clock uses the shared UI font with tabular numerals, regular weight and secondary
 text color. Its size is capped at 16px and still adapts to narrow views; the date, clock position
@@ -107,6 +107,8 @@ are not pixel-area-equivalent to the earlier stepped shape.
 Hover or keyboard focus emphasizes the surface, its leader and its colored title as one unit.
 It does not move the chart. English is the default UI language; an explicit Chinese preference
 is preserved, and task titles always remain in their source language. Toolbar icons are unchanged.
+
+Actual is summed CLOCK time; its drawn contiguous interval is a completion-anchored projection, not a session timeline. For example, CLOCK 09:00–09:40 with `d15:00` draws 14:20–15:00; sessions 09:00–09:15 plus 10:00–10:15 draw 09:45–10:15. LOGBOOK sessions remain untouched.
 
 Completed tasks without actual timing use their explicit estimate, or Default Todo Duration
 (15 minutes by default). They receive spiral slices and connected labels without requiring
@@ -147,7 +149,7 @@ toolbar colors in light and dark themes, including hover and keyboard focus.
   It also points to the main settings and the full guide. Help is read-only, not a second
   settings editor. Click again, click outside or press Escape inside Help to close it.
 - **Tidy:** the Blueprint `crystal-ball` glyph runs the existing Tidy action: move completed
-  tasks and elapsed fixed events to the front while preserving active-work order. It moves
+  tasks and elapsed fixed events to the front while preserving active-work order. A future fixed event stays in place even when DONE; edit or remove its range to release that reservation. It moves
   direct-child wrappers by UID, never changes task text, times, references or descendants,
   and offers one Undo unless the Plan is edited again first.
 - **Eye off / Eye:** when expanded, Eye off offers to hide the entire rendered Nautilus UI,
@@ -276,7 +278,7 @@ determines the column count; there is no fixed two-column layout or three-column
 not use Roam's full-page `rm-desk-page` marker: current host styles use that marker
 to change ancestor padding and impose a viewport-sized canvas. Only native card
 sizes are retained locally; opening this component must not change page spacing.
-Search and New note share one flex-aligned tool group, with New note at the trailing
+Search and New task share one flex-aligned tool group, with New task at the trailing
 edge. The overview has no duplicate close X; use the chart's Desk switch to hide it.
 Tab moves from Search to New note, then directly to the cards. The focus dialog's
 Close button, backdrop dismissal and existing Escape behavior are unchanged.
@@ -314,7 +316,7 @@ or copy the editor's uncommitted buffer into the graph.
   or the current route, and no page is created. Unverifiable ownership blocks
   the action. Finish editing or IME composition first. There is no destructive
   keyboard shortcut or focus-menu action.
-- **Plus adds content under this plan.** **New note** in the overview and **+** in
+- **Plus adds content under this plan.** **New task** in the overview and **+** in
   the focus header open a native-style draft. The first committed, nonblank input
   creates one direct child at the start of the current Nautilus block, then hands
   editing to Roam. Closing an untouched draft creates no empty block; IME text is
@@ -497,8 +499,7 @@ not call private minified functions or bundle the Roam client source.
 
 The optional Execution Layer defaults to **off**. Its advanced settings remain hidden
 until enabled. While it is off, Nautilus Log still mounts a 30px today-plan launcher
-and one create-or-open command, but it loads no execution panel, 1s ticker, CLOCK
-writer, or LOGBOOK reader.
+and one create-or-open command, but it loads no execution panel, 1s ticker, or CLOCK writer. The chart may still read existing LOGBOOK/CLOCK history.
 
 Click **+ Create today's plan** (or the command) to append a frozen copy of the
 single managed Nautilus renderer root and its complete ordinary descendant tree
@@ -660,6 +661,7 @@ but ordinary planning and completion do not require it.
 | Default Todo Duration | 15 minutes |
 | Urgent Trigger Word | Empty |
 | Google Calendar | Not connected; Primary calendar after connection |
+| Completion timestamp | Off |
 | Execution Layer · Advanced | Off |
 | Show capacity as an energy bar | Off |
 | Keep Timing Line first in right sidebar | On |

@@ -48,7 +48,7 @@ def write_page(source):
     shim = '''(ns roam.datascript)
 (defn q [query & args] (.apply (.-q js/window.__chartHarness) nil (clj->js (into [query] args))))'''
     mount = '''(require '[reagent.dom :as rdom])
-(rdom/render [nautilus-log-v1/main {:block-uid "baseline-plan"}] (.getElementById js/document "chart-root"))'''
+(rdom/render [nautilus-log-r2/main {:block-uid "baseline-plan"}] (.getElementById js/document "chart-root"))'''
     html = f'''<!doctype html><html><head><meta charset="utf-8">
 {''.join(f'<link rel="stylesheet" href="{p.resolve().as_uri()}">' for p in NATIVE_CSS)}
 <link rel="stylesheet" href="{(ROOT / 'extension.css').as_uri()}">
@@ -181,7 +181,8 @@ def coverage(page):
     by_uid = {r['uid']: r for r in s['records']}
     for record in scene['records']:
         if not record['label']['truncated']:
-            assert re.sub(r'\s+', '', by_uid[record['uid']]['label']) == re.sub(r'\s+', '', record['event']['description']), record['uid']
+            painted = re.sub(r'\s*(Est\.|估)\s*$', '', by_uid[record['uid']]['label'])
+            assert re.sub(r'\s+', '', painted) == re.sub(r'\s+', '', record['event']['description']), record['uid']
         if record['kind'] != 'timed':
             assert not record.get('anchor') and not record.get('slot') and not record.get('indexPath'), record
             if record.get('boundaryAnchor'):
@@ -331,7 +332,7 @@ def pattern_contract(page):
     assert page.locator('.nautilus-log-unplanned-overlay pattern').get_attribute('id') == before
     ids = page.evaluate('''()=>{
       const host=document.createElement('div');host.id='pattern-proof';document.body.append(host);
-      scittle.core.eval_string('(rdom/render [:svg [nautilus-log-v1/past-unplanned-overlay-component [] 50 {:center-x 150 :center-y 150} {:workday-start 300 :workday-end 1260} 500 1] [nautilus-log-v1/past-unplanned-overlay-component [] 50 {:center-x 150 :center-y 150} {:workday-start 300 :workday-end 1260} 500 1]] (.getElementById js/document "pattern-proof"))');
+      scittle.core.eval_string('(rdom/render [:svg [nautilus-log-r2/past-unplanned-overlay-component [] 50 {:center-x 150 :center-y 150} {:workday-start 300 :workday-end 1260} 500 1] [nautilus-log-r2/past-unplanned-overlay-component [] 50 {:center-x 150 :center-y 150} {:workday-start 300 :workday-end 1260} 500 1]] (.getElementById js/document "pattern-proof"))');
       const ids=[...document.querySelectorAll('.nautilus-log-unplanned-overlay pattern')].map(p=>p.id);
       ReactDOM.unmountComponentAtNode(host);host.remove();return ids;
     }''')
@@ -1164,7 +1165,7 @@ def past_record_texture_contract(page):
     # pattern/clip resources used to paint elapsed time.
     page.evaluate('''()=>{
       const host=document.createElement('div');host.id='texture-proof';host.style.width='960px';document.body.append(host);
-      scittle.core.eval_string('(rdom/render [nautilus-log-v1/main {:block-uid "baseline-plan"}] (.getElementById js/document "texture-proof"))');
+      scittle.core.eval_string('(rdom/render [nautilus-log-r2/main {:block-uid "baseline-plan"}] (.getElementById js/document "texture-proof"))');
     }''')
     expect(page.locator('.nautilus-log-past-record-pattern')).to_have_count(2)
     settle_renderer(page)

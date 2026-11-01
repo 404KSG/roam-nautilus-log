@@ -48,7 +48,7 @@
 
 时长支持 `30m`、`30min`、`1h` 和 `1h30m`。没有时长的任务使用设置中的默认值。
 主控件顺序为 **Desk → 帮助 → Sweep（整理）→ Eye off（收起）**，收起后用 **Eye** 展开。
-点击 Desk 后面的 **?**，查看当前配置、`left` 的含义和功能速查。
+点击 Desk 后面的 **?**，查看当前配置、“未分配”预算的含义和功能速查。
 图表展开时，完成记录始终显示；眼睛只控制整个组件，不筛选完成项。
 
 ## 可选 Google Calendar 同步
@@ -111,7 +111,7 @@ Python Playwright 与 Chromium，不会连接真实 Roam 图谱。真实会话�
 
 ## 致谢
 
-- Tomáš Barys 的 [Nautilus](https://github.com/tombarys/roam-depot-nautilus)：原始螺旋
+- Tomáš Baránek 的 [Nautilus](https://github.com/tombarys/roam-depot-nautilus)：原始螺旋
   日计划理念。
 - [Nautilus Enhanced](https://github.com/hopeserena/nautilus-enhanced)：本项目继续开发
   所基于的分支。

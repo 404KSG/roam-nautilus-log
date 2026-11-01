@@ -289,7 +289,7 @@ def run():
             # Multiple mounted charts share one transient Help owner, never a graph/model singleton.
             f.load(page, 'untimed'); track_listeners(page)
             page.evaluate('''()=>{const host=document.createElement('div');host.id='second-help-chart';host.style.width='520px';document.body.append(host);
-              scittle.core.eval_string('(rdom/render [nautilus-log-v1/main {:block-uid "baseline-plan"}] (.getElementById js/document "second-help-chart"))');}''')
+              scittle.core.eval_string('(rdom/render [nautilus-log-r2/main {:block-uid "baseline-plan"}] (.getElementById js/document "second-help-chart"))');}''')
             expect(page.locator('.nautilus-log-help-btn')).to_have_count(2)
             first = page.locator('#chart-root .nautilus-log-help-btn'); second = page.locator('#second-help-chart .nautilus-log-help-btn')
             open_help(page, first); first_id = first.get_attribute('aria-controls')

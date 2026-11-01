@@ -1,4 +1,5 @@
-(ns nautilus-log-v1
+;; nautilus-renderer 2
+(ns nautilus-log-r2
   (:require [clojure.string :as str]
             [reagent.core :as r]
             [roam.datascript :as rd]))
@@ -312,7 +313,7 @@
    ordinary keywordized ClojureScript data. The extension entry point installs
    this object before any render block can mount."
   (try
-    (let [core (.-nautilusLogCore js/window)
+    (let [core (some-> js/window .-nautilusLogR2 .-core)
           function (aget core function-name)]
       (when function
         (js->clj (.call function nil (clj->js value)) :keywordize-keys true)))
@@ -324,7 +325,7 @@
    inherits source TODO/DONE, an explicit outer marker owns today's status,
    and qualified chart completion evidence remains separate from local execution time."
   (try
-    (let [core (.-nautilusLogTaskCore js/window)
+    (let [core (some-> js/window .-nautilusLogR2 .-taskCore)
           function (aget core function-name)]
       (when function
         (js->clj (.call function nil (clj->js value)) :keywordize-keys true)))
@@ -343,7 +344,7 @@
                  :fallbackMinutes (:default-duration settings)}
         instance (or
                   (try
-                    (when-let [resolver (some-> js/window .-nautilusLogExtensionData .-resolveTaskInstance)]
+                    (when-let [resolver (some-> js/window .-nautilusLogR2 .-resolveTaskInstance)]
                       (js->clj (.call resolver nil (clj->js payload)) :keywordize-keys true))
                     (catch :default _e nil))
                   ;; Compatibility fallback for a chart that mounts while an
@@ -359,7 +360,7 @@
    bridge owns graph access so rendering multiple tasks does not repeat the
    global LOGBOOK query."
   (try
-    (if-let [reader (some-> js/window .-nautilusLogExtensionData .-getClockRenderContext)]
+    (if-let [reader (some-> js/window .-nautilusLogR2 .-getClockRenderContext)]
       (js->clj (.call reader nil page-title (clj->js task-uids) logical-end-minutes) :keywordize-keys true)
       {:entries []})
     (catch :default _e {:entries []})))
@@ -501,7 +502,7 @@
     (.preventDefault event)
     (.stopPropagation event)
     (when hover-info-state (hide-hover-tooltip! hover-info-state))
-    (if-let [locate-task (some-> js/window .-nautilusLogExtensionData .-locatePlanTask)]
+    (if-let [locate-task (some-> js/window .-nautilusLogR2 .-locatePlanTask)]
       (-> (js/Promise.resolve
            (.call locate-task nil uid (.-currentTarget event) (boolean (.-shiftKey event))))
           (.catch (fn [error]
@@ -1379,6 +1380,8 @@
                 :d (shell-path (:start slot) (:end slot) inner-radius center settings)
                 :vector-effect "non-scaling-stroke"}]])])
 
+(declare estimated-completion?)
+
 (defn chart-record-label [record copy params]
   (let [label (:label record) anchor (or (:anchor record) (:boundaryAnchor record))
         left? (= "left" (:side label))
@@ -1401,12 +1404,19 @@
               :style {:white-space "pre" :font-size (str (:fontSize label) "px")} :font-weight "500"}
        (for [[index line] (map-indexed vector (:lines label))]
          ^{:key index}
-         [:tspan {:x (:textX label) :y (+ (:textY label) (* index (:lineHeight label)))} line])]
+         [:tspan {:x (:textX label) :y (+ (:textY label) (* index (:lineHeight label)))}
+          line
+          ;; One muted inline cue preserves the existing title area; the full
+          ;; Tips/ARIA description explains that this is not recorded time.
+          (when (and (= index (dec (count (:lines label))))
+                     (:done (:event record))
+                     (estimated-completion? (:event record)))
+            [:tspan {:class "nautilus-log-record-estimate-cue"} " Est."])])]
       (when (or (:current? params) (:current-event? params))
         [:text {:class "nautilus-log-record-current" :x (:textX label) :y (:metadataY label)
                 :text-anchor (:align label) :font-size (:metadataFontSize label) :pointer-events "none"}
          (or (get-in copy [:tooltips (if (:current-event? params) :currentEvent :currentTask)])
-             (if (:current-event? params) "Current event" "Current task"))])]]))
+             (if (:current-event? params) "Planned event" "Planned now"))])]]))
 
 (defn estimated-completion? [event]
   (contains? #{"estimated-allocation" "completion-estimate"} (:time-claim event)))
@@ -1612,21 +1622,10 @@
        ^{:key (:kind queue)} [pending-queue-component queue copy hover-info-state])])))
 
 (defn add-start-after
-  "Adds an end time to events so that tasks placed after the meeting cannot start before it"
+  "Use the JS scheduler's cumulative fixed-event floors; this remains a thin
+   compatibility wrapper so renderer and execution use one rule."
   [events]
-  (loop [events events
-         start-after 0
-         result []]
-    (if (empty? events)
-      result
-      (let [event (first events)
-            new-start     (if (:meeting event)
-                            (:end event)
-                            start-after)
-            updated-event (if (:todo event)
-                            (assoc event :start-after new-start)
-                            event)]
-        (recur (rest events) new-start (conj result updated-event))))))
+  (or (log-core-call "eventStartFloors" events) events))
 
 (defn apply-plan-session-state! [children-state status-state js-state]
   (let [state (js->clj js-state :keywordize-keys true)]
@@ -1637,7 +1636,7 @@
   "Uses the production renderer plan session so a replaced watch bridge rebinds
    without remounting, and unavailable pulls keep last-good children."
   (try
-    (if-let [create (some-> js/window .-nautilusLogExtensionData .-createRendererPlanSession)]
+    (if-let [create (some-> js/window .-nautilusLogR2 .-createRendererPlanSession)]
       (let [session (.call create nil (clj->js {:planUid block-uid}))
             apply! (fn [state]
                      (apply-plan-session-state! children-state status-state state))]
@@ -1671,7 +1670,7 @@
 (defn help-button [settings copy]
   (r/with-let [button-node (atom nil)
                close-help! (fn [node]
-                             (when-let [close-help (some-> js/window .-nautilusLogExtensionData .-closeChartHelp)]
+                             (when-let [close-help (some-> js/window .-nautilusLogR2 .-closeChartHelp)]
                                (.call close-help nil node)))
                button-ref (fn [node]
                             (when (and @button-node (not (identical? node @button-node)))
@@ -1682,7 +1681,7 @@
               :aria-haspopup "dialog" :aria-expanded "false"
               :on-click (fn [event]
                           (.stopPropagation event)
-                          (when-let [toggle-help (some-> js/window .-nautilusLogExtensionData .-toggleChartHelp)]
+                          (when-let [toggle-help (some-> js/window .-nautilusLogR2 .-toggleChartHelp)]
                             (.call toggle-help nil
                                    (clj->js {:anchor (.-currentTarget event) :language (:language settings)
                                              :startMinutes (:workday-start settings) :endMinutes (:workday-end settings)
@@ -1722,10 +1721,10 @@
       ;; when folding or a renderer update mounts a replacement control.
       :ref (fn [node]
              (when node
-               (when-let [register-host (some-> js/window .-nautilusLogExtensionData .-registerDeskHost)]
+               (when-let [register-host (some-> js/window .-nautilusLogR2 .-registerDeskHost)]
                  (.call register-host nil (options node)))))
       :on-click (fn [event]
-                  (when-let [open-desk (some-> js/window .-nautilusLogExtensionData .-openDesk)]
+                  (when-let [open-desk (some-> js/window .-nautilusLogR2 .-openDesk)]
                     (.call open-desk nil (options (.-currentTarget event)))))}
      [:span {:class "nautilus-log-desk-switch-track" :aria-hidden "true"}
       [:span {:class "nautilus-log-desk-switch-thumb"}]]]))
@@ -1734,7 +1733,7 @@
   [:button
    {:on-click (fn []
                 (when (and (plan-writes-allowed? plan-status-state) (not @tidy-state))
-                  (when-let [tidy (some-> js/window .-nautilusLogExtensionData .-tidyPlan)]
+                  (when-let [tidy (some-> js/window .-nautilusLogR2 .-tidyPlan)]
                     (reset! tidy-state true)
                     (-> (js/Promise.resolve
                          (.call tidy nil
@@ -1805,7 +1804,7 @@
        [:button
         {:on-click (fn [event]
                      (when (and writes-allowed? (not busy?))
-                       (when-let [sync-calendar (some-> js/window .-nautilusLogExtensionData .-syncCalendarPlan)]
+                       (when-let [sync-calendar (some-> js/window .-nautilusLogR2 .-syncCalendarPlan)]
                          (swap! calendar-state assoc
                                 :busy true :result nil :error nil :open false)
                          (-> (js/Promise.resolve
@@ -1930,7 +1929,7 @@
 
 (defn extension-runtime-settings []
   (try
-    (if-let [settings (some-> js/window .-nautilusLogExtensionData .-settings)]
+    (if-let [settings (some-> js/window .-nautilusLogR2 .-settings)]
       (js->clj settings :keywordize-keys true)
       {})
     (catch :default _e {})))
@@ -1949,7 +1948,7 @@
   (or (log-core-call "uiCopy" (:language settings))
       {:capacity {:available "Available" :events "Events" :demand "Demand" :overload "Overload" :fragmented "No fitting slot" :remaining "Remaining"
                   :burningAvailable "Flexible time is elapsing" :burningEvents "Event time is elapsing" :now "Current time"}
-       :allocation {:planned "planned" :free "free" :over "over" :noSlot "no slot" :left "left"}
+       :allocation {:planned "planned" :free "free" :over "over" :noSlot "no slot" :left "open"}
        :legend {:urgent "Urgent" :event "Event" :task "Task"}
        :controls {:help "Nautilus Log help" :helpHint "Help"
                   :desk "Open Desk"
@@ -2128,12 +2127,12 @@
     :ref (fn [node]
            (when node
              (let [suppress? (try
-                               (if-let [detector (.-shouldSuppressRenderContext js/window.nautilusLogExtensionData)]
+                               (if-let [detector (some-> js/window .-nautilusLogR2 .-shouldSuppressRenderContext)]
                                  (boolean (detector node))
                                  false)
                                (catch :default _e false))
                    sidebar? (try
-                              (if-let [detector (.-isRightSidebarRenderContext js/window.nautilusLogExtensionData)]
+                              (if-let [detector (some-> js/window .-nautilusLogR2 .-isRightSidebarRenderContext)]
                                 (boolean (detector node))
                                 false)
                               (catch :default _e false))
@@ -2182,7 +2181,7 @@
                plan-session-alive? (atom true)
                watched-children-state (r/atom [])
                is-running? #(try
-                              (boolean (.-running js/window.nautilusLogExtensionData))
+                              (boolean (some-> js/window .-nautilusLogR2 .-running))
                               (catch :default _e false))
                *running? (r/atom (or (is-running?) nil))
                check-interval (js/setInterval
@@ -2217,11 +2216,11 @@
                desk-host-ref (fn [node]
                                (when-let [previous @desk-host-node]
                                  (when-not (identical? previous node)
-                                   (when-let [close-host (some-> js/window .-nautilusLogExtensionData .-closeDeskHost)]
+                                   (when-let [close-host (some-> js/window .-nautilusLogR2 .-closeDeskHost)]
                                      (.call close-host nil previous))))
                                (reset! desk-host-node node)
                                (when node
-                                 (when-let [register-host (some-> js/window .-nautilusLogExtensionData .-registerDeskHost)]
+                                 (when-let [register-host (some-> js/window .-nautilusLogR2 .-registerDeskHost)]
                                    (.call register-host nil
                                           (clj->js {:planUid block-uid
                                                     :pageTitle page-title-val
@@ -2274,7 +2273,7 @@
                                    ;; Completion evidence is qualified before allocation;
                                    ;; unverified source time must not become a morning estimate.
                                    ;; Tidy still receives every locally settled wrapper UID.
-                                   [(add-start-after (:pendingEvents history))
+                                   [(add-start-after filtered)
                                     (:timedDoneEvents history) (:untimedDoneEvents history)
                                     (:completedUids history) filtered]))))
                tidy-state (r/atom false)
@@ -2331,8 +2330,8 @@
                                         (mapv :uid))
                 settled-uids (vec (distinct (concat completed-uids expired-fixed-uids)))
                 pending-tasks (vec (filter #(and (:todo %) (not (:done %))) planning-events))
-                fixed-events (vec (filter #(and (:meeting %) (not (:done %))) text-events))
-                all-fixed-events (vec (concat fixed-events (filter :meeting done-events)))
+                fixed-events (vec (filter :meeting text-events))
+                all-fixed-events fixed-events
                 capacity-base (or (log-core-call "calculateCapacity"
                                                     {:startMinutes (:workday-start settings)
                                                      :endMinutes (:workday-end settings)
@@ -2389,7 +2388,7 @@
       (.removeEventListener js/window "unload" unload-listener)
       (clear-detail-state! hover-info-state)
       (when-let [node @desk-host-node]
-        (when-let [close-host (some-> js/window .-nautilusLogExtensionData .-closeDeskHost)]
+        (when-let [close-host (some-> js/window .-nautilusLogR2 .-closeDeskHost)]
           (.call close-host nil node)))
       (when-let [session @plan-session]
         (try

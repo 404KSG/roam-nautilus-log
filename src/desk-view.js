@@ -181,9 +181,9 @@ export function createDeskView({
     searchInput.placeholder = 'Search Desk';
     searchInput.setAttribute('aria-label', 'Search Desk');
     searchGroup.append(icon('search'), searchInput);
-    const add = button('New note', 'plus', () => showDraft(), 'rm-desk-page__new-note');
+    const add = button('New task', 'plus', () => showDraft(), 'rm-desk-page__new-note');
     add.classList.remove('bp3-small');
-    add.append(el('span', 'bp3-button-text', 'New note'));
+    add.append(el('span', 'bp3-button-text', 'New task'));
     tools.append(searchGroup, add);
     toolbar.append(title, tools);
     const message = el('div', 'nautilus-desk__notice');
@@ -232,7 +232,7 @@ export function createDeskView({
     const previous = button('Previous', 'chevron-right', () => step(-1), 'rm-desk__previous');
     navigation.append(next, counter, previous);
     const end = el('div', 'rm-desk__side rm-desk__side--end');
-    const newNote = button('New note', 'plus', () => showDraft(), 'rm-desk__new-note');
+    const newNote = button('New task', 'plus', () => showDraft(), 'rm-desk__new-note');
     const more = button('More', 'more', () => {
       const anchor = more.getBoundingClientRect(), frame = focus.getBoundingClientRect();
       menu.style.top = `${anchor.bottom - frame.top}px`;
@@ -273,8 +273,8 @@ export function createDeskView({
     editorStatus.append(editorMessage, retryEditor);
     const editor = el('div', 'nautilus-desk__editor');
     const draftInput = el('textarea', 'rm-desk-draft__input');
-    draftInput.placeholder = 'New note. Start typing...';
-    draftInput.setAttribute('aria-label', 'New note');
+    draftInput.placeholder = 'New task. Start typing...';
+    draftInput.setAttribute('aria-label', 'New task');
     draftInput.rows = 1;
     draftInput.hidden = true;
     body.append(editorStatus, editor, draftInput);

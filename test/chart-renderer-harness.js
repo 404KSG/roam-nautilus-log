@@ -340,6 +340,11 @@ window.nautilusLogExtensionData = {
   registerDeskHost: () => trace('desk-register'),
   closeDeskHost: () => trace('desk-close'),
 };
+// r2 consumes only this isolated bridge; keep the legacy globals above solely
+// for historical-fixture compatibility.
+window.nautilusLogR2 = window.nautilusLogExtensionData;
+window.nautilusLogR2.core = window.nautilusLogCore;
+window.nautilusLogR2.taskCore = { resolveTaskInstance };
 
 // Optional read-only composition of the exact chart and real Desk controller.
 // It shares the same synthetic source rows; no real graph or write adapter exists.
@@ -360,8 +365,10 @@ if (parameters.get('realDesk') === '1') {
       addPullWatch: () => undefined, removePullWatch: () => undefined } });
   const desk = createDeskView({ host: window, document, readPlan: () => entity('baseline-plan'), watchPlan: () => () => {},
     getSettings: () => ({ language: parameters.get('lang') || 'en', 'todo-duration': 15 }), revision: 'synthetic-chart-desk' });
-  Object.assign(window.nautilusLogExtensionData, { openDesk: options => desk.open(options),
-    registerDeskHost: options => desk.registerHost(options), closeDeskHost: container => desk.closeForHost(container) });
+  const deskBridge = { openDesk: options => desk.open(options),
+    registerDeskHost: options => desk.registerHost(options), closeDeskHost: container => desk.closeForHost(container) };
+  Object.assign(window.nautilusLogExtensionData, deskBridge);
+  Object.assign(window.nautilusLogR2, deskBridge);
 }
 
 window.__chartHarness = {
@@ -533,7 +540,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const scripts = document.querySelectorAll('script[type="application/x-scittle"][data-chart-eval]');
   window.__chartEvaluator = {
     call: 'scittle.core.eval_script_tags(document.querySelectorAll(\'script[type="application/x-scittle"][data-chart-eval]\'))',
-    namespace: 'nautilus-log-v1',
+    namespace: 'nautilus-log-r2',
     scripts: scripts.length,
   };
   try {

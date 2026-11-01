@@ -60,7 +60,7 @@ fill suitable gaps from the current moment. Tasks that cannot fit appear in
 Durations support `30m`, `30min`, `1h`, and `1h30m`. Untimed tasks use the
 configured default. The main controls are **Desk → Help → Sweep (Tidy) → Eye off
 (hide)**. A hidden widget shows **Eye** to expand again. Click **?**, just after Desk,
-for the current chart settings, `left` and a quick feature guide. Completed records
+for the current chart settings, unassigned budget and a quick feature guide. Completed records
 remain visible whenever the chart is expanded; there is no completed-only filter.
 
 ## Optional Google Calendar sync
@@ -188,7 +188,7 @@ for the bounded scope and acceptance criteria.
 
 ## Credits
 
-- [Nautilus](https://github.com/tombarys/roam-depot-nautilus) by Tomáš Barys—the
+- [Nautilus](https://github.com/tombarys/roam-depot-nautilus) by Tomáš Baránek—the
   original spiral-planning concept.
 - [Nautilus Enhanced](https://github.com/hopeserena/nautilus-enhanced)—the fork
   from which this project developed.

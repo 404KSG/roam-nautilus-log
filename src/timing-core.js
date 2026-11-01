@@ -10,7 +10,9 @@ const logCore = require('./log-core');
 
 const TODO_RE = /\{\{\[\[(TODO|DONE)\]\]\}\}|\{\{(TODO|DONE)\}\}/i;
 const CLOCK_RE = /^\s*:?CLOCK:{1,2}\s*\[([^\]]+)\](?:\s*--\s*\[([^\]]+)\])?(?:\s*=>\s*(\d+:[0-5]\d))?\s*$/i;
-const NAUTILUS_RENDER_RE = /\{\{\s*\[\[roam\/render\]\]\s*:\s*\(\(roam-render-Nautilus(?:-Log|-Flow)?-cljs\)\)/i;
+// Recognize rN for locating/deduplicating plans. Only the matching renderer
+// contract owns mutation; recognition alone never authorises a downgrade.
+const NAUTILUS_RENDER_RE = /\{\{\s*\[\[roam\/render\]\]\s*:\s*\(\(roam-render-Nautilus(?:-Log(?:-r\d+)?|-Flow)?-cljs\)\)/i;
 const BLOCK_REF_RE = /\(\(([a-zA-Z0-9_-]{6,})\)\)/g;
 const DURATION_TOKEN_RE = /(?:^|\s)(\d+h(?:\d+(?:min|m))?|\d+(?:min|m))(?=\s|$)/gi;
 const DONE_TIME_RE = /(?:^|\s)d(\d{1,2})(?::(\d{1,2}))?(?=\s|$)/i;
@@ -725,9 +727,18 @@ function startOfDay(date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
 }
 
-function actualMinutesToday(taskUid, entries = [], now = new Date()) {
-  const dayStart = startOfDay(now).getTime();
-  const dayEnd = dayStart + 24 * 60 * 60 * 1000;
+function actualMinutesToday(taskUid, entries = [], now = new Date(), workday = null) {
+  const ownerStart = Number(workday?.dayStartMs);
+  const dayStartDate = Number.isFinite(ownerStart) ? new Date(ownerStart) : startOfDay(now);
+  const dayStart = dayStartDate.getTime();
+  // Evidence includes the full owner calendar day, extended only for an
+  // overnight logical window. Scheduling remains bounded by the work window.
+  const midnightAfterOwner = new Date(dayStartDate.getFullYear(), dayStartDate.getMonth(), dayStartDate.getDate() + 1).getTime();
+  const logicalEnd = Number(workday?.endMinutes);
+  const extendedEnd = Number.isFinite(logicalEnd) && logicalEnd > 1440
+    ? new Date(dayStartDate.getFullYear(), dayStartDate.getMonth(), dayStartDate.getDate(), 0, logicalEnd).getTime()
+    : midnightAfterOwner;
+  const dayEnd = Math.max(midnightAfterOwner, extendedEnd);
   const nowMs = now.getTime();
   const totalMilliseconds = (Array.isArray(entries) ? entries : []).reduce((total, entry) => {
     if (entry?.taskUid !== taskUid) return total;
@@ -741,7 +752,7 @@ function actualMinutesToday(taskUid, entries = [], now = new Date()) {
   return Math.floor(totalMilliseconds / 60000);
 }
 
-function buildDailyReview({ tasks = [], entries = [], now = new Date() } = {}) {
+function buildDailyReview({ tasks = [], entries = [], now = new Date(), workday = null } = {}) {
   const entriesByTask = new Map();
   for (const entry of Array.isArray(entries) ? entries : []) {
     if (!entry?.taskUid) continue;
@@ -752,8 +763,8 @@ function buildDailyReview({ tasks = [], entries = [], now = new Date() } = {}) {
   const rows = (Array.isArray(tasks) ? tasks : []).map((task) => {
     const taskEntries = entriesByTask.get(task.uid) || [];
     const closedEntries = taskEntries.filter((entry) => !entry.running);
-    const closedActual = actualMinutesToday(task.uid, closedEntries, now);
-    const currentActual = actualMinutesToday(task.uid, taskEntries, now);
+    const closedActual = actualMinutesToday(task.uid, closedEntries, now, workday);
+    const currentActual = actualMinutesToday(task.uid, taskEntries, now, workday);
     if (task.status === 'DONE' && task.statusOrigin === 'source' && currentActual <= 0) return null;
     const completed = task.status === 'DONE';
     const live = !completed && currentActual > 0 && taskEntries.some((entry) => entry.running);
@@ -800,8 +811,8 @@ function compactMinutes(minutes) {
   return rest ? `${hours}h${rest}m` : `${hours}h`;
 }
 
-function durationMetadata({ taskUid, plannedMinutes: planned = 15, entries = [], now = new Date(), language = 'en' } = {}) {
-  const actual = actualMinutesToday(taskUid, entries, now);
+function durationMetadata({ taskUid, plannedMinutes: planned = 15, entries = [], now = new Date(), language = 'en', workday = null } = {}) {
+  const actual = actualMinutesToday(taskUid, entries, now, workday);
   const normalizedPlanned = Math.max(0, Number(planned) || 0);
   const copy = executionCopy(language).timing;
   return {

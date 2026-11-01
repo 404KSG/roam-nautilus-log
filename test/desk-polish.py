@@ -57,7 +57,7 @@ def run():
                     root=page.locator(scope)
                     m=root.evaluate('''root=>{
                       const rect=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,cy:r.y+r.height/2,right:r.right};};
-                      const bar=root.querySelector('.rm-desk-page__toolbar'),plus=root.querySelector('[aria-label="New note"]'),search=root.querySelector('[aria-label="Search Desk"]');
+                      const bar=root.querySelector('.rm-desk-page__toolbar'),plus=root.querySelector('[aria-label="New task"]'),search=root.querySelector('[aria-label="Search Desk"]');
                       return {bar:rect(bar),plus:rect(plus),search:rect(search),sameGroup:plus.parentElement===search.parentElement.parentElement,
                         closeCount:bar.querySelectorAll('[aria-label="Hide Desk"],.bp3-icon-cross').length,overflow:bar.scrollWidth-bar.clientWidth};
                     }''')
@@ -67,7 +67,7 @@ def run():
                     assert m['bar']['right']-m['plus']['right']<=14,m
                     measurements.append({'width':width,**m})
                     root.get_by_role('textbox',name='Search Desk',exact=True).focus()
-                    page.keyboard.press('Tab');expect(root.get_by_role('button',name='New note',exact=True)).to_be_focused()
+                    page.keyboard.press('Tab');expect(root.get_by_role('button',name='New task',exact=True)).to_be_focused()
                     page.keyboard.press('Tab');expect(root.locator('.rm-desk-tile__preview').first).to_be_focused()
                 inspect('[data-fixture-host="plan-desk"] .nautilus-desk','wide')
                 page.evaluate('()=>deskHarness.api.openCopy()')

@@ -152,14 +152,14 @@ test('Nautilus Log is the only active product identity', () => {
   ];
 
   assert.match(entry, /const componentName = "Nautilus Log"/);
-  assert.match(entry, /roam-render-Nautilus-Log-cljs/);
+  assert.match(entry, /roam-render-Nautilus-Log-r\$\{RENDERER_REVISION\}-cljs/);
   assert.match(packageJson, /"name": "nautilus-log"/);
   for (const legacy of legacyVariants) assert.equal(activeSurface.includes(legacy), false);
 });
 
-test('guides define left as current free time over full-day Available', () => {
-  assert.match(guide, /`left` percentage = `current free time ÷ full-day Available`/);
-  assert.match(guideZh, /`left` 百分比 = `当前剩余灵活时间 ÷ 全天 Available 总量`/);
+test('guides define unassigned capacity against the full-day denominator', () => {
+  assert.match(guide, /`open` is unassigned budget ÷ full-day flexible capacity/);
+  assert.match(guideZh, /`未分配` 是未分配预算 ÷ 全天弹性容量/);
   assert.doesNotMatch(guide, /Planned ÷ Available now/);
   assert.doesNotMatch(guideZh, /Planned ÷ 当前 Available/);
 });
@@ -202,7 +202,7 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested L
   assert.match(component, /nautilus-log:settings-changed/);
   assert.match(component, /\.addEventListener/);
   assert.match(component, /\.removeEventListener/);
-  assert.match(entry, /window\.nautilusLogCore = logCore/);
+  assert.match(entry, /window\.nautilusLogR2 = bridge/);
   assert.doesNotMatch(component, /\(abs \(- done-at duration\)\)/);
 });
 
@@ -223,12 +223,12 @@ test('the production scene uses the full source collection and never drops label
   assert.doesNotMatch(sceneCore, /indexPath|spanDegrees|outsideY/);
   assert.doesNotMatch(show, /index-caption|index-summary|indexTrack/);
   assert.match(sceneCore, /'time-claim': !timed \? 'none'/);
-  assert.match(entry, /window\.nautilusLogCore = logCore/);
+  assert.match(entry, /window\.nautilusLogR2 = bridge/);
 });
 
 test('the chart resolves daily task instances through the shared reference-precedence core', () => {
   assert.match(entry, /import \* as timingCore from "\.\/timing-core"/);
-  assert.match(entry, /window\.nautilusLogTaskCore = timingCore/);
+  assert.match(entry, /taskCore: timingCore/);
   assert.match(entry, /resolveRendererTaskInstance/);
   assert.match(entry, /resolveTaskInstance: resolveRendererTaskInstance/);
   assert.match(component, /\.\-resolveTaskInstance/);
@@ -411,7 +411,7 @@ test('global and overnight windows use continuous minutes and a start-relative s
 
 test('Log scaffolding is isolated and unload is graph-safe', () => {
   assert.match(entry, /Nautilus Log/);
-  assert.match(entry, /roam-render-Nautilus-Log-cljs/);
+  assert.match(entry, /roam-render-Nautilus-Log-r\$\{RENDERER_REVISION\}-cljs/);
   assert.match(entry, /workday-end/);
   assert.match(helpers, /state !== true/);
   assert.doesNotMatch(helpers, /replaceRenderString\(/);

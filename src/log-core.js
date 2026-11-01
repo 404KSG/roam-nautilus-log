@@ -310,6 +310,37 @@ function localDayOrdinal(value) {
  * but its capacity cursor and elapsed shading end at the workday boundary.
  * That prevents yesterday's gaps from becoming actionable "Available" slots.
  */
+function resolveActiveWorkday({ now = new Date(), today = null, yesterday = null, runtime = {}, resolveSettings = resolveRendererSettings } = {}) {
+  const current = now instanceof Date ? now : new Date(now);
+  if (!Number.isFinite(current.getTime())) return { state: 'unavailable', reason: 'invalid-now' };
+  // An unreadable previous page is distinct from an absent one: guessing today
+  // could duplicate an active overnight plan, so callers must fail closed.
+  if (yesterday?.state === 'unreadable') return { state: 'unavailable', reason: 'yesterday-unreadable' };
+  const minute = current.getHours() * 60 + current.getMinutes();
+  const contextFor = (candidate, ownerDate, state) => {
+    const settings = resolveSettings({ runtime, args: candidate?.args || candidate?.planArgs || [] });
+    const startMinutes = Number(settings?.['workday-start']);
+    const endMinutes = Number(settings?.['workday-end']);
+    const owner = ownerDate instanceof Date ? ownerDate : new Date(ownerDate);
+    const dayStart = new Date(owner.getFullYear(), owner.getMonth(), owner.getDate());
+    const delta = Math.round((new Date(current.getFullYear(), current.getMonth(), current.getDate())
+      - dayStart) / 86400000);
+    const logicalNowMinutes = minute + delta * 1440;
+    const calendarEnd = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate() + 1).getTime();
+    const logicalEnd = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate(), 0, endMinutes).getTime();
+    return { state, ownerPageTitle: candidate?.pageTitle || null, ownerPageUid: candidate?.pageUid || null,
+      planUid: candidate?.planUid || candidate?.plan?.uid || null, planArgs: candidate?.args || candidate?.planArgs || [],
+      startMinutes, endMinutes, logicalNowMinutes, dayStartMs: dayStart.getTime(),
+      dayEndMs: Math.max(calendarEnd, logicalEnd), calendarPageTitle: today?.pageTitle || null };
+  };
+  if (yesterday?.plan && yesterday?.date) {
+    const candidate = contextFor(yesterday, yesterday.date, 'active');
+    if (candidate.endMinutes > 1440 && candidate.logicalNowMinutes >= 1440 && candidate.logicalNowMinutes < candidate.endMinutes) return candidate;
+  }
+  if (today?.plan && today?.date) return contextFor(today, today.date, 'calendar-today');
+  return { state: 'absent', calendarPageTitle: today?.pageTitle || null };
+}
+
 function timelineDayState({
   displayDate,
   currentDate = Date.now(),
@@ -559,7 +590,8 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
-function normalizedInterval(event, startMinutes, endMinutes, { includeDone = false } = {}) {
+function normalizedInterval(event, startMinutes, endMinutes, { includeDone = true } = {}) {
+  // A written fixed range remains reserved through its end even when DONE.
   if (!event || (!includeDone && event.done) || event.meeting !== true) return null;
   const start = asNumber(event.start);
   const end = asNumber(event.end);
@@ -619,6 +651,18 @@ function effectiveNow({ startMinutes, endMinutes, nowMinutes }) {
   return Number.isFinite(now) ? clamp(now, startMinutes, endMinutes) : startMinutes;
 }
 
+function eventStartFloors(orderedItems = []) {
+  let floor = 0;
+  return (Array.isArray(orderedItems) ? orderedItems : []).map((item) => {
+    if (item?.meeting === true) {
+      const start = asNumber(item.start), end = asNumber(item.end);
+      if (Number.isFinite(start) && Number.isFinite(end) && end > start) floor = Math.max(floor, end);
+      return { ...item };
+    }
+    return item?.todo === true && item?.done !== true ? { ...item, earliestStart: floor } : { ...item };
+  });
+}
+
 function remainingDuration(task) {
   if (!task || task.done) return 0;
   const rawDuration = asNumber(task.duration);
@@ -666,6 +710,8 @@ function scheduleTasks({
   for (const task of tasks) {
     const duration = remainingDuration(task);
     if (!duration) continue;
+    const earliestStart = asNumber(task.earliestStart);
+    if (Number.isFinite(earliestStart)) cursor = Math.max(cursor, earliestStart);
 
     let placed = false;
     while (cursor < end && !placed) {
@@ -1915,6 +1961,7 @@ module.exports = {
   hourlyGridSegments,
   pastTimelineSegments,
   timelineDayState,
+  resolveActiveWorkday,
   pastUnplannedSegments,
   pastUnplannedGroups,
   availableSlotGroups,
@@ -1922,6 +1969,7 @@ module.exports = {
   spiralCellInnerHour,
   overlappingFixedEventUids,
   isCurrentPlannedTask,
+  eventStartFloors,
   scheduleTasks,
   completedTaskClockSummary,
   historicalDoneSlice,

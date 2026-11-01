@@ -55,12 +55,15 @@ import {
 } from "./calendar-auth";
 
 const componentName = "Nautilus Log";
-const codeBlockUID = "roam-render-Nautilus-Log-cljs";
+// r2 owns a distinct source block, CLJS namespace, and bridge. A renderer
+// source update must advance this integer and all three identities together.
+const RENDERER_REVISION = 2;
+const codeBlockUID = `roam-render-Nautilus-Log-r${RENDERER_REVISION}-cljs`;
 const renderStringCore = `{{[[roam/render]]:((${codeBlockUID}))`;
 let activeCodeBlockUID = codeBlockUID;
 let activeRenderStringCore = renderStringCore;
 const disabledReplacementString = `{{${componentName}-disabled`;
-const version = "v1";
+const version = `r${RENDERER_REVISION}`;
 const titleblockUID = "roam-render-Nautilus-Log";
 const settingsEventName = "nautilus-log:settings-changed";
 const languageDefaultVersion = "en-v1";
@@ -101,6 +104,9 @@ const calendarDefaults = {
 };
 
 let lifecycleGeneration = 0;
+// Object identity protects r2 from a stale or legacy cleanup whose numeric
+// generation happens to be the same after a reload.
+let r2BridgeOwner = null;
 let trackingRequest = 0;
 let trackingQueue = Promise.resolve();
 let timingStartup = null;
@@ -144,7 +150,7 @@ function dailyPageBounds(pageTitle, logicalEndMinutes = 1440) {
 }
 
 function getClockRenderContext(pageTitle, taskUids = [], logicalEndMinutes = null) {
-  const runtime = window.nautilusLogExtensionData?.settings || {};
+  const runtime = window.nautilusLogR2?.settings || window.nautilusLogExtensionData?.settings || {};
   const schedule = logCore.normalizeScheduleSettings({
     startHour: runtime['workday-start'],
     endHour: runtime['workday-end'],
@@ -237,6 +243,10 @@ function runtimeSettings(extensionAPI) {
 function publishRuntimeSettings(extensionAPI) {
   if (typeof window === "undefined") return;
   const settings = runtimeSettings(extensionAPI);
+  if (window.nautilusLogR2 && window.nautilusLogR2 === r2BridgeOwner) {
+    window.nautilusLogR2.settings = settings;
+  }
+  // Legacy renderers only need a non-destructive settings facade.
   window.nautilusLogExtensionData = {
     ...(window.nautilusLogExtensionData || {}),
     settings,
@@ -915,10 +925,12 @@ async function onload({ extensionAPI }) {
     extensionAPI,
     tidy: planTidy.run,
   });
-  window.nautilusLogCore = logCore;
-  window.nautilusLogTaskCore = timingCore;
-  window.nautilusLogExtensionData = {
+  const bridge = {
+    revision: RENDERER_REVISION,
+    ownerId: {},
     running: true,
+    core: logCore,
+    taskCore: timingCore,
     watchGeneration: generation,
     shouldSuppressRenderContext,
     isRightSidebarRenderContext,
@@ -943,12 +955,16 @@ async function onload({ extensionAPI }) {
       return calendarRuntime.syncPlan(options);
     },
   };
+  r2BridgeOwner = bridge;
+  window.nautilusLogR2 = bridge;
+  // Existing history can render through this minimal facade. r2 never reads
+  // it, so a v1 cleanup cannot dispose an r2 host, help, or plan session.
+  window.nautilusLogCore ||= logCore;
+  window.nautilusLogTaskCore ||= timingCore;
+  window.nautilusLogExtensionData ||= bridge;
+  // A legacy template may provide settings, never r2 mutation authority over
+  // its code UID. New creation and template repair always target r2.
   const recoveredTemplateState = readExistingTemplateState(renderStringCore);
-  if (recoveredTemplateState?.renderStringCore) {
-    activeRenderStringCore = recoveredTemplateState.renderStringCore;
-    const recoveredUid = /\(\(([a-zA-Z0-9_-]+)\)\)$/.exec(activeRenderStringCore)?.[1];
-    if (recoveredUid) activeCodeBlockUID = recoveredUid;
-  }
   await setDefaultSettings(extensionAPI, recoveredTemplateState?.settings);
   if (!currentLoad()) return;
   completionStampWriter = createCompletionStampWriter({
@@ -1069,12 +1085,18 @@ function onunload() {
   calendarPanelState = { action: "", error: "" };
   rendererClockCache.clear();
   if (typeof window !== "undefined") {
+    // Keep the legacy facade truthful without deleting it; it may still render
+    // an unmigrated block while r2's own bridge is isolated by identity.
     if (window.nautilusLogExtensionData) {
       window.nautilusLogExtensionData.running = false;
+      window.nautilusLogExtensionData.timingEnabled = false;
     }
-    delete window.nautilusLogCore;
-    delete window.nautilusLogTaskCore;
+    if (window.nautilusLogR2 === r2BridgeOwner) {
+      window.nautilusLogR2.running = false;
+      delete window.nautilusLogR2;
+    }
   }
+  r2BridgeOwner = null;
   // Do not mutate the graph during unload; the render scaffolding is owned by
   // the user's graph and should remain available for a later reload.
   return toggleRenderComponent(

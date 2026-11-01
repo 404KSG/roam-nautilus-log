@@ -254,8 +254,8 @@ def live_focus_preview(page, images, mode='task'):
         all_loaded(page)
     page.evaluate('window.liveOtherImage = liveOtherCard.querySelector("img")')
     if mode == 'draft':
-        page.get_by_role('button', name='New note', exact=True).first.click()
-        active = page.get_by_role('textbox', name='New note', exact=True)
+        page.get_by_role('button', name='New task', exact=True).first.click()
+        active = page.get_by_role('textbox', name='New task', exact=True)
     else:
         tile.locator('.rm-desk-tile__preview').click()
         expect(page.locator('.nautilus-desk__native')).to_have_attribute('data-task-uid', 'task-3')
@@ -458,7 +458,7 @@ def image_only_heading(page, images):
 def folded_composition(page, images):
     prepare(page)
     open_desk(page)
-    page.get_by_role('button', name='New note', exact=True).click()
+    page.get_by_role('button', name='New task', exact=True).click()
     draft = page.locator('.rm-desk-draft__input')
     draft.dispatch_event('compositionstart')
     draft.fill('尚未确认的中文')
@@ -467,7 +467,7 @@ def folded_composition(page, images):
     assert page.evaluate('() => deskHarness.api.stats.writes.length') == 0
     page.evaluate('() => deskHarness.api.setCollapsed("plan-desk", false)')
     expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
-    page.get_by_role('button', name='New note', exact=True).click()
+    page.get_by_role('button', name='New task', exact=True).click()
     expect(draft).to_have_value('尚未确认的中文')
     assert page.evaluate('() => deskHarness.api.stats.writes.length') == 0
     draft.fill('已确认完整中文')
@@ -480,7 +480,7 @@ def folded_composition(page, images):
 def composition_close(page, images):
     prepare(page)
     open_desk(page)
-    page.get_by_role('button', name='New note', exact=True).click()
+    page.get_by_role('button', name='New task', exact=True).click()
     draft = page.locator('.rm-desk-draft__input')
     draft.dispatch_event('compositionstart')
     draft.fill('未确认，不应写入图谱')
@@ -495,7 +495,7 @@ def composition_pending_create(page, images):
     prepare(page)
     open_desk(page)
     page.evaluate('() => deskHarness.api.holdNextCreate()')
-    page.get_by_role('button', name='New note', exact=True).click()
+    page.get_by_role('button', name='New task', exact=True).click()
     draft = page.locator('.rm-desk-draft__input')
     draft.fill('Committed prefix')
     page.wait_for_function('() => deskHarness.api.pending()')
@@ -508,7 +508,7 @@ def composition_pending_create(page, images):
     assert page.evaluate('() => deskHarness.api.text("new-note-1")') == 'Committed prefix'
     assert page.evaluate('() => deskHarness.api.stats.writes.map(w => w.type)') == ['create']
     page.evaluate('() => deskHarness.api.setCollapsed("plan-desk", false)')
-    page.get_by_role('button', name='New note', exact=True).click()
+    page.get_by_role('button', name='New task', exact=True).click()
     expect(draft).to_have_value('Committed prefix 未确认')
     draft.fill('Committed prefix 已确认')
     page.wait_for_function('() => deskHarness.api.text("new-note-1") === "Committed prefix 已确认"')

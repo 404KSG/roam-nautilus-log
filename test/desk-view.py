@@ -563,7 +563,7 @@ def run():
             search_control.evaluate('el => el.dispatchEvent(new KeyboardEvent("keydown", {key:"Alt", bubbles:true, isComposing:true}))')
             page.wait_for_timeout(450)
             assert not grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
-            page.get_by_role('button', name='New note', exact=True).first.focus()
+            page.get_by_role('button', name='New task', exact=True).first.focus()
             page.keyboard.down('Alt'); page.wait_for_timeout(450)
             assert not grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
             page.keyboard.up('Alt')
@@ -597,16 +597,16 @@ def run():
 
             count_writes = page.evaluate('() => deskHarness.api.stats.writes.length')
             page.locator('.rm-desk-page__new-note').click()
-            expect(page.get_by_role('textbox', name='New note', exact=True)).to_be_focused()
+            expect(page.get_by_role('textbox', name='New task', exact=True)).to_be_focused()
             assert page.evaluate('() => deskHarness.api.stats.writes.length') == count_writes
             close_focus()
             assert page.evaluate('() => deskHarness.api.stats.writes.length') == count_writes
             activate('task-1')
-            page.locator('.rm-desk__side--end').get_by_role('button', name='New note', exact=True).click()
+            page.locator('.rm-desk__side--end').get_by_role('button', name='New task', exact=True).click()
             page.evaluate('() => deskHarness.api.holdNextCreate()')
-            page.get_by_role('textbox', name='New note', exact=True).fill('First draft')
+            page.get_by_role('textbox', name='New task', exact=True).fill('First draft')
             page.wait_for_function('deskHarness.api.pending()')
-            page.get_by_role('textbox', name='New note', exact=True).fill('First draft with the remaining input preserved')
+            page.get_by_role('textbox', name='New task', exact=True).fill('First draft with the remaining input preserved')
             # Folding during held create must retain the reservation until the
             # save loop persists the later input, without reopening focus late.
             page.evaluate('() => deskHarness.api.setCollapsed("plan-desk", true)')
@@ -625,7 +625,7 @@ def run():
             checks.append('folded pending draft preserves final authorized text with one UID/create and no late focus resurrection')
 
             page.locator('.rm-desk-page__new-note').click()
-            draft = page.get_by_role('textbox', name='New note', exact=True)
+            draft = page.get_by_role('textbox', name='New task', exact=True)
             draft.dispatch_event('compositionstart')
             draft.fill('中文输入法提交后才创建')
             assert page.evaluate('() => deskHarness.api.stats.writes.filter(w=>w.type==="create").length') == 1
@@ -751,15 +751,15 @@ def run():
                 assert metrics['search']['left'] >= metrics['toolbar']['left'] - 1 and metrics['search']['right'] <= metrics['toolbar']['right'] + 1, metrics
                 assert metrics['add']['left'] >= metrics['toolbar']['left'] - 1 and metrics['add']['right'] <= metrics['toolbar']['right'] + 1, metrics
                 assert len(metrics['rows']) <= 2, metrics
-                # Search uses the space before New note, up to the native
+                # Search uses the space before New task, up to the native
                 # 200px cap; there is no reserved cross-button column.
                 assert metrics['search']['width'] >= min(200, metrics['searchBudget']) - 0.5, metrics
-            # Search and New note lead directly to the cards, without a dead
+            # Search and New task lead directly to the cards, without a dead
             # close-button tab stop. Escape still hides this Desk only.
             owner.evaluate('(el) => { el.style.width = "320px"; }')
             sidebar.get_by_role('textbox', name='Search Desk', exact=True).focus()
             page.keyboard.press('Tab')
-            expect(sidebar.get_by_role('button', name='New note', exact=True)).to_be_focused()
+            expect(sidebar.get_by_role('button', name='New task', exact=True)).to_be_focused()
             page.keyboard.press('Tab')
             expect(sidebar.locator('.rm-desk-tile__preview').first).to_be_focused()
             writes_before_close = page.evaluate('() => deskHarness.api.stats.writes.length')
@@ -777,7 +777,7 @@ def run():
             expect(sidebar).to_have_count(0)
             assert not main_grid.evaluate('(el) => el.classList.contains("rm-desk-overview--numbers")')
             (OUT/'sidebar-toolbar-geometry.json').write_text(json.dumps(toolbar_geometry, indent=2))
-            checks.append('sidebar toolbar has no close button at 280–520px, aligns Search and New note without overflow, tabs directly to cards, and preserves write-free Escape dismissal')
+            checks.append('sidebar toolbar has no close button at 280–520px, aligns Search and New task without overflow, tabs directly to cards, and preserves write-free Escape dismissal')
 
             mount(editor=False)
             card('task-0').locator('[role="button"]').click()
@@ -799,7 +799,7 @@ def run():
             mount(empty=True)
             expect(page.locator('.nautilus-desk__card')).to_have_count(0)
             page.locator('.rm-desk-page__new-note').click()
-            page.get_by_role('textbox', name='New note', exact=True).fill('New content in an empty plan')
+            page.get_by_role('textbox', name='New task', exact=True).fill('New content in an empty plan')
             page.wait_for_function('deskHarness.api.stats.writes.some(w=>w.type==="create")')
             created = page.evaluate('() => deskHarness.api.stats.writes.find(w=>w.type==="create").uid')
             focused(created); close_focus()
@@ -846,7 +846,7 @@ def run():
                 assert page.locator('.nautilus-desk').evaluate('(el) => {const r=el.getBoundingClientRect();return r.left>=-1 && r.right<=innerWidth+1}')
                 if width == 390:
                     narrow_main = page.locator('.nautilus-desk .rm-desk-page__toolbar').evaluate('''toolbar => {
-                      const add=toolbar.querySelector('[aria-label="New note"]').getBoundingClientRect();
+                      const add=toolbar.querySelector('[aria-label="New task"]').getBoundingClientRect();
                       const search=toolbar.querySelector('[aria-label="Search Desk"]').getBoundingClientRect();
                       return {overflow:toolbar.scrollWidth-toolbar.clientWidth, centerDelta:Math.abs((add.top+add.bottom-search.top-search.bottom)/2),
                         closeCount:toolbar.querySelectorAll('[aria-label="Hide Desk"],.bp3-icon-cross').length};

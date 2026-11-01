@@ -11,8 +11,9 @@ export function settledUidsForTidy(snapshot, nowMinutes = currentMinute()) {
     .filter((task) => task?.status === 'DONE')
     .map((task) => task?.uid);
   const settledEvents = (snapshot?.fixedEvents || [])
-    .filter((event) => event?.done === true
-      || (Number.isFinite(Number(event?.end)) && Number(event.end) <= nowMinutes))
+    // DONE changes presentation only; a future written range still constrains
+    // the outline and therefore cannot be settled ahead of pending tasks.
+    .filter((event) => Number.isFinite(Number(event?.end)) && Number(event.end) <= nowMinutes)
     .map((event) => event?.uid);
   return [...new Set([...completedTasks, ...settledEvents].filter(Boolean))];
 }
