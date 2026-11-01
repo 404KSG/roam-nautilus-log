@@ -8,12 +8,12 @@
   and dark themes, including hover and keyboard focus. Keep chart text and category
   colors, Desk switch states, icon geometry and actions unchanged.
 
-- Pure references can use a same-day, date-qualified source completion stamp for chart
-  placement instead of losing it and allocating a default morning slice. Local completion
-  and local CLOCK retain priority and ownership. Unknown source dates or unreadable local
-  timing stay visible as unpositioned labels with explanatory Tips, never invented intervals.
-  Keep durations estimated unless backed by local Actual; write no markers/timestamps and
-  refresh date qualification when source page ownership changes.
+- A visible valid reference completion stamp now places an estimate on the current chart,
+  including after a duration suffix and from project or older Daily Note pages. It remains
+  interpreted plan-clock time, never Actual or a proven source date; local completion and
+  local CLOCK retain priority and ownership. Unreadable or malformed evidence remains
+  unpositioned, while genuinely unstamped completed tasks keep their read-only allocation.
+  No markers/timestamps are written and source changes refresh without a clock tick.
 
 - Known out-of-window records now use ordinary boundary-connected labels rather than a
   special square icon. Earlier intervals connect to START; later intervals connect to END.

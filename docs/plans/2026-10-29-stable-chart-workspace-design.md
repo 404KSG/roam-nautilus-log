@@ -70,47 +70,51 @@ Known local completion stamps and condensed CLOCK totals retain their existing m
 A completion stamp anchors an estimated interval; it is not CLOCK Actual. Both estimated
 allocation and stamped estimate paths keep dashed outlines. Hover must not add a solid
 surface stroke beneath that dashed border.
-Source stamps are not execution-instance timestamps; qualified chart-only inheritance is
+Source stamps are not execution-instance timestamps; interpreted chart-only inheritance is
 specified below. Edit metadata is never timing evidence. Zero duration stays zero. DONE
 estimate overflow keeps its title and duration in the diagram, not in an unfinished queue.
 
 ## Pure-reference completion evidence
 
-The execution task contract remains local: `uid`, `doneAt`, effective task text, CLOCK owners,
-and Review/Actual totals do not inherit source timestamps. The renderer opts into a separate
-`completionEvidence` projection. A bare `((uid))` can follow a pure reference chain to the
-nearest explicit DONE owner; contextual wrappers, local markers/durations/ranges, and reopened
-TODOs do not adopt a source stamp. Explicit local chart completion stamps retain priority.
+The execution task contract remains unchanged: `uid`, `doneAt`, effective text, source-owned
+TODO/DONE, CLOCK owners and Review/Actual totals do not adopt chart completion evidence.
+The renderer opts into a separate `completionEvidence` projection. A sole `((uid))` plus
+recognized, whitespace-delimited duration metadata may follow equivalent intermediate links
+to the nearest explicit DONE owner. Local duration overrides inherited duration. Explicit
+local status owns its own completion; a local stamp wins. Contextual prose, multiple refs,
+code/tag residue and impure intermediate links cannot supply a source endpoint. Hold their
+chart time with an explanation without reopening or reclassifying the underlying task.
 
-Read only that owner's UID, string and owning page UID through public Pull. Require the
-source identity and text to match the snapshot used for status, then qualify `dHH:MM` by the
-canonical Daily Note UID (`MM-DD-YYYY`). The displayed date must match. The sole cross-date
-exception is the next Daily Note within an overnight logical END; normalize it by adding
-1440 minutes. Source page identity is the date convention for the stamp, not proof from an
-edit timestamp. Different/unknown dates remain explicitly unverified; never assume a project
-page or the wrapper's current date supplies missing evidence.
+Read back every admitted link's UID and exact string through public Pull before accepting
+the terminal owner's stamp. A valid source `dHH:MM` is interpreted on the current plan's
+clock; its storage page is not a completion date. Project pages, older Daily Notes and
+undated plan titles therefore do not reject or shift a valid minute. Never derive completion
+dates from page, edit/create, drag or load metadata. Dateless `d01:15` remains minute 75,
+matching local stamps; this convention does not establish post-midnight calendar attribution.
 
-The clock reader exposes which requested **local wrapper** owners were actually read/covered.
-A verified empty result differs from a failed read. Local completion stamps and local CLOCK
-records/Actual win before source fallback; never add source UIDs to CLOCK queries or copy
-source sessions into local Actual. A valid source end plus default/explicit duration remains
-an estimate. Explicit zero stays zero. No marker/time string is written to any graph block.
+The clock reader distinguishes verified empty history from failed reads for local wrapper
+owners. Local stamps and positive local CLOCK Actual retain precedence. Source UIDs never
+enter local CLOCK queries. A present running, out-of-day or sub-minute CLOCK with no usable
+completed interval remains unpositioned rather than becoming a morning allocation. An invalid
+local stamp names local evidence in the tooltip, not the source. Explicit zero estimates stay
+zero. No marker, timestamp, state or CLOCK record is written by these projections.
 
-Qualified source completion intervals use the normal timed/outside-window paths. A 23:54
-completion with a 15-minute default is an estimated 23:39–23:54 interval, not Actual; END 20:00
-receives its ordinary boundary leader, not an 08:30 allocation. Tips identify source date/time
-and estimated duration separately.
+An interpreted source endpoint plus estimate uses the normal timed/outside-window paths:
+`d10:31` plus 30m is 10:01–10:31; `d10:32` plus 15m is 10:17–10:32. A 23:54 completion
+with default 15m keeps 23:39–23:54 and connects to END when outside the chart. It is an
+estimated interval, never source Actual or a proven completion date. Tips say “Reference
+time interpreted for this plan” and omit the formerly inferred source date.
 
-Unverified source evidence sets `completion-time-unverified` and bypasses estimated allocation
-and occupied-time obstacles. Keep a normal completed label and Tips, with no slice, boundary,
-leader or special glyph. Do not silently erase a known-but-unqualified source stamp and use a
-morning gap. Truly absent stamps retain the existing estimate fallback. Source-only failures
-and CLOCK-coverage uncertainty are represented without changing task state or pending demand.
+Unreadable, malformed or ineligible completion evidence sets `completion-time-unverified`
+and bypasses estimated allocation and occupied-time obstacles. Keep the completed label and
+explanatory Tips without a fabricated slice or boundary. A genuinely absent stamp and no
+local CLOCK retain the existing outline-order first-whole-free-slot allocation from START,
+marked “Estimated allocation” and “Not a recorded completion time”.
 
-Source Pull Watches include page ownership. A per-plan reference revision reaches the renderer
-session and reactive text projection even if reference text is unchanged, so moving a source
-between pages immediately invalidates date qualification. Ordinary minute refresh remains a
-fallback; no new polling, graph-wide scan, dependency, permission or persistence is added.
+Source changes propagate through the existing reference revision and refresh without a
+minute tick. DONE → TODO clears completion placement; a later DONE uses its current token.
+The source-page watch remains compatible but page location no longer gates the endpoint.
+No new polling, graph-wide scan, dependency, permission or persistence is introduced.
 
 ## Out-of-window annotations
 

@@ -22,10 +22,11 @@ Their Roam block order is the task priority.
 - **Urgent Trigger Word** changes a task's color, not its scheduling order.
 - A bare block reference inherits its source TODO/DONE. Add an outer TODO to
   explicitly redo completed source content today.
-- A duration written after the reference overrides the source duration. Only a pure
-  reference can use a date-qualified source completion stamp for chart placement;
-  explicit local completion data and local CLOCK take priority. Source CLOCK history
-  is never inherited, and no source timestamp is written into the local wrapper.
+- A duration written after a sole reference overrides the source duration. A visible valid
+  source `dHH:MM` is interpreted as an estimated endpoint on this plan's clock, including
+  project pages and older Daily Notes; it is not a proven completion date or Actual. Explicit
+  local completion data and local CLOCK take priority. Source CLOCK history is never inherited,
+  and no source timestamp is written into the local wrapper.
 - Legacy `dNN%` text has no scheduling meaning. Nautilus Log keeps it as ordinary
   block text and always schedules the full estimate.
 
@@ -189,23 +190,30 @@ An overnight window remains today's active plan until its logical END, even afte
 
 CLOCK and completion stamps are optional. A local stamp such as `d14:30` anchors an estimate;
 without it, the estimate still receives a slice through the allocation described above.
-Inherited completion is identified as coming from its reference. For a pure reference (or
-pure reference chain), the chart may use the nearest explicit DONE owner's `dHH:MM` when
-that source's canonical Daily Note UID establishes the displayed date. In an overnight
-window, a source on the next Daily Note is accepted only through the logical END. Do not
-infer dates from edit/create time, drag time, a project-page title or the wrapper's location.
+Inherited completion is identified as coming from its reference. For a sole reference (or
+safe sole-reference chain), the chart may use the nearest explicit DONE owner's visible valid
+`dHH:MM`, including after duration metadata. The source storage page is not a completion date:
+the Tip says **Reference time interpreted for this plan** and never invents a date from page,
+edit, create, drag, or load time. Explicit local TODO/DONE owns status; a local stamp or local
+CLOCK wins, while an invalid local/source stamp or unreadable source remains unpositioned.
+Prose, extra references, code or other non-duration context cannot supply a source endpoint,
+including through intermediate links. This restricts chart placement only: existing TODO/DONE
+inheritance, task identity and execution ownership remain unchanged.
 
 A source completion at 23:54 with no duration keeps the default 15 minutes as **Estimate**,
 not Actual. With END 20:00, its ordinary leader goes to END instead of filling a morning
-gap. More shows the source date/time and the estimated 23:39–23:54 interval. Local markers,
+gap. More shows the interpreted time and estimated 23:39–23:54 interval. Local markers,
 local completion stamps and local CLOCK keep precedence; CLOCK ownership and statistics
-remain local. Explicit zero estimates are not inflated.
+remain local. Explicit zero estimates are not inflated. In an overnight window, `d01:15`
+remains 01:15 on the plan clock; this does not guess a source completion date.
 
-If the source date is missing/different, source metadata changes during the read, or local
-CLOCK absence cannot be verified, the completed title remains visible without a fabricated
-slice, boundary or icon. Tips retain the available source time and explain that qualification
-is pending. A genuinely absent completion stamp still uses the existing estimate-allocation
-fallback. Source text/page changes refresh qualification without waiting for a clock tick.
+Before applying a source stamp, the chart verifies the referenced text and local CLOCK
+coverage. If either cannot be read consistently, the completed title remains visible without
+a fabricated slice, boundary or icon. A genuinely absent completion
+stamp (and no local CLOCK) instead keeps the read-only **Estimated allocation** fallback: in
+outline order, its whole estimate is placed in the first START-or-later free slot that fits,
+skipping fixed events and anchored completions. Its Tip says it is not a recorded completion
+time, and no `dHH:MM` is written. Source text/page changes refresh without a clock tick.
 These are read-only projections: no markers or timestamps are copied into saved blocks,
 no Actual is invented, and pending scheduling/capacity rules are unchanged.
 

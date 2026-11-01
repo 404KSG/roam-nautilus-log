@@ -418,7 +418,23 @@ function resolveTaskInstance({
   includeCompletionEvidence = false,
 } = {}) {
   const local = String(localString ?? '');
-  const pureReferenceUid = text => /^\s*\(\(([A-Za-z0-9_-]{6,255})\)\)\s*$/.exec(String(text || ''))?.[1] || null;
+  // Completion evidence admits only one reference with recognized duration
+  // metadata. This is deliberately narrower than status inheritance: prose,
+  // multiple references, ranges, code punctuation and local status/time tokens
+  // cannot turn a reusable source marker into this wrapper's placement.
+  const completionReferenceUid = (text) => {
+    const source = String(text || '');
+    if (taskStatus(source) || parseTimeRangeMinutes(source)) return null;
+    const refs = referenceUids(source);
+    if (refs.length !== 1) return null;
+    const residue = source
+      .replace(new RegExp(DURATION_TOKEN_RE.source, DURATION_TOKEN_RE.flags), ' ')
+      .replace(new RegExp(BLOCK_REF_RE.source, BLOCK_REF_RE.flags), ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return residue ? null : refs[0];
+  };
+  const hasCompletionTimeToken = text => /(?:^|\s)d\d{1,2}(?::\S*|(?=\s|$))/i.test(String(text || ''));
   const supplied = new Map((Array.isArray(references) ? references : [])
     .filter((reference) => reference?.uid && typeof reference.string === 'string')
     .map((reference) => [reference.uid, reference.string]));
@@ -442,10 +458,12 @@ function resolveTaskInstance({
     const source = read(referenceUid);
     if (!source) return null;
     const status = taskStatus(source);
-    if (status) return { status, ownerUid: referenceUid, sourceString: source, pureChain: true };
+    if (status) return { status, ownerUid: referenceUid, sourceString: source, pureChain: true,
+      sourceChain: [{ uid: referenceUid, string: source }] };
     const nestedUid = referenceUids(source)[0] || null;
     const nested = nestedUid ? resolveSourceStatus(nestedUid, [...stack, referenceUid]) : null;
-    return nested ? { ...nested, pureChain: nested.pureChain && pureReferenceUid(source) === nestedUid } : null;
+    return nested ? { ...nested, pureChain: nested.pureChain && completionReferenceUid(source) === nestedUid,
+      sourceChain: [{ uid: referenceUid, string: source }, ...(nested.sourceChain || [])] } : null;
   };
 
   const refs = referenceUids(local);
@@ -453,6 +471,8 @@ function resolveTaskInstance({
   const source = sourceUid ? resolveSource(sourceUid) : '';
   const explicitStatus = taskStatus(local);
   const sourceState = sourceUid ? resolveSourceStatus(sourceUid) : null;
+  // Completion evidence is chart-only. Preserve existing status inheritance
+  // and execution ownership even when a reference cannot supply a chart time.
   const sourceStatus = sourceState?.status || null;
   const localDone = doneTime(local);
   const localDurations = durationTokens(local);
@@ -494,11 +514,28 @@ function resolveTaskInstance({
   // CLOCK ownership and local completion writes retain their existing contract.
   let completionEvidence;
   if (includeCompletionEvidence && status === 'DONE' && !range && !structural) {
-    const reference = pureReferenceUid(local) && sourceState?.pureChain && sourceState.status === 'DONE'
-      && DONE_TIME_RE.test(sourceState.sourceString)
-      ? { sourceUid: sourceState.ownerUid, sourceString: sourceState.sourceString,
-        minutes: doneTime(sourceState.sourceString).minutes } : null;
-    completionEvidence = { localMinutes: localDone.minutes, reference };
+    const sourceTime = sourceState ? doneTime(sourceState.sourceString) : null;
+    let reference = null;
+    if (statusOrigin === 'source' && !hasCompletionTimeToken(local)) {
+      if (completionReferenceUid(local) !== sourceUid || !sourceState?.pureChain) {
+        // Do not silently discard an ineligible chain and call its time absent.
+        // Hold only the chart placement; its task status remains source-owned.
+        reference = { state: 'unverified', sourceUid: sourceState?.ownerUid,
+          sourceMinutes: null, reason: 'reference-context-unsupported' };
+      } else if (hasCompletionTimeToken(sourceState.sourceString)) {
+        reference = { sourceUid: sourceState.ownerUid, sourceString: sourceState.sourceString,
+          minutes: sourceTime.minutes };
+        // Raw snapshots are for bounded coherence checks, never chart output.
+        Object.defineProperty(reference, 'sourceChain', {
+          value: sourceState.sourceChain || [], enumerable: false,
+        });
+      }
+    }
+    completionEvidence = {
+      localMinutes: localDone.minutes,
+      ...(hasCompletionTimeToken(local) && localDone.minutes === null ? { localTimeInvalid: true } : {}),
+      reference,
+    };
   }
 
   return {

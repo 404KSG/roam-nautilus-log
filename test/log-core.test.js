@@ -705,12 +705,13 @@ test('English UI settings localize all extension-owned status labels', () => {
     currentTime: 'Current time',
     noCompletionTime: 'No completion time recorded',
     inheritedCompletion: 'Completion status from reference',
-    referenceCompletion: 'Completion time from reference',
+    referenceCompletion: 'Reference time interpreted for this plan',
     completionTimeUnverified: 'Completion time unverified',
-    referenceDateUnverified: 'Source date unverified; not placed on this day',
-    referenceDateMismatch: 'Source Daily Note date differs; completion date unverified',
+    invalidLocalCompletionTime: 'Local completion time is invalid; not placed on the timeline',
+    referenceContextUnsupported: 'Reference context cannot supply a completion time; add a local stamp to place this item',
     referenceClockUnverified: 'Local CLOCK history unavailable; source time not applied',
-    referenceTimeUnverified: 'Source completion time could not be verified; not placed on this day',
+    localClockUnplaceable: 'Local CLOCK has no completed interval on this plan; not placed on the timeline',
+    referenceTimeUnverified: 'Source completion time could not be verified; not placed on this plan',
     inheritedDone: 'Inherited completion',
     noTime: 'Completion time not recorded',
     notTimeScaled: 'Not placed on the timeline',
@@ -744,12 +745,13 @@ test('English UI settings localize all extension-owned status labels', () => {
     currentTime: '当前时间',
     noCompletionTime: '未记录完成时间',
     inheritedCompletion: '完成状态来自引用',
-    referenceCompletion: '完成时间来自引用',
+    referenceCompletion: '引用时间按当前计划解读',
     completionTimeUnverified: '完成时间待确认',
-    referenceDateUnverified: '来源日期未确认，不排入当日时间轴',
-    referenceDateMismatch: '来源日记页日期不同，完成日期待确认',
+    invalidLocalCompletionTime: '本地完成时间格式不正确，不排入时间轴',
+    referenceContextUnsupported: '此引用上下文不能提供完成时间；可添加本地完成戳定位',
     referenceClockUnverified: '本地 CLOCK 记录暂不可核对，未采用来源时间',
-    referenceTimeUnverified: '来源完成时间无法确认，不排入当日时间轴',
+    localClockUnplaceable: '本地 CLOCK 在当前计划内没有已完成区间，不排入时间轴',
+    referenceTimeUnverified: '来源完成时间无法确认，不排入当前计划',
     inheritedDone: '来源完成',
     noTime: '未记录完成时刻',
     notTimeScaled: '不占用时间刻度',
@@ -1018,6 +1020,12 @@ test('historical DONE slices use the default estimate when no duration is presen
     historicalDoneSlice({ done: true, doneAt: 1310, defaultDuration: 15 }),
     { start: 1295, end: 1310, duration: 15 },
   );
+});
+
+test('explicit zero estimates never become a default-sized stamped completion', () => {
+  assert.equal(historicalDoneSlice({ done: true, doneAt: 631, duration: 0, defaultDuration: 15 }), null);
+  assert.deepEqual(historicalDoneSlice({ done: true, doneAt: 631, duration: 0, defaultDuration: 15, actualDuration: 10 }),
+    { start: 621, end: 631, duration: 10, durationSource: 'actual' });
 });
 
 test('DONE without an explicit completion time does not manufacture a historical interval', () => {

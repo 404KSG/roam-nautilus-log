@@ -168,19 +168,30 @@ function resolveRendererTaskInstance(payload = {}, readString = readBlockString,
   const instance = timingCore.resolveTaskInstance({ ...input, readString: safeReadString,
     includeCompletionEvidence: Object.prototype.hasOwnProperty.call(input, 'displayDate') });
   if (!instance.completionEvidence) return instance;
-  const { localMinutes, reference: candidate } = instance.completionEvidence;
-  let reference = null;
-  if (candidate) {
+  const { localMinutes, localTimeInvalid = false, reference: candidate } = instance.completionEvidence;
+  let reference = candidate?.state === 'unverified' ? { ...candidate } : null;
+  if (candidate && !reference) {
+    const chain = Array.isArray(candidate.sourceChain) && candidate.sourceChain.length
+      ? candidate.sourceChain : [{ uid: candidate.sourceUid, string: candidate.sourceString }];
     let source = null;
-    try { source = typeof readSource === 'function' ? readSource(candidate.sourceUid) : null; } catch (_) { /* unverified, never guessed */ }
-    reference = !source || source.uid !== candidate.sourceUid || source.string !== candidate.sourceString
+    let changed = false;
+    for (const expected of chain) {
+      let current = null;
+      try { current = typeof readSource === 'function' ? readSource(expected.uid) : null; } catch (_) { /* unverified, never guessed */ }
+      if (!current || current.uid !== expected.uid || current.string !== expected.string) {
+        source = current;
+        changed = true;
+        break;
+      }
+      source = current;
+    }
+    reference = changed || !source
       ? { state: 'unverified', sourceUid: candidate.sourceUid, sourceMinutes: candidate.minutes,
         reason: source ? 'source-changed' : 'source-unavailable' }
-      : logCore.resolveReferenceCompletionTime({ sourceUid: candidate.sourceUid, sourceMinutes: candidate.minutes,
-        sourcePageUid: source.pageUid, displayDate: input.displayDate, logicalEndMinutes: input.logicalEndMinutes });
+      : logCore.resolveReferenceCompletionTime({ sourceUid: candidate.sourceUid, sourceMinutes: candidate.minutes });
   }
   // Do not expose the extra raw source snapshot beyond this provenance check.
-  return { ...instance, completionEvidence: { localMinutes, reference } };
+  return { ...instance, completionEvidence: { localMinutes, ...(localTimeInvalid ? { localTimeInvalid } : {}), reference } };
 }
 
 function settingValue(extensionAPI, key) {

@@ -30,7 +30,7 @@ test('renderer resolves a source stamp through an exact public metadata pull wit
     assert.equal(result.doneAt, null);
     assert.doesNotMatch(result.effectiveString, /d23:54/);
     assert.deepEqual(result.completionEvidence.reference, {
-      state: 'resolved', sourceUid: 'source-task', sourceMinutes: 1434, sourceDate: '2026-10-31', minutes: 1434,
+      state: 'resolved', sourceUid: 'source-task', sourceMinutes: 1434, minutes: 1434, placement: 'plan-clock',
     });
     assert.equal(reads.length, 1);
     assert.deepEqual(reads[0].lookup, [':block/uid', 'source-task']);
@@ -42,8 +42,8 @@ test('renderer resolves a source stamp through an exact public metadata pull wit
   });
 });
 
-test('wrong identities, changed text, missing dates and failed reads remain unverified', async () => {
-  for (const options of [{ uid: 'wrong-source' }, { string: '{{[[DONE]]}} Different version d22:00' }, { pageUid: 'project-page' }, { pageUid: '10-30-2026' }, { fail: true }]) {
+test('identity/read failures remain unverified, while storage page identity does not qualify the plan clock', async () => {
+  for (const options of [{ uid: 'wrong-source' }, { string: '{{[[DONE]]}} Different version d22:00' }, { fail: true }]) {
     await fixture(async ({ resolveRendererTaskInstance }) => {
       const result = resolveRendererTaskInstance(payload, () => SOURCE);
       assert.equal(result.completionEvidence.reference.state, 'unverified');
@@ -51,16 +51,55 @@ test('wrong identities, changed text, missing dates and failed reads remain unve
       assert.equal(result.completionEvidence.reference.sourceMinutes, 1434);
     }, options);
   }
+  for (const pageUid of ['project-page', '10-30-2026', '']) {
+    await fixture(async ({ resolveRendererTaskInstance }) => {
+      const result = resolveRendererTaskInstance(payload, () => SOURCE);
+      assert.equal(result.completionEvidence.reference.state, 'resolved');
+      assert.equal(result.completionEvidence.reference.minutes, 1434);
+      assert.equal(result.completionEvidence.reference.sourceDate, undefined);
+    }, { pageUid });
+  }
 });
 
-test('legacy callers and local/contextual overrides do not read source date metadata', async () => {
+test('renderer revalidates every nested reference link before accepting a terminal source stamp', async () => {
+  await fixture(async ({ resolveRendererTaskInstance }) => {
+    const snapshots = new Map([
+      ['middle-source', '((source-task))'],
+      ['source-task', SOURCE],
+    ]);
+    const current = new Map([
+      ['middle-source', 'Review ((source-task))'],
+      ['source-task', SOURCE],
+    ]);
+    const reads = [];
+    const result = resolveRendererTaskInstance({ ...payload, localString: '((middle-source))' },
+      uid => snapshots.get(uid) || '', uid => {
+        reads.push(uid);
+        const string = current.get(uid);
+        return string ? { uid, string, pageUid: 'project-page' } : null;
+      });
+    assert.deepEqual(reads, ['middle-source']);
+    assert.deepEqual(result.completionEvidence.reference, {
+      state: 'unverified', sourceUid: 'source-task', sourceMinutes: 1434, reason: 'source-changed',
+    });
+    assert.doesNotMatch(JSON.stringify(result.completionEvidence), /middle-source|sourceString/);
+  });
+});
+
+test('legacy callers and local/contextual overrides do not read source metadata, but qualified duration wrappers do', async () => {
   await fixture(async ({ resolveRendererTaskInstance }, reads) => {
     const old = resolveRendererTaskInstance({ uid: 'local-wrapper', localString: '((source-task))' }, () => SOURCE);
     assert.equal(old.completionEvidence, undefined);
-    for (const localString of ['{{[[TODO]]}} ((source-task))', '{{[[DONE]]}} ((source-task)) d22:00', 'Review ((source-task)) 30m', '((source-task)) 30m']) {
+    for (const localString of ['{{[[TODO]]}} ((source-task))', '{{[[DONE]]}} ((source-task)) d22:00']) {
       const r = resolveRendererTaskInstance({ ...payload, localString }, () => SOURCE);
       assert.equal(r.completionEvidence?.reference ?? null, null);
     }
+    const contextual = resolveRendererTaskInstance({ ...payload, localString: 'Review ((source-task)) 30m' }, () => SOURCE);
+    assert.equal(contextual.status, 'DONE');
+    assert.equal(contextual.completionEvidence.reference.reason, 'reference-context-unsupported');
     assert.equal(reads.length, 0);
+    const duration = resolveRendererTaskInstance({ ...payload, localString: '((source-task)) 30m' }, () => SOURCE);
+    assert.equal(duration.completionEvidence.reference.minutes, 1434);
+    assert.equal(reads.length, 1);
   });
 });

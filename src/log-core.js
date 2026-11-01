@@ -710,35 +710,29 @@ function scheduleTasks({
   };
 }
 
-/** Read-only date qualification for an explicit stamp on a pure reference's owner. */
-function resolveReferenceCompletionTime({ sourceUid, sourceMinutes, sourcePageUid, displayDate, logicalEndMinutes = 1440 } = {}) {
+/**
+ * Interpret a valid source clock on the displayed plan's axis. A block's
+ * storage page is not evidence of its completion date, so page/title/window
+ * inputs are intentionally compatibility-only and never shift the minute.
+ */
+function resolveReferenceCompletionTime({ sourceUid, sourceMinutes } = {}) {
   const validMinute = Number.isInteger(sourceMinutes) && sourceMinutes >= 0 && sourceMinutes < 1440;
   const base = { sourceUid, sourceMinutes: validMinute ? sourceMinutes : null };
-  const unverified = (reason, extra = {}) => ({ state: 'unverified', ...base, ...extra, reason });
-  if (!validMinute) return unverified('invalid-source-time');
-  // Daily Note identity, not edit/create time, drag time or a date-looking title.
-  const parts = /^(\d{2})-(\d{2})-(\d{4})$/.exec(String(sourcePageUid || ''));
-  if (!parts) return unverified('source-date-unverified');
-  const [, mm, dd, yyyy] = parts;
-  const date = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd)));
-  if (date.getUTCFullYear() !== Number(yyyy) || date.getUTCMonth() !== Number(mm) - 1 || date.getUTCDate() !== Number(dd)) {
-    return unverified('source-date-unverified');
-  }
-  const sourceDate = `${yyyy}-${mm}-${dd}`;
-  const displayDay = localDayOrdinal(displayDate);
-  if (displayDay === null) return unverified('display-date-unverified', { sourceDate });
-  const offset = date.getTime() / 86400000 - displayDay;
-  const carryover = offset === 1 && Number.isFinite(logicalEndMinutes) && logicalEndMinutes > 1440
-    && logicalEndMinutes <= 2880 && sourceMinutes + 1440 <= logicalEndMinutes;
-  if (offset !== 0 && !carryover) return unverified('different-day', { sourceDate });
-  return { state: 'resolved', ...base, sourceDate, minutes: sourceMinutes + offset * 1440 };
+  if (!validMinute) return { state: 'unverified', ...base, reason: 'invalid-source-time' };
+  return { state: 'resolved', ...base, minutes: sourceMinutes, placement: 'plan-clock' };
 }
 
 /** Source stamps are a fallback only; they never become local CLOCK ownership. */
-function selectChartCompletionTime({ localDoneAt, actualMinutes, hasLocalClock = false, clockReadKnown = false, reference = null } = {}) {
+function selectChartCompletionTime({ localDoneAt, localTimeInvalid = false, actualMinutes, hasLocalClock = false, clockReadKnown = false, reference = null } = {}) {
   const local = asNumber(localDoneAt);
   if (Number.isFinite(local) && local >= 0) return { origin: 'local', minutes: local };
-  if ((Number.isFinite(actualMinutes) && actualMinutes > 0) || hasLocalClock) return { origin: 'clock', minutes: null };
+  if (Number.isFinite(actualMinutes) && actualMinutes > 0) return { origin: 'clock', minutes: null };
+  if (localTimeInvalid) return { origin: 'unverified', minutes: null, reference: { state: 'unverified', reason: 'invalid-local-time', sourceMinutes: null } };
+  // A running, out-of-day or sub-minute local CLOCK is still evidence, but it
+  // has no completion endpoint. Hold it rather than allocating a START slot or
+  // borrowing a reference stamp; only a positive same-plan summary is Actual.
+  if (hasLocalClock) return { origin: 'unverified', minutes: null,
+    reference: { state: 'unverified', reason: 'local-clock-unplaceable', sourceMinutes: null } };
   if (!reference) return { origin: 'none', minutes: null };
   if (clockReadKnown && reference.state === 'resolved' && Number.isFinite(reference.minutes) && reference.minutes >= 0) {
     return { origin: 'reference', minutes: reference.minutes, reference };
@@ -777,7 +771,7 @@ function historicalDoneSlice({
   const fallbackDuration = asNumber(defaultDuration);
   const originalDuration = hasActual
     ? actual
-    : Number.isFinite(explicitDuration) && explicitDuration > 0
+    : Number.isFinite(explicitDuration) && explicitDuration >= 0
       ? explicitDuration
       : fallbackDuration;
 
@@ -1086,12 +1080,13 @@ const UI_COPY = {
       currentTime: 'Current time',
       noCompletionTime: 'No completion time recorded',
       inheritedCompletion: 'Completion status from reference',
-      referenceCompletion: 'Completion time from reference',
+      referenceCompletion: 'Reference time interpreted for this plan',
       completionTimeUnverified: 'Completion time unverified',
-      referenceDateUnverified: 'Source date unverified; not placed on this day',
-      referenceDateMismatch: 'Source Daily Note date differs; completion date unverified',
+      invalidLocalCompletionTime: 'Local completion time is invalid; not placed on the timeline',
+      referenceContextUnsupported: 'Reference context cannot supply a completion time; add a local stamp to place this item',
       referenceClockUnverified: 'Local CLOCK history unavailable; source time not applied',
-      referenceTimeUnverified: 'Source completion time could not be verified; not placed on this day',
+      localClockUnplaceable: 'Local CLOCK has no completed interval on this plan; not placed on the timeline',
+      referenceTimeUnverified: 'Source completion time could not be verified; not placed on this plan',
       inheritedDone: 'Inherited completion',
       noTime: 'Completion time not recorded',
       notTimeScaled: 'Not placed on the timeline',
@@ -1203,12 +1198,13 @@ const UI_COPY = {
       currentTime: '当前时间',
       noCompletionTime: '未记录完成时间',
       inheritedCompletion: '完成状态来自引用',
-      referenceCompletion: '完成时间来自引用',
+      referenceCompletion: '引用时间按当前计划解读',
       completionTimeUnverified: '完成时间待确认',
-      referenceDateUnverified: '来源日期未确认，不排入当日时间轴',
-      referenceDateMismatch: '来源日记页日期不同，完成日期待确认',
+      invalidLocalCompletionTime: '本地完成时间格式不正确，不排入时间轴',
+      referenceContextUnsupported: '此引用上下文不能提供完成时间；可添加本地完成戳定位',
       referenceClockUnverified: '本地 CLOCK 记录暂不可核对，未采用来源时间',
-      referenceTimeUnverified: '来源完成时间无法确认，不排入当日时间轴',
+      localClockUnplaceable: '本地 CLOCK 在当前计划内没有已完成区间，不排入时间轴',
+      referenceTimeUnverified: '来源完成时间无法确认，不排入当前计划',
       inheritedDone: '来源完成',
       noTime: '未记录完成时刻',
       notTimeScaled: '不占用时间刻度',

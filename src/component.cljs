@@ -551,16 +551,15 @@
                                  " · " (duration-label (- (:full-end event) (:full-start event)))))))
         meta (str summary
                   (when reference-time?
-                    (str " · " (get-in copy [:tooltips :referenceCompletion]) ": " (:sourceDate reference) " " reference-time-text
+                    (str " · " (get-in copy [:tooltips :referenceCompletion]) ": " reference-time-text
                          (when (= kind "outside-window") (str " · " (get-in copy [:tooltips :completionEstimate]) " " range-text))))
                   (when (= kind "unverified-completion")
                     (str " · " (get-in copy [:tooltips (case (:reason reference)
-                                                        "different-day" :referenceDateMismatch
-                                                        "source-date-unverified" :referenceDateUnverified
-                                                        "display-date-unverified" :referenceDateUnverified
+                                                        "invalid-local-time" :invalidLocalCompletionTime
+                                                        "reference-context-unsupported" :referenceContextUnsupported
                                                         "local-clock-unavailable" :referenceClockUnverified
-                                                        :referenceTimeUnverified)])
-                         (when (:sourceDate reference) (str " · " (:sourceDate reference)))))
+                                                        "local-clock-unplaceable" :localClockUnplaceable
+                                                        :referenceTimeUnverified)])))
                   (when allocation? (str " · " (get-in copy [:tooltips :estimatedAllocation]) " " range-text
                                          " · " (get-in copy [:tooltips :notRecordedCompletion])))
                   (when (not= kind "timed") (str " · " (get-in copy [:tooltips :notTimeScaled])))
@@ -744,18 +743,19 @@
         evidence (:completionEvidence instance)
         local-done-at (if (number? (:localMinutes evidence)) (:localMinutes evidence) done-at)
         reference (or (:reference evidence)
-                      ;; An older bridge must not silently turn a pure source
-                      ;; completion into a fresh morning allocation.
+                      ;; Without chart evidence an older bridge cannot tell a
+                      ;; missing source stamp from an unreadable/invalid one.
+                      ;; Do not turn that uncertainty into a morning allocation.
                       (when (and done (= "task" (:kind instance)) (= "source" (:statusOrigin instance))
-                                 (nil? evidence) (re-matches #"\s*\(\([A-Za-z0-9_-]{6,255}\)\)\s*" (or (:localString instance) "")))
+                                 (nil? evidence))
                         {:state "unverified" :sourceUid (:statusOwnerUid instance) :reason "source-context-unavailable"}))
         completion-time (when done
                           (log-core-call "selectChartCompletionTime"
-                            {:localDoneAt local-done-at :actualMinutes actual-duration
+                            {:localDoneAt local-done-at :localTimeInvalid (:localTimeInvalid evidence) :actualMinutes actual-duration
                              :hasLocalClock (boolean (some #(= (:uid block-map) (:taskUid %)) (:entries clock-context)))
                              :clockReadKnown (boolean (some #(= (:uid block-map) %) (:readableTaskUids clock-context)))
                              :reference reference}))
-        unverified-time? (and done reference (or (nil? completion-time) (= "unverified" (:origin completion-time))))
+        unverified-time? (and done (or (nil? completion-time) (= "unverified" (:origin completion-time))))
         completion-minute (if completion-time (:minutes completion-time) local-done-at)
         done-slice (when-not unverified-time?
                      (log-core-call "historicalDoneSlice"
