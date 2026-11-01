@@ -2,8 +2,8 @@
 """Exact-source SCI/Reagent gate: every source record belongs in the diagram.
 
 Every represented record retains its title and timing semantics. Frame height
-follows its displayed columns; only visible Current metadata and active Tips
-occupy rows. This remains an isolated synthetic renderer, not live Roam Desktop.
+follows its displayed columns; only visible Current metadata occupies subtitle
+rows. Two-row Tips retain a stable slot, including while idle. This remains an isolated synthetic renderer, not live Roam Desktop.
 """
 import base64
 import hashlib
@@ -115,13 +115,15 @@ def set_clock(page, iso):
 
 
 def assert_rect_equal(a, b, label):
-    # Inspection may reveal its own readout in normal flow, but must never
-    # move/resize the diagram or cover the content that follows it.
+    # Hover/focus uses a fixed slot. Only explicit pinned expansion may change
+    # normal-flow height; neither state may move/resize the diagram or cover Desk.
     assert a['viewBox'] == b['viewBox'], label
     for key in ('svg', 'stage'):
         assert a[key] and b[key], (label, key)
         assert all(abs(a[key][part] - b[key][part]) <= .5 for part in ('x', 'y', 'width', 'height')), (label, key, a[key], b[key])
     delta = b['detail']['height'] - a['detail']['height']
+    if not a.get('detailExpanded') and not b.get('detailExpanded'):
+        assert abs(delta) <= .1, (label, 'preview slot changed height', a['detail'], b['detail'])
     for key in ('workspace', 'detail'):
         assert all(abs(a[key][part] - b[key][part]) <= .5 for part in ('x', 'y', 'width')), (label, key, a[key], b[key])
     assert abs((b['workspace']['height'] - a['workspace']['height']) - delta) <= .5, label
@@ -227,20 +229,20 @@ def coverage(page):
     })'''), 'compact chart padding must not clip hour labels'
     detail = page.locator('.nautilus-log-detail-region')
     expanded = 'is-expanded' in detail.get_attribute('class')
-    full_content = detail.get_attribute('data-tip-content') == 'full'
-    if detail.get_attribute('data-nautilus-detail') == 'idle':
-        assert s['detail']['height'] == 0, s['detail']
-    elif not expanded and not full_content:
-        assert abs(s['detail']['height'] - 42) < .5
+    assert detail.get_attribute('data-tip-content') == 'compact'
+    if not expanded:
+        assert abs(s['detail']['height'] - 42) < .1, s['detail']
     if detail.get_attribute('data-nautilus-detail') == 'active':
         tip = page.locator('.nautilus-log-detail-content').bounding_box()
         assert tip['width'] <= s['workspace']['width'] - 32 + 1, tip
         assert abs(tip['x'] + tip['width'] / 2 - s['workspace']['x'] - s['workspace']['width'] / 2) <= 1
-        if not expanded and not full_content:
-            assert tip['height'] <= 38.5, tip
-        if full_content:
+        if not expanded:
+            assert abs(tip['height'] - 38) < .1, tip
             for selector in ['.nautilus-log-detail-title', '.nautilus-log-detail-meta']:
-                assert page.locator(selector).evaluate('e=>getComputedStyle(e).textOverflow!=="ellipsis" && e.scrollWidth<=e.clientWidth+1 && e.scrollHeight<=e.clientHeight+1'), selector
+                assert page.locator(selector).evaluate('e=>getComputedStyle(e).whiteSpace==="nowrap" && getComputedStyle(e).textOverflow==="ellipsis" && e.clientHeight===14'), selector
+        else:
+            for selector in ['.nautilus-log-detail-title', '.nautilus-log-detail-meta']:
+                assert page.locator(selector).evaluate('e=>e.scrollWidth<=e.clientWidth+1 && e.scrollHeight<=e.clientHeight+1'), selector
         if detail.get_attribute('data-tip-more') == 'false':
             assert not page.locator('.nautilus-log-detail-expand').count()
             assert page.locator('.nautilus-log-detail-title').evaluate('e=>e.scrollWidth<=e.clientWidth')
@@ -443,7 +445,7 @@ def adaptive_density_contract(page):
         for side, gaps in proof['gaps'].items():
             if len(proof['columns'][side]) >= 4:
                 assert max(gaps, default=0) <= 12, (case, side, gaps)
-        assert proof['tipHeight'] == 0, 'idle Tips must not reserve an empty band'
+        assert proof['tipHeight'] == 42, 'retain only the fixed two-row Tips slot, not hypothetical chart space'
 
     # Resize and move one mounted instance through real host selectors. No
     # changed source row, duplicated clock timer, or recreated SVG is allowed.
@@ -571,7 +573,7 @@ def four_corrections_contract(page):
         if width <= 360:
             assert pressure['height'] <= 38.5, pressure
         else:
-            coverage(page)  # Full-mode metadata may wrap rather than be truncated.
+            coverage(page)  # Even wide previews must remain two fixed text rows.
         pressure_style.evaluate('e=>e.remove()'); settle_renderer(page)
         colors = page.locator('.nautilus-log-html-legend').first.locator('.nautilus-log-legend-dot').evaluate_all('els=>els.map(e=>getComputedStyle(e).backgroundColor)')
         assert colors == ['rgb(194, 75, 75)', 'rgb(173, 139, 36)', 'rgb(19, 124, 189)'], colors
@@ -657,7 +659,7 @@ def full_tip_palette_contract(page):
         assert data['queueTop'] >= data['tipBottom'] and data['deskTop'] >= data['tipBottom'], data
         assert all(abs(before[k]-after['svg'][k]) < .5 for k in ['width','height'])
         if width > 360:
-            assert data['mode'] == 'full' and data['width'] > 280 and data['textOverflow'] != 'ellipsis', data
+            assert data['mode'] == 'compact' and data['width'] > 280 and data['textOverflow'] == 'ellipsis', data
             assert data['titleScroll'] <= data['titleWidth'] + 1 and data['titleScrollHeight'] <= data['titleHeight'] + 1, data
         else:
             assert data['mode'] == 'compact' and data['width'] <= width - 32 and data['textOverflow'] == 'ellipsis', data
@@ -676,9 +678,9 @@ def full_tip_palette_contract(page):
     load(page, 'long', 'main', 640)
     before = state(page)['svg']; select(page, 'long-unbroken'); wide = coverage(page)
     assert page.locator('.nautilus-log-detail-title').inner_text() == page.evaluate('()=>__chartHarness.longTitles()["long-unbroken"]')
-    assert page.get_by_role('button', name='Full text', exact=True).count() == 0, 'wide title must not require More'
-    assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).backgroundImage==="none"')
-    assert wide['detail']['height'] > 42
+    assert page.get_by_role('button', name='Full text', exact=True).count() == 1, 'clipped wide titles need an explicit full-text action'
+    assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).backgroundImage==="none" && getComputedStyle(e).textOverflow==="ellipsis" && e.scrollWidth>e.clientWidth')
+    assert wide['detail']['height'] == 42
     assert all(abs(before[k]-wide['svg'][k]) < .5 for k in ['width','height'])
     page.evaluate('()=>__chartHarness.setWidth(280)')
     page.wait_for_function('document.querySelector(".nautilus-log-detail-region").dataset.nautilusDetail==="idle"')
@@ -687,7 +689,7 @@ def full_tip_palette_contract(page):
     assert page.locator('.nautilus-log-detail-region').get_attribute('data-tip-content') == 'compact'
     page.get_by_role('button', name='Full text', exact=True).click(); settle_renderer(page); coverage(page)
     assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text()
-    reports['unbrokenAndResize'] = {'wideAutomaticFullText': True, 'svgUnchanged': True, 'narrowExpansion': True, 'graphWrites': state(page)['writes']}
+    reports['unbrokenAndResize'] = {'wideTwoRowPreview': True, 'svgUnchanged': True, 'narrowExpansion': True, 'graphWrites': state(page)['writes']}
     return reports
 
 
@@ -724,7 +726,7 @@ def tip_surface_contract(page):
             settle_renderer(page)
             idle = state(page)
             select(page, 'connection-done-0'); coverage(page)
-            assert_rect_equal(idle, state(page), 'showing a tip adds only its own flow height')
+            assert_rect_equal(idle, state(page), 'showing a tip preserves the fixed slot')
             def metrics():
                 return page.evaluate('''()=>{
                   const content=document.querySelector('.nautilus-log-detail-content'),region=content.parentElement;
@@ -768,7 +770,7 @@ def tip_surface_contract(page):
             button.press('Enter')
             expect(button).to_have_attribute('aria-expanded', 'false')
             settle_renderer(page)
-            assert_rect_equal(idle, state(page), 'collapse changes only the active readout height')
+            assert_rect_equal(idle, state(page), 'collapse restores the fixed preview slot')
             assert state(page)['writes'] == 0
             report[f'{theme}-{width}'] = {'closed': normal, 'expandedHeight': expanded['height'], 'stableSlot': True, 'graphWrites': 0}
     return report
@@ -809,11 +811,8 @@ def detail_name_semantics_contract(page):
             assert len({colors[uid]['color'] for uid in ['task-reference', 'event-standup', 'task-completed']}) == 3
             assert page.locator('.nautilus-log-center-date text').evaluate_all('nodes=>nodes.map(e=>({text:e.textContent,fill:getComputedStyle(e).fill}))') == center_before
             semantic_name('task-unbroken', 'task')
-            if width <= 360:
-                page.get_by_role('button', name='Full text', exact=True).click()
-            else:
-                assert page.get_by_role('button', name='Full text', exact=True).count() == 0
-                assert title.evaluate('e=>getComputedStyle(e).textOverflow!=="ellipsis" && e.scrollHeight<=e.clientHeight')
+            page.get_by_role('button', name='Full text', exact=True).click(); settle_renderer(page)
+            assert title.evaluate('e=>getComputedStyle(e).textOverflow!=="ellipsis" && e.scrollHeight<=e.clientHeight')
             expect(title).to_contain_text('XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX')
             coverage(page)
             assert paint()['image'] == 'none' and state(page)['writes'] == 0
@@ -1413,8 +1412,7 @@ def lifecycle(page):
 
 def full_text(page, context, width):
     load(page, 'long', context, width)
-    # Extra provenance legitimately offers More; the wide title itself is
-    # already complete and must not depend on that action.
+    # Both clipping and extra provenance use the same explicit full-text action.
     page.evaluate('()=>__chartHarness.updateChild("long-unbroken","{{[[DONE]]}} "+__chartHarness.longTitles()["long-unbroken"]+" 30m")')
     page.wait_for_function('document.querySelector("[data-task-uid=long-unbroken]").dataset.timeClaim==="estimated-allocation"')
     select(page, 'long-unbroken')
@@ -1425,10 +1423,8 @@ def full_text(page, context, width):
     expanded = coverage(page)
     assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text()
     assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).webkitLineClamp') == 'none'
-    if width <= 360:
-        assert expanded['detail']['height'] > before['detail']['height']
-    # In a full-width view the title may reflow into fewer lines when More
-    # moves beside metadata. Verify revealed content, not forced extra height.
+    assert expanded['detail']['height'] > before['detail']['height']
+    # Explicit reading reveals the complete title and provenance at every width.
     assert 'Not a recorded completion time' in page.locator('.nautilus-log-detail-meta').inner_text()
     assert all(abs(expanded['svg'][key] - before['svg'][key]) < .5 for key in ('x', 'width', 'height')), 'explicit expansion must not resize the SVG'
     assert abs(expanded['svg']['y'] + page.evaluate('() => scrollY') - before['svg']['y'] - scroll_before) < .5, 'the diagram must keep its document-flow position'
@@ -1442,11 +1438,9 @@ def full_text(page, context, width):
     # behind the pinned inspector and remove the focused action mid-render.
     assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text(), 'collapse changed the inspected record'
     page.mouse.move(1180, 980); settle_renderer(page)
-    if width <= 360:
-        assert abs(state(page)['detail']['height'] - 42) < .5
-    else:
-        assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text()
-        assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).textOverflow!=="ellipsis" && e.scrollHeight<=e.clientHeight')
+    assert abs(state(page)['detail']['height'] - 42) < .1
+    assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text()
+    assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).textOverflow==="ellipsis" && e.clientHeight===14')
     page.screenshot(path=str(OUT / 'screenshots' / f'fulltext-{context}-{width}.png'), full_page=True)
     return {'closed': compact_record(before), 'expandedHeight': expanded['detail']['height'], 'pinned': True, 'noInternalScroll': True}
 

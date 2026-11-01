@@ -327,11 +327,12 @@ function chartRecordAppearance({ event = {}, nowMinutes, interactive = false, sh
 function chartTipLayout({ title = '', summary = '', meta = summary, containerWidth = 720,
   fontFamily = 'Inter, system-ui, sans-serif', moreLabel = 'More', measureTitle, measureMeta } = {}) {
   const localWidth = finite(containerWidth, 720);
-  const compact = localWidth <= 360;
   const maxWidth = Math.max(96, localWidth - 32);
   // CSS uses tabular numerals; Canvas defaults to proportional digits. The
   // zero advance gives the tabular width and avoids clipping short time ranges.
-  const titleWidth = textMeasure(`500 11px ${fontFamily}`, measureTitle)(String(title).replace(/[0-9]/g, '0'));
+  const titleDigits = (String(title).match(/[0-9]/g) || []).length;
+  const titleWidth = textMeasure(`500 11px ${fontFamily}`, measureTitle)(String(title).replace(/[0-9]/g, '0'))
+    + 2 + titleDigits * .4;
   const metaDigits = (String(summary).match(/[0-9]/g) || []).length;
   // Inter's tnum zero can itself be wider than its proportional zero. Include
   // the measured native-font allowance plus subpixel grid rounding, not a
@@ -339,13 +340,14 @@ function chartTipLayout({ title = '', summary = '', meta = summary, containerWid
   const metaWidth = textMeasure(`400 11px ${fontFamily}`, measureMeta)(String(summary).replace(/[0-9]/g, '0'))
     + 2 + metaDigits * .4;
   // Equal-size text rows share an action whose label aligns with metadata.
-  // Wide content wraps in full; only compact views require expansion for clipped text.
+  // Every preview has exactly two text rows. Use local horizontal room first;
+  // clipping or additional provenance requires an explicit full-text action.
   const contentGutter = 6 * 2 + 2 + 5 + 4;
-  const more = String(meta) !== String(summary) || (compact && (titleWidth > maxWidth - contentGutter || metaWidth > maxWidth - contentGutter));
+  const more = String(meta) !== String(summary) || titleWidth > maxWidth - contentGutter || metaWidth > maxWidth - contentGutter;
   const actionWidth = Math.max(28, Math.ceil(textMeasure(`400 11px ${fontFamily}`)(moreLabel)) + 6);
   const actionRoom = more ? actionWidth + 4 + 6 : 0;
   const width = Math.max(titleWidth, metaWidth) + contentGutter + actionRoom;
-  return { mode: 'stacked', contentMode: compact ? 'compact' : 'full',
+  return { mode: 'stacked', contentMode: 'compact',
     width: Math.max(60, Math.min(maxWidth, Math.ceil(width))), maxWidth,
     expandedWidth: maxWidth, more, actionWidth, slotHeight: 42 };
 }

@@ -61,5 +61,5 @@ test('closed tips prioritize the title on two compact rows; full details remain 
   assert.equal(long.slotHeight, 42);
   assert.equal(long.mode, 'stacked'); assert.equal(long.more, true);
   assert.ok(long.width <= 688 && long.expandedWidth === 688);
-  assert.equal(long.contentMode, 'full');
+  assert.equal(long.contentMode, 'compact');
 });

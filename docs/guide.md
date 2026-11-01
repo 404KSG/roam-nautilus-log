@@ -214,18 +214,19 @@ These are read-only projections: no markers or timestamps are copied into saved 
 no Actual is invented, and pending scheduling/capacity rules are unchanged.
 
 Hover or keyboard-focus a record, available slot or past gap to read its context in a
-centered, content-sized tip with 16px side insets. Above 360px, it uses available local width
-instead of stopping at 280px. Titles and displayed metadata remain complete, wrapping without
-ellipses. Short content does not stretch across the chart. More reveals extra information,
-not a hidden wide-view title. At 360px or narrower, a compact preview may use More for clipping.
+centered, content-sized tip with 16px side insets. The preview always has two rows: one for
+the title and one for metadata. Longer content widens the note up to the available local
+width, not a universal 280px cap. At that limit, each row uses an ellipsis instead of wrapping.
+Short content does not stretch across the chart. More reveals clipped text or extra information.
 
-The note has 38px normal content in a 42px minimum slot, with 2px above and below it. A faint
+The preview has 38px content in a fixed 42px slot, with 2px above and below it. A faint
 border, 4px corners and 4px vertical/6px horizontal padding add slight breathing room. Both the
 title and metadata use 11px text with a 14px line height. More's visible text aligns with the
 metadata row; its independent 24px hit area does not stretch over long titles. It stays neutral
-until hover/focus and never breaks into letters. Wide wrapping and explicit expansion grow
-only the text region in page flow, without resizing SVG or covering Desk. Idle tips collapse
-to zero height and padding instead of leaving an empty 42px band.
+until hover/focus and never breaks into letters. Idle tips hide their content but retain the
+same small slot, so moving between tasks, gaps and empty space cannot shift the queue or Desk.
+Only an explicit full-text action expands the reading area in page flow, without resizing
+SVG or covering Desk. Expanded reading stays pinned; Less returns to the two-row preview.
 
 Names match the chart's semantic colors: blue tasks, yellow events and neutral gray
 completed records, without text gradients. Actual appears in a recorded completion's first

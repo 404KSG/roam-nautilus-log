@@ -507,6 +507,7 @@ window.__chartHarness = {
       sliceCount: document.querySelectorAll('.nautilus-log-event-slice-group[data-chart-kind="timed"]').length,
       recordCount: document.querySelectorAll('svg.nautilus-log-svg [data-task-uid]').length,
       detailText: detail?.textContent || null,
+      detailExpanded: detail?.classList.contains('is-expanded') || false,
       bodyTooltipCount: document.body.querySelectorAll('[role="tooltip"]').length,
       writes: traces.filter((entry) => entry.kind === 'write').length,
       lastTimeline: [...traces].reverse().find((entry) => entry.kind === 'timeline-day-state') || null,
