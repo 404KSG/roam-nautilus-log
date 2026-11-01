@@ -646,6 +646,7 @@
 }
 
 .nautilus-log-container .nautilus-log-toggle-btn {
+  --nautilus-log-toolbar-icon: #5c7080;
   --nautilus-log-control-tooltip-bg: #fff;
   --nautilus-log-control-tooltip-border: rgba(16, 22, 26, 0.2);
   --nautilus-log-control-tooltip-text: #182026;
@@ -665,7 +666,7 @@
   filter: none !important;
   text-shadow: none !important;
   transform: none;
-  color: var(--nautilus-log-control-icon);
+  color: var(--nautilus-log-toolbar-icon);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -675,6 +676,15 @@
   overflow: visible;
   position: relative;
   transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+:where(.bp3-dark,.rm-dark-theme,.dark) .nautilus-log-container .nautilus-log-toggle-btn,
+.nautilus-log-container:where(.bp3-dark,.rm-dark-theme,.dark) .nautilus-log-toggle-btn {
+  --nautilus-log-toolbar-icon: #a7b6c2;
+}
+
+.nautilus-log-container .nautilus-log-toggle-btn .bp3-icon {
+  color: inherit;
 }
 
 .nautilus-log-toggle-btn[data-nautilus-tooltip]::before,
@@ -742,7 +752,7 @@
 .nautilus-log-container .nautilus-log-toggle-btn:hover,
 .nautilus-log-container .nautilus-log-toggle-btn:focus-visible {
   background-color: var(--nautilus-log-hover) !important;
-  color: var(--nautilus-log-chart-ink);
+  color: var(--nautilus-log-toolbar-icon);
   outline: none;
 }
 
@@ -890,7 +900,6 @@
 .roam-app.rm-dark-theme .nautilus-log-toggle-btn:hover,
 .roam-app.rm-dark-theme .nautilus-log-toggle-btn:focus-visible {
   background-color: rgba(255, 255, 255, 0.1) !important;
-  color: #fff;
 }
 
 .bp3-dark .nautilus-log-toggle-btn,

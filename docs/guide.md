@@ -124,7 +124,8 @@ Past gaps describe the chart allocation, not proof that time was idle or wasted.
 ## Chart controls
 
 The four main controls are **Desk → Help → Clean/Tidy → Eye**. A connected Calendar
-appears after them, without taking the fourth position.
+appears after them, without taking the fourth position. The icons use Roam's native
+toolbar colors in light and dark themes, including hover and keyboard focus.
 
 - **Desk switch:** show or hide unfinished-task cards below the chart. Only the slider is visible; hover or keyboard focus shows its Desk label. The thumb slides right and the track turns blue when open. Click, Space or Enter toggles it; the state also follows fold/expand restoration, control remounts and saved preferences.
 - **Help (?):** immediately after Desk, the question mark opens a native-style quick guide.

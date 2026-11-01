@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- Match Help, Clean, Eye and Calendar icon colors to Roam's native toolbar in light
+  and dark themes, including hover and keyboard focus. Keep chart text and category
+  colors, Desk switch states, icon geometry and actions unchanged.
+
 - Pure references can use a same-day, date-qualified source completion stamp for chart
   placement instead of losing it and allocating a default morning slice. Local completion
   and local CLOCK retain priority and ownership. Unknown source dates or unreadable local
