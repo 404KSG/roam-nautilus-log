@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Exact-source SCI/Reagent gate: every source record belongs in the diagram.
 
-The former footer/scroll acceptance was explicitly rejected. Frame height now
-uses the full source titles, never the clock's scheduled subset. This remains
-an isolated synthetic renderer, not a live Roam Desktop certification.
+Every represented record retains its title and timing semantics. Frame height
+follows its displayed columns; only visible Current metadata occupies subtitle
+rows. Two-row Tips retain a stable slot, including while idle. This remains an isolated synthetic renderer, not live Roam Desktop.
 """
 import base64
 import hashlib
@@ -115,18 +115,29 @@ def set_clock(page, iso):
 
 
 def assert_rect_equal(a, b, label):
+    # Hover/focus uses a fixed slot. Only explicit pinned expansion may change
+    # normal-flow height; neither state may move/resize the diagram or cover Desk.
     assert a['viewBox'] == b['viewBox'], label
-    for key in ('svg', 'workspace', 'stage', 'detail', 'status', 'desk', 'following'):
+    for key in ('svg', 'stage'):
         assert a[key] and b[key], (label, key)
         assert all(abs(a[key][part] - b[key][part]) <= .5 for part in ('x', 'y', 'width', 'height')), (label, key, a[key], b[key])
+    delta = b['detail']['height'] - a['detail']['height']
+    if not a.get('detailExpanded') and not b.get('detailExpanded'):
+        assert abs(delta) <= .1, (label, 'preview slot changed height', a['detail'], b['detail'])
+    for key in ('workspace', 'detail'):
+        assert all(abs(a[key][part] - b[key][part]) <= .5 for part in ('x', 'y', 'width')), (label, key, a[key], b[key])
+    assert abs((b['workspace']['height'] - a['workspace']['height']) - delta) <= .5, label
+    for key in ('status', 'desk', 'following'):
+        assert all(abs(a[key][part] - b[key][part]) <= .5 for part in ('x', 'width', 'height')), (label, key, a[key], b[key])
+        assert abs((b[key]['y'] - a[key]['y']) - delta) <= .5, (label, key, a[key], b[key], delta)
 
 
 def assert_clock_layout(a, b, label):
-    # Queue membership is a semantic state change, including a whole task
-    # ceasing to fit before END. Ordinary motion of the same members is stable.
+    # Real column/current-row changes may resize the content-sized frame.
+    # Ordinary motion that retains those budgets must remain stable.
     assert set(a['sourceUids']) == set(b['sourceUids']), label
     same = ([r['uid'] for r in a['records']], a['queueKind'], [r['uid'] for r in a['queueItems']]) == ([r['uid'] for r in b['records']], b['queueKind'], [r['uid'] for r in b['queueItems']])
-    if same:
+    if same and a['presentation']['columnHeights'] == b['presentation']['columnHeights']:
         assert_rect_equal(a, b, label)
 
 
@@ -139,6 +150,7 @@ def compact_record(s):
 
 
 def coverage(page):
+    settle_renderer(page)  # Pointer/focus exits can collapse the normal-flow readout on the next Reagent frame.
     s = state(page); expected = page.evaluate('() => __chartHarness.expectedSourceUids()')
     represented = [r['uid'] for r in s['records']] + [r['uid'] for r in s['queueItems']]
     assert len(represented) == len(expected) == len(set(represented))
@@ -217,18 +229,20 @@ def coverage(page):
     })'''), 'compact chart padding must not clip hour labels'
     detail = page.locator('.nautilus-log-detail-region')
     expanded = 'is-expanded' in detail.get_attribute('class')
-    full_content = detail.get_attribute('data-tip-content') == 'full'
-    if not expanded and (not full_content or detail.get_attribute('data-nautilus-detail') == 'idle'):
-        assert abs(s['detail']['height'] - 42) < .5
+    assert detail.get_attribute('data-tip-content') == 'compact'
+    if not expanded:
+        assert abs(s['detail']['height'] - 42) < .1, s['detail']
     if detail.get_attribute('data-nautilus-detail') == 'active':
         tip = page.locator('.nautilus-log-detail-content').bounding_box()
         assert tip['width'] <= s['workspace']['width'] - 32 + 1, tip
         assert abs(tip['x'] + tip['width'] / 2 - s['workspace']['x'] - s['workspace']['width'] / 2) <= 1
-        if not expanded and not full_content:
-            assert tip['height'] <= 38.5, tip
-        if full_content:
+        if not expanded:
+            assert abs(tip['height'] - 38) < .1, tip
             for selector in ['.nautilus-log-detail-title', '.nautilus-log-detail-meta']:
-                assert page.locator(selector).evaluate('e=>getComputedStyle(e).textOverflow!=="ellipsis" && e.scrollWidth<=e.clientWidth+1 && e.scrollHeight<=e.clientHeight+1'), selector
+                assert page.locator(selector).evaluate('e=>getComputedStyle(e).whiteSpace==="nowrap" && getComputedStyle(e).textOverflow==="ellipsis" && e.clientHeight===14'), selector
+        else:
+            for selector in ['.nautilus-log-detail-title', '.nautilus-log-detail-meta']:
+                assert page.locator(selector).evaluate('e=>e.scrollWidth<=e.clientWidth+1 && e.scrollHeight<=e.clientHeight+1'), selector
         if detail.get_attribute('data-tip-more') == 'false':
             assert not page.locator('.nautilus-log-detail-expand').count()
             assert page.locator('.nautilus-log-detail-title').evaluate('e=>e.scrollWidth<=e.clientWidth')
@@ -393,6 +407,75 @@ def completion_connections_contract(page):
     return reports
 
 
+def adaptive_density_measure(page):
+    return page.evaluate('''()=>{
+      const svg=document.querySelector('svg.nautilus-log-svg'),stage=svg.parentElement,s=svg.getBoundingClientRect(),g=stage.getBoundingClientRect();
+      const nodes=[...svg.querySelectorAll('.nautilus-log-shell-base,.nautilus-log-shell-outline,.nautilus-log-shell-tick,.nautilus-log-hour-label,.nautilus-log-center-date text,.nautilus-log-record-title,.nautilus-log-record-current,.nautilus-log-record-leader,.nautilus-log-record-anchor,.nautilus-log-record-marker')].filter(e=>getComputedStyle(e).visibility!=='hidden');
+      const boxes=nodes.map(e=>e.getBoundingClientRect()).filter(r=>r.width||r.height),top=Math.min(...boxes.map(r=>r.top)),bottom=Math.max(...boxes.map(r=>r.bottom));
+      const columns={left:[],right:[]};
+      for(const owner of svg.querySelectorAll('[data-task-uid]')){
+        const title=owner.querySelector('.nautilus-log-record-title'),texts=[title,owner.querySelector('.nautilus-log-record-current')].filter(Boolean),rs=texts.map(e=>e.getBoundingClientRect());
+        columns[title.dataset.labelSide].push({uid:owner.dataset.taskUid,top:Math.min(...rs.map(r=>r.top)),bottom:Math.max(...rs.map(r=>r.bottom))});
+      }
+      const gaps={};for(const [side,rows] of Object.entries(columns)){rows.sort((a,b)=>a.top-b.top);gaps[side]=rows.slice(1).map((r,i)=>r.top-rows[i].bottom);}
+      return {svgHeight:s.height,stageHeight:g.height,topVoid:top-g.top,bottomVoid:g.bottom-bottom,svgTopVoid:top-s.top,svgBottomVoid:s.bottom-bottom,
+        tipHeight:document.querySelector('.nautilus-log-detail-region').getBoundingClientRect().height,columns,gaps,frame:__chartHarness.scene().frame};
+    }''')
+
+
+def adaptive_density_contract(page):
+    report = {}
+    cases = [('light', 'en', 'main', 640), ('light', 'en', 'main', 960), ('light', 'en', 'embed', 520),
+             ('light', 'en', 'sidebar', 400), ('light', 'en', 'sidebar', 320), ('light', 'en', 'sidebar', 280),
+             ('dark', 'zh', 'main', 640), ('dark', 'zh', 'sidebar', 400), ('dark', 'zh', 'sidebar', 280)]
+    for theme, language, context, width in cases:
+        load(page, 'planned-density', context, width, window='flow', lang=language)
+        if theme == 'dark':
+            page.locator('body').evaluate("e=>{e.classList.add('bp3-dark');e.style.background='#1d1e21';e.style.color='#ecedef'}")
+        set_clock(page, '2026-10-29T09:24:00')
+        page.mouse.move(1180, 980); settle_renderer(page)
+        proof = adaptive_density_measure(page)
+        coverage(page); geometry_audit(page)
+        key = f'{context}-{width}' if theme == 'light' else f'{theme}-{context}-{width}-{language}'
+        report[key] = proof
+        page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/f'adaptive-density-{key}.png'))
+    (OUT/'adaptive-density-measurements.json').write_text(json.dumps(report, ensure_ascii=False, indent=2))
+    for case, proof in report.items():
+        assert proof['topVoid'] <= 24 and proof['bottomVoid'] <= 24, (case, proof)
+        for side, gaps in proof['gaps'].items():
+            if len(proof['columns'][side]) >= 4:
+                assert max(gaps, default=0) <= 12, (case, side, gaps)
+        assert proof['tipHeight'] == 42, 'retain only the fixed two-row Tips slot, not hypothetical chart space'
+
+    # Resize and move one mounted instance through real host selectors. No
+    # changed source row, duplicated clock timer, or recreated SVG is allowed.
+    original = page.evaluate('()=>__chartHarness.sourceRows()')
+    page.evaluate('()=>window.__adaptiveSvg=document.querySelector("svg.nautilus-log-svg")')
+    transitions = []
+    for context, width in [('main', 720), ('sidebar', 400), ('embed', 520), ('sidebar', 280)]:
+        page.evaluate('''({context,width})=>{const shell=document.querySelector('#renderer-shell');
+          document.querySelector(context==='sidebar'?'#sidebar-render-context':context==='embed'?'#embed-render-context':'#main-render-context').append(shell);
+          shell.dataset.chartContext=context;__chartHarness.setWidth(width);}''', {'context': context, 'width': width})
+        page.wait_for_function('w=>Math.abs(__chartHarness.state().lastPresentationObservation.width-w)<.5', arg=width)
+        coverage(page); geometry_audit(page)
+        assert page.evaluate('()=>window.__adaptiveSvg===document.querySelector("svg.nautilus-log-svg")')
+        assert page.evaluate('()=>__chartHarness.sourceRows()') == original
+        assert state(page)['activeClockIntervals'] == 1
+        transitions.append({'context': context, 'width': width, 'height': adaptive_density_measure(page)['stageHeight']})
+    before = adaptive_density_measure(page)
+    ranges = page.evaluate('()=>__chartHarness.scene().records.map(r=>[r.uid,r.event.start,r.event.end])')
+    page.evaluate('()=>__chartHarness.updateChild("density-task-8","{{[[TODO]]}} 整理流程 60m")')
+    page.wait_for_function('document.querySelector("[data-task-uid=density-task-8] .nautilus-log-record-title").textContent.includes("整理流程")')
+    coverage(page); geometry_audit(page)
+    after = adaptive_density_measure(page)
+    assert after['stageHeight'] < before['stageHeight'] - 50, (before, after)
+    assert page.evaluate('()=>__chartHarness.scene().records.map(r=>[r.uid,r.event.start,r.event.end])') == ranges
+    report['adaptation'] = {'transitions': transitions, 'beforeShorterTitle': before['stageHeight'],
+                            'afterShorterTitle': after['stageHeight'], 'sameIntervals': True, 'graphWrites': state(page)['writes']}
+    (OUT/'adaptive-density-measurements.json').write_text(json.dumps(report, ensure_ascii=False, indent=2))
+    return report
+
+
 def density_and_control_contract(page):
     reports = {}
     for context, width in [('main', 720), ('embed', 520), ('sidebar', 280)]:
@@ -403,27 +486,14 @@ def density_and_control_contract(page):
           const host=document.querySelector('.nautilus-log-desk-host').getBoundingClientRect();
           const ink=Math.max(...[...document.querySelectorAll('.nautilus-log-record-title,.nautilus-log-record-current,.nautilus-log-record-leader,.nautilus-log-slice,.nautilus-log-hour-label,.nautilus-log-record-marker')].map(e=>e.getBoundingClientRect().bottom));
           const labels=new Map(__chartHarness.scene().frame.labels.map(l=>[l.uid,l]));
-          const scale=Math.abs(document.querySelector('svg.nautilus-log-svg').getScreenCTM().a);
           const inactive=[...document.querySelectorAll('svg [data-task-uid]')].filter(e=>getComputedStyle(e).visibility==='visible'&&e.getAttribute('aria-current')!=='true'&&labels.get(e.dataset.taskUid)?.metadataHeight>0);
-          const reserved=Math.min(14*scale,Math.max(ink,...inactive.map(e=>e.querySelector('.nautilus-log-label-hit').getBoundingClientRect().bottom))-ink);
-          return {beforeTip:tip.top-ink,reservedCurrent:reserved,afterTip:host.top-tip.bottom,tipHeight:tip.height};
+          return {beforeTip:tip.top-ink,inactiveReservedRows:inactive.length,afterTip:host.top-tip.bottom,tipHeight:tip.height};
         }''')
-        # The approved wide B shell is 336 rather than 300 view units across.
-        # The symmetric, source-stable frame can retain up to half that growth
-        # as orientation slack when no leader reaches the bottom of the shell.
-        # This is bounded by the chosen plot size, not an extra text/card band.
-        plot = before['presentation']['timeRadius'] * before['presentation']['plotScale'] * 2
-        allowance = 14 + max(0, plot - 300) / 2 if width >= 640 else 20
-        # An inactive candidate keeps at most one Current line of hit/layout
-        # allowance, so the minute transition cannot resize the frame.
-        assert 0 <= measure['beforeTip'] <= allowance + measure['reservedCurrent'], (context, width, measure, allowance)
+        assert 0 <= measure['beforeTip'] <= 24 and measure['inactiveReservedRows'] == 0, (context, width, measure)
         assert 2 <= measure['afterTip'] <= 5 and measure['tipHeight'] <= 38.5, measure
-        # Source-column sizing includes only a stable allowance for potentially
-        # current records, not a duration/status row on every title.
-        budget = page.evaluate('''()=>{const s=__chartHarness.scene(),f=s.frame;let flexible=0,left=0,right=0;
-          for(const r of s.records){if(r.event.todo&&!r.event.done&&!r.event.meeting)flexible+=r.label.height;
-            else if(r.label.side==='left')left+=r.label.height;else right+=r.label.height;}
-          return {height:f.viewBox.height,bound:14+Math.max(f.timeRadius*f.plotScale*2+16,flexible+Math.max(left,right)),tail:f.viewBox.height-f.timedBottom};}''')
+        budget = page.evaluate('''()=>{const s=__chartHarness.scene(),f=s.frame;let left=0,right=0;
+          for(const r of s.records){if(r.label.side==='left')left+=r.label.height;else right+=r.label.height;}
+          return {height:f.viewBox.height,bound:14+Math.max(f.timeRadius*f.plotScale*2+16,left,right),tail:f.viewBox.height-f.timedBottom};}''')
         assert budget['height'] <= budget['bound'] + .5 and budget['tail'] == 2, budget
         for iso in ['2026-10-29T08:01:00', '2026-10-29T13:30:00', '2026-10-29T20:30:00']:
             after = set_clock(page, iso); coverage(page); geometry_audit(page)
@@ -444,7 +514,7 @@ def density_and_control_contract(page):
         assert calls == [{'uid': 'baseline-plan', 'origin': True, 'host': True}] * 3, calls
         select(page, 'connection-done-2'); coverage(page)
         page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/f'density-{context}-{width}.png'))
-        reports[f'{context}-{width}'] = {'spacing': measure, 'switchCallbacks': calls, 'clockStable': True, 'graphWrites': state(page)['writes']}
+        reports[f'{context}-{width}'] = {'spacing': measure, 'switchCallbacks': calls, 'stableUnderEqualColumnBudgets': True, 'graphWrites': state(page)['writes']}
     load(page, 'stress', 'main', 720); set_clock(page, '2026-10-29T21:30:00')
     page.locator('.nautilus-log-pending-queue > summary').click(); settle_renderer(page)
     for uid in ['overflow-0', 'overflow-1', 'overflow-2', 'overflow-3']:
@@ -503,7 +573,7 @@ def four_corrections_contract(page):
         if width <= 360:
             assert pressure['height'] <= 38.5, pressure
         else:
-            coverage(page)  # Full-mode metadata may wrap rather than be truncated.
+            coverage(page)  # Even wide previews must remain two fixed text rows.
         pressure_style.evaluate('e=>e.remove()'); settle_renderer(page)
         colors = page.locator('.nautilus-log-html-legend').first.locator('.nautilus-log-legend-dot').evaluate_all('els=>els.map(e=>getComputedStyle(e).backgroundColor)')
         assert colors == ['rgb(194, 75, 75)', 'rgb(173, 139, 36)', 'rgb(19, 124, 189)'], colors
@@ -589,7 +659,7 @@ def full_tip_palette_contract(page):
         assert data['queueTop'] >= data['tipBottom'] and data['deskTop'] >= data['tipBottom'], data
         assert all(abs(before[k]-after['svg'][k]) < .5 for k in ['width','height'])
         if width > 360:
-            assert data['mode'] == 'full' and data['width'] > 280 and data['textOverflow'] != 'ellipsis', data
+            assert data['mode'] == 'compact' and data['width'] > 280 and data['textOverflow'] == 'ellipsis', data
             assert data['titleScroll'] <= data['titleWidth'] + 1 and data['titleScrollHeight'] <= data['titleHeight'] + 1, data
         else:
             assert data['mode'] == 'compact' and data['width'] <= width - 32 and data['textOverflow'] == 'ellipsis', data
@@ -608,9 +678,9 @@ def full_tip_palette_contract(page):
     load(page, 'long', 'main', 640)
     before = state(page)['svg']; select(page, 'long-unbroken'); wide = coverage(page)
     assert page.locator('.nautilus-log-detail-title').inner_text() == page.evaluate('()=>__chartHarness.longTitles()["long-unbroken"]')
-    assert page.get_by_role('button', name='Full text', exact=True).count() == 0, 'wide title must not require More'
-    assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).backgroundImage==="none"')
-    assert wide['detail']['height'] > 42
+    assert page.get_by_role('button', name='Full text', exact=True).count() == 1, 'clipped wide titles need an explicit full-text action'
+    assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).backgroundImage==="none" && getComputedStyle(e).textOverflow==="ellipsis" && e.scrollWidth>e.clientWidth')
+    assert wide['detail']['height'] == 42
     assert all(abs(before[k]-wide['svg'][k]) < .5 for k in ['width','height'])
     page.evaluate('()=>__chartHarness.setWidth(280)')
     page.wait_for_function('document.querySelector(".nautilus-log-detail-region").dataset.nautilusDetail==="idle"')
@@ -619,7 +689,7 @@ def full_tip_palette_contract(page):
     assert page.locator('.nautilus-log-detail-region').get_attribute('data-tip-content') == 'compact'
     page.get_by_role('button', name='Full text', exact=True).click(); settle_renderer(page); coverage(page)
     assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text()
-    reports['unbrokenAndResize'] = {'wideAutomaticFullText': True, 'svgUnchanged': True, 'narrowExpansion': True, 'graphWrites': state(page)['writes']}
+    reports['unbrokenAndResize'] = {'wideTwoRowPreview': True, 'svgUnchanged': True, 'narrowExpansion': True, 'graphWrites': state(page)['writes']}
     return reports
 
 
@@ -656,7 +726,7 @@ def tip_surface_contract(page):
             settle_renderer(page)
             idle = state(page)
             select(page, 'connection-done-0'); coverage(page)
-            assert_rect_equal(idle, state(page), 'showing a tip uses the reserved slot')
+            assert_rect_equal(idle, state(page), 'showing a tip preserves the fixed slot')
             def metrics():
                 return page.evaluate('''()=>{
                   const content=document.querySelector('.nautilus-log-detail-content'),region=content.parentElement;
@@ -700,7 +770,7 @@ def tip_surface_contract(page):
             button.press('Enter')
             expect(button).to_have_attribute('aria-expanded', 'false')
             settle_renderer(page)
-            assert_rect_equal(idle, state(page), 'collapse restores the stable reserved slot')
+            assert_rect_equal(idle, state(page), 'collapse restores the fixed preview slot')
             assert state(page)['writes'] == 0
             report[f'{theme}-{width}'] = {'closed': normal, 'expandedHeight': expanded['height'], 'stableSlot': True, 'graphWrites': 0}
     return report
@@ -741,11 +811,8 @@ def detail_name_semantics_contract(page):
             assert len({colors[uid]['color'] for uid in ['task-reference', 'event-standup', 'task-completed']}) == 3
             assert page.locator('.nautilus-log-center-date text').evaluate_all('nodes=>nodes.map(e=>({text:e.textContent,fill:getComputedStyle(e).fill}))') == center_before
             semantic_name('task-unbroken', 'task')
-            if width <= 360:
-                page.get_by_role('button', name='Full text', exact=True).click()
-            else:
-                assert page.get_by_role('button', name='Full text', exact=True).count() == 0
-                assert title.evaluate('e=>getComputedStyle(e).textOverflow!=="ellipsis" && e.scrollHeight<=e.clientHeight')
+            page.get_by_role('button', name='Full text', exact=True).click(); settle_renderer(page)
+            assert title.evaluate('e=>getComputedStyle(e).textOverflow!=="ellipsis" && e.scrollHeight<=e.clientHeight')
             expect(title).to_contain_text('XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX')
             coverage(page)
             assert paint()['image'] == 'none' and state(page)['writes'] == 0
@@ -1307,7 +1374,7 @@ def lifecycle(page):
     page.wait_for_function('document.querySelector("[data-task-uid=pending-next]").dataset.timeClaim === "estimated-allocation"')
     settle_renderer(page); done = coverage(page)
     # Explicit status/CLOCK edits change the source allocation; only subsequent
-    # clock-only updates must preserve its source-sized frame.
+    # Clock-only updates with unchanged occupied columns preserve its frame.
     assert done['sourceUids'] == start['sourceUids']
     assert page.locator('[data-estimate-outline-for="pending-next"]').count() == 1
     after_tick = set_clock(page, '2026-10-29T08:02:00')
@@ -1349,8 +1416,7 @@ def lifecycle(page):
 
 def full_text(page, context, width):
     load(page, 'long', context, width)
-    # Extra provenance legitimately offers More; the wide title itself is
-    # already complete and must not depend on that action.
+    # Both clipping and extra provenance use the same explicit full-text action.
     page.evaluate('()=>__chartHarness.updateChild("long-unbroken","{{[[DONE]]}} "+__chartHarness.longTitles()["long-unbroken"]+" 30m")')
     page.wait_for_function('document.querySelector("[data-task-uid=long-unbroken]").dataset.timeClaim==="estimated-allocation"')
     select(page, 'long-unbroken')
@@ -1361,10 +1427,8 @@ def full_text(page, context, width):
     expanded = coverage(page)
     assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text()
     assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).webkitLineClamp') == 'none'
-    if width <= 360:
-        assert expanded['detail']['height'] > before['detail']['height']
-    # In a full-width view the title may reflow into fewer lines when More
-    # moves beside metadata. Verify revealed content, not forced extra height.
+    assert expanded['detail']['height'] > before['detail']['height']
+    # Explicit reading reveals the complete title and provenance at every width.
     assert 'Not a recorded completion time' in page.locator('.nautilus-log-detail-meta').inner_text()
     assert all(abs(expanded['svg'][key] - before['svg'][key]) < .5 for key in ('x', 'width', 'height')), 'explicit expansion must not resize the SVG'
     assert abs(expanded['svg']['y'] + page.evaluate('() => scrollY') - before['svg']['y'] - scroll_before) < .5, 'the diagram must keep its document-flow position'
@@ -1378,11 +1442,9 @@ def full_text(page, context, width):
     # behind the pinned inspector and remove the focused action mid-render.
     assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text(), 'collapse changed the inspected record'
     page.mouse.move(1180, 980); settle_renderer(page)
-    if width <= 360:
-        assert abs(state(page)['detail']['height'] - 42) < .5
-    else:
-        assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text()
-        assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).textOverflow!=="ellipsis" && e.scrollHeight<=e.clientHeight')
+    assert abs(state(page)['detail']['height'] - 42) < .1
+    assert 'END_UNBROKEN' in page.locator('.nautilus-log-detail-title').inner_text()
+    assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).textOverflow==="ellipsis" && e.clientHeight===14')
     page.screenshot(path=str(OUT / 'screenshots' / f'fulltext-{context}-{width}.png'), full_page=True)
     return {'closed': compact_record(before), 'expandedHeight': expanded['detail']['height'], 'pinned': True, 'noInternalScroll': True}
 
@@ -1915,6 +1977,7 @@ def main():
             assert page.get_by_role('button', name='全文', exact=True).count() == 1
             report['chinese'] = compact_record(state(page))
             report['completionConnections'] = completion_connections_contract(page)
+            report['adaptiveDensity'] = adaptive_density_contract(page)
             report['densityAndControl'] = density_and_control_contract(page)
             report['fourCorrections'] = four_corrections_contract(page)
             report['fullTipPalette'] = full_tip_palette_contract(page)

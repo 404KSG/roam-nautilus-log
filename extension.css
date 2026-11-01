@@ -1148,7 +1148,7 @@
 
 .nautilus-log-chart-stage {
   min-width: 0;
-  /* The inline ratio comes from the full source-sized frame, never the clock. */
+  /* The inline ratio follows the currently occupied label columns. */
 }
 
 .nautilus-log-svg {
@@ -1167,27 +1167,24 @@
   width: 100%;
   margin: 0;
   min-width: 0;
-  /* Slight breathing room: 38px note plus 2px above and below. */
+  /* Stable preview slot, including pointer exit: 38px note plus 2px each side. */
   height: 42px;
   padding: 2px 0;
   color: var(--nautilus-log-chart-ink);
 }
 .nautilus-log-detail-region[data-nautilus-detail="idle"] { visibility: hidden; }
+/* Only an explicit, pinned full-text action may grow the reading area. */
 .nautilus-log-detail-region.is-expanded { height: auto; min-height: 42px; align-items: flex-start; }
-/* Compact note chrome does not truncate roomy content or cover following UI. */
-.nautilus-log-detail-region[data-tip-content="full"][data-nautilus-detail="active"] { height: auto; min-height: 42px; }
-.nautilus-log-detail-region[data-tip-content="full"] .nautilus-log-detail-title,
-.nautilus-log-detail-region[data-tip-content="full"] .nautilus-log-detail-meta { display: block; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; word-break: normal; -webkit-line-clamp: unset; }
-.nautilus-log-detail-region[data-tip-content="full"] .nautilus-log-detail-tone,
 .nautilus-log-detail-region.is-expanded .nautilus-log-detail-tone { align-self: start; margin-top: 5px; }
 .nautilus-log-detail-content {
   box-sizing: border-box;
   display: grid;
   grid-template-columns: 5px minmax(0, 1fr);
-  grid-template-rows: repeat(2, minmax(14px, auto));
+  grid-template-rows: repeat(2, 14px);
   column-gap: 4px;
   row-gap: 0;
   max-width: calc(100% - 32px);
+  height: 38px;
   min-height: 38px;
   padding: 4px 6px;
   border: 1px solid var(--nautilus-log-detail-border);
@@ -1212,9 +1209,10 @@
   .nautilus-log-detail-title { color: #222326; }
 }
 .nautilus-log-detail-meta { grid-column: 2; grid-row: 2; align-self: center; min-width: 0; color: var(--nautilus-log-chart-muted); font-size: 11px; font-weight: 400; line-height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nautilus-log-detail-region.is-expanded .nautilus-log-detail-content { height: auto; grid-template-rows: repeat(2, minmax(14px, auto)); }
 .nautilus-log-detail-region.is-expanded .nautilus-log-detail-title { grid-column: 2 / -1; }
 .nautilus-log-detail-region.is-expanded .nautilus-log-detail-title,
-.nautilus-log-detail-region.is-expanded .nautilus-log-detail-meta { display: block; overflow: visible; white-space: normal; overflow-wrap: anywhere; }
+.nautilus-log-detail-region.is-expanded .nautilus-log-detail-meta { display: block; overflow: visible; white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }
 .nautilus-log-container .nautilus-log-detail-expand {
   grid-column: 3;
   grid-row: 1 / 3;

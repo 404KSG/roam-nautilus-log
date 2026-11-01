@@ -4,6 +4,18 @@
 
 ### Fixed
 
+- Keep Tips previews at two fixed rows across main, embed and sidebar views. Longer content
+  grows horizontally to the local limit, then uses ellipses instead of a third row. Retain
+  the small 42px slot while idle so hover/focus transitions cannot move the queue or Desk.
+  Add title measurement room for tabular digits and rounding. Explicit More still reveals
+  complete pinned text and provenance without resizing the SVG or changing source data.
+
+- Fit chart height to the actually occupied label columns instead of reserving a hypothetical
+  single-side stack. Dense columns pack closely without changing text size, wrapping, angular
+  order or real time anchors. Only visible Current indicators need a subtitle row. Main,
+  embed and sidebar diagrams adapt to real content without graph writes; the later fixed-Tips
+  correction retains only its small stable preview slot.
+
 - Match Help, Clean, Eye and Calendar icon colors to Roam's native toolbar in light
   and dark themes, including hover and keyboard focus. Keep chart text and category
   colors, Desk switch states, icon geometry and actions unchanged.
@@ -77,8 +89,8 @@
 - Simplify diagram labels to titles plus **Current task** or **Current event** only for
   the corresponding active record. Bare “Current” is no longer shown. Remove
   duration, Actual and Estimate sublabels; their complete information stays in hover/focus
-  Tips. Potentially current records retain a small stable line allowance; completed records
-  no longer reserve an unused metadata row. Completion styles remain distinct and readable,
+  Tips. Only the currently active record reserves its indicator row; other records
+  no longer reserve unused metadata space. Completion styles remain distinct and readable,
   without strike-through. Hover/focus emphasizes the surface,
   leader, anchor and colored title together, without moving the SVG or making Tips follow
   the pointer. Actual appears in the first completion summary; More retains extra provenance.
@@ -105,14 +117,13 @@
 - Detail names match the chart's semantic colors instead of using a gradient: blue tasks,
   yellow events and neutral gray completed records. Dates, metadata and gap explanations
   retain their colors. Forced-color and print modes remain readable.
-- Roomy tips use local width rather than a universal 280px cap. Above 360px, titles and
-  displayed metadata wrap completely; More reveals extra information. Compressed views
-  retain a bounded preview and explicit full text.
+- Roomy tips use local width rather than a universal 280px cap. All previews retain two
+  fixed text rows; More reveals clipped content or extra information explicitly.
 - Tips remain compact with slight breathing room: 38px normal content in a 42px minimum slot,
   4px vertical/6px horizontal padding and 4px corners. Title and metadata share an 11px font
   size and 14px line height. More's text aligns with the metadata row; its independent 24px
-  hit area does not stretch over long titles. Wide wrapping and explicit expansion grow in
-  page flow without covering Desk. The SVG's empty tail stays 2px; Tips do not resize its frame.
+  hit area does not stretch over long titles. Only explicit expansion grows in page flow
+  without covering Desk. The SVG's empty tail stays 2px; Tips do not resize its frame.
 - Desk uses only the sliding control; its name appears on hover or keyboard focus and
   remains available to screen readers. Checked state follows the actual view and saved
   preference through reload, fold/expand and replacement controls. Click,
@@ -156,9 +167,9 @@
   solid gray Actual/fixed-range completions, dashed estimates and pale hatching for unrecorded past time. Current
   tasks and events remain outlined. The spiral is the only time geometry; the rejected
   outer track and its status badges are removed. Explicit urgency remains authoritative.
-- Short tips fit their content without stretching across the workspace. Roomy views show
-  the full title and current metadata without a redundant title-unlocking action. Narrow
-  previews and extra metadata can explicitly expand, without internal scrollbars or overlays.
+- Short tips fit their content without stretching across the workspace. Longer previews
+  widen to the local boundary before clipping; More exposes full text and extra metadata
+  explicitly, without internal scrollbars or overlays.
 
 - Every titled source record remains in the diagram or the pending queue. Completed
   estimates connect to their slices; DONE estimate overflow and out-of-window ranges keep
@@ -167,12 +178,12 @@
   independent unfinished-task projection.
 - Source-sized frames replace the rejected finite label budget. Ordinary titles wrap,
   including CJK, and narrow views retain connected diagram labels instead of a scrolling
-  Schedule. Frame height follows the diagram membership, its source titles and local width,
-  not pointer movement or ordinary minute motion within the same membership. The spiral,
+  Schedule. Frame height follows actual column occupancy, visible Current rows, source titles
+  and local width, not pointer movement or minute motion with unchanged column budgets. The spiral,
   whole-task scheduler, Actual and completed-estimate allocation remain intact.
-- Details stay centered within the local workspace. Wide content wraps in page flow;
-  explicit expansion can pin additional information or narrow-view full text. The minimum
-  42px slot is invisible when idle. The rejected below-chart completion list, its reserved
+- Details stay centered within the local workspace. Two-row previews stay fixed;
+  explicit expansion pins full text or additional information. The 42px preview slot
+  remains while idle to avoid hover-driven layout shifts. The rejected below-chart completion list, its reserved
   gap, and wheel-based text reading are removed.
 - Narrow charts keep side labels, readable major hour ticks and a compact center date.
   Hour sizes are applied directly to SVG text instead of relying on a CSS variable that

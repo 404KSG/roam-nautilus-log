@@ -23,10 +23,13 @@ test('records without a time interval have small label marks, never orbital time
   }
 });
 
-test('clock changes preserve the full-source frame and source-assigned non-time sides', () => {
+test('placement changes retain readable metrics and source-assigned unknown-time sides', () => {
   const early = build({ events: items.slice(0, 12).map((r, i) => ({ ...r, start: 480 + i * 30, end: 510 + i * 30 })) });
   const late = build({ events: [] });
-  assert.deepEqual(early.frame, late.frame);
+  assert.equal(early.frame.viewBox.width, late.frame.viewBox.width);
+  assert.equal(early.frame.plotScale, late.frame.plotScale);
+  assert.equal(early.frame.fontSize, late.frame.fontSize);
+  assert.equal(early.records.length, late.records.length);
   for (const uid of items.slice(12).map(r => r.uid)) {
     const a = early.records.find(r => r.uid === uid), b = late.records.find(r => r.uid === uid);
     assert.ok(['left', 'right'].includes(a.label.side));

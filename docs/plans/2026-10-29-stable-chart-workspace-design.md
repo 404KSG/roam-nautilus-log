@@ -6,8 +6,8 @@ Revised November 1, 2026. The approved B continuous-shell design replaces the st
 hour-sliced presentation. The thin-ribbon alternative was not selected. Task/event title
 colors and native controls remain; completion and hover are part of the same design:
 
-- Roomy tips show their full current content, wrapping rather than using ellipses. Only a
-  compressed local width may use a compact preview and More for clipped text.
+- Tips previews always use two fixed text rows. Longer content widens up to the local
+  limit, then uses ellipses. Keep the 42px slot while idle; only explicit More opens full text.
 - Main controls are Desk, Help, Clean/Tidy, then whole-widget visibility. Help opens
   a transient quick guide. Eye off offers to hide the expanded widget; Eye offers to
   show it again. The completed-only visibility filter remains removed.
@@ -191,27 +191,35 @@ on the time axis; Desk remains the user's optional editing surface for unfinishe
 
 ## Frame and labels
 
-The frame uses the current diagram members, their source titles/status/ranges and local
-width. A source-sized column budget handles their possible sides without reserving a second
-empty lower band. Diagram labels remain on the same side as their time anchors; ordinary
-labels wrap fully, while pathological text retains an explicit full-text route.
+The latest density correction replaces the hypothetical single-side budget with the height
+of each actually occupied column. The frame fits the larger column or the existing plot extent,
+plus its small insets. Read scheduled placements only to choose the displayed side; do not
+change allocation, intervals, reference qualification or Actual. Unknown-time labels retain
+their source-assigned sides, balanced by title height rather than a moving Current row.
+
+Columns with four or more records form contiguous, vertically centered stacks. Preserve
+angular order, true connector endpoints, text size, line height and wrapping; do not spread
+rows across unused space. Smaller columns retain their anchor-oriented layout. Timed labels
+stay on their time anchor's side. Ordinary titles wrap fully; pathological text retains its
+existing full-text route. Height follows real content rather than a fixed cap.
 
 Only the active task or event renders its typed indicator: **Current task** or **Current event**.
 Other diagram titles have no duration or completion-status sublabel; those details remain complete in Tips and the
-accessible record claim. Potentially current unfinished records keep a fixed 14-unit line
-allowance so a minute transition cannot resize the frame. Completed and out-of-window
-records do not reserve that line. Title leading stays 16/15 units; the indicator uses 10px/9px
+accessible record claim. Only a currently displayed indicator receives the 14-unit subtitle
+row. Use the same interactive/show-now and interval conditions as the painted indicator;
+noncurrent, completed and out-of-window records reserve no such row. Title leading stays
+16/15 units; the indicator uses 10px/9px
 text. Compact columns budget the measured localized task/event phrases before sizing the plot,
 so the full words fit without abbreviation, clipping or reducing the text size.
 The existing label hit area is retained. Only the title ink gets the subtle hover field;
 a separate anchor joins the label and its continuous surface.
 
-The correct stability boundary is **unchanged diagram membership**. Ordinary minute motion,
-hover and opening Help preserve the SVG frame. A task can cease to fit before END: for example, a 45-minute
-task fits at 19:15 with END 20:00, but not at 19:16. A truthful queue must change then. Queue
-membership, day relation or source edits may therefore reflow the diagram. Queue open/close
-only changes content below it, not SVG geometry. Tests must not freeze stale placement to
-satisfy an obsolete unconditional END/clock assertion.
+The stability boundary is **unchanged occupied column budgets**. Ordinary minute motion that
+preserves those budgets, hover and opening Help keep SVG dimensions stable. Real column
+redistribution, Current-row changes, queue membership, day relation or source edits may reflow
+it. A 45-minute task fits at 19:15 with END 20:00 but not at 19:16; the queue must reflect that
+change. Queue open/close only changes content below the SVG. Tests must not restore hypothetical
+height reservations or stale placement to satisfy the former unchanged-membership assertion.
 
 Wide views devote up to 336 of their 720 view units to the shell, matching B's larger
 surface-to-label proportion. Compact views keep the existing source-aware column budget.
@@ -226,28 +234,32 @@ there is no secondary clock caption. Native font stacks are used without new fon
 
 ## Tip and control layout
 
-`chartTipLayout` combines compact note chrome with width-aware content mode. Above 360px,
-`contentMode=full`: natural width is bounded by local workspace width minus 32px, never a
-universal 280px cap. Titles and displayed metadata wrap completely, including unbroken strings.
-More reveals extra information rather than unlocking a wide-view title.
+The latest fixed-preview request supersedes automatic wide-view wrapping and zero-height
+idle Tips. `chartTipLayout` now returns `contentMode=compact` at every width. Natural width
+is still bounded by the local workspace minus 32px, never a universal 280px cap. Short content
+stays narrow; longer content grows horizontally before either row uses an ellipsis.
 
-Normal content is 38px high in a 42px minimum slot, including 2px above and below. Padding is 4px
-vertical/6px horizontal, column gap 4px, with no extra row gap, a faint border and 4px corners.
-Title and metadata use the same 11px/14px text metrics. More's label aligns with the metadata row;
-its separate right-hand target stays 24px high rather than stretching over a long title. Measurement
-uses the matching 11px title font, 23px content gutter, action width and a small host-font allowance.
-Expansion lets the title span the full row and moves More beside metadata, retaining the padding.
+Preview content is exactly 38px high in a fixed 42px slot, including 2px above and below.
+The two grid rows are fixed at 14px: one title row and one metadata row, both nowrap with
+ellipsis. Padding stays 4px vertical/6px horizontal, with a 4px column gap, no extra row gap,
+a faint border and 4px corners. Text remains 11px/14px. More's label aligns with metadata;
+its independent hit area stays 24px high and cannot overlap either text row.
 
-At 360px or narrower, `contentMode=compact` keeps bounded rows and offers More for clipped
-content. Text that fits still remains complete. More uses intrinsic width and nowrap and
-must not overlap either text row.
+Keep the existing pure width calculation rather than adding a DOM measurement feedback loop.
+Use the matching 11px fonts, 23px content gutter and measured action width. Both title and
+summary include tabular-digit advances, 2px rounding room and the existing per-digit allowance.
+Offer More for clipped title/summary content at any width, or when full metadata differs from
+the summary. Do not alter saved text to produce an ellipsis.
 
-Ordinary short tips retain 38px content and a 42px minimum slot. Full-mode wrapping grows
-only the detail region in normal page flow, so following content may move but SVG size and
-time geometry do not. Idle tips reserve only the compact slot. This content-driven height
-is intentional under the latest completeness request; do not reintroduce a fixed-height
-clip or a large empty reservation. Explicit expansion also remains in page flow without
-internal scrolling. Pointer, focus and pinned expansion are separate owners; changed or
+Idle Tips hide their content but retain the same 42px slot and padding. Hover/focus transitions
+between records, gaps and empty space must preserve the slot's top/bottom, SVG, queue and Desk
+positions, including intermediate animation frames. This small reservation is intentional;
+it does not restore the rejected hypothetical chart-column budget or large empty diagram bands.
+
+Only an explicit full-text action may increase height. Preserve the existing pinned reading
+mode: full title/provenance wraps in normal flow, without covering Desk or creating an internal
+scroller. Expansion lets the title span the full row and moves More beside metadata; Less
+returns to the fixed two-row preview. Pointer, focus and pinned expansion are separate owners; changed or
 removed records, folding and unload invalidate stale detail. Less keeps the inspected
 record as the focused preview and clears pointer state accumulated behind the expanded panel;
 it cannot momentarily switch to a different record and remove its own focused button.
@@ -344,13 +356,21 @@ are authoritative. These dimensions are Nautilus choices, not official Linear to
 
 ## Verification and boundaries
 
-Use exact production CLJS/JS in the isolated renderer. Verify ordinary CJK title width,
+Use exact production CLJS/JS in the isolated renderer. The density fixture has six fixed events
+and fourteen tasks, including long CJK text. Check main/embed/sidebar widths 280–960px,
+light/dark themes and both UI languages: no title overlap, leaders through titles, missing
+UIDs or graph writes. Bound top/bottom voids and dense-label gaps independently of frame
+metadata. Verify content-driven chart shrinking without interval changes and one mounted
+SVG/clock timer across host moves and resizing. The chart remains compact; its small Tips slot
+now stays 42px under the later fixed-preview request.
+
+Verify ordinary CJK title width,
 More/展开 line count under font and inherited word-break pressure, hidden Desk text with
 hover/focus labels, computed category colors and readable title contrast. Check actual tagged
 urgency fills across all dark-theme selectors, not only the legend; preserve the native switch
 blue and Free green references. Add wide content
-beyond 280px, automatically wrapped/unbroken text without a title-unlocking More action,
-compact expansion, width transitions, unchanged SVG geometry, and yellow Unfinished cues
+beyond 280px before clipping, one-line title/summary previews, explicit complete/unbroken-text
+expansion, width transitions, unchanged SVG geometry, and yellow Unfinished cues
 versus muted counts/totals, blue task rows and a neutral Unscheduled heading. Preserve default
 15/explicit 45 completion tests, source-reference ownership and optional local CLOCK updates.
 
@@ -372,6 +392,12 @@ expanded, Eye while hidden, persisted collapse state and optional Calendar place
 Help checks cover absence of completed-only filtering, live minute stability,
 English/Chinese settings, native light/dark styling, small viewports, keyboard access,
 outside interaction, native-editor Escape, IME, multiple charts, cleanup and zero graph reads/writes.
+
+`test/chart-fixed-tips.py` checks ten light/dark, English/Chinese and main/embed/sidebar
+combinations. Sample each animation frame while moving among short/medium/long tasks and
+focusing available/past gaps; check idle re-entry, fixed 42px slots, 38px content, one line per
+row, horizontal growth, accessible clipped text, pinned expansion and unchanged source rows.
+A separate short-title/long-metadata case checks second-row clipping and full provenance access.
 
 Retain real Desk controller/state tests and multi-card masonry geometry, resize, image-load,
 IME, Escape, import/drag, previews, strict Remove and all graph-write guards. Queue testing
