@@ -4,6 +4,13 @@
 
 ### Fixed
 
+- Pure references can use a same-day, date-qualified source completion stamp for chart
+  placement instead of losing it and allocating a default morning slice. Local completion
+  and local CLOCK retain priority and ownership. Unknown source dates or unreadable local
+  timing stay visible as unpositioned labels with explanatory Tips, never invented intervals.
+  Keep durations estimated unless backed by local Actual; write no markers/timestamps and
+  refresh date qualification when source page ownership changes.
+
 - Known out-of-window records now use ordinary boundary-connected labels rather than a
   special square icon. Earlier intervals connect to START; later intervals connect to END.
   Tips keep the real range and outside-hours explanation. No time slice, changed timestamp,

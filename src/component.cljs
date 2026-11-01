@@ -322,7 +322,7 @@
   "Calls the tested JavaScript task-instance core. Keeping this projection in
    one place applies the same reference precedence everywhere: a bare wrapper
    inherits source TODO/DONE, an explicit outer marker owns today's status,
-   and source completion time never leaks into today's instance."
+   and qualified chart completion evidence remains separate from local execution time."
   (try
     (let [core (.-nautilusLogTaskCore js/window)
           function (aget core function-name)]
@@ -330,9 +330,12 @@
         (js->clj (.call function nil (clj->js value)) :keywordize-keys true)))
     (catch :default _e nil)))
 
-(defn task-instance-row [child settings]
+(defn task-instance-row [child settings page-title]
   (let [payload {:uid (:block/uid child)
                  :localString (:block/string child)
+                 :displayDate page-title
+                 :logicalEndMinutes (:workday-end settings)
+                 :includeCompletionEvidence true
                  :references (mapv (fn [ref]
                                      {:uid (:block/uid ref)
                                       :string (:block/string ref)})
@@ -459,6 +462,7 @@
 
 (defn event-detail-signature [event]
   (select-keys event [:description :start :end :meeting :todo :done :done-at :bg-color :status-origin
+                      :completion-time-origin :completion-time-unverified :reference-completion
                       :chart-kind :time-claim :full-start :full-end :duration :planned-duration :estimate-unplaced-reason]))
 
 (defn reconcile-detail-state! [detail-state event-signatures available-slot-keys past-gap-keys]
@@ -519,17 +523,24 @@
                      (str (minutes->time (:full-start event)) "–" (minutes->time (:full-end event))))
         allocation? (= "estimated-allocation" (:time-claim event))
         actual? (or (= "actual" (:time-claim event)) (= "actual" (:duration-source event)))
+        reference (:reference-completion event)
+        reference-time? (= "reference" (:completion-time-origin event))
+        reference-time-text (when (number? (:sourceMinutes reference)) (minutes->time (:sourceMinutes reference)))
         summary (if allocation?
                   (str completed " · " estimate)
                   (case kind
+                    "unverified-completion" (str completed " · " estimate " · " (get-in copy [:tooltips :completionTimeUnverified])
+                                                 (when reference-time-text (str " · " reference-time-text)))
                     "completed-estimate-overflow" (str completed " · " estimate " · "
                                                        (get-in copy [:tooltips (case (:estimate-unplaced-reason event)
                                                                                 "zero-duration" :zeroDuration
                                                                                 "invalid-window" :invalidEstimateWindow
                                                                                 :estimateOverflow)]))
                     "unplaced" (str (get-in copy [:tooltips :unplaced]) " · " estimate)
-                    "outside-window" (str (when (:done event) (str completed " · "))
-                                          (get-in copy [:tooltips :outsideWindow]) " · " range-text)
+                    "outside-window" (if reference-time?
+                                       (str completed " " reference-time-text " · " estimate " · " (get-in copy [:tooltips :outsideWindow]))
+                                       (str (when (:done event) (str completed " · "))
+                                            (get-in copy [:tooltips :outsideWindow]) " · " range-text))
                     (cond
                       actual? (str completed " · " (get-in copy [:tooltips :actual]) " "
                                    (duration-label (or (:actual-minutes event) (- (:full-end event) (:full-start event))))
@@ -539,6 +550,17 @@
                                  (get-in copy [:tooltips (if (:meeting event) :event :task)]) " · " range-text
                                  " · " (duration-label (- (:full-end event) (:full-start event)))))))
         meta (str summary
+                  (when reference-time?
+                    (str " · " (get-in copy [:tooltips :referenceCompletion]) ": " (:sourceDate reference) " " reference-time-text
+                         (when (= kind "outside-window") (str " · " (get-in copy [:tooltips :completionEstimate]) " " range-text))))
+                  (when (= kind "unverified-completion")
+                    (str " · " (get-in copy [:tooltips (case (:reason reference)
+                                                        "different-day" :referenceDateMismatch
+                                                        "source-date-unverified" :referenceDateUnverified
+                                                        "display-date-unverified" :referenceDateUnverified
+                                                        "local-clock-unavailable" :referenceClockUnverified
+                                                        :referenceTimeUnverified)])
+                         (when (:sourceDate reference) (str " · " (:sourceDate reference)))))
                   (when allocation? (str " · " (get-in copy [:tooltips :estimatedAllocation]) " " range-text
                                          " · " (get-in copy [:tooltips :notRecordedCompletion])))
                   (when (not= kind "timed") (str " · " (get-in copy [:tooltips :notTimeScaled])))
@@ -718,13 +740,31 @@
                                          :dayEndMs (:dayEndMs clock-context)}))
         actual-duration (:actualMinutes actual-summary)
         last-clock-end (:latestEndMinutes actual-summary)
-        done-slice (log-core-call "historicalDoneSlice"
+        instance (:task-instance block-map)
+        evidence (:completionEvidence instance)
+        local-done-at (if (number? (:localMinutes evidence)) (:localMinutes evidence) done-at)
+        reference (or (:reference evidence)
+                      ;; An older bridge must not silently turn a pure source
+                      ;; completion into a fresh morning allocation.
+                      (when (and done (= "task" (:kind instance)) (= "source" (:statusOrigin instance))
+                                 (nil? evidence) (re-matches #"\s*\(\([A-Za-z0-9_-]{6,255}\)\)\s*" (or (:localString instance) "")))
+                        {:state "unverified" :sourceUid (:statusOwnerUid instance) :reason "source-context-unavailable"}))
+        completion-time (when done
+                          (log-core-call "selectChartCompletionTime"
+                            {:localDoneAt local-done-at :actualMinutes actual-duration
+                             :hasLocalClock (boolean (some #(= (:uid block-map) (:taskUid %)) (:entries clock-context)))
+                             :clockReadKnown (boolean (some #(= (:uid block-map) %) (:readableTaskUids clock-context)))
+                             :reference reference}))
+        unverified-time? (and done reference (or (nil? completion-time) (= "unverified" (:origin completion-time))))
+        completion-minute (if completion-time (:minutes completion-time) local-done-at)
+        done-slice (when-not unverified-time?
+                     (log-core-call "historicalDoneSlice"
                                    {:done done
-                                    :doneAt done-at
+                                    :doneAt completion-minute
                                     :duration duration
-                                    :defaultDuration (:default-duration settings)
+                                    :defaultDuration (if (= "reference" (:origin completion-time)) duration (:default-duration settings))
                                     :actualDuration actual-duration
-                                    :lastClockEnd last-clock-end})
+                                    :lastClockEnd last-clock-end}))
         description (parse-rest cleaned-str)
         event-type (if range :meeting :todo)]
     (-> {:description description
@@ -740,7 +780,10 @@
          :done done
          :warning warning
          :bg-color custom-color
-         :done-at (if done (or done-at last-clock-end) nil)
+         :done-at (if (and done (not unverified-time?)) (or completion-minute last-clock-end) nil)
+         :completion-time-origin (:origin completion-time)
+         :completion-time-unverified (boolean unverified-time?)
+         :reference-completion (:reference completion-time)
          :duration-source (:durationSource done-slice)
          :actual-minutes (when (= "actual" (:durationSource done-slice)) actual-duration)
          :clock-session-count (:sessionCount actual-summary)
@@ -1341,7 +1384,8 @@
         left? (= "left" (:side label))
         highlight-x (- (:textX label) (if left? (+ (:inkWidth label) 5) 5))]
     [:g {:class "nautilus-log-record-annotation"}
-     [:path {:class "nautilus-log-record-leader" :d (:connector label) :fill "none" :pointer-events "none"}]
+     (when (seq (:connector label))
+       [:path {:class "nautilus-log-record-leader" :d (:connector label) :fill "none" :pointer-events "none"}])
      (when anchor
        [:circle {:class "nautilus-log-record-anchor" :cx (:x anchor) :cy (:y anchor) :r 1.7
                  :aria-hidden "true" :pointer-events "none"}])
@@ -2208,11 +2252,12 @@
                                (let [settings @settings-state
                                      clock-version @clock-version-state
                                      clock-minute @now-time-atom
+                                     reference-revision (:referenceRevision @plan-status-state)
                                      children-list (->> @watched-children-state
                                                         (filter #(not= "" (:block/string %)))
                                                         (sort-by :block/order))
                                      mapped (->> children-list
-                                                 (mapv #(task-instance-row % settings))
+                                                 (mapv #(task-instance-row % settings page-title-val))
                                                  (filterv #(not= "structure" (:kind %))))
                                      completed-task-uids (->> mapped
                                                               (filter #(and (= "task" (:kind %))
@@ -2224,8 +2269,8 @@
                                      parsed (mapv #(parse-row-params % settings clock-context) mapped)
                                      filtered (filterv #(not= "" (:description %)) parsed)]
                                  (let [history (log-core-call "partitionChartEvents" filtered)]
-                                   ;; Keep unanchored completion for the estimate projection,
-                                   ;; separate from live pending scheduling and source timestamps.
+                                   ;; Completion evidence is qualified before allocation;
+                                   ;; unverified source time must not become a morning estimate.
                                    ;; Tidy still receives every locally settled wrapper UID.
                                    [(add-start-after (:pendingEvents history))
                                     (:timedDoneEvents history) (:untimedDoneEvents history)

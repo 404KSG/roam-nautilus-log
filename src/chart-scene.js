@@ -15,6 +15,7 @@ function outsideBoundary(item, start, end) {
   return null;
 }
 const labelAnchor = record => record.anchor || record.boundaryAnchor;
+const unverifiedCompletion = item => item?.done === true && item.todo === true && !item.meeting && item['completion-time-unverified'] === true;
 
 function sourceItems(items) {
   const seen = new Set();
@@ -146,7 +147,7 @@ function chartPresentationFrame({ containerWidth, items = [], timeRadius = 150,
   source.forEach((item, index) => {
     const label = labels[index];
     const boundary = outsideBoundary(item, startMinutes, endMinutes);
-    if ((item.meeting || item.done) && validRange(item)
+    if ((item.meeting || item.done) && validRange(item) && !unverifiedCompletion(item)
       && (boundary || (item.end > startMinutes && item.start < endMinutes))) {
       const minute = boundary ? boundary.minute : (Math.max(startMinutes, item.start) + Math.min(endMinutes, item.end)) / 2;
       const angle = (180 - (((minute - 540) / 2 % 360 + 360) % 360)) * Math.PI / 180;
@@ -190,6 +191,10 @@ function labelLayout(frame, records) {
     const textY = y + (titleHeight - label.lines.length * label.lineHeight) / 2 + label.fontSize;
     Object.assign(label, { x, y, side, textX, align: left ? 'end' : 'start', textY,
       metadataY: textY + (label.lines.length - 1) * label.lineHeight + label.metadataHeight });
+    if (record.kind === 'unverified-completion') {
+      label.connector = '';
+      return;
+    }
     if (!labelAnchor(record)) {
       // Non-time glyphs sit beyond the text's outer edge. They neither point
       // into the clock nor cross the real slice leaders on the inner edge.
@@ -241,14 +246,16 @@ function chartScene({ items = [], events = [], containerWidth, startMinutes = 30
   const within = item => validRange(item) && item.end > start && item.start < end;
   const plotted = new Map((Array.isArray(events) ? events : []).filter(event => event?.uid && within(event)).map(event => [event.uid, event]));
   const records = source.map((item, order) => {
-    const interval = plotted.get(item.uid) || ((item.meeting || item.done) && within(item) ? item : null);
+    const unverified = unverifiedCompletion(item);
+    const interval = unverified ? null : plotted.get(item.uid) || ((item.meeting || item.done) && within(item) ? item : null);
     const timed = Boolean(interval);
-    const kind = timed ? 'timed' : validRange(item) ? 'outside-window' : item.done === true ? 'completed-estimate-overflow' : 'unplaced';
+    const kind = unverified ? 'unverified-completion' : timed ? 'timed' : validRange(item) ? 'outside-window' : item.done === true ? 'completed-estimate-overflow' : 'unplaced';
     const original = interval || item;
     const event = { ...original, description: item.description, uid: item.uid,
       'chart-kind': kind, 'time-claim': !timed ? 'none' : item['estimated-allocation'] ? 'estimated-allocation'
         : item.meeting ? 'fixed-range' : !item.done ? 'planned' : item['duration-source'] === 'actual' ? 'actual' : 'completion-estimate',
-      'full-start': validRange(original) ? original.start : null, 'full-end': validRange(original) ? original.end : null };
+      'full-start': !unverified && validRange(original) ? original.start : null, 'full-end': !unverified && validRange(original) ? original.end : null };
+    if (unverified) { delete event.start; delete event.end; }
     if (timed) {
       event.start = Math.max(start, original.start); event.end = Math.min(end, original.end);
     }

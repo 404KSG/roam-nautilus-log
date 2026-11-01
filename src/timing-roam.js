@@ -537,6 +537,21 @@ export function readEntriesForTaskUids(taskUids = []) {
   return normalizeEntryRows(query(TASK_ENTRIES_QUERY, uids, DRAWER_QUERY_STRINGS));
 }
 
+/** Minimal read-only provenance for a referenced completion; never use edit/create timestamps. */
+export function readReferenceCompletionSource(uid) {
+  if (typeof uid !== 'string' || !/^[A-Za-z0-9_-]{6,255}$/.test(uid)) return null;
+  const roam = api(), pull = roam?.data?.pull || roam?.pull;
+  if (typeof pull !== 'function') return null;
+  const owner = pull === roam?.data?.pull ? roam.data : roam;
+  const entity = pull.call(owner, '[:block/uid :block/string {:block/page [:block/uid]}]', [':block/uid', uid]);
+  const actualUid = entity?.[':block/uid'] ?? entity?.['block/uid'] ?? entity?.uid;
+  const string = entity?.[':block/string'] ?? entity?.['block/string'] ?? entity?.string;
+  if (actualUid !== uid || typeof string !== 'string') return null;
+  const page = entity?.[':block/page'] ?? entity?.['block/page'] ?? entity?.page;
+  const pageUid = page?.[':block/uid'] ?? page?.['block/uid'] ?? page?.uid;
+  return { uid: actualUid, string, pageUid: typeof pageUid === 'string' ? pageUid : null };
+}
+
 export function readBlockString(uid) {
   if (!uid) return null;
   const roam = api();

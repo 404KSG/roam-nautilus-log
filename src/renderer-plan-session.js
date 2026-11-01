@@ -35,6 +35,7 @@ function stateSignature(state) {
     status: state.status,
     writesAllowed: state.writesAllowed,
     planUid: state.planUid,
+    referenceRevision: state.referenceRevision || 0,
     children: (state.children || []).map(childSignature),
   });
 }
@@ -65,6 +66,7 @@ export function createRendererPlanSession({
   let boundGraphName = null;
   let boundUid = null;
   let children = [];
+  let referenceRevision = 0;
   let status = 'unbound';
   let writesAllowed = false;
   let lastGood = null;
@@ -72,6 +74,7 @@ export function createRendererPlanSession({
 
   const getState = () => ({
     children,
+    referenceRevision,
     status,
     writesAllowed: destroyed ? false : writesAllowed,
     stale: status === 'stale',
@@ -99,6 +102,7 @@ export function createRendererPlanSession({
   const adoptUnavailable = () => {
     if (sameTargetLastGood()) {
       children = lastGood.children;
+      referenceRevision = lastGood.referenceRevision;
       status = 'stale';
       writesAllowed = false;
       return;
@@ -145,8 +149,10 @@ export function createRendererPlanSession({
     }
     const nextChildren = snapshotChildren(snapshot);
     children = nextChildren;
+    referenceRevision = Number.isSafeInteger(snapshot.referenceRevision) ? snapshot.referenceRevision : 0;
     lastGood = {
       children: nextChildren,
+      referenceRevision,
       planUid: boundUid,
       graphApi: boundGraphApi,
       graphName: boundGraphName,
@@ -194,6 +200,7 @@ export function createRendererPlanSession({
   const clearScopeData = () => {
     lastGood = null;
     children = [];
+    referenceRevision = 0;
     status = 'unbound';
     writesAllowed = false;
   };

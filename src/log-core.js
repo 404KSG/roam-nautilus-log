@@ -710,6 +710,45 @@ function scheduleTasks({
   };
 }
 
+/** Read-only date qualification for an explicit stamp on a pure reference's owner. */
+function resolveReferenceCompletionTime({ sourceUid, sourceMinutes, sourcePageUid, displayDate, logicalEndMinutes = 1440 } = {}) {
+  const validMinute = Number.isInteger(sourceMinutes) && sourceMinutes >= 0 && sourceMinutes < 1440;
+  const base = { sourceUid, sourceMinutes: validMinute ? sourceMinutes : null };
+  const unverified = (reason, extra = {}) => ({ state: 'unverified', ...base, ...extra, reason });
+  if (!validMinute) return unverified('invalid-source-time');
+  // Daily Note identity, not edit/create time, drag time or a date-looking title.
+  const parts = /^(\d{2})-(\d{2})-(\d{4})$/.exec(String(sourcePageUid || ''));
+  if (!parts) return unverified('source-date-unverified');
+  const [, mm, dd, yyyy] = parts;
+  const date = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd)));
+  if (date.getUTCFullYear() !== Number(yyyy) || date.getUTCMonth() !== Number(mm) - 1 || date.getUTCDate() !== Number(dd)) {
+    return unverified('source-date-unverified');
+  }
+  const sourceDate = `${yyyy}-${mm}-${dd}`;
+  const displayDay = localDayOrdinal(displayDate);
+  if (displayDay === null) return unverified('display-date-unverified', { sourceDate });
+  const offset = date.getTime() / 86400000 - displayDay;
+  const carryover = offset === 1 && Number.isFinite(logicalEndMinutes) && logicalEndMinutes > 1440
+    && logicalEndMinutes <= 2880 && sourceMinutes + 1440 <= logicalEndMinutes;
+  if (offset !== 0 && !carryover) return unverified('different-day', { sourceDate });
+  return { state: 'resolved', ...base, sourceDate, minutes: sourceMinutes + offset * 1440 };
+}
+
+/** Source stamps are a fallback only; they never become local CLOCK ownership. */
+function selectChartCompletionTime({ localDoneAt, actualMinutes, hasLocalClock = false, clockReadKnown = false, reference = null } = {}) {
+  const local = asNumber(localDoneAt);
+  if (Number.isFinite(local) && local >= 0) return { origin: 'local', minutes: local };
+  if ((Number.isFinite(actualMinutes) && actualMinutes > 0) || hasLocalClock) return { origin: 'clock', minutes: null };
+  if (!reference) return { origin: 'none', minutes: null };
+  if (clockReadKnown && reference.state === 'resolved' && Number.isFinite(reference.minutes) && reference.minutes >= 0) {
+    return { origin: 'reference', minutes: reference.minutes, reference };
+  }
+  const { minutes: rawMinutes, sourceString: _privateSnapshot, ...details } = reference;
+  if (!Object.prototype.hasOwnProperty.call(details, 'sourceMinutes')) details.sourceMinutes = Number.isInteger(rawMinutes) ? rawMinutes : null;
+  return { origin: 'unverified', minutes: null, reference: { ...details, state: 'unverified',
+    reason: reference.state === 'unverified' ? reference.reason : clockReadKnown ? 'source-time-unverified' : 'local-clock-unavailable' } };
+}
+
 /**
  * Return the historical slice for a completed item only when the graph has an
  * explicit completion timestamp.  The start is deliberately derived from the
@@ -817,20 +856,26 @@ function partitionChartEvents(events = []) {
 function projectCompletedEstimates({ items = [], startMinutes = 300, endMinutes = 1260, defaultDuration = 15 } = {}) {
   const source = Array.isArray(items) ? items : [];
   const hasRange = item => Number.isFinite(item?.start) && Number.isFinite(item?.end) && item.end > item.start;
-  const needsEstimate = item => item?.done === true && item.todo === true && !item.meeting
+  const held = item => item?.done === true && item.todo === true && !item.meeting && item['completion-time-unverified'] === true;
+  const needsEstimate = item => item?.done === true && item.todo === true && !item.meeting && !held(item)
     && (!hasRange(item) || item['estimated-allocation'] === true || Boolean(item['estimate-unplaced-reason']));
   const estimates = source.filter(needsEstimate).map(item => {
     const values = [item['planned-duration'], item.duration, defaultDuration, 15].map(asNumber);
     const duration = Math.round(values.find(value => Number.isFinite(value) && value >= 0));
     return { ...item, duration, done: false };
   });
-  const obstacles = source.filter(item => hasRange(item) && (item.meeting || item.done) && !needsEstimate(item))
+  const obstacles = source.filter(item => hasRange(item) && (item.meeting || item.done) && !needsEstimate(item) && !held(item))
     .map(item => ({ start: item.start, end: item.end, meeting: true, done: false }));
   const plan = scheduleTasks({ startMinutes, endMinutes, nowMinutes: startMinutes, tasks: estimates, fixedEvents: obstacles });
   const placed = new Map(plan.scheduledTasks.map(item => [item.uid, item]));
   const durations = new Map(estimates.map(item => [item.uid, item.duration]));
   const validWindow = Number.isFinite(startMinutes) && Number.isFinite(endMinutes) && endMinutes > startMinutes;
   const projected = source.map(item => {
+    if (held(item)) {
+      const pending = { ...item };
+      for (const key of ['start', 'end', 'full-start', 'full-end', 'estimated-allocation', 'estimate-unplaced-reason']) delete pending[key];
+      return pending;
+    }
     if (!needsEstimate(item)) return item;
     const next = { ...item, duration: durations.get(item.uid) };
     delete next.start; delete next.end;
@@ -1041,6 +1086,12 @@ const UI_COPY = {
       currentTime: 'Current time',
       noCompletionTime: 'No completion time recorded',
       inheritedCompletion: 'Completion status from reference',
+      referenceCompletion: 'Completion time from reference',
+      completionTimeUnverified: 'Completion time unverified',
+      referenceDateUnverified: 'Source date unverified; not placed on this day',
+      referenceDateMismatch: 'Source Daily Note date differs; completion date unverified',
+      referenceClockUnverified: 'Local CLOCK history unavailable; source time not applied',
+      referenceTimeUnverified: 'Source completion time could not be verified; not placed on this day',
       inheritedDone: 'Inherited completion',
       noTime: 'Completion time not recorded',
       notTimeScaled: 'Not placed on the timeline',
@@ -1152,6 +1203,12 @@ const UI_COPY = {
       currentTime: '当前时间',
       noCompletionTime: '未记录完成时间',
       inheritedCompletion: '完成状态来自引用',
+      referenceCompletion: '完成时间来自引用',
+      completionTimeUnverified: '完成时间待确认',
+      referenceDateUnverified: '来源日期未确认，不排入当日时间轴',
+      referenceDateMismatch: '来源日记页日期不同，完成日期待确认',
+      referenceClockUnverified: '本地 CLOCK 记录暂不可核对，未采用来源时间',
+      referenceTimeUnverified: '来源完成时间无法确认，不排入当日时间轴',
       inheritedDone: '来源完成',
       noTime: '未记录完成时刻',
       notTimeScaled: '不占用时间刻度',
@@ -1872,6 +1929,8 @@ module.exports = {
   scheduleTasks,
   completedTaskClockSummary,
   historicalDoneSlice,
+  resolveReferenceCompletionTime,
+  selectChartCompletionTime,
   partitionChartEvents,
   projectCompletedEstimates,
   chartTaskDisposition,

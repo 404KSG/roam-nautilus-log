@@ -154,12 +154,15 @@ def coverage(page):
     else:
         assert not page.locator('.nautilus-log-pending-queue').count()
     for record in s['records']:
-        assert record['marks'] > 0 and record['label'].strip(), record
+        assert record['label'].strip(), record
+        assert record['marks'] > 0 or record['kind'] == 'unverified-completion', record
         assert record['visible'], record
         if record['kind'] != 'timed':
             assert record['timeClaim'] == 'none', record
             if record['boundaryEdge']:
                 assert record['kind'] == 'outside-window' and not record['markerPath'], record
+            elif record['kind'] == 'unverified-completion':
+                assert not record['markerPath'] and record['marks'] == 0, record
             else:
                 assert record['markerPath'], record
     scene = page.evaluate('() => __chartHarness.scene()')
@@ -174,6 +177,9 @@ def coverage(page):
                 assert by_uid[record['uid']]['boundaryEdge'] == record['boundaryAnchor']['edge'], record
                 assert by_uid[record['uid']]['boundaryMinute'] == record['boundaryAnchor']['minute'], record
                 assert record['label']['side'] == ('left' if record['boundaryAnchor']['x'] < scene['frame']['center']['x'] else 'right'), record
+            elif record['kind'] == 'unverified-completion':
+                assert not record.get('markerPath') and record['label']['connector'] == '', record
+                assert record['event'].get('start') is None and record['event'].get('end') is None, record
             else:
                 assert record['marker']['size'] <= 6 and record['label']['side'] == record['label']['sourceSide']
         else:
@@ -244,7 +250,8 @@ def geometry_audit(page):
       for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){
         const a=boxes[i].r,b=boxes[j].r;if(Math.min(a.right,b.right)-Math.max(a.left,b.left)>1&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1)overlaps.push([boxes[i].uid,boxes[j].uid]);
       }
-      for(const node of nodes){const path=node.querySelector('.nautilus-log-record-leader'),matrix=path.getScreenCTM(),length=path.getTotalLength();
+      for(const node of nodes){const path=node.querySelector('.nautilus-log-record-leader');if(!path)continue;
+        const matrix=path.getScreenCTM(),length=path.getTotalLength();
         for(let i=0;i<=64;i++){const p=path.getPointAtLength(length*i/64);const q=new DOMPoint(p.x,p.y).matrixTransform(matrix);
           for(const box of boxes){if(box.uid===node.dataset.taskUid)continue;const r=box.r;
             if(q.x>r.left+.5&&q.x<r.right-.5&&q.y>r.top+.5&&q.y<r.bottom-.5)crossings.push({from:node.dataset.taskUid,to:box.uid,point:{x:q.x,y:q.y},box:{x:r.x,y:r.y,width:r.width,height:r.height}});}
@@ -332,8 +339,11 @@ def completion_connections_contract(page):
         def allocations():
             return page.evaluate('''()=>__chartHarness.scene().records.filter(r=>r.event['time-claim']==='estimated-allocation').map(r=>({uid:r.uid,start:r.event.start,end:r.event.end,duration:r.event.duration,actual:r.event['actual-minutes'],doneAt:r.event['done-at']}))''')
         proof = allocations()
-        assert len(proof) == 7 and [r['duration'] for r in proof[:2]] == [15, 45]
+        assert len(proof) == 6 and [r['duration'] for r in proof[:2]] == [15, 45]
         assert all(r['end'] - r['start'] == r['duration'] and not r['actual'] and r['doneAt'] is None for r in proof)
+        referenced = page.evaluate('()=>__chartHarness.scene().records.find(r=>r.uid==="connection-done-2").event')
+        assert [referenced['start'], referenced['end']] == [450, 480], referenced
+        assert referenced['time-claim'] == 'completion-estimate' and referenced['completion-time-origin'] == 'reference', referenced
         for iso in ['2026-10-29T08:01:00', '2026-10-29T13:30:00', '2026-10-29T20:30:00']:
             current = set_clock(page, iso); coverage(page); geometry_audit(page)
             assert_clock_layout(before, current, 'estimated completion and changing pending membership')
@@ -1272,13 +1282,14 @@ def lifecycle(page):
     load(page, 'untimed')
     start = coverage(page)
     kinds = {r['uid']: r['kind'] for r in start['records']}
-    for uid in ['untimed-local', 'untimed-reference', 'running-only', 'other-day']:
+    for uid in ['untimed-local', 'running-only', 'other-day']:
         assert kinds[uid] == 'timed'
         assert page.locator(f'[data-task-uid="{uid}"]').get_attribute('data-time-claim') == 'estimated-allocation'
     select(page, 'untimed-reference')
     aria = page.locator('[data-task-uid="untimed-reference"]').get_attribute('aria-label')
-    assert 'Completion status from reference' in aria and 'Not a recorded completion time' in aria
-    assert 'Estimated allocation' in aria and 'Actual' not in aria
+    assert page.locator('[data-task-uid="untimed-reference"]').get_attribute('data-time-claim') == 'completion-estimate'
+    assert 'Completion status from reference' in aria and 'Completion time from reference' in aria
+    assert '07:40–08:00' in aria and 'Estimate 20m' in aria and 'Actual' not in aria
     page.locator('[data-task-uid="untimed-reference"]').press('Shift+Enter')
     assert page.evaluate('()=>__chartHarness.traces().filter(t=>t.kind==="locate").at(-1)') == {'kind': 'locate', 'uid': 'untimed-reference', 'sidebar': True}
     header = page.locator('.nautilus-log-header-copy').inner_text()
@@ -1370,6 +1381,122 @@ def full_text(page, context, width):
         assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).textOverflow!=="ellipsis" && e.scrollHeight<=e.clientHeight')
     page.screenshot(path=str(OUT / 'screenshots' / f'fulltext-{context}-{width}.png'), full_page=True)
     return {'closed': compact_record(before), 'expandedHeight': expanded['detail']['height'], 'pinned': True, 'noInternalScroll': True}
+
+
+def reference_completion_contract(page):
+    report = {'matrix': {}}
+    record = page.locator('svg [data-task-uid="completion-wrapper"]')
+    detail = page.locator('.nautilus-log-detail-region')
+
+    def event():
+        return next(r['event'] for r in page.evaluate('()=>__chartHarness.scene().records') if r['uid'] == 'completion-wrapper')
+
+    def hover():
+        page.mouse.move(1180, 980)
+        record.locator('.nautilus-log-record-title').hover(); settle_renderer(page)
+
+    for theme, context, width, lang in [('light', 'main', 960, 'en'), ('dark', 'main', 960, 'en'),
+                                      ('light', 'sidebar', 280, 'zh'), ('dark', 'sidebar', 280, 'zh')]:
+        load(page, 'reference-completion', context, width, window='flow', lang=lang)
+        set_clock(page, '2026-10-29T23:55:00')
+        if theme == 'dark':
+            page.locator('body').evaluate("e=>{e.classList.add('bp3-dark');e.style.background='#1d1e21';e.style.color='#ecedef'}")
+        expect(record).to_have_attribute('data-chart-kind', 'outside-window')
+        expect(record).to_have_attribute('data-boundary-minute', '1200')
+        expect(record.locator('.nautilus-log-slice,.nautilus-log-record-marker')).to_have_count(0)
+        value = event()
+        assert [value['start'], value['end'], value['duration']] == [1419, 1434, 15], value
+        assert value['completion-time-origin'] == 'reference' and value.get('actual-minutes') is None, value
+        hover()
+        expect(detail).to_contain_text('Estimate 15m' if lang == 'en' else '估计 15m')
+        expect(detail).to_contain_text('23:54')
+        page.get_by_role('button', name='Full text' if lang == 'en' else '全文', exact=True).click(); settle_renderer(page)
+        expect(detail).to_contain_text('Completion time from reference' if lang == 'en' else '完成时间来自引用')
+        expect(detail).to_contain_text('2026-10-29')
+        coverage(page); geometry_audit(page)
+        page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/f'reference-completion-{theme}-{context}-{width}.png'))
+        assert all('completion-source' not in r['uids'] for r in page.evaluate('()=>__chartHarness.traces().filter(t=>t.kind==="clock-owner-read")'))
+        assert state(page)['writes'] == 0
+        report['matrix'][f'{theme}-{context}-{width}'] = {'range': [1419, 1434], 'estimate': 15, 'boundary': 1200, 'clockOwner': 'completion-wrapper'}
+
+    load(page, 'reference-completion', 'main', 960, window='flow')
+    set_clock(page, '2026-10-29T23:55:00')
+    source_rows = page.evaluate('()=>__chartHarness.sourceRows()')
+    ticks = len(page.evaluate('()=>__chartHarness.traces().filter(t=>t.kind==="clock")'))
+    page.evaluate('()=>__chartHarness.updateReferenceSource("completion-source",{pageUid:"project-page"})')
+    expect(record).to_have_attribute('data-chart-kind', 'unverified-completion')
+    expect(record.locator('.nautilus-log-slice,.nautilus-log-record-marker,.nautilus-log-record-anchor,.nautilus-log-record-leader')).to_have_count(0)
+    assert len(page.evaluate('()=>__chartHarness.traces().filter(t=>t.kind==="clock")')) == ticks, 'source date change must not need a minute tick'
+    hover()
+    expect(detail).to_contain_text('Completion time unverified')
+    expect(detail).to_contain_text('23:54')
+    page.get_by_role('button', name='Full text', exact=True).click(); settle_renderer(page)
+    expect(detail).to_contain_text('Source date unverified')
+    coverage(page); geometry_audit(page)
+    page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/'reference-completion-unverified.png'))
+    page.evaluate('()=>__chartHarness.updateReferenceSource("completion-source",{pageUid:"10-28-2026"})')
+    expect(detail).to_have_attribute('data-nautilus-detail', 'idle')
+    hover(); page.get_by_role('button', name='Full text', exact=True).click(); settle_renderer(page)
+    expect(detail).to_contain_text('Source Daily Note date differs')
+    expect(detail).to_contain_text('2026-10-28')
+    assert event().get('start') is None and event().get('end') is None
+    page.evaluate('()=>__chartHarness.updateReferenceSource("completion-source",{pageUid:"10-29-2026"})')
+    expect(record).to_have_attribute('data-chart-kind', 'outside-window')
+    assert [event()['start'], event()['end']] == [1419, 1434]
+    assert page.evaluate('()=>__chartHarness.sourceRows()') == source_rows
+    report['dateUncertaintyAndLiveRefresh'] = True
+
+    # Local Actual wins; foreign/source CLOCK never becomes this wrapper's Actual.
+    page.evaluate('()=>__chartHarness.setClockEntries([{taskUid:"completion-wrapper",start:"2026-10-29T07:00:00",end:"2026-10-29T07:10:00",running:false}])')
+    expect(record).to_have_attribute('data-time-claim', 'actual')
+    assert [event()['start'], event()['end'], event()['actual-minutes']] == [420, 430, 10]
+    assert event()['completion-time-origin'] == 'clock' and not event().get('reference-completion')
+    page.evaluate('()=>__chartHarness.setClockEntries([{taskUid:"completion-source",start:"2026-10-29T07:00:00",end:"2026-10-29T07:40:00",running:false}])')
+    expect(record).to_have_attribute('data-chart-kind', 'outside-window')
+    assert event().get('actual-minutes') is None and event()['duration'] == 15
+    page.evaluate('()=>__chartHarness.setClockReadAvailable(false)')
+    expect(record).to_have_attribute('data-chart-kind', 'unverified-completion')
+    hover(); page.get_by_role('button', name='Full text', exact=True).click(); settle_renderer(page)
+    expect(detail).to_contain_text('Local CLOCK history unavailable')
+    page.evaluate('()=>__chartHarness.setClockReadAvailable(true)')
+    expect(record).to_have_attribute('data-chart-kind', 'outside-window')
+    page.evaluate('()=>__chartHarness.setClockEntries([])')
+    report['localClockPriorityAndReadFailure'] = True
+
+    page.evaluate('()=>__chartHarness.updateChild("completion-wrapper","{{[[DONE]]}} ((completion-source)) 30m d19:30")')
+    expect(record).to_have_attribute('data-chart-kind', 'timed')
+    assert [event()['start'], event()['end']] == [1140, 1170]
+    assert event()['completion-time-origin'] == 'local' and not event().get('reference-completion')
+    page.evaluate('()=>__chartHarness.updateChild("completion-wrapper","((completion-source)) d22:00")')
+    expect(record).to_have_attribute('data-chart-kind', 'outside-window')
+    assert event()['end'] == 1320 and event()['completion-time-origin'] == 'local'
+    page.evaluate('()=>__chartHarness.updateChild("completion-wrapper","{{[[TODO]]}} ((completion-source))")')
+    expect(record).to_have_count(0)
+    expect(page.locator('[data-queued-task-uid="completion-wrapper"]')).to_have_count(1)
+    page.evaluate('()=>__chartHarness.updateChild("completion-wrapper","((completion-chain))")')
+    expect(record).to_have_attribute('data-chart-kind', 'outside-window')
+    assert event()['reference-completion']['sourceUid'] == 'completion-source'
+    page.evaluate('()=>__chartHarness.updateChild("completion-wrapper","((completion-source))")')
+    page.evaluate('()=>__chartHarness.updateReferenceSource("completion-source",{string:"{{[[DONE]]}} Completed reference"})')
+    expect(record).to_have_attribute('data-time-claim', 'estimated-allocation')
+    assert [event()['start'], event()['end']] == [510, 525], 'only genuine missing completion time may use the existing estimate allocation'
+    page.evaluate('()=>__chartHarness.updateReferenceSource("completion-source",{string:"{{[[DONE]]}} Completed reference 0m d23:54"})')
+    expect(record).to_have_attribute('data-chart-kind', 'completed-estimate-overflow')
+    assert event()['duration'] == 0 and event().get('start') is None
+    assert state(page)['writes'] == 0
+    report['localOverridesPureChainMissingAndZero'] = True
+
+    load(page, 'reference-completion', 'main', 720, window='overnight')
+    page.evaluate('()=>__chartHarness.updateReferenceSource("completion-source",{pageUid:"10-30-2026",string:"{{[[DONE]]}} Completed reference d01:15"})')
+    set_clock(page, '2026-10-30T01:16:00')
+    expect(record).to_have_attribute('data-time-claim', 'completion-estimate')
+    assert [event()['start'], event()['end']] == [1500, 1515]
+    assert event()['reference-completion']['sourceDate'] == '2026-10-30'
+    page.evaluate('()=>__chartHarness.updateReferenceSource("completion-source",{string:"{{[[DONE]]}} Completed reference d03:00"})')
+    expect(record).to_have_attribute('data-chart-kind', 'unverified-completion')
+    assert state(page)['writes'] == 0
+    report['overnightDayQualification'] = True
+    return report
 
 
 def outside_boundary_contract(page):
@@ -1694,7 +1821,8 @@ def main():
             report['fullText'] = {f'{c}-{w}': full_text(page, c, w) for c, w in [('main', 960), ('sidebar', 280), ('embed', 520)]}
             load(page, 'untimed', 'sidebar', 280, lang='zh'); select(page, 'untimed-reference'); coverage(page)
             assert not page.locator('.nautilus-log-index-caption').count()
-            assert '不是记录的完成时刻' in page.locator('[data-task-uid="untimed-reference"]').get_attribute('aria-label')
+            assert '完成时间来自引用' in page.locator('[data-task-uid="untimed-reference"]').get_attribute('aria-label')
+            assert '07:40–08:00' in page.locator('[data-task-uid="untimed-reference"]').get_attribute('aria-label')
             assert page.get_by_role('button', name='全文', exact=True).count() == 1
             report['chinese'] = compact_record(state(page))
             report['completionConnections'] = completion_connections_contract(page)
@@ -1710,6 +1838,7 @@ def main():
             report['tipSurface'] = tip_surface_contract(page)
             report['continuousShell'] = continuous_shell_contract(page)
             report['currentOnlyLabels'] = current_only_labels_contract(page)
+            report['referenceCompletion'] = reference_completion_contract(page)
             report['outsideBoundary'] = outside_boundary_contract(page)
             report['centerClock'] = center_clock_contract(page)
             report['timeflowRecovery'] = timeflow_recovery(page)

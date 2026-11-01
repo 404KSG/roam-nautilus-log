@@ -604,6 +604,31 @@ test('nested descendant changes are delivered to subscribers', async () => {
   session.destroy();
 });
 
+test('a source page move refreshes renderer evidence even when reference text is unchanged', async () => {
+  const { createPlanWatchBridge, createRendererPlanSession } = await api();
+  const callbacks = new Map(), pending = [];
+  const source = '{{[[DONE]]}} Source d23:54';
+  const roam = { data: {
+    pull: () => ({ ':block/string': 'plan', ':block/children': [{ ':block/uid': 'task', ':block/string': '((source-task))', ':block/order': 0,
+      ':block/refs': [{ ':block/uid': 'source-task', ':block/string': source }] }] }),
+    addPullWatch: async (pattern, entity, callback) => callbacks.set(`${pattern}|${entity}`, callback),
+    removePullWatch: async () => undefined,
+  } };
+  const bridge = createPlanWatchBridge({ roam, readString: () => source, schedule: fn => { pending.push(fn); return () => {}; } });
+  const session = createRendererPlanSession({ planUid: 'plan', getProvider: () => ({ running: true, subscribe: bridge.subscribe, generation: 1, graphApi: roam, graphName: 'graph' }) });
+  const events = [];
+  session.subscribe(state => events.push(JSON.parse(JSON.stringify(state))));
+  session.sync(); await Promise.resolve();
+  const entry = [...callbacks.entries()].find(([key]) => key.endsWith('|[:block/uid "source-task"]'));
+  assert.ok(entry[0].includes(':block/page'), 'source date ownership must be watched');
+  const before = session.getState(), count = events.length;
+  entry[1](); pending.shift()();
+  assert.equal(events.length, count + 1);
+  assert.deepEqual(session.getState().children, before.children);
+  assert.equal(session.getState().referenceRevision, before.referenceRevision + 1);
+  session.destroy(); bridge.destroy();
+});
+
 test('a real plan-watch refs-only source change reaches renderer consumers', async () => {
   const { createPlanWatchBridge, createRendererPlanSession, resolveRendererTaskInstance } = await api();
   let refString = '{{[[TODO]]}} Source title 15m';

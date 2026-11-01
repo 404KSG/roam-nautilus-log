@@ -115,7 +115,7 @@ export function createRendererClockReader({
     }
   };
 
-  const read = (taskUids = []) => {
+  const readContext = (taskUids = []) => {
     const scope = getScope();
     if (scope[0] !== previousScope[0] || scope[1] !== previousScope[1]) clear();
     previousScope = scope;
@@ -128,7 +128,7 @@ export function createRendererClockReader({
 
     const uids = [...new Set((Array.isArray(taskUids) ? taskUids : [])
       .filter((uid) => typeof uid === 'string' && uid))];
-    if (!uids.length) return [];
+    if (!uids.length) return { entries: [], readableTaskUids: [] };
 
     // Coverage is explicit owner certification, not "entries happened to be an array".
     const covered = new Set(snapshot?.status !== 'error' ? snapshot?.entryTaskUids || [] : []);
@@ -164,10 +164,12 @@ export function createRendererClockReader({
       return cached.entries;
     });
 
+    const readableTaskUids = uids.filter(uid => covered.has(uid) || cache.has(uid));
     const limit = Math.max(1, maxOwners);
     while (cache.size > limit) cache.delete(cache.keys().next().value);
-    return result;
+    return { entries: result, readableTaskUids };
   };
 
-  return { read, clear, invalidate, size: () => cache.size };
+  const read = taskUids => readContext(taskUids).entries;
+  return { read, readContext, clear, invalidate, size: () => cache.size };
 }

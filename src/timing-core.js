@@ -415,8 +415,10 @@ function resolveTaskInstance({
   readString,
   fallbackMinutes = 15,
   maxDepth = 8,
+  includeCompletionEvidence = false,
 } = {}) {
   const local = String(localString ?? '');
+  const pureReferenceUid = text => /^\s*\(\(([A-Za-z0-9_-]{6,255})\)\)\s*$/.exec(String(text || ''))?.[1] || null;
   const supplied = new Map((Array.isArray(references) ? references : [])
     .filter((reference) => reference?.uid && typeof reference.string === 'string')
     .map((reference) => [reference.uid, reference.string]));
@@ -440,11 +442,10 @@ function resolveTaskInstance({
     const source = read(referenceUid);
     if (!source) return null;
     const status = taskStatus(source);
-    if (status) return { status, ownerUid: referenceUid };
+    if (status) return { status, ownerUid: referenceUid, sourceString: source, pureChain: true };
     const nestedUid = referenceUids(source)[0] || null;
-    return nestedUid
-      ? resolveSourceStatus(nestedUid, [...stack, referenceUid])
-      : null;
+    const nested = nestedUid ? resolveSourceStatus(nestedUid, [...stack, referenceUid]) : null;
+    return nested ? { ...nested, pureChain: nested.pureChain && pureReferenceUid(source) === nestedUid } : null;
   };
 
   const refs = referenceUids(local);
@@ -489,6 +490,17 @@ function resolveTaskInstance({
       .replace(/\s+/g, ' ')
       .trim();
 
+  // Chart-only evidence is kept separate from doneAt/effectiveString. Execution,
+  // CLOCK ownership and local completion writes retain their existing contract.
+  let completionEvidence;
+  if (includeCompletionEvidence && status === 'DONE' && !range && !structural) {
+    const reference = pureReferenceUid(local) && sourceState?.pureChain && sourceState.status === 'DONE'
+      && DONE_TIME_RE.test(sourceState.sourceString)
+      ? { sourceUid: sourceState.ownerUid, sourceString: sourceState.sourceString,
+        minutes: doneTime(sourceState.sourceString).minutes } : null;
+    completionEvidence = { localMinutes: localDone.minutes, reference };
+  }
+
   return {
     uid,
     sourceUid,
@@ -504,6 +516,7 @@ function resolveTaskInstance({
     doneAt: explicitStatus === 'DONE' ? localDone.minutes : null,
     kind: structural ? 'structure' : range ? 'event' : 'task',
     range,
+    ...(completionEvidence ? { completionEvidence } : {}),
   };
 }
 

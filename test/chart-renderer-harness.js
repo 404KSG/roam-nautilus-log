@@ -3,6 +3,7 @@ import * as timingCore from '../src/timing-core.js';
 import { createDeskView } from '../src/desk-view.js';
 import { createChartHelp } from '../src/chart-help.js';
 import { projectPull } from './pull-projection.cjs';
+import { resolveRendererTaskInstance } from '../src/index.js';
 // This is the dependency-free module re-exported by src/entry-helpers.js;
 // production and the renderer exercise the same sidebar selector contract.
 import { isRightSidebarRenderContext } from '../src/render-context.js';
@@ -69,7 +70,12 @@ const syntheticStrings = new Map([
   ['source-todo', '{{[[TODO]]}} Draft the project brief 30m'],
   ['source-done', '{{[[DONE]]}} Completed synthetic task 20m d8'],
   ['connection-source', '{{[[DONE]]}} 完成参考资料对照 30m d8'],
+  ['completion-source', '{{[[DONE]]}} Completed reference d23:54'],
+  ['completion-chain', '((completion-source))'],
 ]);
+const sourcePages = new Map([...syntheticStrings.keys()].map(uid => [uid, '10-29-2026']));
+let referenceRevision = 0;
+let clockReadsAvailable = true;
 const mixedChildren = [
   { 'block/uid': 'event-standup', 'block/string': '09:00-09:30 Stand-up', 'block/order': 0, 'block/refs': [] },
   { 'block/uid': 'task-reference', 'block/string': '((source-todo))', 'block/order': 1, 'block/refs': [] },
@@ -144,6 +150,11 @@ let children = clone({
     { 'block/uid': 'overflow-2', 'block/string': '{{[[TODO]]}} Overflow gamma 900m', 'block/order': 20, 'block/refs': [] },
     { 'block/uid': 'overflow-3', 'block/string': `{{[[TODO]]}} ${'Long title '.repeat(260)}END_LONG 900m`, 'block/order': 21, 'block/refs': [] },
   ]),
+  'reference-completion': [
+    ['completion-fitness', '06:00-08:00 Morning event'],
+    ['completion-breakfast', '08:00-08:30 Breakfast'],
+    ['completion-wrapper', '((completion-source))'],
+  ].map(([uid, string], order) => ({ 'block/uid': uid, 'block/string': string, 'block/order': order, 'block/refs': [] })),
   'outside-boundary': [
     ['boundary-lunch', '12:00-13:00 Lunch'],
     ['boundary-review', '{{[[DONE]]}} Review 20m d18:00'],
@@ -201,7 +212,7 @@ function q(query, ...args) {
 }
 
 function sessionState() {
-  return { children: clone(children), status: 'ready', writesAllowed: true };
+  return { children: clone(children), status: 'ready', writesAllowed: true, referenceRevision };
 }
 
 const sessionSubscribers = new Set();
@@ -231,8 +242,10 @@ function readSyntheticString(uid) {
 }
 
 function resolveTaskInstance(payload) {
-  const input = { ...payload, readString: readSyntheticString };
-  const result = timingCore.resolveTaskInstance(input);
+  const result = resolveRendererTaskInstance(payload, readSyntheticString, uid => {
+    trace('completion-source-read', { uid });
+    return syntheticStrings.has(uid) ? { uid, string: syntheticStrings.get(uid), pageUid: sourcePages.get(uid) || null } : null;
+  });
   trace('resolve-task-instance', {
     payload: clone(payload),
     result: {
@@ -295,11 +308,12 @@ window.nautilusLogExtensionData = {
   isRightSidebarRenderContext,
   createRendererPlanSession,
   resolveTaskInstance,
-  getClockRenderContext: (_pageTitle, _uids, logicalEndMinutes) => ({
-    entries: clone(clockEntries),
-    dayStartMs: new RealDate('2026-10-29T00:00:00').getTime(),
-    dayEndMs: new RealDate('2026-10-29T00:00:00').getTime() + Math.max(1440, Number(logicalEndMinutes) || 1440) * 60000,
-  }),
+  getClockRenderContext: (_pageTitle, uids, logicalEndMinutes) => {
+    trace('clock-owner-read', { uids: [...uids] });
+    return { entries: clockReadsAvailable ? clone(clockEntries) : [], readableTaskUids: clockReadsAvailable ? [...uids] : [],
+      dayStartMs: new RealDate('2026-10-29T00:00:00').getTime(),
+      dayEndMs: new RealDate('2026-10-29T00:00:00').getTime() + Math.max(1440, Number(logicalEndMinutes) || 1440) * 60000 };
+  },
   locatePlanTask: (uid, _target, sidebar) => {
     trace('locate', { uid, sidebar: Boolean(sidebar) });
     return Promise.resolve();
@@ -362,6 +376,17 @@ window.__chartHarness = {
     if (!item) throw new Error('Unknown synthetic fixture UID');
     item['block/string'] = string;
     trace('session-update-child', { uid }); publishSession();
+  },
+  updateReferenceSource(uid, { string, pageUid } = {}) {
+    if (!syntheticStrings.has(uid)) throw Error('Unknown synthetic source');
+    if (typeof string === 'string') syntheticStrings.set(uid, string);
+    if (pageUid !== undefined) sourcePages.set(uid, pageUid);
+    referenceRevision += 1;
+    publishSession();
+  },
+  setClockReadAvailable(value) {
+    clockReadsAvailable = Boolean(value);
+    window.dispatchEvent(new CustomEvent('nautilus-log:clock-changed'));
   },
   setClockEntries(entries) {
     clockEntries = clone(entries);

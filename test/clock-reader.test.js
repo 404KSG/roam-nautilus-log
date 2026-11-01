@@ -24,6 +24,29 @@ function countingRead(handler) {
 
 const owners = Array.from({ length: 16 }, (_, i) => `task-${String(i + 1).padStart(2, '0')}`);
 
+test('render context distinguishes verified CLOCK absence from read failure without expanding owner identity', async () => {
+  const { createRendererClockReader } = await api();
+  let fail = true;
+  const calls = [];
+  const reader = createRendererClockReader({
+    getSnapshot: () => ({ entries: [], entryTaskUids: ['covered-wrapper'] }),
+    read: uids => { calls.push([...uids]); if (fail) throw Error('unavailable'); return []; },
+  });
+  assert.deepEqual(reader.readContext(['covered-wrapper', 'local-wrapper']), { entries: [], readableTaskUids: ['covered-wrapper'] });
+  fail = false;
+  assert.deepEqual(reader.readContext(['covered-wrapper', 'local-wrapper']), { entries: [], readableTaskUids: ['covered-wrapper', 'local-wrapper'] });
+  assert.deepEqual(calls, [['local-wrapper'], ['local-wrapper']]);
+  assert.deepEqual(reader.read(['local-wrapper']), []);
+  assert.equal(calls.length, 2);
+});
+
+test('current CLOCK coverage survives post-read cache trimming', async () => {
+  const { createRendererClockReader } = await api();
+  const reader = createRendererClockReader({ maxOwners: 1, read: () => [] });
+  assert.deepEqual(reader.readContext(['wrapper-a', 'wrapper-b']), { entries: [], readableTaskUids: ['wrapper-a', 'wrapper-b'] });
+  assert.equal(reader.size(), 1);
+});
+
 test('renderer reads uncovered historical owners instead of treating today entries as all history', async () => {
   const { createRendererClockReader } = await api();
   const today = { taskUid: 'today', clockUid: 'clock-today' };

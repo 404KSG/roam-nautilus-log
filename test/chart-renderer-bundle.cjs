@@ -13,6 +13,7 @@ webpack({
   mode: 'development',
   devtool: false,
   target: 'web',
+  module: { rules: [{ test: /\.cljs$/, type: 'asset/source' }] },
 }, (error, stats) => {
   if (error || stats.hasErrors()) {
     console.error(error || stats.toString({ all: false, errors: true }));

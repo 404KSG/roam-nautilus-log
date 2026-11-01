@@ -1,7 +1,7 @@
 const PLAN_PULL_PATTERN = '[:block/string {:block/children [:block/uid :block/string :block/order {:block/refs [:block/uid :block/string]}]}]';
 const PLAN_MEMBERSHIP_WATCH_PATTERN = '[:block/string :block/children]';
 const CHILD_WATCH_PATTERN = '[:block/string :block/order]';
-const SOURCE_WATCH_PATTERN = '[:block/string]';
+const SOURCE_WATCH_PATTERN = '[:block/string :block/page]';
 const BLOCK_REF_RE = /\(\(([a-zA-Z0-9_-]{6,})\)\)/g;
 
 function sequence(value) {
@@ -217,7 +217,7 @@ export function createPlanWatchBridge({
       entry.refreshPending = false;
       entry.cancelRefresh = null;
       if (destroyed || watches.get(uid) !== entry) return;
-      const snapshot = read(uid);
+      const snapshot = { ...read(uid), referenceRevision: entry.referenceRevision };
       entry.snapshot = snapshot;
       syncEntityWatches(uid, entry);
       for (const subscriber of [...entry.listeners]) {
@@ -229,7 +229,8 @@ export function createPlanWatchBridge({
 
   const syncEntityWatches = (uid, entry) => {
     const refresh = () => scheduleRead(uid, entry);
-    const sync = (watchMap, targetUids, pattern) => {
+    const refreshReference = () => { entry.referenceRevision += 1; refresh(); };
+    const sync = (watchMap, targetUids, pattern, callback = refresh) => {
       for (const [targetUid, watch] of [...watchMap]) {
         if (targetUids.has(targetUid)) continue;
         watchMap.delete(targetUid);
@@ -237,7 +238,7 @@ export function createPlanWatchBridge({
       }
       for (const targetUid of targetUids) {
         if (watchMap.has(targetUid)) continue;
-        const watch = addWatch(pattern, targetUid, refresh);
+        const watch = addWatch(pattern, targetUid, callback);
         if (watch) watchMap.set(targetUid, watch);
       }
     };
@@ -245,7 +246,7 @@ export function createPlanWatchBridge({
       .map((child) => child?.['block/uid'])
       .filter(Boolean));
     sync(entry.childWatches, childUids, CHILD_WATCH_PATTERN);
-    sync(entry.sourceWatches, referencedUids(entry.snapshot, readReferencedString), SOURCE_WATCH_PATTERN);
+    sync(entry.sourceWatches, referencedUids(entry.snapshot, readReferencedString), SOURCE_WATCH_PATTERN, refreshReference);
   };
 
   const remove = (uid, entry) => {
@@ -274,6 +275,7 @@ export function createPlanWatchBridge({
         cancelRefresh: null,
         refreshPending: false,
         snapshot: read(uid),
+        referenceRevision: 0,
         parentWatch: null,
         childWatches: new Map(),
         sourceWatches: new Map(),

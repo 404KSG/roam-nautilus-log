@@ -20,6 +20,7 @@ import {
   openPrimaryPlan,
   readAllEntries,
   readBlockString,
+  readReferenceCompletionSource,
   readChildren,
   readPrimaryPlan,
   showToast,
@@ -114,7 +115,7 @@ let unsubscribeClockRender = null;
 const rendererClockCache = createRendererClockReader({
   getSnapshot: () => timingRuntime?.getSnapshot?.(),
 });
-const rendererClockEntries = (taskUids) => rendererClockCache.read(taskUids);
+const rendererClockContext = (taskUids) => rendererClockCache.readContext(taskUids);
 
 function dailyPageBounds(pageTitle, logicalEndMinutes = 1440) {
   try {
@@ -142,7 +143,7 @@ function getClockRenderContext(pageTitle, taskUids = [], logicalEndMinutes = nul
     ? Number(logicalEndMinutes)
     : schedule.endMinutes;
   return {
-    entries: rendererClockEntries(taskUids),
+    ...rendererClockContext(taskUids),
     ...dailyPageBounds(pageTitle, resolvedEnd),
   };
 }
@@ -153,7 +154,7 @@ function getClockRenderContext(pageTitle, taskUids = [], logicalEndMinutes = nul
  * string in a nested Pull Watch snapshot, so the renderer must be able to
  * hydrate that source by UID instead of silently dropping the row.
  */
-function resolveRendererTaskInstance(payload = {}, readString = readBlockString) {
+function resolveRendererTaskInstance(payload = {}, readString = readBlockString, readSource = readReferenceCompletionSource) {
   const safeReadString = (uid) => {
     try {
       const value = typeof readString === "function" ? readString(uid) : "";
@@ -163,10 +164,23 @@ function resolveRendererTaskInstance(payload = {}, readString = readBlockString)
       return "";
     }
   };
-  return timingCore.resolveTaskInstance({
-    ...(payload && typeof payload === "object" ? payload : {}),
-    readString: safeReadString,
-  });
+  const input = payload && typeof payload === "object" ? payload : {};
+  const instance = timingCore.resolveTaskInstance({ ...input, readString: safeReadString,
+    includeCompletionEvidence: Object.prototype.hasOwnProperty.call(input, 'displayDate') });
+  if (!instance.completionEvidence) return instance;
+  const { localMinutes, reference: candidate } = instance.completionEvidence;
+  let reference = null;
+  if (candidate) {
+    let source = null;
+    try { source = typeof readSource === 'function' ? readSource(candidate.sourceUid) : null; } catch (_) { /* unverified, never guessed */ }
+    reference = !source || source.uid !== candidate.sourceUid || source.string !== candidate.sourceString
+      ? { state: 'unverified', sourceUid: candidate.sourceUid, sourceMinutes: candidate.minutes,
+        reason: source ? 'source-changed' : 'source-unavailable' }
+      : logCore.resolveReferenceCompletionTime({ sourceUid: candidate.sourceUid, sourceMinutes: candidate.minutes,
+        sourcePageUid: source.pageUid, displayDate: input.displayDate, logicalEndMinutes: input.logicalEndMinutes });
+  }
+  // Do not expose the extra raw source snapshot beyond this provenance check.
+  return { ...instance, completionEvidence: { localMinutes, reference } };
 }
 
 function settingValue(extensionAPI, key) {
