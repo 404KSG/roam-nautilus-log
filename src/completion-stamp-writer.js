@@ -229,10 +229,16 @@ export function createCompletionStampWriter({ extensionAPI, host = globalThis.wi
         return { stamped: false, reason: 'foreign-reopen' };
       }
       const expected = value.replace(/ d(?:[01]\d|2[0-3]):[0-5]\d$/, '');
+      // Withdraw and verify deletion authority before changing the text. If the
+      // host later refuses that change, an identical manual token must not
+      // inherit a receipt for the old suffix.
+      try { await saveReceiptState(core.withoutReceipt(parsed.value, uid, frozen), frozen, uid, value, isCurrent); }
+      catch (_error) {
+        warn('The completion time was preserved because ownership removal could not be confirmed.');
+        return { stamped: false, reason: 'receipt-removal-unconfirmed' };
+      }
       const result = await writeOnce({ uid, before: value, after: expected, frozen, isCurrent, signal });
       if (!result.confirmed) return { stamped: false, ...result };
-      try { await saveReceiptState(core.withoutReceipt(parsed.value, uid, frozen), frozen, uid, expected, isCurrent); }
-      catch (_error) { warn('The owned completion time was removed, but its receipt update could not be confirmed.'); }
       return { stamped: true, removed: true, string: expected };
     }, { signal });
   };

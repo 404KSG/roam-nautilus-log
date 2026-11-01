@@ -201,6 +201,56 @@ test('failed or no-op receipt persistence does not claim removal authority', asy
   });
 });
 
+test('failed receipt revocation preserves the suffix and cannot delete a later identical manual time', async t => {
+  for (const mode of ['reject', 'no-op']) await t.test(mode, async st => {
+    const f = await fixture(st); await f.complete();
+    const stored = structuredClone(f.values.get('completion-stamp-receipts'));
+    f.settings.set = async () => { if (mode === 'reject') throw Error('storage unavailable'); };
+    const result = await f.reopen();
+    assert.equal(f.blocks.get('task00001'), '{{[[TODO]]}} Task 30m d10:31');
+    assert.notEqual(result.removed, true);
+    assert.equal(f.updates.length, 1, 'receipt failure must prevent the suffix-removal write');
+    assert.deepEqual(f.values.get('completion-stamp-receipts'), stored);
+    // Even the original report's later identical body/token cannot be deleted
+    // while withdrawing its old authority remains unconfirmed.
+    f.blocks.set('task00001', '{{[[DONE]]}} Task 30m d10:31');
+    await f.reopen();
+    assert.equal(f.blocks.get('task00001'), '{{[[TODO]]}} Task 30m d10:31');
+    assert.equal(f.updates.length, 1);
+    assert.ok(f.notices.some(n => /ownership.*remov|revok/i.test(n)));
+  });
+});
+
+test('once revocation succeeds an uncertain suffix removal cannot leave authority over recreated text', async t => {
+  for (const mode of ['reject', 'no-op']) await t.test(mode, async st => {
+    let removing = false, f;
+    f = await fixture(st, { update: async (uid, string, blocks) => {
+      if (!removing) { blocks.set(uid, string); return; }
+      assert.equal(f.values.get('completion-stamp-receipts').items.length, 0);
+      if (mode === 'reject') throw Error('host write refused');
+    } });
+    await f.complete(); removing = true;
+    assert.equal((await f.reopen()).reason, 'unconfirmed');
+    assert.equal(f.blocks.get('task00001'), '{{[[TODO]]}} Task 30m d10:31');
+    assert.equal(f.values.get('completion-stamp-receipts').items.length, 0);
+    f.blocks.set('task00001', '{{[[DONE]]}} Task 30m d10:31');
+    assert.equal((await f.reopen()).reason, 'foreign-reopen');
+    assert.equal(f.blocks.get('task00001'), '{{[[TODO]]}} Task 30m d10:31');
+    assert.equal(f.updates.length, 2, 'the later manual timestamp must cause no update');
+  });
+});
+
+test('an edit during receipt revocation remains intact and the old receipt stays revoked', async t => {
+  const f = await fixture(t); await f.complete();
+  const entered = deferred(), settled = deferred(), persist = f.settings.set;
+  f.settings.set = async (key, value) => { entered.resolve(); await settled.promise; return persist(key, value); };
+  const pending = f.reopen(); await entered.promise;
+  f.blocks.set('task00001', '{{[[TODO]]}} New user text d10:31'); settled.resolve();
+  assert.equal((await pending).reason, 'changed-before-write');
+  assert.equal(f.blocks.get('task00001'), '{{[[TODO]]}} New user text d10:31');
+  assert.equal(f.updates.length, 1); assert.equal(f.values.get('completion-stamp-receipts').items.length, 0);
+});
+
 test('feature-off performs no optional graph, hash, lock or receipt work', async t => {
   let hashes = 0;
   const f = await fixture(t, { enabled: false, hash: async () => { hashes++; throw Error('unused'); } });

@@ -26,7 +26,7 @@ A suffix is exactly one final ` dHH:MM`. Existing completion fields, including m
 
 Receipts use the existing extension setting `completion-stamp-receipts`. Each holds graph, graph type, user UID, block UID, token, action time, and SHA-256 of the body with only the task marker normalized. Task text and completion history are never stored. The limits are 64 receipts and 32 KiB; retention follows operation order, not wall-clock order. String and object stores are validated for exact fields, scopes, hash shape, timestamps, counts, and UTF-8 size.
 
-A missing, corrupt, evicted, stale, or foreign-scope receipt cannot authorize deletion. Changed body text also prevents deletion. Receipt persistence is read back and compared by field values. Failure after a confirmed text write leaves the suffix intact and warns that ownership was not safely saved.
+A missing, corrupt, evicted, stale, or foreign-scope receipt cannot authorize deletion. Changed body text also prevents deletion. Receipt persistence is read back and compared by field values. Failure after a confirmed stamp write leaves the suffix intact and warns that ownership was not safely saved. On reopen, receipt removal must be persisted and its absence verified before the suffix is deleted. Failed revocation preserves the suffix. If the later text update fails, the receipt remains revoked so an identical manual token cannot inherit its authority.
 
 ## Coexistence and verification limits
 
