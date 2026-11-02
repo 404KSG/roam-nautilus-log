@@ -97,7 +97,8 @@ Completed records and estimates remain visible and occupy their intervals; they 
 The **continuous shell** draws each timed record as one surface, with rounded transitions
 through the radius profile. Hour marks remain as edge ticks rather than lines that visually
 split a task. Titles have no duration/status sublabel: only the active task or event shows
-**Current task** or **Current event**, respectively, underneath. Hover/focus Tips retain the
+**Current task** or **Current event**, respectively, underneath in the same theme-aware red
+as the current-time pointer. Task/event titles keep their category colors. Hover/focus Tips retain the
 full duration, Actual and Estimate details.
 The center clock uses the shared UI font with tabular numerals, regular weight and secondary
 text color. Its size is capped at 16px and still adapts to narrow views; the date, clock position

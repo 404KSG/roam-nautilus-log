@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- Show Current task / Current event status text in the existing time-pointer red, with
+  the lighter dark-theme variant. Keep title colors, the center clock, typography,
+  layout and current-state timing unchanged; retain system colors in forced-color mode.
+
 - Remove the obsolete outline-reordering control, command, execution/Undo logic and
   documentation. The toolbar now contains Desk, Help and whole-widget visibility, followed
   by optional Calendar. Existing graph order, manual Desk moves and shared write guards remain.

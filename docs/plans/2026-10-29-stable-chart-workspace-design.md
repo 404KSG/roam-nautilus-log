@@ -204,6 +204,9 @@ stay on their time anchor's side. Ordinary titles wrap fully; pathological text 
 existing full-text route. Height follows real content rather than a fixed cap.
 
 Only the active task or event renders its typed indicator: **Current task** or **Current event**.
+Use the existing theme-aware `--nautilus-log-now` red for this status text, matching the time
+pointer. Keep its regular weight, metrics and layout. Titles keep their category colors;
+ordinary metadata and the center clock remain secondary. Forced-color mode retains CanvasText.
 Other diagram titles have no duration or completion-status sublabel; those details remain complete in Tips and the
 accessible record claim. Only a currently displayed indicator receives the 14-unit subtitle
 row. Use the same interactive/show-now and interval conditions as the painted indicator;

@@ -1,6 +1,14 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { chartScene, chartRecordMetadata } = require('../src/log-core');
+const fs = require('node:fs');
+const path = require('node:path');
+
+test('Current status text uses the time-pointer red without recoloring ordinary metadata', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../extension.css'), 'utf8');
+  assert.match(css, /\.nautilus-log-record-current\s*\{\s*fill:\s*var\(--nautilus-log-now\);\s*font-weight:\s*400/);
+  assert.match(css, /\.nautilus-log-record-meta\s*\{\s*fill:\s*var\(--nautilus-log-chart-muted\)/);
+});
 
 const task = { uid: 'work', description: 'Write', todo: true, duration: 45 };
 
