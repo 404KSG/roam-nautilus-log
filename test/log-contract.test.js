@@ -25,7 +25,6 @@ const timingRoam = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-roa
 const todayPlan = fs.readFileSync(path.join(__dirname, '..', 'src', 'today-plan.js'), 'utf8');
 const todayPlanLauncher = fs.readFileSync(path.join(__dirname, '..', 'src', 'today-plan-launcher.js'), 'utf8');
 const todayPlanCommands = fs.readFileSync(path.join(__dirname, '..', 'src', 'today-plan-commands.js'), 'utf8');
-const tidyPlan = fs.readFileSync(path.join(__dirname, '..', 'src', 'tidy-plan.js'), 'utf8');
 const logCore = fs.readFileSync(path.join(__dirname, '..', 'src', 'log-core.js'), 'utf8');
 const sceneCore = fs.readFileSync(path.join(__dirname, '..', 'src', 'chart-scene.js'), 'utf8');
 
@@ -285,7 +284,7 @@ test('charts create a plan session later if the factory is missing at mount', ()
 test('chart write gates require a ready plan and do not block CLOCK stop', () => {
   const writes = component.slice(
     component.indexOf('(defn plan-writes-allowed?'),
-    component.indexOf('(defn tidy-button'),
+    component.indexOf('(defn desk-button'),
   );
   assert.match(writes, /:writesAllowed/);
   assert.match(writes, /"ready"/);
@@ -912,51 +911,24 @@ test('folding retains the scoped outline claim while Desk hides its UI', () => {
   assert.match(view, /root\.hidden = true/);
 });
 
-test('Tidy is a stable, reversible direct-child action that does not rewrite schedule inputs', () => {
-  assert.match(component, /nautilus-log-tidy-btn/);
-  assert.match(component, /\[blueprint-toolbar-icon "crystal-ball"\]/);
-  assert.match(component, /Official Blueprint 20px glyphs on the existing 18px toolbar canvas/);
-  assert.doesNotMatch(component, /translate\(1 1\) scale\(0\.9166667\)|m16 22-1-4/);
-  const helpSource = component.slice(
-    component.indexOf('(defn help-button'),
-    component.indexOf('(defn plan-writes-allowed?')
-  );
-  const collapseSource = component.slice(
-    component.indexOf('(defn collapse-button'),
-    component.indexOf('(defn switch-debug-button')
-  );
+test('remaining chart controls retain native icon bounds and all completed history', () => {
+  const helpSource = component.slice(component.indexOf('(defn help-button'), component.indexOf('(defn plan-writes-allowed?'));
+  const collapseSource = component.slice(component.indexOf('(defn collapse-button'), component.indexOf('(defn switch-debug-button'));
   assert.doesNotMatch(helpSource, /:width "16" :height "16"/);
   assert.match(helpSource, /:width "18" :height "18"/);
   assert.match(collapseSource, /blueprint-toolbar-icon \(if @collapsed-state "eye-open" "eye-off"\)/);
   assert.match(component, /:width "18" :height "18" :viewBox "0 0 20 20"/);
-  assert.match(component, /:settledUids settled-uids/);
   assert.match(component, /log-core-call "partitionChartEvents" filtered/);
-  assert.match(component, /log-core-call "settledPlanUids"/);
   assert.match(logCore, /event\.done !== true/);
-  assert.match(logCore, /result\.completedUids\.push\(event\.uid\)/);
   assert.doesNotMatch(component, /not= "source" \(:status-origin %\)/);
-  assert.match(component, /:nowMinutes \(when[\s\S]*:timelineMinutes timeline-state/);
-  assert.match(entry, /tidyPlan: ownedTidy\.run/);
-  assert.match(entry, /logCore\.settledPlanUids/);
-  assert.match(tidyPlan, /resolveSettled/);
-  assert.match(tidyPlan, /stableTidyOrder/);
-  assert.match(tidyPlan, /childOrderMoves/);
-  assert.match(tidyPlan, /setOpen/);
-  assert.match(tidyPlan, /applyOpenTarget/);
-  assert.match(tidyPlan, /collapsedUids/);
-  assert.match(tidyPlan, /runningTaskUid/);
-  assert.match(tidyPlan, /The Plan changed after Tidy/);
-  assert.match(css, /\.nautilus-log-toast-action/);
-  assert.match(tidyPlan, /updateGraphBlockOpen/);
-  assert.doesNotMatch(tidyPlan, /deleteGraphBlock|createGraphBlock/);
 });
 
-test('Log keeps a hover-labeled Desk switch and four quiet icon controls without playback mode', () => {
+test('Log keeps a hover-labeled Desk switch and remaining quiet icon controls without playback mode', () => {
   assert.doesNotMatch(component, /\(defn playback-button/);
   assert.doesNotMatch(component, /playback-state-atom|playback-frame-atom|requestAnimationFrame/);
   assert.doesNotMatch(logCore, /playback\s*=/);
   assert.doesNotMatch(css, /nautilus-log-playback-active|nautilus-log-slice-pop-in/);
-  assert.equal((component.match(/:data-nautilus-tooltip/g) || []).length, 5);
+  assert.equal((component.match(/:data-nautilus-tooltip/g) || []).length, 4);
   assert.match(component, /:role "switch"/);
   assert.doesNotMatch(component, /nautilus-log-desk-switch-label/);
   assert.match(css, /\.nautilus-log-desk-btn\[aria-checked="true"\] \.nautilus-log-desk-switch-thumb\s*\{[^}]*translateX\(12px\)/);
@@ -966,19 +938,17 @@ test('Log keeps a hover-labeled Desk switch and four quiet icon controls without
   assert.match(css, /\.nautilus-log-toggle-btn\[data-nautilus-tooltip\]:focus-visible::after/);
 });
 
-test('Log orders Desk, Help, Tidy and whole-widget Eye before optional Calendar', () => {
+test('Log orders Desk, Help and whole-widget Eye before optional Calendar', () => {
   const controls = component.slice(
     component.indexOf('(defn log-controls'),
     component.indexOf('(defn render-context-probe'),
   );
   const help = controls.indexOf('[help-button');
   const desk = controls.indexOf('[desk-button');
-  const tidy = controls.indexOf('[tidy-button');
   const calendar = controls.indexOf('[calendar-button');
   const collapse = controls.indexOf('[collapse-button');
   assert.ok(desk >= 0 && desk < help);
-  assert.ok(help < tidy);
-  assert.ok(tidy < collapse);
+  assert.ok(help < collapse);
   assert.ok(collapse < calendar);
 });
 

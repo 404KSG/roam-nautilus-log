@@ -1,8 +1,10 @@
 # Nautilus Log final pass — 2026-11-01
 
 Implementation contract updated November 2, 2026. This supersedes conflicting renderer,
-calendar-day, and completed-event assumptions in earlier design notes. The reference
-baseline is `f0bb0d9030421f19e4c3556a4d0a6b193de66c9d`, including its Blueprint crystal-ball Tidy icon.
+calendar-day, and completed-event assumptions in earlier design notes. The integrated
+published baseline is `867cb4bcc394125b75caf6f99bea05118a1762ca`: keep removal of the automatic
+outline-reordering control and keep current-status text in time-pointer red. Those published
+parallel decisions supersede the earlier proposal to preserve and refine that control.
 
 ## Product boundary
 
@@ -61,7 +63,7 @@ is checked before creation and later writes. Existing supported or newer-family 
 located rather than duplicated. The dated UI guards against silently creating a different
 calendar date after its label becomes stale.
 
-## Event order and Tidy
+## Event order and explicit reordering
 
 `respect-event-order` is independent and **off by default**. Off retains all-day gap filling
 in user task order. On uses `eventStartFloors`: each pending task receives the maximum end
@@ -78,13 +80,11 @@ DONE does not cancel a fixed reservation. Its written range remains in schedulin
 capacity, and overlap detection; users release it by editing/removing the range. Completion
 styling stays separate from reservation semantics.
 
-`settledPlanUids` supplies one classification rule for chart and command projections.
-Tidy moves completed tasks and elapsed fixed events, preserving future reservations and
-pending relative order. Its production adapter rechecks eligibility from current rows,
-including requests made by legacy CLJS, and stops later moves if eligibility changes.
-Tidy/Undo also revalidate supported renderer ownership. Elapsed classification uses
-owner-relative wall time, not a cursor clamped to budget END. Undo retains its order/open-state
-verification and does not rewrite text or descendants.
+Task order changes only through explicit outline edits and manual Desk moves. Moving a task
+across an event can change its earliest start when this option is on. There is no automatic
+completed-item reordering command, bridge endpoint, production helper, or Undo service.
+The retired feature's modules, glyph and tests stay removed; Desk and Calendar keep their
+shared graph-write guard and native ownership checks.
 
 ## One active workday
 
@@ -95,7 +95,7 @@ Unreadable is distinct from absent. Future-family roots stay discoverable but do
 writable execution tasks.
 
 A November 1 21:00–November 2 02:00 plan remains the owner at 00:30: logical minute **1470**,
-**90 minutes** available. Execution Plan, capacity, Review, task mutations and Tidy share
+**90 minutes** available. Execution Plan, capacity, Review and task mutations share
 that context. At END selection returns to the calendar date without stopping a running
 CLOCK. Previous-owner timing remains visible with its date and explicit Stop action;
 start/complete actions require membership in the active supported plan.
@@ -129,7 +129,8 @@ separate interpretation of dateless referenced stamps is unchanged.
 
 Estimated completed records show a measured `≈` cue without removing previously visible
 title characters or adding a universal subtitle row. Accessible names and Tips retain the
-full meaning. **Planned now / 当前计划** describes the forecast, independently of CLOCK focus.
+full meaning. **Planned now / 当前计划** describes the forecast, independently of CLOCK focus,
+and uses the current-time pointer's theme-aware red. Titles retain their category colors.
 **free / 未分配** is unassigned budget divided by full-day flexible capacity after deducting
 Planned, not remaining clock time or physiological energy. Both topbar display modes use
 the same minute projection.
@@ -149,7 +150,7 @@ Roam Logbook extension to be disabled. No independent POMO entry is added.
 The frozen publication candidate must pass the full Node suite and all configured browser
 gates. Added coverage includes renderer contract/source refusal, exact bounded migration,
 real current/legacy CLJS in both orders, actual old scaffold writes, stale cleanup, retained
-historical readers, event/Tidy before-after forecasts, overnight ownership, full-day/DST
+historical readers, optional event floors and explicit-order forecasts, overnight ownership, full-day/DST
 CLOCK evidence, calendar creation recovery, and actual overnight topbar/launcher/Review UI.
 Existing timestamp/reference/editor guarantees remain required.
 

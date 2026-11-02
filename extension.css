@@ -870,31 +870,6 @@
   to { transform: rotate(360deg); }
 }
 
-.nautilus-log-toast-content {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.nautilus-log-toast-action {
-  appearance: none;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.nautilus-log-toast-action:focus-visible {
-  outline: 1px solid currentColor;
-  outline-offset: 2px;
-}
-
 .bp3-dark .nautilus-log-toggle-btn:hover,
 .bp3-dark .nautilus-log-toggle-btn:focus-visible,
 .roam-app.rm-dark-theme .nautilus-log-toggle-btn:hover,
@@ -1250,8 +1225,8 @@
 .nautilus-log-record--event { --nautilus-log-record-accent: var(--nautilus-log-event); --nautilus-log-record-text: var(--nautilus-log-event-text); }
 .nautilus-log-record--done { --nautilus-log-record-accent: var(--nautilus-log-completed); --nautilus-log-record-text: var(--nautilus-log-completed); }
 .nautilus-log-record-title { fill: var(--nautilus-log-task-text); font-weight: 500; }
-.nautilus-log-record-meta,
-.nautilus-log-record-current { fill: var(--nautilus-log-chart-muted); font-weight: 400; }
+.nautilus-log-record-meta { fill: var(--nautilus-log-chart-muted); font-weight: 400; }
+.nautilus-log-record-current { fill: var(--nautilus-log-now); font-weight: 400; }
 .nautilus-log-record-estimate-cue { fill: var(--nautilus-log-completed); font-weight: 400; }
 .nautilus-log-record-anchor { fill: var(--nautilus-log-record-accent); fill-opacity: .7; }
 .nautilus-log-label-highlight { fill: transparent; }

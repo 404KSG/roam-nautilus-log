@@ -89,7 +89,7 @@ export function installVersionFixture({ core, taskCore, settings, getChildren, r
         openDesk:options=>desk.open(options),registerDeskHost:options=>desk.registerHost(options),closeDeskHost:container=>desk.closeForHost(container),
         toggleChartHelp:options=>help.toggle(options),closeChartHelp:anchor=>help.closeForAnchor(anchor),
         locatePlanTask:()=>Promise.resolve(),
-        tidyPlan:()=>{throw Error('Unexpected Tidy write');},syncCalendarPlan:()=>{throw Error('Unexpected Calendar write');},
+        syncCalendarPlan:()=>{throw Error('Unexpected Calendar write');},
       }});
     handle.publish(settings,false);handle.setReady(true);
     const generation={handle,watcher,desk,help};generations.push(generation);

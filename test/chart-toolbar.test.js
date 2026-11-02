@@ -6,20 +6,15 @@ const icons = require('./fixtures/blueprint-toolbar-icons.json');
 const component = fs.readFileSync(path.join(__dirname, '../src/component.cljs'), 'utf8');
 const section = (start, end) => component.slice(component.indexOf(start), component.indexOf(end));
 
-test('toolbar uses the exact official Blueprint Crystal ball and Eye glyph geometry', () => {
-  const renderer = section('(defn blueprint-toolbar-icon', '(defn tidy-button');
+test('toolbar retains the exact official Blueprint Eye glyph geometry', () => {
+  const renderer = section('(defn blueprint-toolbar-icon', '(defn plan-writes-allowed?');
   assert.match(renderer, /:width "18" :height "18" :viewBox "0 0 20 20"/);
   assert.match(renderer, /:fill "currentColor" :stroke "none"/);
   assert.match(renderer, /:fill-rule "evenodd"/);
+  assert.deepEqual(Object.keys(icons.icons).sort(), ['eye-off', 'eye-open']);
   for (const [name, geometry] of Object.entries(icons.icons)) {
     assert.ok(renderer.includes(JSON.stringify(name)) && renderer.includes(JSON.stringify(geometry)), name);
   }
-  const tidy = section('(defn tidy-button', '(defn calendar-result-popover');
-  assert.match(tidy, /\[blueprint-toolbar-icon "crystal-ball"\]/);
-  assert.match(tidy, /:data-nautilus-tooltip \(:tidy copy\)/);
-  assert.match(tidy, /:aria-label \(:tidy copy\)/);
-  assert.match(tidy, /\.\-tidyPlan/);
-  assert.doesNotMatch(tidy, /translate\(1 1\)|m16 22-1-4/);
 });
 
 test('Eye is the whole-widget disclosure action, never a completed-record filter', () => {
@@ -30,9 +25,10 @@ test('Eye is the whole-widget disclosure action, never a completed-record filter
   assert.doesNotMatch(component, /show-done-state|switch-done-visibility-button|"eye-on"/);
 });
 
-test('four main controls keep exact priority even when optional Calendar is present', () => {
+test('three main controls keep exact priority before optional Calendar', () => {
   const controls = section('(defn log-controls', '(defn render-context-probe');
-  const positions = ['desk-button', 'help-button', 'tidy-button', 'collapse-button', 'calendar-button']
+  const positions = ['desk-button', 'help-button', 'collapse-button', 'calendar-button']
     .map(name => controls.indexOf(`[${name}`));
   assert.ok(positions.every((p, i) => p >= 0 && (i === 0 || positions[i - 1] < p)), positions.join(','));
+  assert.doesNotMatch(controls, /tidy|settled-uids|crystal-ball/);
 });

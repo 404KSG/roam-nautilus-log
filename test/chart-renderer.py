@@ -310,12 +310,11 @@ def contrast(page):
         now:paint('.nautilus-log-now-needle-line','stroke'),
         clock:paint('.nautilus-log-center-now','fill'),
         control:paint('.nautilus-log-collapse-btn svg path','fill'),
-        tidyControl:paint('.nautilus-log-tidy-btn svg path','fill'),
         helpControl:paint('.nautilus-log-help-btn svg path','fill')};
     }''')
     scores = {k: ratio(v, paints['background']) for k, v in paints.items() if k != 'background'}
     assert min(scores[k] for k in ('task', 'event', 'completed', 'clock')) >= 4.5, scores
-    assert min(scores[k] for k in ('estimateOutline', 'focus', 'now', 'control', 'tidyControl', 'helpControl')) >= 3, scores
+    assert min(scores[k] for k in ('estimateOutline', 'focus', 'now', 'control', 'helpControl')) >= 3, scores
     return {'paint': paints, 'ratios': scores}
 
 
@@ -1805,7 +1804,7 @@ def continuous_shell_contract(page):
           return {records,gradients,fill,inlineMaterial:svg.style.getPropertyValue('--nautilus-log-task-future-fill'),oldHourSectors:svg.querySelectorAll('.nautilus-log-grid .nautilus-log-slice').length,outline:svg.querySelector('.nautilus-log-shell-outline').getAttribute('d'),base:svg.querySelector('.nautilus-log-shell-base').getAttribute('d')};
         }''')
         assert all(r['count'] == 1 and r['path'] == r['expected'] and r['path'].count('M') == 1 and r['path'].endswith('Z') and r['indicatorInside'] for r in proof['records']), proof
-        assert all(r['legacyMetadata'] == 0 and r['indicator'] == (('Current event' if r['category'] == 'event' else 'Current task') if r['current'] else None) for r in proof['records']), proof
+        assert all(r['legacyMetadata'] == 0 and r['indicator'] == (('Planned event' if r['category'] == 'event' else 'Planned now') if r['current'] else None) for r in proof['records']), proof
         assert len(proof['gradients']) == 4 and len({g['id'] for g in proof['gradients']}) == 4, proof
         assert proof['inlineMaterial'].startswith('url(#nautilus-shell-') and 'url(' in proof['fill'], 'Reagent CSS variables must use string keys and actually paint the gradients'
         assert proof['oldHourSectors'] == 0 and proof['outline'] == proof['base'], proof
@@ -1847,12 +1846,20 @@ def continuous_shell_contract(page):
 
 def current_only_labels_contract(page):
     report = {}
-    for width, language in [(720, 'en'), (280, 'en'), (280, 'zh')]:
+    cases = [(theme, classes, width, language)
+             for theme, classes in [('light', ''), ('bp3', 'bp3-dark'), ('roam', 'roam-app rm-dark-theme'), ('dark', 'dark')]
+             for width, language in [(720, 'en'), (280, 'en'), (280, 'zh')]]
+    for theme, classes, width, language in cases:
         load(page, 'mixed', 'main' if width == 720 else 'sidebar', width, lang=language)
-        words = {'task': 'Current task', 'event': 'Current event'} if language == 'en' else {'task': '当前任务', 'event': '当前事件'}
+        page.locator('body').evaluate('''(e,c)=>{e.className=c;e.style.background=c?'#1d1e21':'#fff';e.style.color=c?'#ecedef':'#222326'}''', classes)
+        settle_renderer(page)
+        expected_red = 'rgb(229, 143, 140)' if classes else 'rgb(194, 75, 75)'
+        title_colors = {'task': 'rgb(142, 192, 222)', 'event': 'rgb(215, 191, 112)'} if classes else {'task': 'rgb(16, 107, 163)', 'event': 'rgb(123, 101, 26)'}
+        words = {'task': 'Planned now', 'event': 'Planned event'} if language == 'en' else {'task': '当前计划', 'event': '计划中的事件'}
         def indicators():
-            values = page.locator('.nautilus-log-record-current').evaluate_all('''nodes=>nodes.map(e=>{const owner=e.closest('[data-task-uid]'),r=e.getBoundingClientRect(),h=owner.querySelector('.nautilus-log-label-hit').getBoundingClientRect();return {uid:owner.dataset.taskUid,category:owner.dataset.category,text:e.textContent,current:owner.getAttribute('aria-current'),inside:r.left>=h.left-1&&r.right<=h.right+1&&r.bottom<=h.bottom+1};})''')
+            values = page.locator('.nautilus-log-record-current').evaluate_all('''nodes=>nodes.map(e=>{const owner=e.closest('[data-task-uid]'),r=e.getBoundingClientRect(),h=owner.querySelector('.nautilus-log-label-hit').getBoundingClientRect();return {uid:owner.dataset.taskUid,category:owner.dataset.category,text:e.textContent,current:owner.getAttribute('aria-current'),fill:getComputedStyle(e).fill,weight:getComputedStyle(e).fontWeight,titleFill:getComputedStyle(owner.querySelector('.nautilus-log-record-title')).fill,inside:r.left>=h.left-1&&r.right<=h.right+1&&r.bottom<=h.bottom+1};})''')
             assert all(v['text'] == words[v['category']] and v['current'] == 'true' and v['inside'] for v in values), values
+            assert all(v['fill'] == expected_red and v['weight'] == '400' and v['titleFill'] == title_colors[v['category']] for v in values), (theme, width, values)
             assert not page.locator('svg .nautilus-log-record-meta').count()
             return values
         initial = indicators()
@@ -1863,11 +1870,27 @@ def current_only_labels_contract(page):
         expect(page.locator('.nautilus-log-detail-meta')).to_contain_text('1h30m')
         set_clock(page, '2026-10-29T09:01:00')
         assert [v['uid'] for v in indicators()] == ['event-standup']
-        page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/f'current-only-{width}-{language}.png'))
+        needle = page.locator('.nautilus-log-now-needle-line').evaluate('e=>getComputedStyle(e).stroke')
+        clock = page.locator('.nautilus-log-center-now').evaluate('e=>getComputedStyle(e).fill')
+        assert needle == expected_red and clock != expected_red, 'only the Current subtitle joins the existing pointer red'
+        rgb = [float(n) for n in re.findall(r'[\d.]+', expected_red)]
+        contrast_ratio = ratio(rgb, [29, 30, 33] if classes else [255, 255, 255])
+        assert contrast_ratio >= 4.5, (theme, contrast_ratio)
+        page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/f'current-only-{theme}-{width}-{language}.png'))
+        set_clock(page, '2026-10-29T09:31:00')
+        resumed = indicators()
+        assert resumed and all(v['category'] == 'task' for v in resumed), resumed
+        assert not page.locator('[data-task-uid="event-standup"] .nautilus-log-record-current').count()
         for iso in ['2026-10-29T04:59:00', '2026-10-29T21:00:00', '2026-10-30T08:01:00', '2026-10-28T08:01:00']:
             set_clock(page, iso); assert indicators() == [], iso
         assert state(page)['writes'] == 0
-        report[f'{width}-{language}'] = {'taskAndEventCurrent': True, 'typedCurrent': True, 'hoverIndependent': True, 'nonCurrentHasNoSublabel': True, 'detailsRetainedInTips': True}
+        report[f'{theme}-{width}-{language}'] = {'taskAndEventCurrent': True, 'typedCurrent': True, 'hoverIndependent': True, 'nonCurrentHasNoSublabel': True, 'detailsRetainedInTips': True, 'fill': expected_red, 'contrast': contrast_ratio, 'titleAndClockColorsPreserved': True}
+    load(page, 'mixed', 'main', 720)
+    page.emulate_media(forced_colors='active'); settle_renderer(page)
+    forced = page.locator('.nautilus-log-record-current').evaluate('e=>({fill:getComputedStyle(e).fill,title:getComputedStyle(e.closest("[data-task-uid]").querySelector(".nautilus-log-record-title")).fill})')
+    assert forced['fill'] == forced['title'], forced
+    report['forcedColors'] = forced
+    page.emulate_media(forced_colors='none')
     load(page, 'empty', 'main', 720, window='flow')
     set_clock(page, '2026-10-29T17:47:00')
     gap = page.locator('[data-past-gap-key]').first

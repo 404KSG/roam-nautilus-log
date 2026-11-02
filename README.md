@@ -52,10 +52,11 @@ launcher instead opens that existing workday's plan. See [overnight workdays](./
   Dragging changes task order; nested logs stay attached. Removal and outside-block
   drops follow the [native ownership rules](./docs/guide.md#safe-outside-block-references).
 
-The controls are **Desk → Help → crystal-ball Tidy → Eye off**. Help explains the
-current settings and budget. Tidy moves completed tasks and elapsed events to the
-front while preserving pending-task priority and future reservations. The eye hides
-or expands the widget; completed records remain visible in the expanded chart.
+The controls are **Desk → Help → Eye off**, followed by optional Calendar. Help explains
+the current settings and budget. The eye hides or expands the widget; completed records
+remain visible in the expanded chart. Planned-now status uses the time-pointer red,
+while titles retain their category colors. Task order changes only through your outline
+edits or explicit Desk moves.
 
 ## Choose how much to enable
 

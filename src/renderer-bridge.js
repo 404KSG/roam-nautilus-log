@@ -88,7 +88,6 @@ function installRendererBridge({ host, core, taskCore, services = {}, getScope =
       closeDeskHost: node => close(node, family),
       toggleChartHelp: options => toggleHelp(options, family),
       closeChartHelp: node => closeHelp(node, family),
-      tidyPlan: options => mutate('tidyPlan', options, family),
       syncCalendarPlan: options => mutate('syncCalendarPlan', options, family),
     };
     for (const key of ['shouldSuppressRenderContext','isRightSidebarRenderContext','getClockRenderContext','resolveTaskInstance','readPlan','watchPlan','locatePlanTask']) {

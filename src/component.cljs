@@ -1715,7 +1715,6 @@
 ;; Source: https://blueprintjs.com/docs/#icons/icons-list
 (defn blueprint-toolbar-icon [icon-name]
   (when-let [path (case icon-name
-                   "crystal-ball" "m14.5 2 1.047 2.953L18.5 6l-2.953 1.047L14.5 10l-1.046-2.953L10.5 6l2.954-1.047zM10 1c1.08 0 2.11.203 3.06.57l-.668 1.886a6.5 6.5 0 1 0 4.081 5.464l.248-.7 1.577-.558a8.47 8.47 0 0 1-2.23 7.786c.267.271.432.642.432 1.052 0 .822-.422 1.452-.862 1.868-.437.413-.988.716-1.545.939-1.123.449-2.57.693-4.093.693s-2.97-.244-4.093-.693c-.557-.223-1.108-.526-1.545-.939-.44-.416-.862-1.046-.862-1.868 0-.41.164-.781.43-1.052A8.5 8.5 0 0 1 10 1m0 7 .764 2.236L13 11l-2.236.764L10 14l-.764-2.236L7 11l2.236-.764z"
                    "eye-off" "M20 9.96v-.08a.8.8 0 0 0-.21-.43c-.55-.69-1.19-1.3-1.85-1.87l-3.93 2.62a3.966 3.966 0 0 1-3.96 3.77c-.47 0-.91-.1-1.33-.24l-2.24 1.49c.52.21 1.05.39 1.6.51 1.21.27 2.43.28 3.64.05 1.11-.21 2.17-.64 3.17-1.18 1.56-.84 2.99-2 4.23-3.3.23-.24.46-.49.67-.75a.87.87 0 0 0 .21-.43zm-.46-5.14c.27-.18.46-.47.46-.82 0-.55-.45-1-1-1-.21 0-.39.08-.54.18l-.01-.02L15 5.46c-.95-.53-1.95-.96-3.01-1.2a9.2 9.2 0 0 0-3.65-.04c-1.11.21-2.17.64-3.17 1.18-1.56.84-2.99 2-4.23 3.3-.23.24-.46.48-.67.75-.27.34-.27.76 0 1.1.64.79 1.39 1.5 2.16 2.15.26.21.52.41.79.61L.44 15.16l.01.02A1 1 0 0 0 0 16c0 .55.45 1 1 1 .21 0 .39-.08.54-.18l.01.02 18-12zm-8.67 3.4c-.25-.12-.53-.2-.83-.2-1.1 0-1.99.89-1.99 1.99 0 .03.02.06.02.09l-1.78 1.19c-.14-.4-.22-.83-.22-1.28 0-2.19 1.78-3.97 3.98-3.97 1.01 0 1.91.38 2.61 1z"
                    "eye-open" "M10.01 7.984A2.01 2.01 0 0 0 8.012 9.99c0 1.103.9 2.006 1.998 2.006a2.01 2.01 0 0 0 1.998-2.006c0-1.103-.9-2.006-1.998-2.006M20 9.96v-.08a.83.83 0 0 0-.21-.442c-.64-.802-1.398-1.514-2.168-2.166-1.658-1.404-3.566-2.587-5.664-3.058a9 9 0 0 0-3.656-.05c-1.11.2-2.178.641-3.177 1.183-1.569.852-2.997 2.016-4.246 3.33-.23.25-.46.49-.67.761-.279.351-.279.773 0 1.124.64.802 1.4 1.514 2.169 2.166 1.658 1.404 3.566 2.577 5.664 3.058a9 9 0 0 0 3.656.05c1.11-.21 2.178-.651 3.177-1.193 1.569-.852 2.997-2.016 4.246-3.33.23-.24.46-.49.67-.751A.86.86 0 0 0 20 10.12zM10.01 14a4.003 4.003 0 0 1-3.996-4.01 4.003 4.003 0 0 1 3.996-4.011 4.003 4.003 0 0 1 3.996 4.011 4.003 4.003 0 0 1-3.996 4.011"
                    nil)]
@@ -1748,27 +1747,6 @@
                     (.call open-desk nil (options (.-currentTarget event)))))}
      [:span {:class "nautilus-log-desk-switch-track" :aria-hidden "true"}
       [:span {:class "nautilus-log-desk-switch-thumb"}]]]))
-
-(defn tidy-button [block-uid settled-uids tidy-state settings copy plan-status-state]
-  [:button
-   {:on-click (fn []
-                (when (and (plan-writes-allowed? plan-status-state) (not @tidy-state))
-                  (when-let [tidy (some-> js/window .-nautilusLogR2 .-tidyPlan)]
-                    (reset! tidy-state true)
-                    (-> (js/Promise.resolve
-                         (.call tidy nil
-                                (clj->js {:planUid block-uid
-                                          :settledUids settled-uids
-                                          :language (:language settings)})))
-                        (.catch (fn [error]
-                                  (.error js/console "[Nautilus Log] Tidy failed" error)))
-                        (.finally (fn [] (reset! tidy-state false)))))))
-    :class "nautilus-log-toggle-btn nautilus-log-tidy-btn"
-    :data-nautilus-tooltip (:tidy copy)
-    :aria-label (:tidy copy)
-    :aria-busy (if @tidy-state "true" "false")
-    :disabled (or @tidy-state (not (plan-writes-allowed? plan-status-state)))}
-   [blueprint-toolbar-icon "crystal-ball"]])
 
 (defn calendar-result-popover [result settings copy]
   (let [model (or (log-core-call "calendarSyncResultModel"
@@ -2131,11 +2109,10 @@
            [:span (:description event)]
            [:span {:class "nautilus-log-warning-message"} (localized-warning (:warning event) copy)]])]])))
 
-(defn log-controls [settings collapsed-state block-uid page-title-val render-context settled-uids tidy-state calendar-state copy show-debug-button? plan-status-state]
+(defn log-controls [settings collapsed-state block-uid page-title-val render-context calendar-state copy show-debug-button? plan-status-state]
   [:div {:class "nautilus-log-controls-top"}
    [desk-button block-uid page-title-val (:controls copy)]
    [help-button settings (:controls copy)]
-   [tidy-button block-uid settled-uids tidy-state settings (:controls copy) plan-status-state]
    [collapse-button collapsed-state block-uid render-context (:controls copy)]
    [calendar-button block-uid page-title-val calendar-state settings (:controls copy) plan-status-state]
    (when show-debug-button? [switch-debug-button])])
@@ -2295,11 +2272,9 @@
                                  (let [history (log-core-call "partitionChartEvents" filtered)]
                                    ;; Completion evidence is qualified before allocation;
                                    ;; unverified source time must not become a morning estimate.
-                                   ;; Tidy still receives every locally settled wrapper UID.
                                    [(if (:respect-event-order settings) (add-start-after filtered) filtered)
                                     (filterv #(not (:meeting %)) (:timedDoneEvents history)) (:untimedDoneEvents history)
-                                    (mapv :uid (filter #(and (:done %) (:todo %)) filtered)) filtered]))))
-               tidy-state (r/atom false)
+                                    filtered]))))
                calendar-state (r/atom {:busy false
                                        :hovered false
                                        :open false
@@ -2340,12 +2315,10 @@
                 plan-from-time (:scheduleFromMinutes timeline-state)
                 plan-status @plan-status-state
                 renderer-error (some-> (renderer-data) .-error)
-                [text-events done-events untimed-done-events _completed-uids source-events] @*text-events
+                [text-events done-events untimed-done-events source-events] @*text-events
                 planning-events (if (= "past" (:relation timeline-state))
                                   (vec (remove #(and (:todo %) (not (:done %))) text-events))
                                   text-events)
-                settled-uids (vec (or (log-core-call "settledPlanUids"
-                                         {:items source-events :nowMinutes (when (not= "other" (:relation timeline-state)) (:timelineMinutes timeline-state))}) []))
                 pending-tasks (vec (filter #(and (:todo %) (not (:done %))) planning-events))
                 fixed-events (vec (filter :meeting text-events))
                 all-fixed-events fixed-events
@@ -2375,14 +2348,14 @@
                [:div {:class "nautilus-log-renderer-notice" :role "status"} renderer-error])
              (if @collapsed-state
                (do (clear-detail-state! hover-info-state)
-                   [log-controls settings collapsed-state block-uid page-title-val @render-context-state settled-uids tidy-state calendar-state copy show-debug-button? plan-status-state])
+                   [log-controls settings collapsed-state block-uid page-title-val @render-context-state calendar-state copy show-debug-button? plan-status-state])
                [:div {:class "nautilus-log-shell" :ref container-ref}
                 [:header {:class (str "nautilus-log-header"
                                      (when @compact-state " nautilus-log-header--compact"))}
                  [:div {:class "nautilus-log-header-copy"}
                   [capacity-metrics-component capacity settings]]
                  [:div {:class "nautilus-log-header-actions"}
-                  [log-controls settings collapsed-state block-uid page-title-val @render-context-state settled-uids tidy-state calendar-state copy show-debug-button? plan-status-state]
+                  [log-controls settings collapsed-state block-uid page-title-val @render-context-state calendar-state copy show-debug-button? plan-status-state]
                   [html-legend-component copy]]]
                 (when @compact-state
                   [compact-overview-component capacity settings copy compact-overview-open-state])

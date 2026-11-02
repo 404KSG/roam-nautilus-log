@@ -17,7 +17,7 @@
 | 层级 | 运行环境 | 主要覆盖 | 不应承担 |
 |---|---|---|---|
 | L0 静态检查 | Node / 构建器 | ClojureScript/JavaScript 语法、构建、lint、CSS 解析、manifest | 用户交互与浏览器布局 |
-| L1 纯单元 | Node test runner | 时间解析、容量计算、事件/任务分类、引用状态、Tidy 排序、格式化 | Roam DOM、焦点、真实渲染 |
+| L1 纯单元 | Node test runner | 时间解析、容量计算、事件/任务分类、引用状态、格式化 | Roam DOM、焦点、真实渲染 |
 | L2 DOM 组件 | jsdom + Testing Library + 最小 `roamAlphaAPI` mock | 面板状态、按钮、生命周期、observer/timer 清理、无障碍名称 | CSS 布局、SVG 实际尺寸、真实 Roam 选择区 |
 | L3 浏览器组件 | 本地静态 harness + Playwright Chromium | CSS、响应式、SVG、键盘交互、视觉快照、tooltip 边界 | Roam DataScript 与真实页面行为 |
 | L4 真实 Roam Web E2E | 专用 test graph + Headless Chromium | 扩展加载、真实 DOM、Enter、焦点、右侧栏、顶栏、onload/onunload、关键 CSS 性能 | Roam Desktop 专属 API |

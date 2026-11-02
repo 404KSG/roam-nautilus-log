@@ -45,7 +45,7 @@ function bridgeFixture(host = {}) {
     closeDeskHost: value => calls.push(['close', value]),
     toggleChartHelp: value => calls.push(['help', value.anchor]),
     closeChartHelp: value => calls.push(['help-close', value]),
-    tidyPlan: value => calls.push(['tidy', value.planUid]),
+    syncCalendarPlan: value => calls.push(['calendar', value.planUid]),
     createRendererPlanSession: options => { const value = { options, destroyed:false, destroy() { value.destroyed = true; } }; return value; },
   };
   const handle = installRendererBridge({ host, core: { version:2 }, taskCore: {}, services, getScope: () => scope,
@@ -94,7 +94,7 @@ test('foreign legacy globals are neither replaced nor stopped; newer plan mutati
   const legacy = { running:true }, core = {}, host = { nautilusLogExtensionData:legacy, nautilusLogCore:core };
   const f = bridgeFixture(host);
   assert.equal(host.nautilusLogExtensionData,legacy); assert.equal(host.nautilusLogCore,core);
-  await assert.rejects(f.handle.bridge.tidyPlan({ planUid:'newer' }),/cannot safely/);
-  await f.handle.bridge.tidyPlan({planUid:'current'});
+  await assert.rejects(f.handle.bridge.syncCalendarPlan({ planUid:'newer' }),/cannot safely/);
+  await f.handle.bridge.syncCalendarPlan({planUid:'current'});
   f.handle.destroy(); assert.equal(legacy.running,true); assert.equal(host.nautilusLogCore,core);
 });

@@ -25,7 +25,6 @@ import {
   readReferenceCompletionSource,
   readChildren,
   readPrimaryPlan,
-  readPlanIdentity,
   readActivePrimaryPlan,
   showToast,
 } from "./timing-roam";
@@ -44,8 +43,6 @@ import { createDeskView } from "./desk-view";
 import { createChartHelp } from "./chart-help";
 import { createDeskActions } from "./desk-actions";
 import { createDeskDiagnosticCommands } from "./desk-diagnostics";
-import { createPlanTidy } from "./tidy-plan";
-import { createTidyCommands, settledUidsForTidy } from "./tidy-commands";
 import {
   decideCalendarManagedChange,
   normalizeGoogleCalendarEvents,
@@ -136,8 +133,6 @@ let deskView = null;
 let chartHelp = null;
 let deskActions = null;
 let deskDiagnosticCommands = null;
-let planTidy = null;
-let tidyCommands = null;
 let calendarRuntime = null;
 let completionStampWriter = null;
 let completionStampAdapter = null;
@@ -945,38 +940,7 @@ async function onload({ extensionAPI }) {
     notify: (message) => showToast(message, 'info'),
   });
   deskDiagnosticCommands.initialize();
-  planTidy?.destroy();
-  planTidy = createPlanTidy({
-    assertPlan: uid => {
-      if (!loadBridge?.owns() || !loadBridge.bridge.ready || !inspectRenderer(readBlockString(uid)).mutable) {
-        throw Error('The plan renderer changed or is not ready for outline writes.');
-      }
-    },
-    resolveSettled: (uid, rows, requested) => {
-      if (!requested.length) return [];
-      const identity = readPlanIdentity(uid);
-      const ownerDate = logCore.dateForPlanTitle(identity?.pageTitle);
-      const context = ownerDate ? logCore.planWorkdayContext({ now: new Date(), ownerDate,
-        args: inspectRenderer(identity?.string).invocation?.args || [], runtime: runtimeSettings(extensionAPI) }) : null;
-      const items = rows.map(row => {
-        const task = timingCore.resolveTaskInstance({ uid:row.uid, localString:row.string, readString:readBlockString });
-        if (task.kind === 'event') return { uid:row.uid, meeting:true, ...task.range,
-          ...(context ? logCore.alignIntervalToWindow({ start:task.range?.start,end:task.range?.end,
-            windowStart:context.startMinutes,windowEnd:context.endMinutes }) : {}) };
-        return { uid:row.uid, todo:task.kind === 'task', done:task.status === 'DONE' };
-      });
-      const allowed = new Set(logCore.settledPlanUids({ items, nowMinutes:context?.logicalNowMinutes }));
-      return requested.filter(target => allowed.has(target));
-    },
-    runningTaskUid: () => timingRuntime?.getSnapshot?.()?.entries
-      ?.find((entry) => entry?.running === true)?.taskUid || null,
-  });
-  tidyCommands?.destroy();
-  tidyCommands = createTidyCommands({
-    extensionAPI,
-    tidy: planTidy.run,
-  });
-  const ownedDesk = deskView, ownedHelp = chartHelp, ownedWatch = planWatchBridge, ownedTidy = planTidy;
+  const ownedDesk = deskView, ownedHelp = chartHelp, ownedWatch = planWatchBridge;
   loadBridge = installRendererBridge({ host: window, core: logCore, taskCore: timingCore,
     getScope: rendererScope,
     canMutatePlan: (uid, family) => {
@@ -990,7 +954,6 @@ async function onload({ extensionAPI }) {
       openDesk: options => ownedDesk.open(options), registerDeskHost: options => ownedDesk.registerHost(options),
       closeDeskHost: container => ownedDesk.closeForHost(container),
       toggleChartHelp: options => ownedHelp.toggle(options), closeChartHelp: anchor => ownedHelp.closeForAnchor(anchor),
-      tidyPlan: ownedTidy.run,
       locatePlanTask: (uid, origin, sidebar = false) => sidebar ? openTaskInRightSidebar(uid) : locateTaskInCurrentSurface(uid, { origin }),
       syncCalendarPlan: options => loadCalendar ? loadCalendar.syncPlan(options) : Promise.reject(Error('Google Calendar sync is not ready.')),
     },
@@ -1035,7 +998,6 @@ async function onload({ extensionAPI }) {
     .catch((error) => {
       console.debug("[Nautilus Log] Google Calendar connection restore unavailable", error);
     });
-  tidyCommands.initialize();
   publishRuntimeSettings(extensionAPI);
   extensionAPI.settings.panel.create(panelConfig(extensionAPI, language));
   const templateString = await generateTemplateString(extensionAPI);
@@ -1140,10 +1102,6 @@ function onunload() {
   deskActions = null;
   planWatchBridge?.destroy();
   planWatchBridge = null;
-  planTidy?.destroy();
-  planTidy = null;
-  tidyCommands?.destroy();
-  tidyCommands = null;
   calendarRuntime?.destroy();
   calendarRuntime = null;
   completionStampAdapter?.destroy();
@@ -1192,9 +1150,6 @@ export {
   freezeCanonicalTemplate,
   readBlockTree,
   createPlanWatchBridge,
-  createPlanTidy,
-  createTidyCommands,
-  settledUidsForTidy,
   readPrimaryPlan,
   readActivePrimaryPlan,
   readChildren,

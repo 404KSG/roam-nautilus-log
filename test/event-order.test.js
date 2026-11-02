@@ -1,6 +1,5 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const fs=require('node:fs');
 const core=require('../src/log-core');
 const timing=require('../src/timing-core');
 const macro='{{[[roam/render]]:((roam-render-Nautilus-Log-r2-cljs))}}';
@@ -63,39 +62,21 @@ test('overnight event alignment precedes cumulative floors even for nonchronolog
     {scheduled:[['first',1470,1485],['second',1485,1500]],overflow:[]});
 });
 
-test('actual Tidy and Undo preserve pending forecasts across nonchronological future and elapsed event rows',async()=>{
-  const api=await import(`data:text/javascript;base64,${fs.readFileSync('extension.js').toString('base64')}#event-order-tidy`);
-  let rows=[
+test('forecasting preserves outline order; only an explicit reorder changes event-relative placement',()=>{
+  const rows=[
     {uid:'late',string:'14:00-15:00 Later commitment'},
     {uid:'first',string:'{{[[TODO]]}} First 60m'},
-    {uid:'done',string:'{{[[DONE]]}} Settled work 15m'},
+    {uid:'done',string:'{{[[DONE]]}} Finished work 15m'},
     {uid:'early-done',string:'{{[[DONE]]}} 12:00-13:00 Future reservation'},
     {uid:'past',string:'08:00-09:00 Elapsed event'},
     {uid:'second',string:'{{[[TODO]]}} Second 30m'},
-  ].map((row,order)=>({...row,order,open:true}));
-  const now=new Date(2026,10,1,10),settings={workdayStart:9,workdayEnd:17,respectEventOrder:true};
-  const project=()=>{
-    const plan=snapshot(rows);plan.workday=core.planWorkdayContext({ownerDate:plan.date,now,runtime:{'workday-start':9,'workday-end':17}});
-    return {plan,result:timing.executionProjection(plan,now,settings)};
-  };
-  const before=project(),order=rows.map(row=>row.uid),strings=rows.map(row=>[row.uid,row.string]);
-  const tidy=api.createPlanTidy({read:()=>rows.map((row,order)=>({...row,order})),runExclusive:fn=>fn(),
-    move:async({uid,order})=>{const index=rows.findIndex(row=>row.uid===uid);rows.splice(order,0,rows.splice(index,1)[0]);rows=rows.map((row,i)=>({...row,order:i}));},
-    setOpen:async(uid,open)=>{rows=rows.map(row=>row.uid===uid?{...row,open}:row);},notify:()=>{},notifyAction:()=>{},
-    resolveSettled:(_uid,_rows,requested)=>{const eligible=new Set(api.settledUidsForTidy(project().plan));return requested.filter(uid=>eligible.has(uid));},
-  });
-  const result=await tidy.run({planUid:'plan',settledUids:api.settledUidsForTidy(before.plan)});
-  assert.equal(result.ok,true);assert.equal(result.changed,true);
-  assert.deepEqual(rows.map(row=>row.uid),['done','past','late','first','early-done','second']);
-  assert.deepEqual(positions(project().result),positions(before.result));
-  assert.deepEqual(rows.map(row=>[row.uid,row.string]).sort(),strings.sort());
-  assert.equal((await tidy.undo({planUid:'plan',token:result.token})).ok,true);
-  assert.deepEqual(rows.map(row=>row.uid),order);assert.deepEqual(positions(project().result),positions(before.result));tidy.destroy();
-});
-
-test('Tidy uses owner-relative wall time after END rather than a cursor clamped to the budget',async()=>{
-  const api=await import(`data:text/javascript;base64,${fs.readFileSync('extension.js').toString('base64')}#tidy-wall-time`);
-  const plan=snapshot([{uid:'late',string:'23:00-23:30 Late event'}]);
-  plan.workday=core.planWorkdayContext({ownerDate:plan.date,now:new Date(2026,10,2,0,30),runtime:{'workday-start':6,'workday-end':20}});
-  assert.deepEqual(api.settledUidsForTidy(plan),['late']);
+  ];
+  const original=JSON.stringify(rows),settings={workdayStart:9,workdayEnd:17,respectEventOrder:true};
+  const before=timing.executionProjection(snapshot(rows),new Date(2026,10,1,10),settings);
+  assert.deepEqual(positions(before),{scheduled:[['first',900,960],['second',960,990]],overflow:[]});
+  assert.deepEqual(positions(timing.executionProjection(snapshot(rows),new Date(2026,10,1,10,30),settings)),positions(before));
+  assert.equal(JSON.stringify(rows),original);
+  const manuallyReordered=[rows[1],rows[0],...rows.slice(2)];
+  assert.deepEqual(positions(timing.executionProjection(snapshot(manuallyReordered),new Date(2026,10,1,10),settings)),
+    {scheduled:[['first',600,660],['second',900,930]],overflow:[]});
 });

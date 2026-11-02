@@ -7,7 +7,6 @@ const { installTestHostLocks } = require('./test-host-locks.cjs');
 
 const PLAN = '[[Nautilus Log]] {{[[roam/render]]:((roam-render-Nautilus-Log-cljs))}}';
 const PAGE_TITLE = 'August 22nd, 2026';
-const DATE = new Date(2026, 7, 22, 10, 0);
 const CHILDREN_QUERY_MARKER = '?uid ?string ?order ?open';
 const DAILY_TREE_MARKER = '?page-uid ?uid ?string ?order ?parent-uid';
 const EVIDENCE_DIR = '/tmp/nautilus-children-pull-eea7b74e';
@@ -367,148 +366,6 @@ function installCalendarChildrenHost(graph, { pullMode = 'fast' } = {}) {
   return { traces, restore, roam };
 }
 
-function tidyCommandHarness(extension, { rows } = {}) {
-  const blocks = new Map();
-  blocks.set('plan', { uid: 'plan', string: PLAN, parentUid: 'page', order: 0, open: true });
-  blocks.set('page', { uid: 'page', string: PAGE_TITLE, parentUid: null, order: 0, open: true });
-  (rows || [
-    { uid: 'active-a', string: '{{[[TODO]]}} Alpha 15m', open: true },
-    { uid: 'done-a', string: '{{[[DONE]]}} Done A 15m', open: true },
-    { uid: 'divider', string: '---', open: false },
-    { uid: 'past-event', string: '{{[[DONE]]}} 05:00-06:00 Event', open: false },
-    { uid: 'active-b', string: '{{[[TODO]]}} Beta 15m', open: true },
-  ]).forEach((row, order) => {
-    blocks.set(row.uid, {
-      uid: row.uid,
-      string: row.string,
-      parentUid: 'plan',
-      order,
-      open: row.open === true,
-    });
-  });
-  const childrenOf = (parentUid) => [...blocks.values()]
-    .filter((block) => block.parentUid === parentUid)
-    .sort((left, right) => Number(left.order) - Number(right.order));
-  const traces = [];
-  const notices = [];
-  const actions = [];
-  const q = (query, ...args) => {
-    if (query.includes(DAILY_TREE_MARKER)) {
-      traces.push('query:plan');
-      return [...blocks.values()]
-        .filter((block) => block.uid !== 'page')
-        .map((block) => ['page', block.uid, block.string, block.order, block.parentUid]);
-    }
-    if (query.includes(CHILDREN_QUERY_MARKER)) {
-      traces.push(`query:children:${args[0]}`);
-      return childrenOf(args[0]).map((block) => [block.uid, block.string, block.order, block.open === true]);
-    }
-    traces.push('query:other');
-    return [];
-  };
-  const roam = {
-    graph: { name: 'children-tidy-host' },
-    util: { dateToPageTitle: () => PAGE_TITLE },
-    q,
-    data: {
-      q,
-      pull: (pattern, lookup) => {
-        const lookupVal = lookup?.[1];
-        traces.push(`pull:${lookup?.[0] || ''}:${lookupVal || ''}`);
-        if (typeof pattern === 'string' && (pattern.includes(':block/_page') || pattern.includes('block/_page'))) {
-          traces.push('pull:daily-tree');
-          if (lookupVal !== PAGE_TITLE) return null;
-          return {
-            ':block/uid': 'page',
-            ':block/_page': [...blocks.values()].filter((block) => block.uid !== 'page').map((block) => ({
-              ':block/uid': block.uid,
-              ':block/string': block.string,
-              ':block/order': block.order,
-              ':block/_children': block.parentUid ? [{ ':block/uid': block.parentUid }] : [],
-            })),
-          };
-        }
-        if (isChildrenPullPattern(pattern)) {
-          traces.push(`pull:children:${lookupVal || ''}`);
-          const block = blocks.get(lookupVal);
-          if (!block) return null;
-          return {
-            ':block/uid': block.uid,
-            ':block/children': childrenOf(block.uid).map((child) => ({
-              ':block/uid': child.uid,
-              ':block/string': child.string,
-              ':block/order': child.order,
-              ':block/open': child.open === true,
-            })),
-          };
-        }
-        const block = blocks.get(lookupVal);
-        return block ? { ':block/uid': block.uid, ':block/string': block.string } : null;
-      },
-      block: {
-        move: async ({ location, block }) => {
-          traces.push(`move:${block.uid}:${location.order}`);
-          const siblings = childrenOf(location['parent-uid']);
-          const from = siblings.findIndex((row) => row.uid === block.uid);
-          const [row] = siblings.splice(from, 1);
-          siblings.splice(location.order, 0, row);
-          siblings.forEach((child, index) => {
-            child.order = index;
-            child.parentUid = location['parent-uid'];
-          });
-        },
-        update: async ({ block }) => {
-          traces.push(`setOpen:${block.uid}:${block.open}`);
-          const current = blocks.get(block.uid);
-          if (block.open !== undefined) current.open = block.open === true;
-        },
-      },
-    },
-  };
-  roam.moveBlock = (args) => roam.data.block.move(args);
-  roam.updateBlock = (args) => roam.data.block.update(args);
-  const palette = new Map();
-  const restore = installHost(roam);
-  const planTidy = extension.createPlanTidy({
-    runningTaskUid: () => null,
-    notify: (message, intent) => notices.push({ message, intent }),
-    notifyAction: (options) => actions.push(options),
-  });
-  const commands = extension.createTidyCommands({
-    extensionAPI: {
-      settings: {
-        get(key) {
-          if (key === 'todo-duration') return 15;
-          if (key === 'language') return 'en';
-          return null;
-        },
-      },
-      ui: {
-        commandPalette: {
-          addCommand: (command) => palette.set(command.label, command),
-          removeCommand: ({ label }) => palette.delete(label),
-        },
-      },
-    },
-    tidy: planTidy.run,
-  });
-  commands.initialize();
-  return {
-    command: palette.get('Nautilus Log: Tidy Primary Plan'),
-    traces,
-    notices,
-    actions,
-    planTidy,
-    commands,
-    childrenOf,
-    restore() {
-      try { commands.destroy(); } catch (_error) { /* ignore */ }
-      try { planTidy.destroy(); } catch (_error) { /* ignore */ }
-      restore();
-    },
-  };
-}
-
 test('readChildren is exported from the production module', async () => {
   const extension = await loadExtension();
   assert.equal(typeof extension.readChildren, 'function');
@@ -642,18 +499,16 @@ test('duplicate child UIDs are preserved so downstream safety can see them', asy
     assert.deepEqual(rows.map((row) => row.string), ['Second', 'First']);
     assert.equal(rows.length, 2);
     assert.equal(childQueryCount(host.traces), 0);
-    const tidy = extension.createPlanTidy({
+    let writes = 0;
+    const actions = extension.createDeskActions({
       read: extension.readChildren,
-      move: async () => {},
-      setOpen: async () => {},
-      notify() {},
-      notifyAction() {},
+      readString: () => PLAN,
+      move: async () => { writes += 1; },
       runExclusive: (operation) => operation(),
     });
-    const result = await tidy.run({ planUid: 'plan', settledUids: [], language: 'en' });
-    assert.equal(result.ok, false);
-    assert.match(result.error?.message || '', /unreadable/i);
-    tidy.destroy();
+    await assert.rejects(actions.moveTask({ planUid: 'plan', uid: 'dup', position: 'top' }), /unreadable/i);
+    assert.equal(writes, 0);
+    actions.destroy();
   } finally {
     restore();
   }
@@ -850,46 +705,6 @@ test('managed graph fixture fallback runs exactly one children query', async () 
     assert.equal(managedChildQueryCount(graph.trace), 1);
   } finally {
     restore();
-  }
-});
-
-test('commandPalette default readPrimaryPlan and readChildren fast path tidies, confirms, and Undoes', async () => {
-  const extension = await loadExtension();
-  const harness = tidyCommandHarness(extension);
-  try {
-    const result = await harness.command.callback();
-    assert.equal(result.ok, true);
-    assert.equal(result.changed, true);
-    assert.deepEqual(harness.childrenOf('plan').map((row) => row.uid), [
-      'done-a',
-      'past-event',
-      'active-a',
-      'divider',
-      'active-b',
-    ]);
-    assert.equal(harness.childrenOf('plan').find((row) => row.uid === 'done-a').open, false);
-    assert.equal(harness.traces.filter((row) => row === 'query:plan').length, 0);
-    assert.equal(childQueryCount(harness.traces), 0);
-    assert.ok(harness.traces.includes('pull:daily-tree'));
-    assert.ok(childPullCount(harness.traces) >= 1);
-    assert.equal(harness.traces.filter((row) => row.startsWith('move:')).length >= 1, true);
-    assert.equal(harness.traces.some((row) => row.startsWith('setOpen:done-a:')), true);
-    const undone = await harness.planTidy.undo({
-      planUid: 'plan',
-      token: result.token,
-      language: 'en',
-    });
-    assert.equal(undone.ok, true);
-    assert.deepEqual(harness.childrenOf('plan').map((row) => row.uid), [
-      'active-a',
-      'done-a',
-      'divider',
-      'past-event',
-      'active-b',
-    ]);
-    assert.equal(childQueryCount(harness.traces), 0);
-  } finally {
-    harness.restore();
   }
 });
 

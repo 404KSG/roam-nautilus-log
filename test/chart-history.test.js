@@ -17,7 +17,6 @@ test('chart history keeps untimed DONE separate from both scheduling and timed h
   assert.deepEqual(result.pendingEvents, [rows[0], rows[3]]);
   assert.deepEqual(result.timedDoneEvents, [rows[2], rows[4]]);
   assert.deepEqual(result.untimedDoneEvents, [rows[1], rows[5]]);
-  assert.deepEqual(result.completedUids, ['untimed-a', 'timed', 'fixed-done', 'untimed-b']);
   assert.equal(result.untimedDoneEvents[0], rows[1]);
   assert.equal(historicalDoneSlice({ done: true, duration: 30 }), null);
   const input = { startMinutes: 300, endMinutes: 1260, nowMinutes: 480,
@@ -36,7 +35,7 @@ test('chart history does not turn missing, invalid, or zero-length ranges into t
   assert.deepEqual(result.timedDoneEvents, [midnight]);
   assert.deepEqual(result.pendingEvents, []);
   assert.deepEqual(partitionChartEvents(), {
-    pendingEvents: [], timedDoneEvents: [], untimedDoneEvents: [], completedUids: [],
+    pendingEvents: [], timedDoneEvents: [], untimedDoneEvents: [],
   });
 });
 
@@ -55,5 +54,4 @@ test('reference DONE can remain visible in chart history without entering Desk o
   const history = partitionChartEvents([{ uid: input.uid, todo: true, done: true,
     'status-origin': instance.statusOrigin, start: null, end: null }]);
   assert.equal(history.untimedDoneEvents[0].uid, 'local-wrapper');
-  assert.deepEqual(history.completedUids, ['local-wrapper']);
 });

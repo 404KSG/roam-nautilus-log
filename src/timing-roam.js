@@ -784,14 +784,6 @@ export async function updateGraphBlock(uid, string) {
   await update({ block: { uid, string } });
 }
 
-export async function updateGraphBlockOpen(uid, open) {
-  if (!uid) throw new Error('A block UID is required for updating its outline state.');
-  const update = resolveMutation('update');
-  if (!update) throw new Error('Roam block updating is unavailable.');
-  await update({ block: { uid, open: open === true } });
-  return true;
-}
-
 export async function deleteGraphBlock(uid) {
   if (!uid) throw new Error('A block UID is required for deletion.');
   const remove = resolveMutation('delete');
@@ -1168,33 +1160,6 @@ export function showToast(message, intent = 'warning') {
   } else {
     console[intent === 'danger' ? 'error' : 'warn'](`[Nautilus Log] ${message}`);
   }
-}
-
-export function showActionToast({ message, actionLabel, onAction, intent = 'success' } = {}) {
-  const renderToast = api()?.ui?.components?.renderToast;
-  const react = typeof window !== 'undefined' ? window.React : null;
-  if (typeof renderToast !== 'function' || typeof react?.createElement !== 'function') {
-    showToast([message, actionLabel].filter(Boolean).join(' · '), intent);
-    return;
-  }
-  const action = typeof onAction === 'function' && actionLabel
-    ? react.createElement('button', {
-      type: 'button',
-      className: 'nautilus-log-toast-action',
-      onClick: onAction,
-    }, actionLabel)
-    : null;
-  renderToast({
-    id: `nautilus-log-${Date.now()}`,
-    content: react.createElement(
-      'span',
-      { className: 'nautilus-log-toast-content' },
-      react.createElement('span', null, String(message || '')),
-      action,
-    ),
-    intent,
-    timeout: 6000,
-  });
 }
 
 export { pageTitleFor };

@@ -31,7 +31,7 @@ test('compiled Desk is idle before opening and cannot reopen after destroy', asy
 
 test('renderer Desk button passes the clicked component and origin, without an execution-layer gate', () => {
   const source = fs.readFileSync(path.join(root, 'src/component.cljs'), 'utf8');
-  const button = source.slice(source.indexOf('(defn desk-button'), source.indexOf('(defn tidy-button'));
+  const button = source.slice(source.indexOf('(defn desk-button'), source.indexOf('(defn calendar-result-popover'));
   assert.match(button, /:planUid block-uid/);
   assert.match(button, /:pageTitle page-title-val/);
   assert.match(button, /:origin node/);

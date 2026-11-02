@@ -275,7 +275,8 @@ test('event positions are optional and a future DONE event still reserves its wr
   const on=timingCore.executionProjection(snapshot,new Date(2026,10,2,9),{workdayStart:9,workdayEnd:18,respectEventOrder:true});
   assert.deepEqual(off.scheduledTasks.map(task=>[task.uid,task.start]),[['today-task',540],['after-event',600]]);
   assert.deepEqual(on.scheduledTasks.map(task=>[task.uid,task.start]),[['today-task',540],['after-event',780]]);
-  assert.equal(on.fixedMinutes,60);assert.deepEqual(api.settledUidsForTidy(snapshot),[]);
+  assert.equal(on.fixedMinutes,60);
+  assert.equal(g.trace.filter(row=>row[0]==='request'||row[0]==='update-request').length,0);
 });
 
 test('ordinary chart hours do not trim evening CLOCK evidence and local stamps normalize only within the overnight window',()=>{
