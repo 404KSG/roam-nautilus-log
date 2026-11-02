@@ -4,6 +4,9 @@
 
 ### Changed
 
+- Batch Desk card-height reads before row-span writes, preventing one synchronous browser
+  layout per card. Keep native geometry and immediate resize behavior. Loaded previews
+  now skip unused placeholder-text parsing during search and card refreshes.
 - Reduce the single JavaScript bundle by caching one exact copy of the embedded renderer source.
   Reuse text widths within each chart layout and group cold CLOCK entries in one pass.
   Preserve renderer r2 bytes, layout output, cache freshness, and source ownership checks.

@@ -27,10 +27,12 @@ export function createDeskMasonry({ grid, host = window }) {
     }
     const style = host.getComputedStyle(grid);
     const gap = parseFloat(style.columnGap) || 0;
-    for (const item of items) {
-      const span = `span ${nativeRowSpan(item.offsetHeight, gap)}`;
-      if (item.style.gridRowEnd !== span) item.style.gridRowEnd = span;
-    }
+    // Read every height before changing grid placement. Interleaving them
+    // makes each next offsetHeight flush the preceding tile's layout change.
+    const spans = items.map(item => `span ${nativeRowSpan(item.offsetHeight, gap)}`);
+    items.forEach((item, index) => {
+      if (item.style.gridRowEnd !== spans[index]) item.style.gridRowEnd = spans[index];
+    });
     grid.dataset.columns = style.display === 'grid' ? String(style.gridTemplateColumns.split(/\s+/).filter(Boolean).length) : '0';
   };
   const schedule = () => {

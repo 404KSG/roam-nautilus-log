@@ -801,7 +801,9 @@ export function createDeskView({
         // a neutral placeholder instead of briefly promoting image alt text.
         const loaded = Boolean(cached);
         let safeText = { text: '' };
-        try { safeText = nativePreviewText(task.localString); } catch (_error) { /* Full admission exposes the retryable error. */ }
+        if (!loaded) {
+          try { safeText = nativePreviewText(task.localString); } catch (_error) { /* Full admission exposes the retryable error. */ }
+        }
         const rootText = loaded ? cached.root?.text || '' : (safeText.text || 'Loading preview…');
         const rootStatus = loaded ? cached.root?.status : null;
         const rowLabel = loaded ? cached.rows?.find((row) => row.text)?.text || '' : '';
