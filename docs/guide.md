@@ -136,20 +136,16 @@ Past gaps describe the chart allocation, not proof that time was idle or wasted.
 
 ## Chart controls
 
-The four main controls are **Desk → Help → Tidy → Eye**. A connected Calendar
-appears after them, without taking the fourth position. The icons use Roam's native
+The three main controls are **Desk → Help → Eye**. A connected Calendar
+appears after them as the fourth control. The icons use Roam's native
 toolbar colors in light and dark themes, including hover and keyboard focus.
 
 - **Desk switch:** show or hide unfinished-task cards below the chart. Only the slider is visible; hover or keyboard focus shows its Desk label. The thumb slides right and the track turns blue when open. Click, Space or Enter toggles it; the state also follows fold/expand restoration, control remounts and saved preferences.
 - **Help (?):** immediately after Desk, the question mark opens a native-style quick guide.
   It shows this chart's resolved hours and default task duration, explains Available,
-  Events, Planned and `left`, and summarizes scheduling, Desk/Tidy and completion styles.
+  Events, Planned and `left`, and summarizes scheduling, Desk and completion styles.
   It also points to the main settings and the full guide. Help is read-only, not a second
   settings editor. Click again, click outside or press Escape inside Help to close it.
-- **Tidy:** the Blueprint `crystal-ball` glyph runs the existing Tidy action: move completed
-  tasks and elapsed fixed events to the front while preserving active-work order. It moves
-  direct-child wrappers by UID, never changes task text, times, references or descendants,
-  and offers one Undo unless the Plan is edited again first.
 - **Eye off / Eye:** when expanded, Eye off offers to hide the entire rendered Nautilus UI,
   including Desk cards and the focus dialog. When hidden, Eye offers to expand it again.
   The compact state leaves only this expand control. The original plan outline stays hidden
@@ -415,7 +411,7 @@ Copy callback. The editor-first fix is implemented, but the live macro workflow
 remains unvalidated: no physical drop, real clipboard, app switch, paste, or send
 was exercised.
 
-Removal, moves, and creation share Tidy's graph-scoped `outline` Web Lock.
+Desk removal, moves, and creation share the graph-scoped `outline` Web Lock.
 Removal requires public `data.pull` plus the applicable `data.block.delete` or
 `data.block.move` API, verified Daily Note helpers, and stable provider, graph,
 type, and user context. It checks registered surfaces, focus, and composition;

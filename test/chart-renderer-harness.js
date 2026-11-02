@@ -335,7 +335,6 @@ window.nautilusLogExtensionData = {
     trace('locate', { uid, sidebar: Boolean(sidebar) });
     return Promise.resolve();
   },
-  tidyPlan: () => { trace('write', { operation: 'tidyPlan' }); throw new Error('Unexpected graph write'); },
   syncCalendarPlan: () => { trace('write', { operation: 'syncCalendarPlan' }); throw new Error('Unexpected graph write'); },
   registerDeskHost: () => trace('desk-register'),
   closeDeskHost: () => trace('desk-close'),

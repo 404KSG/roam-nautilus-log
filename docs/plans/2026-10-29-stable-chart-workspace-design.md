@@ -8,7 +8,7 @@ colors and native controls remain; completion and hover are part of the same des
 
 - Tips previews always use two fixed text rows. Longer content widens up to the local
   limit, then uses ellipses. Keep the 42px slot while idle; only explicit More opens full text.
-- Main controls are Desk, Help, Tidy (crystal-ball), then whole-widget visibility. Help opens
+- Main controls are Desk, Help, then whole-widget visibility. Help opens
   a transient quick guide. Eye off offers to hide the expanded widget; Eye offers to
   show it again. The completed-only visibility filter remains removed.
 - Desk shows only its slider, with a hover/focus label.
@@ -276,9 +276,9 @@ No second React state or new preference is introduced.
 
 The user's Help request supersedes the earlier proposal to explain capacity through
 segment Tips. Keep Tips unchanged. Place Help immediately after Desk, followed by
-Tidy and the whole-widget Eye control. Use the official Blueprint 20px crystal-ball,
-Eye off and Eye SVG paths on the existing 18px control canvas; no dependency or font
-installation is needed. Connected Calendar is an additional control after these four.
+the whole-widget Eye control. Use the official Blueprint 20px Eye off and Eye SVG paths
+on the existing 18px control canvas; no dependency or font installation is needed.
+Connected Calendar is an additional control after these three.
 Do not restore the completed-only visibility atom or filtering branches. Completed
 records, labels, estimates and texture remain visible whenever the chart is expanded.
 The same collapsed-state owner drives the icon and aria-expanded. The folded state
@@ -288,8 +288,9 @@ keeps only Eye (Expand), and folding dismisses an open Help card.
 default duration and language from the renderer, never task text or graph data. English is
 the default; explicit Chinese uses localized copy. Explain remaining/full-day budgets,
 unfinished Planned demand, the full-day denominator of `left`, whole-task source order,
-Desk/Tidy and completion provenance. Tidy's settled-first behavior must match the actual
-allocator, not a remembered description. Point to the existing settings and a revision-bound
+Desk and completion provenance. Scheduling descriptions must match the actual allocator.
+There is no outline-reordering button or command, and loading the extension does not undo
+past manual outline changes. Point to the existing settings and a revision-bound
 full guide; do not introduce a second settings editor or saved Help preference.
 
 Use native typography and a restrained 360px maximum width with 12px viewport gutters.
@@ -387,8 +388,8 @@ bounded control-envelope rounding and unchanged interval/queue data. Pointer tes
 center can belong to the other turn. Verify SVG containment and browser hit-testing rather
 than forcing clicks through overlapping bounding boxes.
 
-Toolbar checks cover Desk/Help/Tidy/Eye order, exact official glyphs, Eye off while
-expanded, Eye while hidden, persisted collapse state and optional Calendar placement.
+Toolbar checks cover Desk/Help/Eye order, exact official glyphs, Eye off while expanded,
+Eye while hidden, persisted collapse state and optional Calendar in the fourth position.
 Help checks cover absence of completed-only filtering, live minute stability,
 English/Chinese settings, native light/dark styling, small viewports, keyboard access,
 outside interaction, native-editor Escape, IME, multiple charts, cleanup and zero graph reads/writes.

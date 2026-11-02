@@ -2,14 +2,10 @@
 
 ## Decision
 
-Keep the existing control size, color, spacing, hover background, and icon treatment unchanged. Remove the day-playback control and make the remaining four controls self-explanatory through a shared lightweight tooltip.
+Keep the existing control size, color, spacing, hover background, and icon treatment unchanged. Remove the day-playback control and make the remaining controls self-explanatory through a shared lightweight tooltip.
 
-The four controls are:
-
-- show or hide completed items;
-- sync Google Calendar;
-- tidy completed tasks and elapsed events;
-- collapse or expand Nautilus Log.
+The current main controls are Desk, Help and whole-widget visibility, followed by
+Calendar when connected. The shared hover treatment applies to the remaining controls.
 
 ## Hover help
 

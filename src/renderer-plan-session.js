@@ -48,7 +48,7 @@ function providerPresent(provider) {
  * Renderer-owned Plan subscription. Detects watch-bridge identity / generation
  * and graph scope so a chart that does not remount can drop the previous
  * listener. Unavailable pulls keep same-target last-good data; a confirmed
- * missing pull clears. Temporary errors disable Tidy/Calendar writes.
+ * missing pull clears. Temporary errors disable chart-triggered Calendar writes.
  */
 export function createRendererPlanSession({
   planUid: initialPlanUid = '',

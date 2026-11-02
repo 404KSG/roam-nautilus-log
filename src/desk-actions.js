@@ -4,7 +4,7 @@ import { isNautilusComponent, resolveTaskInstance } from './timing-core';
 import { readChildren, readBlockString, blockUidExists, moveGraphBlock, createGraphBlock, updateGraphBlock } from './timing-roam';
 import { canonicalDeskReference, createModernReferenceAdapter, DeskReferenceImportError, fingerprintDeskReferenceSource, freezeReferenceDrop, isSafeDeskReferenceUid, isUnsupportedReferenceSource, readDeskDropContext, readStrictReferenceEntity, readStrictReferenceOutline, sameDeskDropContext, stableDeskReferenceUid } from './desk-reference-import';
 
-/** All Desk writes share Tidy's outline lock. A successful host call is not confirmation. */
+/** All Desk writes share the graph-scoped outline lock. A successful host call is not confirmation. */
 export function createDeskActions({
   read = readChildren, readString = readBlockString, exists = blockUidExists,
   move = moveGraphBlock, create = createGraphBlock, update = updateGraphBlock,

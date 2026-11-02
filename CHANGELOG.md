@@ -4,8 +4,9 @@
 
 ### Fixed
 
-- Replace Tidy's glyph with the official Blueprint `crystal-ball` icon. Keep its 18px canvas,
-  native toolbar colors, accessible label, tooltip, button states and Tidy action unchanged.
+- Remove the obsolete outline-reordering control, command, execution/Undo logic and
+  documentation. The toolbar now contains Desk, Help and whole-widget visibility, followed
+  by optional Calendar. Existing graph order, manual Desk moves and shared write guards remain.
 
 - Keep Tips previews at two fixed rows across main, embed and sidebar views. Longer content
   grows horizontally to the local limit, then uses ellipses instead of a third row. Retain
@@ -19,7 +20,7 @@
   embed and sidebar diagrams adapt to real content without graph writes; the later fixed-Tips
   correction retains only its small stable preview slot.
 
-- Match Help, Tidy, Eye and Calendar icon colors to Roam's native toolbar in light
+- Match Help, Eye and Calendar icon colors to Roam's native toolbar in light
   and dark themes, including hover and keyboard focus. Keep chart text and category
   colors, Desk switch states, icon geometry and actions unchanged.
 
@@ -47,10 +48,10 @@
 
 - Add an independent, default-off completion timestamp switch. Verified native TODO completion in the main outline, right sidebar, and body-mounted Desk can append local `dHH:MM` without writing Actual or starting CLOCK/POMO. It uses bounded public reads/watches and latest-only SHA-256 ownership receipts in extension settings; foreign/manual timestamps, uncertain receipts, and Todo Trigger conflicts preserve text. Native Undo is not promised as one step.
 
-- Order the main toolbar as Desk, Help, Tidy, then whole-widget visibility.
-  Use the official Blueprint crystal-ball glyph, Eye off while expanded (hide action), and
-  Eye while hidden (expand action). Connected Calendar stays available after these four.
-  Keep the existing Tidy action, collapse preferences, keyboard access and permanent
+- Order the main toolbar as Desk, Help, then whole-widget visibility.
+  Use the official Blueprint Eye off while expanded (hide action), and Eye while hidden
+  (expand action). Connected Calendar stays available after these three.
+  Keep collapse preferences, keyboard access and permanent
   completed-record visibility; do not restore the former completed-only Eye filter.
 
 - Add a native-style Help question mark beside the Desk switch. Its read-only
@@ -326,22 +327,12 @@
   not cache a failed read as empty. Chart plan sessions bind provider generation;
   a replaced watch cannot revive writes, and unavailable reads stay stale rather
   than looking like a confirmed empty tree.
-- Plan Tidy uses the outline lock (separate from Calendar mapping), keeps a
-  still-safe Undo token on no-op, expires a token after partial Undo, and confirms
-  collapsed rows actually expanded before reporting Undo success. Toast failures
-  after finished writes do not rewrite the result as `changed: false`. Unknown
-  (`changed: null`) means a mutation was attempted but not confirmed.
 - Execution popover rendering snapshots settings once per synchronous render
-  instead of reading language and related keys once per task row. Plan Tidy no
-  longer re-reads the parent outline once per settled uid on no-op open checks,
-  and a collapse `setOpen` that resolves without sticking is visited at most once
-  per uid. These are duplicate-work reductions on local synthetic fixtures. A
-  previous single-lane run reported 15-row settings gets 204→90 and
-  interleaved-n15 child reads 29→6; this combined tree must be re-measured
-  before quoting new numbers. The 50ms paint-budget fallback, Primary Plan
-  create/locate and receipts, CLOCK-over-POMO, pending shell (no “Checking
-  today’s plan” flash), Undo/partial/unknown flags, and a fresh parent/order/open
-  read after every real awaited write are unchanged. This does not claim that live
+  instead of reading language and related keys once per task row. A previous
+  single-lane synthetic run reported 15-row settings gets 204→90; the combined tree
+  must be re-measured before quoting new numbers. The 50ms paint-budget fallback,
+  Primary Plan create/locate receipts, CLOCK-over-POMO and pending shell (no
+  “Checking today’s plan” flash) are unchanged. This does not claim that live
   Roam’s ~1s open or shortcut feel is fixed.
 - Primary Plan Daily-tree materialization prefers a synchronous reverse
   `data.pull` (`:block/_page` plus `:block/_children`) and falls back to the
@@ -357,10 +348,9 @@
   `:block/children` (`uid` / `string` / `order` / `open`) and fall back to the
   existing Datalog query when pull is missing, thenable, unreadable, the parent
   uid does not match, or the children field is absent. Missing `:block/open` still
-  means false, matching `get-else`. Tidy, Calendar mapping, and LOGBOOK drawer
+  means false, matching `get-else`. Desk, Calendar mapping and LOGBOOK drawer
   confirmation keep the same filter/sort contract. This is a compatibility fast
-  path plus fallback, not a claim that Tidy or Calendar is already faster in live
-  Roam.
+  path plus fallback, not a claim of improved live latency.
 - External chart labels may reuse a local `placeExternalLabels` pass via
   translate; that is an operation-count saving in Node, not a Roam UI jank fix.
 - OAuth worker route handlers now `await` and return sanitized JSON on thrown
@@ -470,10 +460,6 @@
   a shortened description. Normal sync preserves Roam edits; Option/Alt-click
   force-refreshes managed strings while user-created descendants remain safe.
 
-- A one-click Tidy control now moves completed tasks and elapsed fixed events
-  to the front of the Plan with stable ordering. Active task priority, fixed
-  times, references, descendants, and spiral placement remain unchanged; the
-  native toast offers one conflict-safe Undo.
 - Modifier-clicking the Nautilus topbar trigger now routes the Primary Plan
   without changing normal click: Option/Alt-click locates it in the main window,
   while Shift-click opens or brings one deduplicated copy to the top of the right
@@ -507,20 +493,13 @@
   of one wrapping debug-style tooltip. Zero change counters stay hidden, event
   and task inventory remain secondary, local deletions receive an explicit
   restore hint, and the stable hover help always keeps Option-click discoverable.
-- The four remaining chart controls keep their existing geometry and visual
+- The remaining chart controls keep their existing geometry and visual
   treatment while gaining reliable localized hover and keyboard-focus help.
   Calendar temporarily swaps to a rotating Blueprint refresh glyph only while
   a real synchronization request is pending.
 - The non-essential day Playback control and its simulated clock path have
   been removed; the real NOW needle and normal minute refresh are unchanged.
-- Tidy now collapses only expanded settled items after ordering while preserving
-  unfinished outline choices; Undo restores both order and only the outline
-  states changed by Tidy.
-- The Tidy control now uses the supplied Lucide `brush-cleaning` glyph at the
-  same quiet 18px outline weight and interaction surface as the neighboring
-  chart controls.
-- All four chart controls now share an 18px icon canvas and a 32px click target;
-  the denser Tidy brush is optically centered at 16.5px for balanced visual weight.
+- Chart icon controls share an 18px icon canvas and a 32px click target.
 - Spiral depth is based on hours elapsed from the configured start, preserving
   the default 05:00 profile while keeping pre-05:00 and next-day sectors visible.
 - Direct flexible blocks no longer need a TODO marker to participate in Plan,
@@ -547,10 +526,6 @@
   target while adding the authorized Primary calendar account as a safe,
   encoded account hint. Missing or invalid hints and non-Calendar links fall
   back unchanged, with no extra Calendar request or background work.
-- Tidy now treats every visibly completed direct child—including a bare
-  reference whose source is already DONE—as settled, while continuing to move
-  only today's wrapper. Reordering also preserves each Block's existing
-  expanded or collapsed outline state instead of folding active work.
 - The Nautilus topbar shortcut hint now appears reliably on hover and keyboard
   focus, even while a timer is refreshing the trigger state, using the same
   compact surface, pointer, and light/dark treatment as Roam's native popovers.

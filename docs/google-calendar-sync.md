@@ -105,7 +105,7 @@ rewrite every old malformed blob. These guarantees apply to cooperating
 instances of this version in one browser storage partition. They are not a
 distributed lock across devices or a guarantee of immediate Roam replication.
 Update all participating clients before relying on the new recovery protocol.
-Calendar mapping uses the `calendar-mapping` lock; Plan Tidy uses `outline`.
+Calendar mapping uses the `calendar-mapping` lock; Desk writes use `outline`.
 The two can overlap on one Plan. In-flight host writes still cannot be retracted
 without CAS. Adapter `read`/`children` counts are not Roam `pull`/`q` time, and
 runtime `assertActive` Plan identity reads are extra host pulls outside the

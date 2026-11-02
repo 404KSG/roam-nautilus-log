@@ -58,7 +58,7 @@ fill suitable gaps from the current moment. Tasks that cannot fit appear in
 ```
 
 Durations support `30m`, `30min`, `1h`, and `1h30m`. Untimed tasks use the
-configured default. The main controls are **Desk → Help → Sweep (Tidy) → Eye off
+configured default. The main controls are **Desk → Help → Eye off
 (hide)**. A hidden widget shows **Eye** to expand again. Click **?**, just after Desk,
 for the current chart settings, `left` and a quick feature guide. Completed records
 remain visible whenever the chart is expanded; there is no completed-only filter.
@@ -137,21 +137,17 @@ see the guide for synchronization limits. CLOCK history reads overlay per-owner
 entries with a short TTL and LRU cap; a failed read is not cached as empty history.
 Chart subscriptions bind a provider generation so a replaced watch does not keep
 writing, and a temporary unavailable read stays stale instead of looking like a
-confirmed empty tree. Plan Tidy serializes outline writes, reports partial/unknown
-change flags instead of a fake success, and Undo only reports success after the
-collapsed rows actually expand (the running task stays an exception). Opening the
-execution popover reuses one settings snapshot per synchronous render, and Tidy's
-no-op open scan uses one parent snapshot with at most one write per uid. Those are
-duplicate-work reductions on synthetic fixtures (a prior single-lane run saw 15-row
-settings gets 204→90 and interleaved-n15 child reads 29→6); combined numbers need a
-fresh measurement and are not a claim that live Roam feels faster. Primary Plan
+confirmed empty tree. Opening the execution popover reuses one settings snapshot per
+synchronous render. This reduces duplicate work in synthetic fixtures (a prior single-lane
+run saw 15-row settings gets 204→90); combined numbers need a fresh measurement and are
+not a claim that live Roam feels faster. Primary Plan
 reads may use a reverse `data.pull` of today's Daily tree and fall back to the
 existing Datalog query when that pull is missing or unreadable. Direct child
 outline reads may use a synchronous `data.pull` of `:block/children` and fall
 back to the existing children query when that pull is missing or unreadable.
 Malformed present
 string/order/parent values fail closed instead of looking like a missing plan;
-that is a local compatibility path, not a measured live-popover or Tidy speedup. The 50ms
+that is a local compatibility path, not a measured live-popover speedup. The 50ms
 paint-budget fallback, Primary create/locate receipts, CLOCK-over-POMO, and the
 pending shell (no “Checking today's plan” flash) stay. Chart label
 placement may skip a redundant local layout pass; that is an operation-count saving,

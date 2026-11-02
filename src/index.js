@@ -36,8 +36,6 @@ import { createDeskView } from "./desk-view";
 import { createChartHelp } from "./chart-help";
 import { createDeskActions } from "./desk-actions";
 import { createDeskDiagnosticCommands } from "./desk-diagnostics";
-import { createPlanTidy } from "./tidy-plan";
-import { createTidyCommands, settledUidsForTidy } from "./tidy-commands";
 import {
   decideCalendarManagedChange,
   normalizeGoogleCalendarEvents,
@@ -115,8 +113,6 @@ let deskView = null;
 let chartHelp = null;
 let deskActions = null;
 let deskDiagnosticCommands = null;
-let planTidy = null;
-let tidyCommands = null;
 let calendarRuntime = null;
 let completionStampWriter = null;
 let completionStampAdapter = null;
@@ -905,16 +901,6 @@ async function onload({ extensionAPI }) {
     notify: (message) => showToast(message, 'info'),
   });
   deskDiagnosticCommands.initialize();
-  planTidy?.destroy();
-  planTidy = createPlanTidy({
-    runningTaskUid: () => timingRuntime?.getSnapshot?.()?.entries
-      ?.find((entry) => entry?.running === true)?.taskUid || null,
-  });
-  tidyCommands?.destroy();
-  tidyCommands = createTidyCommands({
-    extensionAPI,
-    tidy: planTidy.run,
-  });
   window.nautilusLogCore = logCore;
   window.nautilusLogTaskCore = timingCore;
   window.nautilusLogExtensionData = {
@@ -932,7 +918,6 @@ async function onload({ extensionAPI }) {
     closeDeskHost: (container) => deskView?.closeForHost(container),
     toggleChartHelp: (options) => chartHelp?.toggle(options),
     closeChartHelp: (anchor) => chartHelp?.closeForAnchor(anchor),
-    tidyPlan: planTidy.run,
     locatePlanTask: (taskUid, origin, sidebar = false) => (
       sidebar
         ? openTaskInRightSidebar(taskUid)
@@ -977,7 +962,6 @@ async function onload({ extensionAPI }) {
     .catch((error) => {
       console.debug("[Nautilus Log] Google Calendar connection restore unavailable", error);
     });
-  tidyCommands.initialize();
   publishRuntimeSettings(extensionAPI);
   extensionAPI.settings.panel.create(panelConfig(extensionAPI, language));
   const templateString = await generateTemplateString(extensionAPI);
@@ -1056,10 +1040,6 @@ function onunload() {
   deskActions = null;
   planWatchBridge?.destroy();
   planWatchBridge = null;
-  planTidy?.destroy();
-  planTidy = null;
-  tidyCommands?.destroy();
-  tidyCommands = null;
   calendarRuntime?.destroy();
   calendarRuntime = null;
   completionStampAdapter?.destroy();
@@ -1106,9 +1086,6 @@ export {
   freezeCanonicalTemplate,
   readBlockTree,
   createPlanWatchBridge,
-  createPlanTidy,
-  createTidyCommands,
-  settledUidsForTidy,
   readPrimaryPlan,
   readChildren,
   resolveRendererTaskInstance,

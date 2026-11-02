@@ -133,8 +133,8 @@ Internal key: `energy-bar-enabled`.
 - Fixed events are excluded from the flexible-capacity denominator by the
   existing capacity calculator.
 - Untimed tasks retain the configured default duration.
-- External TODO/DONE, duration edits, task additions, reopenings, and Tidy all
-  redraw from authoritative plan state.
+- External TODO/DONE, duration edits, task additions, reopenings, and outline-order
+  changes redraw from authoritative plan state.
 - A failed completion leaves the committed layer and percentage unchanged after
   the existing error recovery.
 - Completing a task closes only that task's running CLOCK. A different focused

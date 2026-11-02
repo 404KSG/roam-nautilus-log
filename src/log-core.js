@@ -828,14 +828,13 @@ function completedTaskClockSummary({ taskUid, entries = [], dayStartMs, dayEndMs
  * Preserve row identity and outline order; Desk continues to use projectPlan.
  */
 function partitionChartEvents(events = []) {
-  const result = { pendingEvents: [], timedDoneEvents: [], untimedDoneEvents: [], completedUids: [] };
+  const result = { pendingEvents: [], timedDoneEvents: [], untimedDoneEvents: [] };
   for (const event of Array.isArray(events) ? events : []) {
     if (!event || typeof event !== 'object') continue;
     if (event.done !== true) {
       result.pendingEvents.push(event);
       continue;
     }
-    if (typeof event.uid === 'string' && event.uid) result.completedUids.push(event.uid);
     const timed = Number.isFinite(event.start) && Number.isFinite(event.end) && event.end > event.start;
     (timed ? result.timedDoneEvents : result.untimedDoneEvents).push(event);
   }
@@ -1047,7 +1046,6 @@ const UI_COPY = {
       calendarTasksPending: 'reconnect for Tasks',
       calendarTasksUnavailable: 'Tasks unavailable',
       desk: 'Desk',
-      tidy: 'Tidy completed and elapsed items',
       collapse: 'Collapse Nautilus Log',
       expand: 'Expand Nautilus Log',
     },
@@ -1165,7 +1163,6 @@ const UI_COPY = {
       calendarTasksPending: '重新连接以同步 Tasks',
       calendarTasksUnavailable: 'Tasks 暂不可用',
       desk: 'Desk',
-      tidy: '整理已完成任务与已过去事件',
       collapse: '折叠 Nautilus Log',
       expand: '展开 Nautilus Log',
     },
@@ -1862,47 +1859,6 @@ function placeFloatingTooltip({
   };
 }
 
-/**
- * Move settled direct children to the front without changing the relative
- * order inside either partition.  This is the central Tidy invariant: active
- * flexible tasks keep the exact priority order consumed by scheduleTasks,
- * while fixed events retain their explicit ranges.
- */
-function stableTidyOrder({ items = [], settledUids = [] } = {}) {
-  const source = Array.isArray(items) ? items.slice() : [];
-  const settled = new Set((Array.isArray(settledUids) ? settledUids : [])
-    .filter((uid) => typeof uid === 'string' && uid));
-  if (settled.size === 0) return source;
-  return source.filter((item) => settled.has(item?.uid))
-    .concat(source.filter((item) => !settled.has(item?.uid)));
-}
-
-/**
- * Produce deterministic move-to-index operations for one sibling list.  The
- * simulated list is updated after every move so applying the returned moves
- * in order reaches targetUids without rewriting blocks already in place.
- */
-function childOrderMoves({ currentUids = [], targetUids = [] } = {}) {
-  const current = Array.isArray(currentUids) ? currentUids.slice() : [];
-  const target = Array.isArray(targetUids) ? targetUids.slice() : [];
-  if (current.length !== target.length
-      || new Set(current).size !== current.length
-      || new Set(target).size !== target.length
-      || current.some((uid) => !target.includes(uid))) {
-    return [];
-  }
-  const moves = [];
-  for (let order = 0; order < target.length; order += 1) {
-    if (current[order] === target[order]) continue;
-    const from = current.indexOf(target[order], order + 1);
-    if (from < 0) return [];
-    const [uid] = current.splice(from, 1);
-    current.splice(order, 0, uid);
-    moves.push({ uid, order });
-  }
-  return moves;
-}
-
 module.exports = {
   START_HOURS,
   END_HOURS,
@@ -1943,8 +1899,6 @@ module.exports = {
   translateLabelRects,
   radialTooltipGeometry,
   placeFloatingTooltip,
-  stableTidyOrder,
-  childOrderMoves,
   isCompactChartWidth,
   chartPresentationFrame,
   shellRadius,
