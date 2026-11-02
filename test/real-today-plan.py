@@ -146,7 +146,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     page.screenshot(path=str(OUT/(name+'-FAILED.png')))
             def full_tree():
                 tree=page.evaluate('realPlan.tree()')
-                assert tree['string']=='[[My day]] {{[[roam/render]]:((roam-render-Nautilus-Log-cljs)) 28 25 8 "focus" 22}}'
+                assert tree['string']=='[[My day]] {{[[roam/render]]:((roam-render-Nautilus-Log-r2-cljs)) 28 25 8 "focus" 22}}'
                 assert [c['string'] for c in tree['children']]==['09:00-09:30 Stand-up','{{[[TODO]]}} Write 30m ((external-note))','{{[[DONE]]}} Prepared 15m','---','((clone-3)) and ((external-note))']
                 step=tree['children'][1]['children'][0]
                 assert step['string']=='**First step** ((clone-1))'
@@ -158,7 +158,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                 assert len([b for b in blocks if b['uid'].startswith('clone-')])==6
             def replacement_tree():
                 tree=page.evaluate('realPlan.tree()')
-                assert tree['string']=='[[My day]] {{[[roam/render]]:((roam-render-Nautilus-Log-cljs)) 28 25 8 "focus" 22}}'
+                assert tree['string']=='[[My day]] {{[[roam/render]]:((roam-render-Nautilus-Log-r2-cljs)) 28 25 8 "focus" 22}}'
                 children=tree['children']
                 assert [c['string'] for c in children[:4]]==['09:00-09:30 Stand-up','{{[[TODO]]}} Write 30m ((external-note))','{{[[DONE]]}} Prepared 15m','---']
                 event=children[0]; step=children[1]['children'][0]
