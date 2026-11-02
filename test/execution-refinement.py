@@ -47,14 +47,14 @@ def run():
             }''')
             assert layout_reads == 0, f'unchanged time tick performed {layout_reads} geometry reads'
             panel = page.locator('.nautilus-log-timing__capacity')
-            expect(panel).to_contain_text('56% left · 8h53m free')
+            expect(panel).to_contain_text('56% free · 8h53m free')
             page.evaluate('''() => {
                 window.originalComplete = document.querySelector('.nautilus-log-timing__icon-button.is-complete');
                 originalComplete.focus();
                 energyBarHarness.api.tickMinute(3);
             }''')
             expect(page.locator('.nautilus-log-timing__capacity-value')).to_have_text('55%')
-            expect(panel).to_contain_text('55% left · 8h50m free')
+            expect(panel).to_contain_text('55% free · 8h50m free')
             expect(page.locator('.nautilus-log-timing__row-meta').first).to_contain_text('10:10–11:10')
             assert page.evaluate('() => originalComplete.isConnected && document.activeElement === originalComplete')
             page.screenshot(path=str(OUT / 'capacity.png'))
