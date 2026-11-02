@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Reduce the single JavaScript bundle by caching one exact copy of the embedded renderer source.
+  Reuse text widths within each chart layout and group cold CLOCK entries in one pass.
+  Preserve renderer r2 bytes, layout output, cache freshness, and source ownership checks.
+
 - Isolate renderer r2 by source UID, CLJS namespace, and owned runtime bridge. Migrate only the managed template and active Primary Plan reference, preserving the surrounding text and tree. Legacy source blocks and history remain intact; ambiguous targets, source mismatches, newer contracts, and unresolved writes are preserved with a notice. Retained historical readers can reconnect across r2 reloads.
 - Keep fixed-event reservations, including DONE events, through their written end. The new independent **Respect event positions / 任务遵循事件位置** switch defaults off. When enabled, preceding events impose a cumulative earliest start without splitting or overtaking tasks.
 - Show Actual **total** and **display interval** explicitly, add a measured `≈` cue to estimated completed records, and use **Current task / 当前任务**, **Current event / 当前事件** and **free / 未分配**. Preserve accepted completion-anchor precedence, visible titles, compact geometry, and CLOCK ownership.

@@ -1,0 +1,25 @@
+{
+  "source": "8fcae54f4f83f42e24d92d7bd0dbbeda5d977c8e",
+  "scenarios": [
+    {
+      "count": 20,
+      "width": 720,
+      "sha256": "877eaf7e00e7f6283b7db9d3015a869984c141424a20c5edd26a25667bf22f43"
+    },
+    {
+      "count": 100,
+      "width": 720,
+      "sha256": "3627e8c8bedebf27135aac553bb7232e4efbd1a6064268ba48ebfbe9deb1cdb6"
+    },
+    {
+      "count": 300,
+      "width": 720,
+      "sha256": "5e9d0beee9633d3d76808fdf3cd79fa1d346efe6252fb8fba3f2bf802c5790bf"
+    },
+    {
+      "count": 40,
+      "width": 280,
+      "sha256": "d64c8dbe3240e2f824f624f54830bf1b1407aa2a2583dcf9dc5d78a3f187577a"
+    }
+  ]
+}

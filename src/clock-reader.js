@@ -144,11 +144,17 @@ export function createRendererClockReader({
       try {
         const entries = readOwners(missing);
         if (!Array.isArray(entries)) throw new Error('CLOCK owners returned unreadable data.');
+        // Build the complete batch before certifying any owner. A malformed
+        // entry must not leave a partially populated cache after a failed read.
+        const requested = new Set(missing), grouped = new Map();
+        for (const entry of entries) {
+          const uid = entry.taskUid;
+          if (!requested.has(uid)) continue;
+          const group = grouped.get(uid);
+          if (group) group.push(entry); else grouped.set(uid, [entry]);
+        }
         for (const uid of missing) {
-          cache.set(uid, {
-            at: instant,
-            entries: entries.filter((entry) => entry.taskUid === uid),
-          });
+          cache.set(uid, { at: instant, entries: grouped.get(uid) || [] });
         }
       } catch (error) {
         console.debug('[Nautilus Log] CLOCK render snapshot unavailable', error);

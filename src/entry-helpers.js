@@ -66,7 +66,8 @@ function blockByUid(uid, strict = false) {
   return block;
 }
 
-export const rendererSourceText = () => `\`\`\`clojure\n ${cljsFile} \`\`\``;
+let rendererSourceCache;
+export const rendererSourceText = () => rendererSourceCache ??= `\`\`\`clojure\n ${cljsFile} \`\`\``;
 export function readRendererSource() {
   const { source } = readFixedRendererScaffold();
   return inspectRendererSource(source?.string ?? null, rendererSourceText());

@@ -26,20 +26,33 @@ function sourceItems(items) {
   });
 }
 
+// Cache only within one font/measurer invocation. Later layouts must see font
+// loading, viewport and style changes; cap transient text retention per closure.
+function memoizedMeasure(read) {
+  const widths = new Map();
+  return text => {
+    const cacheable = typeof text === 'string' && text.length <= 512;
+    if (cacheable && widths.has(text)) return widths.get(text);
+    const width = read(text);
+    if (cacheable && Number.isFinite(width) && widths.size < 4096) widths.set(text, width);
+    return width;
+  };
+}
+
 function textMeasure(font, supplied) {
-  if (typeof supplied === 'function') return supplied;
+  if (typeof supplied === 'function') return memoizedMeasure(supplied);
   if (typeof document !== 'undefined') {
     canvasContext ||= document.createElement('canvas').getContext('2d');
     if (canvasContext) {
       // Different title/indicator/Tip measurers share this canvas. Restore the
-      // requested font on each call so one measurer cannot silently resize another.
-      return text => {
+      // requested font before each native measurement so widths cannot cross fonts.
+      return memoizedMeasure(text => {
         canvasContext.font = font;
         return canvasContext.measureText(text).width;
-      };
+      });
     }
   }
-  return text => [...text].reduce((sum, ch) => sum + (/[^\x00-\xff]/.test(ch) ? 13 : 7), 0);
+  return memoizedMeasure(text => [...text].reduce((sum, ch) => sum + (/[^\x00-\xff]/.test(ch) ? 13 : 7), 0));
 }
 
 function wrapTitle(text, width, measure, maxLinesOverride = null) {
