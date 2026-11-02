@@ -1,4 +1,6 @@
 import * as timingCore from './timing-core';
+import * as logCore from './log-core';
+import { inspectRenderer } from './renderer-contract';
 import { createClockCoordinator } from './clock-coordinator';
 import {
   closeClock,
@@ -15,7 +17,10 @@ import {
   readAllEntries,
   readEntriesForTaskUids,
   readBlockString,
+  readChildren,
   readPrimaryPlan,
+  readActivePrimaryPlan,
+  readPlanIdentity,
   readRunningEntries,
   showToast,
   updateGraphBlock,
@@ -59,8 +64,18 @@ export function createTimingRuntime({
 }) {
   let destroyed = false;
   let initializationPromise = null;
+  const userIdentity = () => { try { return globalThis.window?.roamAlphaAPI?.user?.uid?.() || ''; } catch (_) { return ''; } };
+  const initialUser = userIdentity();
+  const planningSettings = () => ({
+    'workday-start': extensionAPI.settings.get('workday-start'),
+    'workday-end': extensionAPI.settings.get('workday-end'),
+    'respect-event-order': extensionAPI.settings.get('respect-event-order') === true,
+  });
+  let planningSnapshot = planningSettings();
+  const fallbackMinutes = () => Number(extensionAPI.settings.get('todo-duration')) || 15;
   const assertActive = () => {
     if (destroyed) throw new Error('Actual Time Tracking is no longer active.');
+    if (userIdentity() !== initialUser) throw new Error('The completion user changed. Reload this client before writing.');
     clockCoordinator.assertCurrent();
   };
   const invalidatedTaskUids = new Set();
@@ -247,25 +262,35 @@ export function createTimingRuntime({
     return standaloneClearPromise;
   };
 
+  const ownerStillActive = (plan, currentNow, runtime = planningSnapshot) => {
+    if (!plan?.plan) return plan?.pageTitle === pageTitleFor(currentNow);
+    const ownerDate = plan.date || logCore.dateForPlanTitle(plan.pageTitle);
+    const context = logCore.planWorkdayContext({ now: currentNow, ownerDate,
+      args: plan.planArgs || [], runtime });
+    if (!context) return false;
+    if (plan.pageTitle === pageTitleFor(currentNow)) return true;
+    return context.endMinutes > 1440 && context.logicalNowMinutes >= 1440 && context.logicalNowMinutes < context.endMinutes;
+  };
+
   const readAuthoritativePlan = (currentNow, { rescanPlan = false } = {}) => {
-    const previous = snapshot.planSnapshot;
+    const previous = snapshot.planSnapshot, runtime = planningSettings();
     const currentPageTitle = pageTitleFor(currentNow);
-    const reusablePlanUid = !rescanPlan && previous?.pageTitle === currentPageTitle
-      ? previous?.plan?.uid
-      : null;
+    const normalized = logCore.resolveRendererSettings({ runtime });
+    const minute = currentNow.getHours() * 60 + currentNow.getMinutes();
+    const carryPeriod = runtime['workday-start'] == null || runtime['workday-end'] == null
+      || (normalized['workday-end'] > 1440 && minute < normalized['workday-end'] - 1440);
+    const reusablePlanUid = !rescanPlan && !carryPeriod && previous?.pageTitle === currentPageTitle
+      && previous.settingsSignature === JSON.stringify(runtime) ? previous?.plan?.uid : null;
     if (reusablePlanUid && typeof readPlan === 'function') {
       try {
-        const projected = projectPrimaryPlanPull(
-          readPlan(reusablePlanUid),
-          previous,
-          Number(extensionAPI.settings.get('todo-duration')) || 15,
-        );
-        if (timingCore.isNautilusComponent(projected?.plan?.string)) return projected;
-      } catch (error) {
-        console.debug('[Nautilus Log] cached Primary Plan pull unavailable', error);
-      }
+        const identity = readPlanIdentity(reusablePlanUid);
+        if (identity?.pageTitle === currentPageTitle && timingCore.isNautilusComponent(identity.string)) {
+          const projected = projectPrimaryPlanPull(readPlan(reusablePlanUid), previous, fallbackMinutes());
+          if (timingCore.isNautilusComponent(projected?.plan?.string)) return projected;
+        }
+      } catch (error) { console.debug('[Nautilus Log] cached Primary Plan pull unavailable', error); }
     }
-    return readPrimaryPlan(currentNow, Number(extensionAPI.settings.get('todo-duration')) || 15);
+    return readActivePrimaryPlan(currentNow, runtime, fallbackMinutes());
   };
 
   const refresh = ({ notice = '', planSnapshot: suppliedPlanSnapshot, entries: suppliedEntries, rescanPlan = false } = {}) => {
@@ -273,19 +298,16 @@ export function createTimingRuntime({
     try {
       assertActive();
       const currentNow = now();
-      const sourcePlanSnapshot = suppliedPlanSnapshot === undefined
-        ? readAuthoritativePlan(currentNow, { rescanPlan: rescanPlan || forcePlanRescan })
-        : suppliedPlanSnapshot;
-      if (suppliedPlanSnapshot === undefined) forcePlanRescan = false;
-      const planSnapshot = sourcePlanSnapshot
-        ? {
-          ...sourcePlanSnapshot,
-          execution: timingCore.executionProjection(sourcePlanSnapshot, currentNow, {
-            workdayStart: extensionAPI.settings.get('workday-start') ?? 5,
-            workdayEnd: extensionAPI.settings.get('workday-end') ?? 21,
-          }),
-        }
-        : sourcePlanSnapshot;
+      const runtime = planningSettings();
+      planningSnapshot = runtime;
+      const suppliedValid = suppliedPlanSnapshot !== undefined && ownerStillActive(suppliedPlanSnapshot, currentNow, runtime);
+      const sourcePlanSnapshot = suppliedValid ? suppliedPlanSnapshot
+        : readAuthoritativePlan(currentNow, { rescanPlan: rescanPlan || forcePlanRescan });
+      if (!suppliedValid) forcePlanRescan = false;
+      const execution = timingCore.executionProjection(sourcePlanSnapshot, currentNow, runtime);
+      const planSnapshot = sourcePlanSnapshot ? { ...sourcePlanSnapshot, execution,
+        workday: { ...sourcePlanSnapshot.workday, ...execution?.workday },
+        settingsSignature: JSON.stringify(runtime), planningSettings: runtime } : sourcePlanSnapshot;
       const reviewTasks = planSnapshot?.reviewCandidates || planSnapshot?.reviewTasks || (planSnapshot?.plan
         ? timingCore.projectReviewCandidates(
           planSnapshot.rows,
@@ -314,7 +336,8 @@ export function createTimingRuntime({
           plannedMinutes: task.plannedMinutes,
         } : entry;
       });
-      const dailyReview = timingCore.buildDailyReview({ tasks: reviewTasks, entries, now: currentNow });
+      const dailyReview = timingCore.buildDailyReview({ tasks: reviewTasks, entries, now: currentNow,
+        workday: planSnapshot?.plan && Number.isFinite(planSnapshot?.workday?.dayStartMs) ? planSnapshot.workday : null });
       const recentRetention = extensionAPI.settings.get('recent-retention-minutes') ?? 45;
       const activeWork = timingCore.buildActiveWork(entries, currentNow, recentRetention);
       const pomodoro = currentPomodoro(extensionAPI, activeWork.focused);
@@ -517,10 +540,10 @@ export function createTimingRuntime({
     return run;
   };
 
-  const closeEntriesAt = async (entries, instant, shouldClose = () => true) => {
+  const closeEntriesAt = async (entries, instant, shouldClose = () => true, assertIntent = assertActive) => {
     const updated = new Map();
     for (const entry of entries.filter((candidate) => candidate.running && shouldClose(candidate))) {
-      assertActive();
+      assertIntent();
       const closed = await closeClock(entry, instant);
       assertActive();
       if (closed) updated.set(entry.clockUid, closed);
@@ -596,7 +619,48 @@ export function createTimingRuntime({
     return entries;
   };
 
+  const capturePlanIntent = taskUid => {
+    const plan = snapshot.planSnapshot;
+    const task = plan?.tasks?.find(item => item.uid === taskUid);
+    return { planUid: plan?.plan?.uid, pageTitle: plan?.pageTitle, localString: task?.localString };
+  };
+  const bindTaskIntent = (intent, taskUid, instant) => {
+    assertActive();
+    const plan = readActivePrimaryPlan(instant, planningSettings(), fallbackMinutes());
+    if (!intent.planUid || plan.plan?.uid !== intent.planUid || plan.pageTitle !== intent.pageTitle) {
+      throw new Error('The Plan date or ownership changed. Refresh the active Plan before trying again.');
+    }
+    const task = plan.tasks.find(item => item.uid === taskUid);
+    if (plan.rendererReadOnly || !task || task.status !== 'TODO') throw new Error('Only an unfinished task in today’s supported Nautilus Plan can be changed.');
+    if (intent.localString !== undefined && task.localString !== intent.localString) throw new Error('The task was edited. Refresh before changing it.');
+    return { plan, task, taskUid, localString: task.localString, statusOwnerUid: task.statusOwnerUid || taskUid, instant };
+  };
+  const assertTaskBinding = binding => {
+    assertActive();
+    // Once an explicit command starts under the lock, it stays bound to its
+    // accepted owner/instant. A rollover cannot retarget its later writes.
+    const identity = readPlanIdentity(binding.plan.plan.uid);
+    let task;
+    if (identity?.pageTitle && typeof identity.string === 'string') {
+      if (identity.pageTitle !== binding.plan.pageTitle || !inspectRenderer(identity.string).mutable) {
+        throw new Error('The task or its owning Plan changed during the operation.');
+      }
+      const child = readChildren(binding.plan.plan.uid).find(item => item.uid === binding.taskUid);
+      if (child) task = timingCore.resolveTaskInstance({ uid: child.uid, localString: child.string, readString: readBlockString });
+    } else {
+      const plan = readPrimaryPlan(new Date(binding.plan.workday.dayStartMs), fallbackMinutes());
+      if (!plan.rendererReadOnly && plan.plan?.uid === binding.plan.plan.uid && plan.pageUid === binding.plan.pageUid) {
+        task = plan.tasks.find(item => item.uid === binding.taskUid);
+      }
+    }
+    if (!task || task.status !== 'TODO' || task.localString !== binding.localString || (task.statusOwnerUid || task.uid) !== binding.statusOwnerUid) {
+      throw new Error('The task or its owning Plan changed during the operation.');
+    }
+    return task;
+  };
+
   const startTask = (taskUid) => {
+    const intent = capturePlanIntent(taskUid);
     // Sidebar navigation is reversible UI feedback, so begin it from the
     // trusted Plan-row UID before graph validation and CLOCK confirmation.
     // This mirrors native Roam Logbook: the graph mutation remains the sole
@@ -608,14 +672,8 @@ export function createTimingRuntime({
       });
     }
     return enqueue(async () => {
-      const task = snapshot.planSnapshot?.tasks?.find((candidate) => candidate.uid === taskUid);
-      if (!task || task.status !== 'TODO') {
-        throw new Error('Only an unfinished task in today’s Nautilus Plan can own the Timing Line.');
-      }
       const instant = now();
-      if (snapshot.planSnapshot?.pageTitle !== pageTitleFor(instant)) {
-        throw new Error('The Plan date changed. Refresh today’s Plan before starting a task.');
-      }
+      const binding = bindTaskIntent(intent, taskUid, instant), task = binding.task;
       const taskString = readBlockString(taskUid);
       if (typeof taskString !== 'string' || timingCore.resolveTaskInstance({
         uid: taskUid, localString: taskString, readString: readBlockString,
@@ -628,27 +686,29 @@ export function createTimingRuntime({
       if (snapshot.standalonePomodoro || extensionAPI.settings.get(STANDALONE_POMODORO_STATE_KEY)) {
         await setStandalonePomodoro(null);
       }
-      assertActive();
+      assertTaskBinding(binding);
       if (focused?.taskUid === taskUid) {
-        const entries = await closeEntriesAt(before, instant, (entry) => entry.clockUid !== focused.clockUid);
-        return refresh({ planSnapshot: snapshot.planSnapshot, entries });
+        const entries = await closeEntriesAt(before, instant, (entry) => entry.clockUid !== focused.clockUid, () => assertTaskBinding(binding));
+        return refresh({ planSnapshot: binding.plan, entries });
       }
-      const closedEntries = await closeEntriesAt(before, instant);
-      assertActive();
-      const created = await createRunningClock(taskUid, instant, taskString, assertActive);
+      const closedEntries = await closeEntriesAt(before, instant, () => true, () => assertTaskBinding(binding));
+      assertTaskBinding(binding);
+      const created = await createRunningClock(taskUid, instant, taskString, assertActive, () => assertTaskBinding(binding));
       assertActive();
       created.entry = {
         ...created.entry,
         title: task.title,
         status: task.status,
         plannedMinutes: task.plannedMinutes,
+        pageTitle: binding.plan.pageTitle,
+        workday: binding.plan.workday,
       };
       await setPomodoro(timingCore.nextPomodoroState(snapshot.pomodoro, {
         action: focused ? 'switch' : 'start',
         nowMs: instant.getTime(),
       }));
       return refresh({
-        planSnapshot: snapshot.planSnapshot,
+        planSnapshot: binding.plan,
         entries: [created.entry, ...closedEntries.filter((entry) => entry.clockUid !== created.entry.clockUid)],
       });
     }, { deferStart: hasSidebarIntent });
@@ -666,11 +726,10 @@ export function createTimingRuntime({
     });
   };
 
-  const finishTask = (taskUid) => enqueue(async () => {
-    const task = snapshot.planSnapshot?.tasks?.find((candidate) => candidate.uid === taskUid);
-    if (!task || task.status !== 'TODO') {
-      throw new Error('Only an unfinished task in today’s Nautilus Plan can be completed.');
-    }
+  const finishTask = (taskUid) => {
+    const intent = capturePlanIntent(taskUid);
+    return enqueue(async () => {
+    const instant = now(), binding = bindTaskIntent(intent, taskUid, instant);
     const liveTask = timingCore.resolveTaskInstance({
       uid: taskUid, localString: readBlockString(taskUid), readString: readBlockString,
     });
@@ -678,17 +737,20 @@ export function createTimingRuntime({
     const statusOwnerUid = liveTask.statusOwnerUid || taskUid;
     // Freeze the optional writer's identity before CLOCK awaits. Its editor
     // and unresolved-write preflight must also precede any CLOCK closure.
+    if (completionStampWriter && !completionStampWriter.isEditorSafe(statusOwnerUid, readBlockString(statusOwnerUid))) {
+      throw new Error('Finish editing or composing this task before completing it.');
+    }
     const stampContext = completionStampWriter?.enabled?.() ? completionStampWriter.freezeContext() : null;
     if (stampContext) completionStampWriter.assertCanComplete(statusOwnerUid, stampContext);
-    const instant = now();
     const entries = readCurrentClockEntries([taskUid]);
     const ownedRunning = entries.filter((entry) => entry.running && entry.taskUid === taskUid);
     const updatedEntries = await closeEntriesAt(
       entries,
       instant,
       (entry) => entry.taskUid === taskUid,
+      () => assertTaskBinding(binding),
     );
-    assertActive();
+    assertTaskBinding(binding);
     if (stampContext && !completionStampWriter.contextCurrent(stampContext)) throw new Error('The completion user or graph changed.');
     if (stampContext && completionStampWriter.enabled()) {
       // enqueue already holds the same clock lock. Re-entering the graph guard
@@ -700,10 +762,11 @@ export function createTimingRuntime({
     assertActive();
     if (ownedRunning.length > 0 && !timingCore.chooseFocusedEntry(updatedEntries)) await setPomodoro(null);
     return refresh({
-      planSnapshot: readAuthoritativePlan(instant),
+      planSnapshot: readAuthoritativePlan(now()),
       entries: updatedEntries,
     });
-  });
+    });
+  };
 
   const deleteCurrentClock = (taskUid) => {
     const clockUid = timingCore.chooseFocusedEntry(snapshot.entries)?.clockUid;
@@ -750,6 +813,8 @@ export function createTimingRuntime({
       showToast(message, 'danger');
       throw new Error(message);
     }
+    const initialPlan = readActivePrimaryPlan(now(), planningSettings(), fallbackMinutes());
+    if (initialPlan.rendererReadOnly) throw new Error('This plan uses a newer or unsupported renderer. Update this client before enabling execution.');
     let initialEntries = readAllEntries();
     if (initialEntries.filter((entry) => entry.running).length > 1
       || initialEntries.some((entry) => entry.running && entry.status === 'DONE')) {
@@ -760,7 +825,7 @@ export function createTimingRuntime({
       });
     }
     assertActive();
-    refresh({ entries: initialEntries });
+    refresh({ entries: initialEntries, planSnapshot: initialPlan });
     assertActive();
     if (!snapshot.activeWork.focused && extensionAPI.settings.get(POMODORO_STATE_KEY)) {
       await setPomodoro(null);
@@ -791,6 +856,10 @@ export function createTimingRuntime({
       const currentNow = now();
       // Only the bounded active set can expire here; do not walk the full
       // history or query the graph just to remove an expired Recent item.
+      if (!ownerStillActive(snapshot.planSnapshot, currentNow) && !refreshHandle && !refreshPromise && !mutationInFlight) {
+        forcePlanRescan = true;
+        scheduleRecoveryRefresh('workday boundary');
+      }
       const activeWork = timingCore.buildActiveWork(snapshot.activeWork.items, currentNow, snapshot.activeWork.windowMinutes);
       const changed = activeWork.recent.length !== snapshot.activeWork.recent.length
         || activeWork.focused?.clockUid !== snapshot.activeWork.focused?.clockUid;
@@ -879,10 +948,14 @@ export function createTimingRuntime({
     deleteCurrentClock,
     startStandalonePomodoro,
     stopStandalonePomodoro,
-    locate: (options = {}) => openPrimaryPlan(snapshot.planSnapshot?.plan?.uid, options),
-    openTask: (taskUid, { sidebar = false } = {}) => (
-      sidebar ? openTaskInRightSidebar(taskUid) : openTaskInMainWindow(taskUid)
-    ),
+    locate: (options = {}) => {
+      assertActive();
+      return openPrimaryPlan(readAuthoritativePlan(now()).plan?.uid, options);
+    },
+    openTask: (taskUid, { sidebar = false } = {}) => {
+      assertActive();
+      return sidebar ? openTaskInRightSidebar(taskUid) : openTaskInMainWindow(taskUid);
+    },
     disable,
     destroy,
     getSnapshot: () => snapshot,

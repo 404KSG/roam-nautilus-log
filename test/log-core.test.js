@@ -635,7 +635,7 @@ test('paired clock hours occupy separate spiral cells', () => {
   );
 });
 
-test('fixed event conflicts use half-open overlap boundaries', () => {
+test('written fixed event conflicts retain DONE reservations and use half-open boundaries', () => {
   assert.deepEqual(
     overlappingFixedEventUids({
       events: [
@@ -646,7 +646,7 @@ test('fixed event conflicts use half-open overlap boundaries', () => {
         { uid: 'done', meeting: true, done: true, start: 550, end: 620 },
       ],
     }),
-    ['a', 'b'],
+    ['a', 'b', 'done'],
   );
   assert.deepEqual(overlappingFixedEventUids({ events: [] }), []);
 });
@@ -729,8 +729,8 @@ test('English UI settings localize all extension-owned status labels', () => {
     estimatedShort: 'Est.',
     actualShort: 'Actual',
     current: 'Current',
-    currentEvent: 'Current event',
-    currentTask: 'Current task',
+    currentEvent: 'Planned event',
+    currentTask: 'Planned now',
     currentTime: 'Current time',
     noCompletionTime: 'No completion time recorded',
     inheritedCompletion: 'Completion status from reference',
@@ -748,6 +748,10 @@ test('English UI settings localize all extension-owned status labels', () => {
     estimated: 'Estimate',
     outsideWindow: 'Outside chart hours',
     actual: 'Actual',
+    actualTotal: 'total',
+    projectedInterval: 'display interval',
+    actualAggregateExplanation: 'CLOCK durations are summed. The displayed interval is anchored at completion and does not show a continuous session. Individual sessions remain in LOGBOOK.',
+    estimateCueDescription: 'The approximation mark identifies an estimated duration.',
     completionEstimate: 'Estimated interval',
     estimatedAllocation: 'Estimated allocation',
     notRecordedCompletion: 'Not a recorded completion time',
@@ -769,8 +773,8 @@ test('English UI settings localize all extension-owned status labels', () => {
     estimatedShort: '估时',
     actualShort: '实录',
     current: '当前',
-    currentEvent: '当前事件',
-    currentTask: '当前任务',
+    currentEvent: '计划中的事件',
+    currentTask: '当前计划',
     currentTime: '当前时间',
     noCompletionTime: '未记录完成时间',
     inheritedCompletion: '完成状态来自引用',
@@ -788,6 +792,10 @@ test('English UI settings localize all extension-owned status labels', () => {
     estimated: '估计',
     outsideWindow: '显示时段外',
     actual: '实际记录',
+    actualTotal: '合计',
+    projectedInterval: '绘图区间',
+    actualAggregateExplanation: '这里汇总 CLOCK 时长，并按完成时刻摆放区间，不表示期间持续工作。各次记录仍保留在 LOGBOOK。',
+    estimateCueDescription: '约等号表示时长采用估计值。',
     completionEstimate: '估计区间',
     estimatedAllocation: '估时排布',
     notRecordedCompletion: '不是记录的完成时刻',
@@ -807,7 +815,7 @@ test('English UI settings localize all extension-owned status labels', () => {
       capacity: { availableMinutes: 0, fixedMinutes: 90, demandMinutes: 30, overloadMinutes: 30, slackMinutes: 0, unplacedMinutes: 30 },
     }),
     {
-      planned: { key: 'demand', label: 'Planned', value: '30m', summaryLabel: 'planned', percent: '0%', percentLabel: 'left', percentTone: 'warning', tone: 'neutral' },
+      planned: { key: 'demand', label: 'Planned', value: '30m', summaryLabel: 'planned', percent: '0%', percentLabel: 'free', percentTone: 'warning', tone: 'neutral' },
       status: { key: 'overload', label: 'Overload', value: '30m', summaryLabel: 'over', tone: 'warning' },
       available: { key: 'available', label: 'Available', value: '0m', tone: 'neutral' },
       events: { key: 'events', label: 'Events', value: '1h30m', tone: 'event' },
@@ -819,7 +827,7 @@ test('English UI settings localize all extension-owned status labels', () => {
     free: 'free',
     over: 'over',
     noSlot: 'no slot',
-    left: 'left',
+    left: 'free',
   });
 });
 
@@ -848,7 +856,7 @@ test('capacity summary reports current free time as a share of full-day flexible
       language: 'en',
       capacity: { availableMinutes: 540, totalAvailableMinutes: 540, fixedMinutes: 420, demandMinutes: 105, overloadMinutes: 0, slackMinutes: 435, unplacedMinutes: 0 },
     }).planned,
-    { key: 'demand', label: 'Planned', value: '1h45m', summaryLabel: 'planned', percent: '81%', percentLabel: 'left', percentTone: 'positive', tone: 'neutral' },
+    { key: 'demand', label: 'Planned', value: '1h45m', summaryLabel: 'planned', percent: '81%', percentLabel: 'free', percentTone: 'positive', tone: 'neutral' },
   );
 
   const lateDayDemand = capacityMetrics({
@@ -862,7 +870,7 @@ test('capacity summary reports current free time as a share of full-day flexible
       capacity: { availableMinutes: 90, demandMinutes: 105, overloadMinutes: 15 },
     }).planned;
   assert.equal(overloadedDemand.percent, '0%');
-  assert.equal(overloadedDemand.percentLabel, 'left');
+  assert.equal(overloadedDemand.percentLabel, 'free');
   assert.equal(overloadedDemand.percentTone, 'warning');
 
   const exactDemand = capacityMetrics({
@@ -938,6 +946,7 @@ test('runtime extension settings override stale or nested render arguments', () 
       'workday-start-hour': 6,
       'workday-end-hour': 21,
       'custom-color-1-tag': '#Top',
+      'respect-event-order': false,
       language: 'en',
     },
   );

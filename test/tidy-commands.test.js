@@ -68,9 +68,9 @@ test('Tidy command projection keeps future DONE reservations in place', async ()
       { uid: 'done-source', status: 'DONE', statusOrigin: 'source' },
     ],
     fixedEvents: [
-      { uid: 'past-event', end: 600, done: false },
-      { uid: 'future-event', end: 900, done: false },
-      { uid: 'done-event', end: 900, done: true },
+      { uid: 'past-event', start: 570, end: 600, done: false },
+      { uid: 'future-event', start: 870, end: 900, done: false },
+      { uid: 'done-event', start: 870, end: 900, done: true },
     ],
   }, 720);
 
@@ -286,7 +286,7 @@ test('Tidy command palette callback uses default readPrimaryPlan and tidies sett
     assert.equal(harness.traces.filter((row) => row.startsWith('query:children:')).length, 0);
     assert.ok(harness.traces.includes('pull:daily-tree'));
     assert.ok(harness.traces.some((row) => row.startsWith('pull:children:')));
-    assert.deepEqual(harness.settingsReads, ['todo-duration', 'language']);
+    assert.deepEqual(harness.settingsReads, ['todo-duration', 'workday-start', 'workday-end', 'language']);
     assert.equal(harness.traces.filter((row) => row.startsWith('move:')).length, 2);
     assert.equal(Boolean(result.token), true);
   } finally {

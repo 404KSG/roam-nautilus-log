@@ -29,7 +29,8 @@ function createRoamMock() {
   };
 
   const roam = {
-    graph: { name: 'scaffold-test-graph' },
+    graph: { name: 'scaffold-test-graph', type: 'hosted' },
+    user: { uid: () => 'scaffold-user' },
     util: { generateUID: () => `logtest${++generated}` },
     data: {
       pull: (_pattern, lookup) => entity(lookup?.[1]),
@@ -306,7 +307,40 @@ test('preview defaults migrate once from an empty prefix and midnight end', asyn
   await extension.onunload();
 });
 
-test('a new shorthand reuses one customized legacy template without rewriting historical Logs', async (t) => {
+test('a single customized legacy template migrates only its UID and remains stable on reload', async t => {
+  const { roam, pages, blocks } = createRoamMock();
+  pages.set('roam/render', 'render-page'); pages.set('January 1st, 2000', 'history-page');
+  blocks.set('legacy-title', {uid:'legacy-title',string:'Nautilus Flow',parentUid:'render-page',order:0});
+  blocks.set('legacy-template', {uid:'legacy-template',string:'Nautilus Flow [[roam/templates]]',parentUid:'legacy-title',order:0});
+  const original = '[[log]] {{[[roam/render]]:((roam-render-Nautilus-Flow-cljs)) 28 30 9 "" 2}}';
+  blocks.set('template-root', {uid:'template-root',string:original,parentUid:'legacy-template',order:0,open:false,heading:2});
+  blocks.set('template-child', {uid:'template-child',string:'Keep my nested context',parentUid:'template-root',order:0});
+  blocks.set('history001', {uid:'history001',string:original,parentUid:'history-page',order:0});
+  blocks.set('roam-render-Nautilus-Flow-cljs', {uid:'roam-render-Nautilus-Flow-cljs',string:'legacy code stays',parentUid:'legacy-title',order:1});
+  const queries=[], query=roam.q;
+  roam.q=(...args)=>{queries.push(args[0]);return query(...args)};
+  global.window={roamAlphaAPI:roam,dispatchEvent(){}};installTestHostLocks(window);
+  t.after(()=>{delete global.window;});
+  const source=fs.readFileSync(path.join(__dirname,'../extension.js'));
+  const extension=(await import(`data:text/javascript;base64,${source.toString('base64')}#single-legacy-${Math.random()}`)).default;
+  const settings=new Map([['language','en'],['language-default-version','en-v1']]);
+  const extensionAPI={settings:{get:key=>settings.get(key),set:async(key,value)=>settings.set(key,value),panel:{create(){}}}};
+  await extension.onload({extensionAPI});
+  assert.equal(blocks.get('template-root').string, original.replace('roam-render-Nautilus-Flow-cljs','roam-render-Nautilus-Log-r2-cljs'));
+  assert.equal(blocks.get('template-root').open,false);assert.equal(blocks.get('template-root').heading,2);
+  assert.equal(blocks.get('template-child').parentUid,'template-root');
+  assert.equal(blocks.get('history001').string,original);
+  assert.equal(blocks.get('roam-render-Nautilus-Flow-cljs').string,'legacy code stays');
+  assert.equal(settings.get('prefix-str'),'[[log]]');assert.equal(settings.get('workday-start'),9);
+  assert.equal(settings.get('renderer-migration-pending').items.length,0);
+  assert.ok(!queries.some(value=>value.includes('history001')||value.includes('January 1st, 2000')));
+  const count=blocks.size;
+  await extension.onunload();await extension.onload({extensionAPI});
+  assert.equal(blocks.size,count);assert.equal(window.nautilusLogExtensionData.running,true);
+  await extension.onunload();
+});
+
+test('ambiguous managed templates remain intact instead of guessing a migration target', async (t) => {
   const { roam, pages, blocks } = createRoamMock();
   pages.set('roam/render', 'render-page');
   pages.set('September 1st, 2026', 'daily-page');
@@ -444,53 +478,15 @@ test('a new shorthand reuses one customized legacy template without rewriting hi
   };
   installTestHostLocks(global.window);
 
+  const originalBlocks = structuredClone([...blocks]);
   await extension.onload({ extensionAPI });
 
-  assert.equal(settings.get('prefix-str'), '[[log]]');
-  assert.equal(settings.get('desc-length'), 28);
-  assert.equal(settings.get('todo-duration'), 30);
-  assert.equal(settings.get('workday-start'), 9);
-  assert.equal(settings.get('workday-end'), 2);
-
-  const activeTemplates = [...blocks.values()]
-    .filter((block) => pageUidOfForTest(blocks, pages, block) === 'render-page')
-    .filter((block) => block.string === 'Nautilus Log [[roam/templates]]');
-  assert.equal(activeTemplates.length, 1);
-  assert.equal(activeTemplates[0].string, 'Nautilus Log [[roam/templates]]');
-  assert.match(
-    blocks.get('legacy-template-render').string,
-    /^\[\[log\]\] \{\{\[\[roam\/render\]\]:\(\(roam-render-Nautilus-Log-r2-cljs\)\) 28 30 9 "" 2\}\}$/,
-  );
-  assert.equal(blocks.get('roam-render-Nautilus-Flow-cljs').string, 'old legacy code');
-  assert.equal(blocks.get('roam-render-Nautilus-Log-cljs').string, 'old code');
-  assert.match(blocks.get('roam-render-Nautilus-Log-r2-cljs').string, /nautilus-log-r2/);
-  assert.equal(blocks.get('historical-log').string, historicalString);
-  assert.equal(blocks.get('duplicate-template').string, 'Nautilus Log · Previous template');
-  assert.equal(blocks.get('enhanced-template').string, 'Nautilus Log · Previous template');
-  assert.equal(blocks.get('weekly-template').string, 'Weekly Planning [[roam/templates]]');
-  assert.equal(
-    blocks.get('weekly-template-render').string,
-    'Agenda + {{[[roam/render]]:((roam-render-Nautilus-Log-cljs))}}',
-  );
-
-  const weeklyTemplateBeforeSettingsChange = blocks.get('weekly-template-render').string;
-  const prefixSetting = latestPanel.settings.find(({ id }) => id === 'prefix-str');
-  await prefixSetting.action.onChange({ target: { value: '[[changed-log]]' } });
-  assert.match(blocks.get('legacy-template-render').string, /^\[\[changed-log\]\]/);
-  assert.equal(blocks.get('weekly-template-render').string, weeklyTemplateBeforeSettingsChange);
-  assert.equal(blocks.get('historical-log').string, historicalString);
-
-  const blockCountAfterUpgrade = blocks.size;
-  await extension.onunload();
-  await extension.onload({ extensionAPI });
-
-  const templatesAfterReload = [...blocks.values()]
-    .filter((block) => pageUidOfForTest(blocks, pages, block) === 'render-page')
-    .filter((block) => block.string === 'Nautilus Log [[roam/templates]]');
-  assert.equal(templatesAfterReload.length, 1);
-  assert.equal(blocks.size, blockCountAfterUpgrade);
-  assert.equal(blocks.get('historical-log').string, historicalString);
-
+  assert.equal(settings.get('prefix-str'), '[[Nautilus Log]]');
+  assert.deepEqual([...blocks], originalBlocks, 'ambiguous templates, source code and historical logs must stay intact');
+  assert.equal(blocks.has('roam-render-Nautilus-Log-r2-cljs'), false);
+  assert.equal(window.nautilusLogR2.ready, false);
+  assert.match(window.nautilusLogR2.error, /Multiple managed templates/);
+  assert.equal(window.nautilusLogExtensionData.running, true, 'legacy read facade remains available');
   await extension.onunload();
 });
 
@@ -815,7 +811,7 @@ test('switching tracking keeps exactly one topbar and a failed start restores th
     await toggle(enabled);
     assert.equal(hostCount(), 1);
     assert.equal(intervals.size, enabled ? 1 : 0);
-    assert.equal(commands.has('Nautilus Log: Create or open today’s plan'), true);
+    assert.equal(commands.has('Nautilus Log: Create or open today’s Daily Note plan'), true);
     assert.equal(commands.has('Nautilus Log: 1. Focus current block'), enabled);
   }
   await toggle(true);

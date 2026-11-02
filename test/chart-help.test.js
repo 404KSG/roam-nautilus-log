@@ -20,7 +20,7 @@ test('Help replaces the completed-visibility control in both languages', () => {
   assert.ok(controls.indexOf('[desk-button') < controls.indexOf('[help-button'));
 });
 
-test('Help is English by default and explains the real left denominator', () => {
+test('Help is English by default and explains the unassigned budget denominator', () => {
   const { chartHelpModel } = help();
   const model = chartHelpModel({ startMinutes: 300, endMinutes: 1260, defaultDuration: 15 });
   assert.equal(model.title, 'Nautilus Log');
@@ -28,6 +28,8 @@ test('Help is English by default and explains the real left denominator', () => 
   assert.match(model.rows.find(row => row.key === 'left').text, /Available.*Planned/);
   assert.match(model.rows.find(row => row.key === 'left').text, /full-day Available/);
   assert.match(model.rows.find(row => row.key === 'left').text, /fully planned/);
+  assert.equal(model.rows.find(row => row.key === 'left').label, 'free');
+  assert.match(model.rows.find(row => row.key === 'schedule').text, /default off/);
   assert.match(model.settings, /POMO does not record Actual/);
   assert.match(model.rows.find(row => row.key === 'desk').text, /to the top/);
   assert.deepEqual(core.stableTidyOrder({ items: [{ uid: 'pending' }, { uid: 'done' }], settledUids: ['done'] }).map(row => row.uid), ['done', 'pending']);
@@ -39,6 +41,7 @@ test('Help honors explicit Chinese, logical overnight hours, and zero without in
   const model = chartHelpModel({ language: 'zh', startMinutes: 1260, endMinutes: 1560, defaultDuration: 0 });
   assert.match(model.setup, /21:00.*次日 02:00.*0m/);
   assert.match(model.rows.find(row => row.key === 'left').text, /全天可安排/);
+  assert.equal(model.rows.find(row => row.key === 'left').label, '未分配');
   assert.match(model.guideUrl, /guide\.zh-CN\.md$/);
   const invalid = chartHelpModel({ startMinutes: NaN, endMinutes: Infinity, defaultDuration: NaN });
   assert.doesNotMatch(invalid.setup, /NaN|Infinity|05:00|15m/);

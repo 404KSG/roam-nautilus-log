@@ -1,4 +1,5 @@
 import { graphName } from './graph-context';
+import { inspectRenderer } from './renderer-contract';
 
 export class DeskReferenceImportError extends Error {
   constructor(message, code = 'invalid-drop') {
@@ -254,4 +255,4 @@ export function isUnsupportedReferenceSource(string) {
   return false;
 }
 
-const isNautilusRenderer = string => /\{\{\s*\[\[roam\/render\]\]\s*:\s*\(\(roam-render-Nautilus(?:-Log|-Flow)?-cljs\)\)/i.test(string);
+const isNautilusRenderer = string => inspectRenderer(string).mutable === true;

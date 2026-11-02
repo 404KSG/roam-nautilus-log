@@ -1,5 +1,5 @@
 // Host boundary fixture shared by Node and browser acceptance. No prepared trees.
-const CORE = '{{[[roam/render]]:((roam-render-Nautilus-Log-cljs))';
+const CORE = '{{[[roam/render]]:((roam-render-Nautilus-Log-r2-cljs))';
 const ROOT = 'nautilus-log-plan-2026-09-09';
 const TITLE = 'September 9th, 2026';
 const COMPONENT = `[[My day]] ${CORE} 28 25 8 "focus" 22}}`;
@@ -96,7 +96,8 @@ function createManagedGraph({ day = true, namespaced = true } = {}) {
       if (query.includes('?clock-uid ?clock-string')) return [...blocks.values()].filter(b=>/^CLOCK:/.test(b.string)).map(b=>{
         const drawer=blocks.get(b.parentUid),task=blocks.get(drawer?.parentUid);
         return [b.uid,b.string,drawer?.string,task?.uid,task?.string,[...pages].find(([,uid])=>uid===pageOf(b))?.[0]];
-      });
+      }).filter(row=>(!query.includes('[?task-uid ...]') || args[0].includes(row[3]))
+        && (!query.includes('?running-pattern') || args[1].test(row[1])));
       if (query.includes('?page-uid ?uid ?string ?order ?parent-uid')) return [...blocks.values()].filter(b => pageOf(b) === pages.get(args[0])).map(b => [pages.get(args[0]), b.uid,b.string,b.order,b.parentUid]);
       if (query.includes(':node/title ?page-title')) return pages.has(args[0]) ? [[pages.get(args[0])]] : [];
       if (query.includes('clojure.string/includes?')) return [...blocks.values()].filter(b => pageOf(b) === 'render-page' && b.string.includes('[[roam/templates]]')).map(b => [pull(b,query)]);
@@ -142,7 +143,7 @@ function createManagedGraph({ day = true, namespaced = true } = {}) {
   add({uid:'source-ref',string:'((source-step)) and ((external-note))',parentUid:'source-root',order:4});
   add({uid:'external-note',string:'{{[[TODO]]}} External owner 20m',parentUid:'notes-page',order:0});
   if (day) { pages.set(TITLE,'day'); add({uid:'weekly-tag',string:'#[[2026-W37]]',parentUid:'day',order:0}); }
-  const values = new Map([['language','en'],['energy-bar-enabled',true],['todo-duration',15]]);
+  const values = new Map([['language','en'],['energy-bar-enabled',true],['todo-duration',15],['workday-start',5],['workday-end',21]]);
   const settings = {get(key) { if(this !== settings) throw Error('Unbound get'); return hooks.get ? hooks.get(key,values) : values.get(key); }, async set(key,value) {
     if(this !== settings) throw Error('Unbound set');
     await hooks.beforeSet?.(key,value);

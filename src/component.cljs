@@ -14,6 +14,9 @@
 
 (def init-custom-color-1-tag "")
 
+(def renderer-revision 2)
+(defn renderer-data [] (aget js/window (str "nautilusLogR" renderer-revision)))
+
 (def init-workday-start 300)
 
 ;; ------- other defaults –––––––
@@ -524,6 +527,11 @@
                      (str (minutes->time (:full-start event)) "–" (minutes->time (:full-end event))))
         allocation? (= "estimated-allocation" (:time-claim event))
         actual? (or (= "actual" (:time-claim event)) (= "actual" (:duration-source event)))
+        actual-summary (when actual?
+                         (str completed " · " (get-in copy [:tooltips :actual]) " "
+                              (duration-label (or (:actual-minutes event) (:duration event) 0)) " "
+                              (get-in copy [:tooltips :actualTotal]) " · "
+                              (get-in copy [:tooltips :projectedInterval]) " " range-text))
         reference (:reference-completion event)
         reference-time? (= "reference" (:completion-time-origin event))
         reference-time-text (when (number? (:sourceMinutes reference)) (minutes->time (:sourceMinutes reference)))
@@ -540,17 +548,20 @@
                     "unplaced" (str (get-in copy [:tooltips :unplaced]) " · " estimate)
                     "outside-window" (if reference-time?
                                        (str completed " " reference-time-text " · " estimate " · " (get-in copy [:tooltips :outsideWindow]))
-                                       (str (when (:done event) (str completed " · "))
-                                            (get-in copy [:tooltips :outsideWindow]) " · " range-text))
+                                       (if actual?
+                                         (str actual-summary " · " (get-in copy [:tooltips :outsideWindow]))
+                                         (str (when (:done event) (str completed " · "))
+                                              (get-in copy [:tooltips :outsideWindow]) " · " range-text)))
                     (cond
-                      actual? (str completed " · " (get-in copy [:tooltips :actual]) " "
-                                   (duration-label (or (:actual-minutes event) (- (:full-end event) (:full-start event))))
-                                   " · " range-text)
+                      actual? actual-summary
                       (and (:done event) (:todo event) (not (:meeting event))) (str completed " · " estimate " · " range-text)
                       :else (str (when (:done event) (str completed " · "))
                                  (get-in copy [:tooltips (if (:meeting event) :event :task)]) " · " range-text
                                  " · " (duration-label (- (:full-end event) (:full-start event)))))))
         meta (str summary
+                  (when actual? (str " · " (get-in copy [:tooltips :actualAggregateExplanation])))
+                  (when (and (:done event) (:todo event) (not actual?))
+                    (str " · " (get-in copy [:tooltips :estimateCueDescription])))
                   (when reference-time?
                     (str " · " (get-in copy [:tooltips :referenceCompletion]) ": " reference-time-text
                          (when (= kind "outside-window") (str " · " (get-in copy [:tooltips :completionEstimate]) " " range-text))))
@@ -742,7 +753,10 @@
         last-clock-end (:latestEndMinutes actual-summary)
         instance (:task-instance block-map)
         evidence (:completionEvidence instance)
-        local-done-at (if (number? (:localMinutes evidence)) (:localMinutes evidence) done-at)
+        raw-local-done-at (if (number? (:localMinutes evidence)) (:localMinutes evidence) done-at)
+        local-done-at (or (log-core-call "localCompletionMinute"
+                          {:minute raw-local-done-at :startMinutes (:workday-start settings)
+                           :endMinutes (:workday-end settings) :lastClockEnd last-clock-end}) raw-local-done-at)
         reference (or (:reference evidence)
                       ;; Without chart evidence an older bridge cannot tell a
                       ;; missing source stamp from an unreadable/invalid one.
@@ -1404,14 +1418,10 @@
               :style {:white-space "pre" :font-size (str (:fontSize label) "px")} :font-weight "500"}
        (for [[index line] (map-indexed vector (:lines label))]
          ^{:key index}
-         [:tspan {:x (:textX label) :y (+ (:textY label) (* index (:lineHeight label)))}
-          line
-          ;; One muted inline cue preserves the existing title area; the full
-          ;; Tips/ARIA description explains that this is not recorded time.
-          (when (and (= index (dec (count (:lines label))))
-                     (:done (:event record))
-                     (estimated-completion? (:event record)))
-            [:tspan {:class "nautilus-log-record-estimate-cue"} " Est."])])]
+         [:tspan {:x (or (:titleTextX label) (:textX label)) :y (+ (:textY label) (* index (:lineHeight label)))} line])]
+      (when (:estimateCue label)
+        [:text {:class "nautilus-log-record-estimate-cue" :x (:cueX label) :y (:textY label)
+                :text-anchor (:align label) :font-size (:fontSize label) :aria-hidden "true" :pointer-events "none"} "≈"])
       (when (or (:current? params) (:current-event? params))
         [:text {:class "nautilus-log-record-current" :x (:textX label) :y (:metadataY label)
                 :text-anchor (:align label) :font-size (:metadataFontSize label) :pointer-events "none"}
@@ -1536,9 +1546,9 @@
                              :defaultDuration (:default-duration settings) :relation (:relation timeline-state)
                              :nowMinutes (:elapsedThroughMinutes timeline-state)
                              :interactive (and (:interactive timeline-state) (:showNow timeline-state))
-                             :font (str "500 13px " font-family)
-                             :currentLabels [(or (get-in copy [:tooltips :currentTask]) "Current task")
-                                             (or (get-in copy [:tooltips :currentEvent]) "Current event")]
+                             :font (str "500 13px " font-family) :showEstimateCue true
+                             :currentLabels [(or (get-in copy [:tooltips :currentTask]) "Planned now")
+                                             (or (get-in copy [:tooltips :currentEvent]) "Planned event")]
                              :radiusForMinute (fn [minute] (spiral-outer-radius minute settings))
                              :startMinutes (:workday-start settings) :endMinutes (:workday-end settings)})
         frame (:frame scene)
@@ -1652,13 +1662,16 @@
   "Creates the production session once the factory exists after mount.
    Cleanup must not recreate a destroyed session."
   (when @alive?
-    (when-not @plan-session
-      (when-let [session (watch-plan-children! block-uid children-state status-state)]
-        (reset! plan-session session)))
-    (when-let [session @plan-session]
-      (try
-        (.sync session)
-        (catch :default _e nil)))))
+    (let [bridge (renderer-data) previous @plan-session]
+      (when (and previous (not (identical? bridge (aget previous "nautilusBridgeOwner"))))
+        (try (.destroy previous) (catch :default _e nil))
+        (reset! plan-session nil))
+      (when-not @plan-session
+        (when-let [session (watch-plan-children! block-uid children-state status-state)]
+          (aset session "nautilusBridgeOwner" bridge)
+          (reset! plan-session session)))
+      (when-let [session @plan-session]
+        (try (.sync session) (catch :default _e nil))))))
 
 (defn reset-now-time-atom [now-time-atom & [epoch-state]]
   (let [now (new js/Date (.now js/Date))
@@ -1669,9 +1682,12 @@
 
 (defn help-button [settings copy]
   (r/with-let [button-node (atom nil)
+               help-binding (atom nil)
                close-help! (fn [node]
-                             (when-let [close-help (some-> js/window .-nautilusLogR2 .-closeChartHelp)]
-                               (.call close-help nil node)))
+                             (when (identical? node (:node @help-binding))
+                               (when-let [close-help (some-> (:bridge @help-binding) .-closeChartHelp)]
+                                 (.call close-help nil node))
+                               (reset! help-binding nil)))
                button-ref (fn [node]
                             (when (and @button-node (not (identical? node @button-node)))
                               (close-help! @button-node))
@@ -1681,11 +1697,15 @@
               :aria-haspopup "dialog" :aria-expanded "false"
               :on-click (fn [event]
                           (.stopPropagation event)
-                          (when-let [toggle-help (some-> js/window .-nautilusLogR2 .-toggleChartHelp)]
-                            (.call toggle-help nil
-                                   (clj->js {:anchor (.-currentTarget event) :language (:language settings)
-                                             :startMinutes (:workday-start settings) :endMinutes (:workday-end settings)
-                                             :defaultDuration (:default-duration settings)}))))}
+                          (let [bridge (renderer-data) node (.-currentTarget event)]
+                            (when (and @help-binding (not (identical? bridge (:bridge @help-binding))))
+                              (close-help! (:node @help-binding)))
+                            (when-let [toggle-help (some-> bridge .-toggleChartHelp)]
+                              (reset! help-binding {:node node :bridge bridge})
+                              (.call toggle-help nil
+                                     (clj->js {:anchor node :language (:language settings)
+                                               :startMinutes (:workday-start settings) :endMinutes (:workday-end settings)
+                                               :defaultDuration (:default-duration settings)})))))}
      ;; Blueprint's native 16px help glyph; reuse geometry, not a client bundle or font.
      [:svg {:width "18" :height "18" :viewBox "0 0 16 16" :fill "currentColor" :aria-hidden "true" :data-icon "help"}
       [:path {:d "M8 0C3.58 0 0 3.58 0 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm1 13H7v-2h2v2zm1.93-6.52c-.14.32-.35.64-.62.97L9.25 8.83c-.12.15-.24.29-.28.42-.04.13-.09.3-.09.52V10H7.12V8.88s.05-.51.21-.71L8.4 6.73c.22-.26.35-.49.44-.68.09-.19.12-.38.12-.58 0-.3-.1-.55-.28-.75-.18-.19-.44-.28-.76-.28-.33 0-.59.1-.78.29-.19.19-.33.46-.4.81-.03.11-.1.15-.2.14l-1.7-.25c-.12-.01-.16-.08-.14-.19.12-.82.46-1.47 1.03-1.94.57-.48 1.32-.72 2.25-.72.47 0 .9.07 1.29.22s.72.34 1 .59c.28.25.49.55.65.89.15.35.22.72.22 1.12s-.07.75-.21 1.08z"}]]]
@@ -1948,7 +1968,7 @@
   (or (log-core-call "uiCopy" (:language settings))
       {:capacity {:available "Available" :events "Events" :demand "Demand" :overload "Overload" :fragmented "No fitting slot" :remaining "Remaining"
                   :burningAvailable "Flexible time is elapsing" :burningEvents "Event time is elapsing" :now "Current time"}
-       :allocation {:planned "planned" :free "free" :over "over" :noSlot "no slot" :left "open"}
+       :allocation {:planned "planned" :free "free" :over "over" :noSlot "no slot" :left "free"}
        :legend {:urgent "Urgent" :event "Event" :task "Task"}
        :controls {:help "Nautilus Log help" :helpHint "Help"
                   :desk "Open Desk"
@@ -2175,8 +2195,23 @@
           (.observe observer node)
           (reset! resize-observer-state observer))))))
 
+(defn bind-desk-host! [binding node block-uid page-title-val]
+  (let [previous @binding bridge (when node (renderer-data))]
+    (when (and previous (or (not (identical? node (:node previous)))
+                            (not (identical? bridge (:bridge previous)))))
+      (when-let [close-host (some-> (:bridge previous) .-closeDeskHost)]
+        (try (.call close-host nil (:node previous)) (catch :default _e nil))))
+    (reset! binding (when node {:node node :bridge bridge}))
+    (when-let [register-host (some-> bridge .-registerDeskHost)]
+      (.call register-host nil
+             (clj->js {:planUid block-uid :pageTitle page-title-val :container node
+                       :origin (some-> node (.closest ".nautilus-log-container") (.querySelector ".nautilus-log-desk-btn"))})))))
+
 (defn main [{:keys [:block-uid]} & args]
   (r/with-let [plan-session (atom nil)
+               page-title-val (page-title block-uid)
+               desk-host-binding (atom nil)
+               desk-host-ref (fn [node] (bind-desk-host! desk-host-binding node block-uid page-title-val))
                plan-status-state (r/atom {:status "unbound" :writesAllowed false})
                plan-session-alive? (atom true)
                watched-children-state (r/atom [])
@@ -2189,12 +2224,17 @@
                                  (let [next-running-state (is-running?)]
                                    (when (not= @*running? next-running-state)
                                      (reset! *running? next-running-state)))
-                                 (sync-plan-session! plan-session plan-session-alive? block-uid watched-children-state plan-status-state))
+                                 (sync-plan-session! plan-session plan-session-alive? block-uid watched-children-state plan-status-state)
+                                 (when (and @desk-host-binding
+                                            (not (identical? (renderer-data) (:bridge @desk-host-binding))))
+                                   (desk-host-ref (:node @desk-host-binding))))
                                5000)
                settings-state (r/atom (resolve-render-settings args))
                settings-listener (fn [_event]
+                                   (reset! *running? (is-running?))
                                    (reset! settings-state (resolve-render-settings args))
-                                   (sync-plan-session! plan-session plan-session-alive? block-uid watched-children-state plan-status-state))
+                                   (sync-plan-session! plan-session plan-session-alive? block-uid watched-children-state plan-status-state)
+                                   (when-let [node (:node @desk-host-binding)] (desk-host-ref node)))
                _settings-listener (.addEventListener js/window settings-event-name settings-listener)
                now-time-atom (r/atom (now-minutes))
                clock-epoch-state (r/atom (js/Math.floor (/ (.now js/Date) 60000)))
@@ -2211,23 +2251,6 @@
                resize-observer-state (atom nil)
                container-ref (fn [node]
                                (observe-compact-width! node compact-state presentation-width-state hover-info-state resize-observer-state))
-               page-title-val (page-title block-uid)
-               desk-host-node (atom nil)
-               desk-host-ref (fn [node]
-                               (when-let [previous @desk-host-node]
-                                 (when-not (identical? previous node)
-                                   (when-let [close-host (some-> js/window .-nautilusLogR2 .-closeDeskHost)]
-                                     (.call close-host nil previous))))
-                               (reset! desk-host-node node)
-                               (when node
-                                 (when-let [register-host (some-> js/window .-nautilusLogR2 .-registerDeskHost)]
-                                   (.call register-host nil
-                                          (clj->js {:planUid block-uid
-                                                    :pageTitle page-title-val
-                                                    :container node
-                                                    :origin (some-> node
-                                                                    (.closest ".nautilus-log-container")
-                                                                    (.querySelector ".nautilus-log-desk-btn"))})))))
                daily-page-atom? (r/atom (daily-page? block-uid))
                refresh-clock! (fn []
                                 (when @plan-session-alive?
@@ -2273,9 +2296,9 @@
                                    ;; Completion evidence is qualified before allocation;
                                    ;; unverified source time must not become a morning estimate.
                                    ;; Tidy still receives every locally settled wrapper UID.
-                                   [(add-start-after filtered)
-                                    (:timedDoneEvents history) (:untimedDoneEvents history)
-                                    (:completedUids history) filtered]))))
+                                   [(if (:respect-event-order settings) (add-start-after filtered) filtered)
+                                    (filterv #(not (:meeting %)) (:timedDoneEvents history)) (:untimedDoneEvents history)
+                                    (mapv :uid (filter #(and (:done %) (:todo %)) filtered)) filtered]))))
                tidy-state (r/atom false)
                calendar-state (r/atom {:busy false
                                        :hovered false
@@ -2316,19 +2339,13 @@
                                     :showNow @daily-page-atom?})
                 plan-from-time (:scheduleFromMinutes timeline-state)
                 plan-status @plan-status-state
-                [text-events done-events untimed-done-events completed-uids source-events] @*text-events
+                renderer-error (some-> (renderer-data) .-error)
+                [text-events done-events untimed-done-events _completed-uids source-events] @*text-events
                 planning-events (if (= "past" (:relation timeline-state))
                                   (vec (remove #(and (:todo %) (not (:done %))) text-events))
                                   text-events)
-                expired-fixed-uids (->> text-events
-                                        (filter :meeting)
-                                        (filter (fn [event]
-                                                  (or (= "past" (:relation timeline-state))
-                                                      (and (= "today" (:relation timeline-state))
-                                                           (number? (:end event))
-                                                           (<= (:end event) (:elapsedThroughMinutes timeline-state))))))
-                                        (mapv :uid))
-                settled-uids (vec (distinct (concat completed-uids expired-fixed-uids)))
+                settled-uids (vec (or (log-core-call "settledPlanUids"
+                                         {:items source-events :nowMinutes (when (not= "other" (:relation timeline-state)) (:timelineMinutes timeline-state))}) []))
                 pending-tasks (vec (filter #(and (:todo %) (not (:done %))) planning-events))
                 fixed-events (vec (filter :meeting text-events))
                 all-fixed-events fixed-events
@@ -2352,7 +2369,10 @@
                 events-state [(fill-day planning-events (:workday-start settings) (:workday-end settings) plan-from-time) done-events untimed-done-events source-events]]
             [:div {:class (str "nautilus-log-container" (when @collapsed-state " nautilus-log-collapsed"))
                    :data-nautilus-log-block block-uid
+                   :data-nautilus-renderer "2"
                    :data-nautilus-plan-status (or (:status plan-status) "unbound")}
+             (when (seq renderer-error)
+               [:div {:class "nautilus-log-renderer-notice" :role "status"} renderer-error])
              (if @collapsed-state
                (do (clear-detail-state! hover-info-state)
                    [log-controls settings collapsed-state block-uid page-title-val @render-context-state settled-uids tidy-state calendar-state copy show-debug-button? plan-status-state])
@@ -2387,9 +2407,9 @@
       (.removeEventListener js/document "visibilitychange" visibility-listener)
       (.removeEventListener js/window "unload" unload-listener)
       (clear-detail-state! hover-info-state)
-      (when-let [node @desk-host-node]
-        (when-let [close-host (some-> js/window .-nautilusLogR2 .-closeDeskHost)]
-          (.call close-host nil node)))
+      (when-let [binding @desk-host-binding]
+        (when-let [close-host (some-> (:bridge binding) .-closeDeskHost)]
+          (try (.call close-host nil (:node binding)) (catch :default _e nil))))
       (when-let [session @plan-session]
         (try
           (.destroy session)

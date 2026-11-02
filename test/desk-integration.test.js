@@ -66,9 +66,10 @@ test('extension binds Desk to shared reads and destroys it before destroying the
   const binding = source.match(/deskView = createDeskView\(\{([\s\S]*?)\n  \}\);/)?.[1] || '';
   assert.match(binding, /actions: deskActions/);
   assert.match(binding, /readPlan: planWatchBridge\.read,\s*watchPlan: planWatchBridge\.subscribe,/);
-  assert.match(source, /deskView\?\.restoreMountedHosts\(\)/);
-  assert.match(source, /openDesk: \(options\) => deskView\?\.open\(options\)/);
-  assert.match(source, /closeDeskHost: \(container\) => deskView\?\.closeForHost\(container\)/);
+  assert.match(source, /ownedDesk\.restoreMountedHosts\(/);
+  assert.match(source, /const ownedDesk = deskView/);
+  assert.match(source, /openDesk: options => ownedDesk\.open\(options\)/);
+  assert.match(source, /closeDeskHost: container => ownedDesk\.closeForHost\(container\)/);
   for (const section of [source.slice(source.indexOf('async function onload'), source.indexOf('function onunload')),
     source.slice(source.indexOf('function onunload'), source.indexOf('\nexport {'))]) {
     assert.ok(section.indexOf('deskView?.destroy()') >= 0);

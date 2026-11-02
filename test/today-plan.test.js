@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const COMPONENT = '{{[[roam/render]]:((roam-render-Nautilus-Log-cljs)) 22 15 5 "" 21}}';
+const COMPONENT = '{{[[roam/render]]:((roam-render-Nautilus-Log-r2-cljs)) 22 15 5 "" 21}}';
 const LEGACY = '{{[[roam/render]]:((roam-render-Nautilus-cljs)) 22 15 5 "" 21}}';
 const FLOW = '{{[[roam/render]]:((roam-render-Nautilus-Flow-cljs)) 22 15 5 "" 21}}';
 
@@ -189,7 +189,7 @@ function createGraph({ title = 'September 9th, 2026' } = {}) {
 function installHost(roam, { locks = exclusiveLocks() } = {}) {
   const timers = [];
   const storage = new Map();
-  const receiptValues = new Map();
+  const receiptValues = new Map([['workday-start',5],['workday-end',21]]);
   global.window = {
     fixtureSettings: { get: key => key === 'language' ? 'en' : receiptValues.get(key), set: async (key, value) => receiptValues.set(key,value) },
     roamAlphaAPI: roam,
@@ -269,7 +269,7 @@ test('missing page creates the Daily Note; empty page reuses uid', async (t) => 
   assert.equal(graph.counts().createPage, 1);
   assert.equal(graph.counts().createBlock, 1);
   assert.equal(graph.trace.find((row) => row[0] === 'createBlock')[4], 'last');
-  assert.match(graph.trace.find((row) => row[0] === 'createBlock')[2], /roam-render-Nautilus-Log-cljs/);
+  assert.match(graph.trace.find((row) => row[0] === 'createBlock')[2], /roam-render-Nautilus-Log-r2-cljs/);
 
   const empty = createGraph();
   empty.addPage('September 9th, 2026', 'empty-day');
@@ -350,7 +350,7 @@ test('missing-template fallback writes one last-child generateTemplateString val
   const built = [];
   const { options } = sessionOptions({
     buildComponentString: async () => {
-      const value = '[[log]] {{[[roam/render]]:((roam-render-Nautilus-Log-cljs)) 28 30 9 "" 2}}';
+      const value = '[[log]] {{[[roam/render]]:((roam-render-Nautilus-Log-r2-cljs)) 28 30 9 "" 2}}';
       built.push(value);
       return value;
     },
@@ -372,7 +372,7 @@ test('frozen anonymous template clones its complete tree, formatting, and intern
   installHost(graph.roam);
   t.after(() => { delete global.window; delete global.navigator; delete global.localStorage; });
   const source = {
-    uid: 'source-root', string: `{{[[roam/render]]:((roam-render-Nautilus-Log-cljs)) 22 15 5 "" 21}}`,
+    uid: 'source-root', string: `{{[[roam/render]]:((roam-render-Nautilus-Log-r2-cljs)) 22 15 5 "" 21}}`,
     properties: { open: false, heading: 2, 'text-align': 'center', 'children-view-type': 'bullet' },
     children: [
       { uid: 'source-a', string: '08:00-09:00 fixed ((outside))', properties: { open: true }, children: [
@@ -666,8 +666,8 @@ test('create command label is unnumbered English and CLOCK labels stay in timing
     todayPlan: { ensureToday: async (opts) => { calls.push(opts); return { status: 'ready-present' }; } },
   });
   assert.equal(commands.initialize(), true);
-  assert.deepEqual([...palette.keys()], ['Nautilus Log: Create or open today’s plan']);
-  await palette.get('Nautilus Log: Create or open today’s plan').callback();
+  assert.deepEqual([...palette.keys()], ['Nautilus Log: Create or open today’s Daily Note plan']);
+  await palette.get('Nautilus Log: Create or open today’s Daily Note plan').callback();
   assert.deepEqual(calls, [{ locateMode: 'main' }]);
   commands.destroy();
   assert.equal(palette.size, 0);
@@ -707,7 +707,8 @@ test('inspectCanonicalTemplate distinguishes missing, standard, and custom', asy
   };
   global.window = { roamAlphaAPI: roam };
   t.after(() => { delete global.window; });
-  assert.equal(extension.inspectCanonicalTemplate('{{[[roam/render]]:((roam-render-Nautilus-Log-cljs))').kind, 'missing');
+  const core = '{{[[roam/render]]:((roam-render-Nautilus-Log-r2-cljs))';
+  assert.equal(extension.inspectCanonicalTemplate(core).kind, 'missing');
 
   blocks.set('template', {
     uid: 'template',
@@ -717,11 +718,11 @@ test('inspectCanonicalTemplate distinguishes missing, standard, and custom', asy
   });
   blocks.set('render', {
     uid: 'render',
-    string: '[[Nautilus Log]] {{[[roam/render]]:((roam-render-Nautilus-Log-cljs)) 22 15 5 "" 21}}',
+    string: '[[Nautilus Log]] {{[[roam/render]]:((roam-render-Nautilus-Log-r2-cljs)) 22 15 5 "" 21}}',
     order: 0,
     parentUid: 'template',
   });
-  assert.equal(extension.inspectCanonicalTemplate('{{[[roam/render]]:((roam-render-Nautilus-Log-cljs))').kind, 'standard');
+  assert.equal(extension.inspectCanonicalTemplate(core).kind, 'standard');
 
   blocks.set('sibling', {
     uid: 'sibling',
@@ -729,7 +730,7 @@ test('inspectCanonicalTemplate distinguishes missing, standard, and custom', asy
     order: 1,
     parentUid: 'template',
   });
-  assert.equal(extension.inspectCanonicalTemplate('{{[[roam/render]]:((roam-render-Nautilus-Log-cljs))').kind, 'custom');
+  assert.equal(extension.inspectCanonicalTemplate(core).kind, 'custom');
   blocks.delete('sibling');
   blocks.set('desc', {
     uid: 'desc',
@@ -737,7 +738,7 @@ test('inspectCanonicalTemplate distinguishes missing, standard, and custom', asy
     order: 0,
     parentUid: 'render',
   });
-  const inspect = () => extension.inspectCanonicalTemplate('{{[[roam/render]]:((roam-render-Nautilus-Log-cljs))');
+  const inspect = () => extension.inspectCanonicalTemplate(core);
   assert.equal(inspect().kind, 'standard');
   blocks.delete('desc');
   const originalString = blocks.get('render').string;
@@ -748,6 +749,10 @@ test('inspectCanonicalTemplate distinguishes missing, standard, and custom', asy
   ]) {
     blocks.get('render').string = string;
     assert.equal(inspect().kind, 'custom');
+  }
+  for (const uid of ['roam-render-Nautilus-Log-cljs','roam-render-Nautilus-Log-r3-cljs']) {
+    blocks.get('render').string = originalString.replace('roam-render-Nautilus-Log-r2-cljs',uid);
+    assert.equal(inspect().kind,'custom','legacy/newer templates must not silently create a new r2 plan');
   }
   blocks.get('render').string = originalString;
   const query = roam.q;

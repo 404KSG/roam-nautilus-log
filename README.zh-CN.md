@@ -2,42 +2,19 @@
 
 > **给每一分钟分配一份工作。**
 
-一个面向 Roam Research 的可视化日计划工具。Nautilus Log 把一篇 Daily Note
-变成动态螺旋日程：固定事件保持不动，弹性任务进入剩余时间，超载工作始终可见。
+面向 Roam Research 的可视化日计划工具。固定事件保留时段，完整任务按你决定的顺序
+进入空档，放不下的工作始终可见。Daily Note 和原生 block 是数据依据。
 
 [English](./README.md) · **简体中文** · [使用指南](./docs/guide.zh-CN.md)
 
 ![Nautilus Log 螺旋日计划、Timing、Plan、Review 与右侧边栏视图](https://raw.githubusercontent.com/404KSG/roam-nautilus-log/main/docs/assets/nautilus-log-overview.png)
 
-## 它能带来什么
-
-- **让计划真正放进时间。** 同时看到 Planned、Available、固定 Events、剩余容量，
-  以及今天放不下的工作。
-- **透明而灵活的排程。** 事件保留原定时间，未完成任务按照 Roam block 顺序向前推进。
-- **让一天适应你的作息。** 可以从任意整点开始，并按需把计划连续延伸到次日。
-- **低摩擦执行。** 可以只使用预计时长，也可以启动独立 POMO，或按需用兼容的
-  `LOGBOOK::` / `CLOCK:` 记录任务时间。
-- **逐项聚焦长日志。** Desk 在海螺图下方使用 Roam 原生卡片样式，隐藏重复大纲并记住视图模式。
-  拖拽和 Move to top 同步移动原任务、调整排程优先级；加号可在当前计划下新增内容。
-  使用完整 Desk 页预览规则，宽度与上方图表一致；Remove from Desk 只删除无本地内容的纯引用包装块，其他卡片完整移到所属 Daily Note。
-  同窗口、同图谱的合格外部 block 可作为本地纯块引用拖入，不新增任务标记，原 block 保持不变。
-  点击卡片用原生编辑器处理完整日志；编辑器内 Esc 交给 Roam，关闭按钮或 Desk 外框的 Esc 返回卡片区。
-  不改动 Roam 自带的 Desk 收藏集合；[验证仍限于合成夹具](./docs/guide.zh-CN.md#安全的外部-block-引用)。
-- **有依据的每日回顾。** 直接在普通 Roam block 上比较 Planned 与 Actual。
-
-排程规则完全确定：事件先占用自己的时间范围，再从当前时刻开始，把完整任务依次放入
-足够大的空档。放不下的任务进入**今日放不下**，不会被静默丢弃。
-
 ## 快速开始
 
-1. 从 Roam Depot 安装 **Nautilus Log**；更新处于审核阶段时，使用对应 Depot PR
-   中给出的 ShortHand。
-2. 点击顶栏 **＋ 创建今日计划**，或运行 **Nautilus Log: Create or open today’s plan**。
-   无论当前浏览哪个页面，都以今天的 Daily Note 为目标，并复制完整的受管理
-   Nautilus 模板树（包括普通嵌套子项）并打开结果。一次普通点击即可，无需面板、
-   确认或手动输入 `;;`。
-3. 把固定事件和 TODO 写成组件的直接子级。
-4. 排列任务，并为每项任务填写粗略时长。
+1. 从 Roam Depot 安装 **Nautilus Log**；试用 Draft 更新时，使用对应 Depot PR 的 ShortHand。
+2. 点击 **＋ 创建今日计划**，一次点击即可把受管理模板复制到今天的 Daily Note 并打开。
+   已有计划时直接打开，不重复创建。
+3. 把事件和任务写成组件的直接子级，排列任务并填写估时。
 
 ```text
 05:00-06:00 Morning routine
@@ -46,77 +23,78 @@
 11:45-12:30 Lunch
 ```
 
-时长支持 `30m`、`30min`、`1h` 和 `1h30m`。没有时长的任务使用设置中的默认值。
-主控件顺序为 **Desk → 帮助 → Sweep（整理）→ Eye off（收起）**，收起后用 **Eye** 展开。
-点击 Desk 后面的 **?**，查看当前配置、“未分配”预算的含义和功能速查。
-图表展开时，完成记录始终显示；眼睛只控制整个组件，不筛选完成项。
+时长支持 `30m`、`30min`、`1h` 和 `1h30m`。顶层普通文字也会作为任务；没有估时的任务
+使用**默认任务时长**，初始为 15 分钟。子级笔记和日志属于父任务，不单独增加排程需求。
+
+始终可用的命令 **Nautilus Log: Create or open today’s Daily Note plan** 明确面向日历当天。
+跨午夜工作时，顶栏入口会打开仍在活动窗口内的那一份计划。详见[活动跨夜工作日](./docs/guide.zh-CN.md#活动跨夜工作日)。
+
+## 理解和调整计划
+
+- **保留你的顺序。** 不自动拆分任务，也不让后面的任务抢先执行；剩余队列放在**今日放不下**。
+- **明确保留预约。** 事件标记 DONE 后，写明的时段仍然占用预算；要提前释放，应修改或删除时段。
+  **任务遵循事件位置**是独立、默认关闭的设置：开启后，任务还必须等大纲中所有前置固定事件结束。
+  关闭时，任务可使用更早的空档。
+- **理解预算。** “未分配”（英文 `free`）表示扣除 Planned 后的空余预算占全天弹性容量的比例。
+  它衡量时间预算，不代表生理精力，也不是时钟还剩多少的百分比。
+- **区分证据。** Actual 汇总 CLOCK 会话时长，图上把总量放到以完成时刻为终点的一段区间中，
+  不逐段重放会话。采用估时的完成项带有小型 `≈` 标记，Tips 说明时长与摆放依据。
+- **在 Desk 中工作。** 原生样式卡片编辑原 block；**新任务**在计划最前面插入隐式任务，不强加 TODO。
+  拖拽改变任务顺序，嵌套日志随任务保留。移除和外部拖入遵循[原生归属规则](./docs/guide.zh-CN.md#安全的外部-block-引用)。
+
+控件顺序为 **Desk → 帮助 → 水晶球整理 → Eye off**。帮助解释当前配置与预算；整理把完成任务
+和已过时事件移到前面，保留待办优先级与未来预约。眼睛控制收起／展开，完成记录在展开时始终可见。
+
+## 按需启用功能
+
+**默认只做规划。** 执行层关闭时，海螺图、Desk 和轻量创建／打开入口仍可使用，不启动执行面板、
+一秒刷新或 CLOCK 写入器。图表仍可读取已有 CLOCK 历史。
+
+**执行层 · 进阶**增加 **Timing、Plan、Review**，并在面板内提供独立 **POMO**。CLOCK 优先于 POMO，
+切换任务前先结束上一条 CLOCK。独立 POMO 不写 CLOCK，也不增加 Actual，但仍使用同一个执行入口，
+因此启用前需关闭单独的 Roam Logbook 扩展。可选容量槽显示紧凑的“未分配比例 · 计划时长”。
+
+**完成时间戳**独立、默认关闭。确认原生完成操作后，可追加一个 `dHH:MM`，不启动 CLOCK/POMO，
+也不计量 Actual。重新打开时，仅删除仍能确认归属 Nautilus 的那个后缀。开启前应在所有客户端
+停用 Todo Trigger。详见[可选完成时间戳](./docs/guide.zh-CN.md#可选完成时间戳)。
+
+已有跨夜计划会一直作为活动工作日，直到它的 END；容量、任务操作、CLOCK 合计和 Review 共用其归属日期。
+日历当天的新建仍需明确操作，到达 END 也不会自动停止正在运行的 CLOCK。
 
 ## 可选 Google Calendar 同步
 
-打开 Nautilus Log 设置，点击 **连接 Google Calendar**，即可用只读权限授权自己的账号。
-连接后，设置会显示 **已连接 · 只读 · 主日历**，图表中出现 Blueprint Calendar 按钮。
-Roam Desktop 会在系统浏览器打开真实的 Google 授权页，并自动把结果返回正在等待的设置页。
-Calendar 按钮只手动同步当前 Nautilus 图表对应的日期；不会后台轮询，也不会自动创建
-Daily Note。
+在设置中用 Google 的只读授权连接账号。图表上的 Calendar 按钮按所点击计划的日期手动导入
+定时忙碌事件和有日期的 Google Tasks，不后台轮询，也不创建 Daily Note。
 
-普通点击会保护你在 Roam 中改写的文字；Option/Alt + 点击只强制刷新 Google 托管字段，
-仍保留用户自己创建的子 block。全天事件、空闲/透明事件和已拒绝事件不会导入。连接可在
-Roam 刷新后自动恢复，用户无需创建或粘贴 OAuth Client ID、密钥或 Calendar ID。Calendar
-数据由 Roam 客户端直接向 Google 请求，不会经过轻量授权服务。导入的 `Open` 链接保留
-Google 原始事件目标，并在浏览器登录多个 Google 账号时优先提示已连接的主账号。
+普通同步保留本地改动；Option/Alt + 点击恢复 Google 托管字段，仍保留用户创建的子级。
+Google Tasks 没有估时时使用默认任务时长。用户无需配置 OAuth Client 或粘贴密钥。
+详见[Calendar 设置与恢复](./docs/google-calendar-sync.md)及[隐私说明](./PRIVACY.md)。
 
-块结构、授权、权限范围、合并规则与隐私边界详见
-[Google Calendar 同步说明](./docs/google-calendar-sync.md)与[隐私说明](./PRIVACY.md)。
-中断写入使用图谱本地的 `google-calendar-sync-pending` 日志：无法读取或属于其它图谱时失败关闭，保留本地改动与已停放冲突；缺省或空白日志不等于抹掉已有 WAL。Google 读取受单次分页预算限制，不完整网络结果不会被当成成功的部分同步。同一 UID 的图读取只在无 yield 区间内复用。这些是本地正确性边界，不是真实 Google/Roam 延迟提升，也不会自动迁移所有旧的损坏 journal。
+## 升级与恢复
 
-## 可选执行层
+r2 使用独立的源码 UID、命名空间和运行桥。升级仅变更受管理模板与活动 Primary Plan 的 renderer 引用，
+保留前缀、参数、子级内容和呈现属性。历史计划通过兼容读取器继续展示；目标含糊或源码不符时会提示，保留原内容。
 
-即使执行层关闭，30px 顶栏按钮和一条命令仍可创建或定位今天的 Primary Plan。该轻量
-入口不会启动 CLOCK 写入、1 秒计时器或执行面板。一键插入会冻结并复制完整的受管理
-renderer 根及普通子树，所有新块使用新 UID；树内引用会重映射，树外引用保持不变。
-它不会复制昨天，也不会改动源模板。多个根、模板顶层兄弟或无法读取的动态内容会安全
-失败，并可打开模板查看。今天 Daily Note 上已有任何合法 Nautilus 组件（包括空任务
-计划或全部完成的计划）都只定位，不重复创建。创建需要确认当前图谱并获得 Web Locks；
-读取失败后的“重新检查”只读，不会自动插入。
-
-**创建未完成**会打开诊断与已验证块计数；**检查已创建内容**不会清除未完成状态。
-只有原内存操作重新验证每个已写块后才提供**继续创建**；重载后只能验证、打开，不能用新
-模板补写。图谱/日期范围内的 SHA-256 记录只保存目标标识与哈希，不保存模板正文。
-LOGBOOK/CLOCK 历史和无法保留的属性会在模板写入前被拒绝。首次写入前跨午夜会停止；
-写入开始后则完成冻结的原日期，并提示日期变化，不会把昨天显示为今天的就绪计划。
-
-需要在可视化规划之外进一步执行时，可在设置中开启 **Execution Layer · Advanced**。
-精简顶栏面板提供：
-
-- **Timing**：当前 CLOCK 与最近任务。
-- **Plan**：今天已安排和未排入的工作。
-- **Review**：Planned 与 Actual 对比。
-- **POMO**：不写入 CLOCK 的独立正计时专注模式。
-
-任意时刻只运行一个任务 CLOCK。CLOCK 历史读取按 owner 覆盖，带短 TTL 与 LRU 上限；失败读取不会被缓存成空历史。图表订阅绑定 provider 代际，换掉 watch 后不会继续写入；暂时读不到时保持 stale，而不是看起来像已确认的空树。Plan Tidy 串行整理大纲，用 partial/unknown 标记变化，不把未确认写报成成功；Undo 仅在被折叠行确实展开后才报成功（当前 running 任务除外）。打开执行面板时，同一次同步渲染会复用一份 settings 快照，不再按任务行重复读 language；Tidy 的无改动折叠扫描只读一次父级大纲，且每个 UID 最多写一次。这些是合成夹具上的重复工作减少（此前单 lane 曾测到 15 行 settings 204→90、交错 n15 childReads 29→6）；合并树必须复跑后才能报新数，也不等于真实 Roam 已变快。Primary 读取可走当天 Daily 树的反向 `data.pull`，在 pull 缺失或无法解释时回退现有 Datalog。直接子块读取可走同步 `data.pull` 的 `:block/children`，在 pull 缺失或无法解释时回退现有 children 查询。已存在但类型错误的 string/order/父 uid 会失败关闭，而不是被丢掉后看起来像没有 Primary；这是本地兼容快路径，不是已测量的真实弹窗或 Tidy 提速。50ms 绘制兜底、Primary 创建/定位与 receipt、CLOCK 优先于 POMO、以及打开中的骨架（不闪 Checking）保持不变。图表标签布局可能跳过一次本地重复计算，这只是操作次数收益，不是已测量的界面卡顿修复。LOGBOOK 256 字符变体仍保留兼容。本地 OAuth Worker 的 `await` 与错误形态测试只存在于源码，不等于已部署服务。CLOCK 的优先级高于 POMO，并可把当前任务置顶到
-Roam 右侧边栏。执行设置中另有默认关闭的 **用精力槽显示剩余容量**：它会用双层时间
-容量仪表替换普通顶栏标记：上下两层围绕顶栏中心线对折，上层显示分层槽，下层将精确
-`% left · 未完成计划总时长` 合并后左对齐；CLOCK/POMO 计时则直接居中在顶栏中心线上。
-执行层默认关闭，因此只使用预计时长时仍然轻量。完成时间戳也是独立、默认关闭的选项：只会在已验证的用户完成操作后追加本地 `dHH:MM`，不是 Actual，也不会启动 CLOCK/POMO。
-
-设置、命令、语法、历史规则和安全边界请参阅[使用指南](./docs/guide.zh-CN.md)。
+请更新所有客户端。旧客户端仍可能修改自己的旧源码块或模板，本地扩展无法协调所有其他设备。
+迁移不扫描历史，也不盲目重试未确认的写入。计划创建同样保留可验证的恢复记录：重载后可检查和验证
+未完成副本，不能换一个模板继续补写。详见[渲染器升级](./docs/guide.zh-CN.md#渲染器升级)。
 
 ## 本地验证
 
-运行 `npm test` 和 `PYTHONDONTWRITEBYTECODE=1 npm run test:ui`。浏览器套件需要已有的
-Python Playwright 与 Chromium，不会连接真实 Roam 图谱。真实会话套件使用实际源查询、
-冻结、会话、写入适配器与两个顶栏入口，只替换底层图谱和时钟；假图谱会拒绝重复 UID。
-覆盖一键完整复制、部分写入/重载、导航、提示框边界和计时优先级。截图与结果位于
-`/tmp/nautilus-real-today-plan`；这不等于真实 Roam Desktop 验证。
+```sh
+npm test
+PYTHONDONTWRITEBYTECODE=1 npm run test:ui
+```
+
+浏览器检查需要已有的 Python Playwright 和 Chromium。套件使用隔离图谱，覆盖完整的新旧 CLJS、
+真实渲染服务、模板恢复、跨午夜运行逻辑与界面。报告中的跳过项不算已验证；这些检查不等于真实
+Roam Desktop、操作系统输入法、原子原生 Undo、Calendar 授权或跨设备验证。
 
 ## 致谢
 
-- Tomáš Baránek 的 [Nautilus](https://github.com/tombarys/roam-depot-nautilus)：原始螺旋
-  日计划理念。
-- [Nautilus Enhanced](https://github.com/hopeserena/nautilus-enhanced)：本项目继续开发
-  所基于的分支。
-- [Roam Logbook](https://github.com/forrestchang/roam-logbook)：兼容 CLOCK 计时与聚焦
-  执行的灵感来源。
+- Tomáš Baránek 的 [Nautilus](https://github.com/tombarys/roam-depot-nautilus)：原始螺旋日计划理念。
+- [Nautilus Enhanced](https://github.com/hopeserena/nautilus-enhanced)：本项目继续开发所基于的分支。
+- [Roam Logbook](https://github.com/forrestchang/roam-logbook)：兼容 CLOCK 计时与聚焦执行的灵感来源。
 
-时间分配哲学受到 [YNAB Method](https://www.ynab.com/the-four-rules/) 启发；Nautilus Log
-与 YNAB 没有关联。项目沿用原始 MIT License。
+时间分配哲学受到 [YNAB Method](https://www.ynab.com/the-four-rules/) 启发；Nautilus Log 与 YNAB 没有关联。
+项目沿用原始 MIT License。

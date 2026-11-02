@@ -99,6 +99,7 @@ export function createDeskView({
     }
     if (options.origin) binding.origin = options.origin;
     if (!binding.session && preferences.read(providerGraph, binding.planUid)) start(binding);
+    binding.session?.updateSettings?.();
     syncControl(binding);
     return binding;
   };
@@ -120,7 +121,14 @@ export function createDeskView({
     if (!saved && enabled) binding.session?.notice('Desk is open, but browser storage is unavailable. This view may not survive a reload.');
   };
 
+  const newTaskCopy = () => {
+    let zh = false;
+    try { zh = getSettings()?.language === 'zh'; } catch (_) {}
+    return zh ? {label:'新任务',placeholder:'新任务。开始输入…',counter:'新建'}
+      : {label:'New task',placeholder:'New task. Start typing...',counter:'new'};
+  };
   function createSession(binding) {
+    let draftCopy = newTaskCopy();
     const { planUid, container, pageTitle = '', origin = document.activeElement } = binding;
     const chart = container.closest('.nautilus-log-container');
     const roam = host.roamAlphaAPI;
@@ -181,9 +189,9 @@ export function createDeskView({
     searchInput.placeholder = 'Search Desk';
     searchInput.setAttribute('aria-label', 'Search Desk');
     searchGroup.append(icon('search'), searchInput);
-    const add = button('New task', 'plus', () => showDraft(), 'rm-desk-page__new-note');
+    const add = button(draftCopy.label, 'plus', () => showDraft(), 'rm-desk-page__new-note');
     add.classList.remove('bp3-small');
-    add.append(el('span', 'bp3-button-text', 'New task'));
+    add.append(el('span', 'bp3-button-text', draftCopy.label));
     tools.append(searchGroup, add);
     toolbar.append(title, tools);
     const message = el('div', 'nautilus-desk__notice');
@@ -232,7 +240,7 @@ export function createDeskView({
     const previous = button('Previous', 'chevron-right', () => step(-1), 'rm-desk__previous');
     navigation.append(next, counter, previous);
     const end = el('div', 'rm-desk__side rm-desk__side--end');
-    const newNote = button('New task', 'plus', () => showDraft(), 'rm-desk__new-note');
+    const newNote = button(draftCopy.label, 'plus', () => showDraft(), 'rm-desk__new-note');
     const more = button('More', 'more', () => {
       const anchor = more.getBoundingClientRect(), frame = focus.getBoundingClientRect();
       menu.style.top = `${anchor.bottom - frame.top}px`;
@@ -273,8 +281,8 @@ export function createDeskView({
     editorStatus.append(editorMessage, retryEditor);
     const editor = el('div', 'nautilus-desk__editor');
     const draftInput = el('textarea', 'rm-desk-draft__input');
-    draftInput.placeholder = 'New task. Start typing...';
-    draftInput.setAttribute('aria-label', 'New task');
+    draftInput.placeholder = draftCopy.placeholder;
+    draftInput.setAttribute('aria-label', draftCopy.label);
     draftInput.rows = 1;
     draftInput.hidden = true;
     body.append(editorStatus, editor, draftInput);
@@ -388,10 +396,10 @@ export function createDeskView({
     function updateControls() {
       updateEscapeHint();
       const index = tasks.findIndex((task) => task.uid === selectedUid);
-      counter.textContent = mode === 'draft' ? 'new' : `${Math.max(0, index + 1)} / ${tasks.length}`;
+      counter.textContent = mode === 'draft' ? draftCopy.counter : `${Math.max(0, index + 1)} / ${tasks.length}`;
       next.disabled = busy || status !== 'ready' || (mode === 'draft' ? !tasks.length : index < 0 || index === tasks.length - 1);
       previous.disabled = busy || status !== 'ready' || mode === 'draft';
-      const previousLabel = index === 0 && mode === 'task' ? 'New note' : 'Previous';
+      const previousLabel = index === 0 && mode === 'task' ? draftCopy.label : 'Previous';
       previous.title = previousLabel;
       previous.setAttribute('aria-label', previousLabel);
       add.disabled = newNote.disabled = busy || status !== 'ready' || !actions;
@@ -1072,15 +1080,21 @@ export function createDeskView({
       catch (_error) { status = 'unavailable'; renderCards(); }
       diagnostics.afterLayout('after-open');
     }
-    const session = { start, close, showOverview, notice };
+    const session = { start, close, showOverview, notice, updateSettings() {
+      draftCopy = newTaskCopy();
+      for (const control of [add,newNote]) { control.title=draftCopy.label;control.setAttribute('aria-label',draftCopy.label); }
+      add.querySelector('.bp3-button-text').textContent=draftCopy.label;
+      draftInput.placeholder=draftCopy.placeholder;draftInput.setAttribute('aria-label',draftCopy.label);
+      updateControls();
+    } };
     return session;
   }
   const closeForHost = (container, reason = 'host-removed') => { const binding = hosts.get(container); binding?.session?.close(false, reason); hosts.delete(container); };
   return {
     open, registerHost, closeForHost, diagnostics,
-    restoreMountedHosts() {
+    restoreMountedHosts(register = registerHost) {
       if (!document?.querySelectorAll) return;
-      for (const container of document.querySelectorAll('[data-nautilus-desk-plan]')) registerHost({
+      for (const container of document.querySelectorAll('[data-nautilus-desk-plan]')) register({
         container, planUid: container.dataset.nautilusDeskPlan, pageTitle: container.dataset.nautilusDeskPage || '',
         origin: container.closest('.nautilus-log-container')?.querySelector('.nautilus-log-desk-btn'),
       });

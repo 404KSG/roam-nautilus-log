@@ -5,6 +5,8 @@ import {
   readBlockTree,
   readExistingTemplateState,
   shouldSuppressRenderContext,
+  inspectRendererScaffold,
+  readRendererSource,
   toggleRenderComponent,
   updateTemplateString,
 } from "./entry-helpers";
@@ -23,6 +25,8 @@ import {
   readReferenceCompletionSource,
   readChildren,
   readPrimaryPlan,
+  readPlanIdentity,
+  readActivePrimaryPlan,
   showToast,
 } from "./timing-roam";
 import { createTimingRuntime } from "./timing-runtime";
@@ -32,6 +36,10 @@ import { changedClockOwners, createRendererClockReader } from "./clock-reader";
 import { createTimingTopbar } from "./timing-topbar";
 import { createPlanWatchBridge } from "./plan-watch";
 import { createRendererPlanSession } from "./renderer-plan-session";
+import { REVISION as RENDERER_REVISION, CODE_UID as codeBlockUID, BRIDGE_KEY, inspectRenderer } from './renderer-contract';
+import { installRendererBridge } from './renderer-bridge';
+import { createRendererMigration } from './renderer-migration';
+import { graphName } from './graph-context';
 import { createDeskView } from "./desk-view";
 import { createChartHelp } from "./chart-help";
 import { createDeskActions } from "./desk-actions";
@@ -55,10 +63,7 @@ import {
 } from "./calendar-auth";
 
 const componentName = "Nautilus Log";
-// r2 owns a distinct source block, CLJS namespace, and bridge. A renderer
-// source update must advance this integer and all three identities together.
-const RENDERER_REVISION = 2;
-const codeBlockUID = `roam-render-Nautilus-Log-r${RENDERER_REVISION}-cljs`;
+// Source, namespace and bridge revision are defined by renderer-contract.
 const renderStringCore = `{{[[roam/render]]:((${codeBlockUID}))`;
 let activeCodeBlockUID = codeBlockUID;
 let activeRenderStringCore = renderStringCore;
@@ -89,6 +94,8 @@ const executionDefaults = {
   "forgotten-timer-minutes": 120,
 };
 
+const planningDefaults = { 'respect-event-order': false };
+
 const completionStampDefaults = {
   // Deliberately separate from template defaults: this is extension-local
   // opt-in metadata, never a renderer argument or graph block field.
@@ -107,6 +114,14 @@ let lifecycleGeneration = 0;
 // Object identity protects r2 from a stale or legacy cleanup whose numeric
 // generation happens to be the same after a reload.
 let r2BridgeOwner = null;
+let rendererBridge = null;
+let rendererMigration = null;
+function rendererScope() {
+  const provider = typeof window === 'undefined' ? null : window.roamAlphaAPI;
+  let user = '';
+  try { user = provider?.user?.uid?.() || ''; } catch (_) {}
+  return { provider, graph: graphName(typeof window === 'undefined' ? {} : window), type: provider?.graph?.type || '', user };
+}
 let trackingRequest = 0;
 let trackingQueue = Promise.resolve();
 let timingStartup = null;
@@ -135,15 +150,8 @@ const rendererClockContext = (taskUids) => rendererClockCache.readContext(taskUi
 
 function dailyPageBounds(pageTitle, logicalEndMinutes = 1440) {
   try {
-    const parsed = window.roamAlphaAPI?.util?.pageTitleToDate?.(pageTitle);
-    const date = parsed instanceof Date ? parsed : new Date(parsed);
-    if (!Number.isFinite(date.getTime())) return {};
-    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const endMinutes = Number(logicalEndMinutes);
-    const dayEnd = Number.isFinite(endMinutes) && endMinutes > 1440
-      ? new Date(dayStart.getTime() + endMinutes * 60_000)
-      : new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
-    return { dayStartMs: dayStart.getTime(), dayEndMs: dayEnd.getTime() };
+    const parsed = window.roamAlphaAPI?.util?.pageTitleToDate?.(pageTitle) ?? logCore.dateForPlanTitle(pageTitle);
+    return logCore.clockEvidenceBounds({ ownerDate: parsed, endMinutes: logicalEndMinutes }) || {};
   } catch (_error) {
     return {};
   }
@@ -155,7 +163,7 @@ function getClockRenderContext(pageTitle, taskUids = [], logicalEndMinutes = nul
     startHour: runtime['workday-start'],
     endHour: runtime['workday-end'],
   });
-  const resolvedEnd = Number.isFinite(Number(logicalEndMinutes))
+  const resolvedEnd = logicalEndMinutes !== null && logicalEndMinutes !== undefined && Number.isFinite(Number(logicalEndMinutes))
     ? Number(logicalEndMinutes)
     : schedule.endMinutes;
   return {
@@ -235,6 +243,7 @@ function runtimeSettings(extensionAPI) {
     "google-calendar-enabled": calendarEnabled,
     "google-calendar-configured": calendarConfigured,
     "google-calendar-tasks-configured": Number(calendarConnection?.version) >= 2,
+    "respect-event-order": extensionAPI.settings.get("respect-event-order") === true,
     "completion-stamps-enabled": extensionAPI.settings.get("completion-stamps-enabled") === true,
     language: extensionAPI.settings.get("language") || "en",
   };
@@ -243,14 +252,7 @@ function runtimeSettings(extensionAPI) {
 function publishRuntimeSettings(extensionAPI) {
   if (typeof window === "undefined") return;
   const settings = runtimeSettings(extensionAPI);
-  if (window.nautilusLogR2 && window.nautilusLogR2 === r2BridgeOwner) {
-    window.nautilusLogR2.settings = settings;
-  }
-  // Legacy renderers only need a non-destructive settings facade.
-  window.nautilusLogExtensionData = {
-    ...(window.nautilusLogExtensionData || {}),
-    settings,
-  };
+  rendererBridge?.publish(settings);
   if (typeof window.dispatchEvent === "function") {
     const event = typeof window.CustomEvent === "function"
       ? new window.CustomEvent(settingsEventName, { detail: { settings } })
@@ -283,7 +285,7 @@ async function generateTemplateString(extensionAPI, renderCore = activeRenderStr
 }
 
 async function setDefaultSettings(extensionAPI, recoveredTemplateSettings = null) {
-  await Promise.all(Object.entries({ ...defaults, ...executionDefaults, ...completionStampDefaults, ...calendarDefaults }).map(async ([key, fallback]) => {
+  await Promise.all(Object.entries({ ...defaults, ...executionDefaults, ...planningDefaults, ...completionStampDefaults, ...calendarDefaults }).map(async ([key, fallback]) => {
     const current = extensionAPI.settings.get(key);
     const hasRecovered = recoveredTemplateSettings
       && Object.prototype.hasOwnProperty.call(recoveredTemplateSettings, key);
@@ -375,7 +377,7 @@ async function startTiming(extensionAPI) {
       timingTopbar = topbar;
       timingCommands = commands;
       todayPlanSession?.initialize?.();
-      if (window.nautilusLogExtensionData) window.nautilusLogExtensionData.timingEnabled = true;
+      rendererBridge?.publish(runtimeSettings(extensionAPI), true);
       return true;
     } catch (error) {
       commands?.destroy();
@@ -404,9 +406,7 @@ async function stopTiming({ closeActive = false } = {}) {
   timingRuntime = null;
   timingTopbar = null;
   timingCommands = null;
-  if (typeof window !== "undefined" && window.nautilusLogExtensionData) {
-    window.nautilusLogExtensionData.timingEnabled = false;
-  }
+  rendererBridge?.publish(r2BridgeOwner?.settings || {}, false);
   return true;
 }
 
@@ -490,6 +490,8 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
       durationDesc: "没有写时长的弹性任务默认占用的分钟数。",
       color: "紧急触发词",
       colorDesc: "使任务显示为紧急红色的关键词（不可包含空格，例如：重要）。",
+      eventOrder: "任务遵循事件位置",
+      eventOrderDesc: "默认关闭。开启后，写在固定事件后面的任务会等到该事件结束；关闭时保留按任务顺序填入全天空档的方式。",
       completionStamps: "完成时间戳",
       completionStampsDesc: "可选，默认关闭。在大纲、侧栏和 Desk 完成任务后添加 dHH:MM，不启动 CLOCK/POMO，也不计入 Actual。请先停用 Todo Trigger；手写、旧插件及归属不明的时间戳会保留。",
       tracking: "执行层 · 进阶",
@@ -537,6 +539,8 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
       durationDesc: "Default minutes for an untimed flexible task.",
       color: "Urgent Trigger Word",
       colorDesc: "Keyword that colors a task urgent red (no spaces, for example urgent).",
+      eventOrder: "Respect event positions",
+      eventOrderDesc: "Off by default. When enabled, tasks listed after a fixed event wait until it ends. Off keeps existing task order filling the day's available gaps.",
       completionStamps: "Completion timestamp",
       completionStampsDesc: "Off by default. Adds dHH:MM after completion in the outline, sidebar, and Desk. It does not start CLOCK/POMO or measure Actual. Disable Todo Trigger first. Manual, legacy, and unverified timestamps stay intact.",
       tracking: "Execution Layer · Advanced",
@@ -829,6 +833,17 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
         },
       },
       {
+        id: "respect-event-order",
+        name: labels.eventOrder,
+        description: labels.eventOrderDesc,
+        action: { type: "switch", defaultValue: extensionAPI.settings.get("respect-event-order") === true,
+          onChange: async value => {
+            await extensionAPI.settings.set("respect-event-order", typeof value === 'boolean' ? value : Boolean(value?.target?.checked));
+            publishRuntimeSettings(extensionAPI);
+            await timingRuntime?.requestRefresh?.();
+          } },
+      },
+      {
         id: "completion-stamps-enabled",
         name: labels.completionStamps,
         description: labels.completionStampsDesc,
@@ -877,10 +892,23 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
 }
 
 async function onload({ extensionAPI }) {
+  // A stale loader must not displace a working owner before source preflight.
+  if (typeof window !== 'undefined' && window[BRIDGE_KEY]?.running) {
+    let state;
+    try { state = readRendererSource().state; } catch (_) { state = 'unreadable'; }
+    if (window[BRIDGE_KEY].revision > RENDERER_REVISION || !['current','absent'].includes(state)) {
+      showToast('This client cannot replace the active renderer. Update the extension or inspect the renderer source.', 'warning');
+      return;
+    }
+  }
   const generation = ++lifecycleGeneration;
   trackingRequest += 1;
   trackingQueue = Promise.resolve();
   const currentLoad = () => generation === lifecycleGeneration;
+  rendererMigration?.destroy();
+  rendererMigration = null;
+  rendererBridge?.destroy();
+  rendererBridge = null;
   rendererClockCache.clear();
   activeCodeBlockUID = codeBlockUID;
   activeRenderStringCore = renderStringCore;
@@ -898,6 +926,8 @@ async function onload({ extensionAPI }) {
   deskActions?.destroy();
   planWatchBridge?.destroy();
   planWatchBridge = createPlanWatchBridge({ readString: readBlockString });
+  let loadBridge = null;
+  let loadCalendar = null;
   deskActions = createDeskActions();
   deskView = createDeskView({
     revision: typeof __NAUTILUS_SOURCE_REVISION__ === 'string' ? __NAUTILUS_SOURCE_REVISION__ : 'unknown',
@@ -908,7 +938,7 @@ async function onload({ extensionAPI }) {
     watchPlan: planWatchBridge.subscribe,
     readString: readBlockString,
     readChildren,
-    getSettings: () => window.nautilusLogExtensionData?.settings || {},
+    getSettings: () => loadBridge?.bridge.settings || {},
   });
   deskDiagnosticCommands = createDeskDiagnosticCommands({
     extensionAPI, diagnostics: deskView.diagnostics,
@@ -917,6 +947,27 @@ async function onload({ extensionAPI }) {
   deskDiagnosticCommands.initialize();
   planTidy?.destroy();
   planTidy = createPlanTidy({
+    assertPlan: uid => {
+      if (!loadBridge?.owns() || !loadBridge.bridge.ready || !inspectRenderer(readBlockString(uid)).mutable) {
+        throw Error('The plan renderer changed or is not ready for outline writes.');
+      }
+    },
+    resolveSettled: (uid, rows, requested) => {
+      if (!requested.length) return [];
+      const identity = readPlanIdentity(uid);
+      const ownerDate = logCore.dateForPlanTitle(identity?.pageTitle);
+      const context = ownerDate ? logCore.planWorkdayContext({ now: new Date(), ownerDate,
+        args: inspectRenderer(identity?.string).invocation?.args || [], runtime: runtimeSettings(extensionAPI) }) : null;
+      const items = rows.map(row => {
+        const task = timingCore.resolveTaskInstance({ uid:row.uid, localString:row.string, readString:readBlockString });
+        if (task.kind === 'event') return { uid:row.uid, meeting:true, ...task.range,
+          ...(context ? logCore.alignIntervalToWindow({ start:task.range?.start,end:task.range?.end,
+            windowStart:context.startMinutes,windowEnd:context.endMinutes }) : {}) };
+        return { uid:row.uid, todo:task.kind === 'task', done:task.status === 'DONE' };
+      });
+      const allowed = new Set(logCore.settledPlanUids({ items, nowMinutes:context?.logicalNowMinutes }));
+      return requested.filter(target => allowed.has(target));
+    },
     runningTaskUid: () => timingRuntime?.getSnapshot?.()?.entries
       ?.find((entry) => entry?.running === true)?.taskUid || null,
   });
@@ -925,43 +976,32 @@ async function onload({ extensionAPI }) {
     extensionAPI,
     tidy: planTidy.run,
   });
-  const bridge = {
-    revision: RENDERER_REVISION,
-    ownerId: {},
-    running: true,
-    core: logCore,
-    taskCore: timingCore,
-    watchGeneration: generation,
-    shouldSuppressRenderContext,
-    isRightSidebarRenderContext,
-    getClockRenderContext,
-    resolveTaskInstance: resolveRendererTaskInstance,
-    createRendererPlanSession,
-    readPlan: planWatchBridge.read,
-    watchPlan: planWatchBridge.subscribe,
-    openDesk: (options) => deskView?.open(options),
-    registerDeskHost: (options) => deskView?.registerHost(options),
-    closeDeskHost: (container) => deskView?.closeForHost(container),
-    toggleChartHelp: (options) => chartHelp?.toggle(options),
-    closeChartHelp: (anchor) => chartHelp?.closeForAnchor(anchor),
-    tidyPlan: planTidy.run,
-    locatePlanTask: (taskUid, origin, sidebar = false) => (
-      sidebar
-        ? openTaskInRightSidebar(taskUid)
-        : locateTaskInCurrentSurface(taskUid, { origin })
-    ),
-    syncCalendarPlan: (options) => {
-      if (!calendarRuntime) return Promise.reject(new Error("Google Calendar sync is not ready."));
-      return calendarRuntime.syncPlan(options);
+  const ownedDesk = deskView, ownedHelp = chartHelp, ownedWatch = planWatchBridge, ownedTidy = planTidy;
+  loadBridge = installRendererBridge({ host: window, core: logCore, taskCore: timingCore,
+    getScope: rendererScope,
+    canMutatePlan: (uid, family) => {
+      const info = inspectRenderer(readBlockString(uid));
+      return info.mutable && (family === 'legacy' ? info.kind === 'legacy' : info.kind === 'current');
     },
-  };
-  r2BridgeOwner = bridge;
-  window.nautilusLogR2 = bridge;
-  // Existing history can render through this minimal facade. r2 never reads
-  // it, so a v1 cleanup cannot dispose an r2 host, help, or plan session.
-  window.nautilusLogCore ||= logCore;
-  window.nautilusLogTaskCore ||= timingCore;
-  window.nautilusLogExtensionData ||= bridge;
+    services: {
+      shouldSuppressRenderContext, isRightSidebarRenderContext, getClockRenderContext,
+      resolveTaskInstance: resolveRendererTaskInstance, createRendererPlanSession,
+      readPlan: ownedWatch.read, watchPlan: ownedWatch.subscribe,
+      openDesk: options => ownedDesk.open(options), registerDeskHost: options => ownedDesk.registerHost(options),
+      closeDeskHost: container => ownedDesk.closeForHost(container),
+      toggleChartHelp: options => ownedHelp.toggle(options), closeChartHelp: anchor => ownedHelp.closeForAnchor(anchor),
+      tidyPlan: ownedTidy.run,
+      locatePlanTask: (uid, origin, sidebar = false) => sidebar ? openTaskInRightSidebar(uid) : locateTaskInCurrentSurface(uid, { origin }),
+      syncCalendarPlan: options => loadCalendar ? loadCalendar.syncPlan(options) : Promise.reject(Error('Google Calendar sync is not ready.')),
+    },
+  });
+  rendererBridge = loadBridge;
+  r2BridgeOwner = loadBridge.bridge;
+  rendererMigration = createRendererMigration({ extensionAPI,
+    sourceReady: () => currentLoad() && loadBridge.owns() && readRendererSource().state === 'current',
+    notify: message => showToast(message, 'warning'),
+  });
+  const loadMigration = rendererMigration;
   // A legacy template may provide settings, never r2 mutation authority over
   // its code UID. New creation and template repair always target r2.
   const recoveredTemplateState = readExistingTemplateState(renderStringCore);
@@ -981,6 +1021,7 @@ async function onload({ extensionAPI }) {
   calendarRuntime = createCalendarRuntime({
     extensionAPI,
     onConnectionChange: () => {
+      if (!currentLoad()) return;
       publishRuntimeSettings(extensionAPI);
       if (!calendarPanelState.action) {
         extensionAPI.settings.panel.create(
@@ -989,6 +1030,7 @@ async function onload({ extensionAPI }) {
       }
     },
   });
+  loadCalendar = calendarRuntime;
   calendarRuntime.prepare()
     .catch((error) => {
       console.debug("[Nautilus Log] Google Calendar connection restore unavailable", error);
@@ -998,21 +1040,47 @@ async function onload({ extensionAPI }) {
   extensionAPI.settings.panel.create(panelConfig(extensionAPI, language));
   const templateString = await generateTemplateString(extensionAPI);
   if (!currentLoad()) return;
-  await toggleRenderComponent(
-    true,
-    titleblockUID,
-    version,
-    activeRenderStringCore,
-    disabledReplacementString,
-    activeCodeBlockUID,
-    componentName,
-    templateString,
-  );
+  const assertRendererLoad = () => {
+    if (!currentLoad() || !loadBridge.owns()) throw Error('Renderer installation was superseded or the graph changed.');
+  };
+  try {
+    await toggleRenderComponent(true, titleblockUID, version, activeRenderStringCore,
+      disabledReplacementString, activeCodeBlockUID, componentName, templateString,
+      { assertActive: assertRendererLoad, migrateReference: loadMigration.migrate });
+    assertRendererLoad();
+    // Only the current plan is considered. The shared active-workday reader
+    // supplies the overnight owner when that context is available.
+    const active = readActivePrimaryPlan(new Date(), runtimeSettings(extensionAPI), Number(extensionAPI.settings.get('todo-duration')) || 15);
+    if (active.plan && inspectRenderer(active.plan.string).kind === 'legacy') {
+      const targetUid = active.plan.uid, targetTitle = active.pageTitle;
+      const result = await loadMigration.migrate({ uid: targetUid, kind: 'active-plan', expected: active.plan.string,
+        isCurrent: () => {
+          assertRendererLoad();
+          const current = readActivePrimaryPlan(new Date(), runtimeSettings(extensionAPI), Number(extensionAPI.settings.get('todo-duration')) || 15);
+          return current.plan?.uid === targetUid && current.pageTitle === targetTitle;
+        } });
+      if (!result.ok) throw Error('The active plan renderer update is unconfirmed; its contents were preserved for inspection.');
+    }
+  } catch (error) {
+    if (!currentLoad()) return;
+    loadBridge.bridge.error = error.message;
+    showToast(error.message, 'warning');
+  }
   if (!currentLoad()) return;
-  deskView?.restoreMountedHosts();
+  let codeReady = false;
+  try { codeReady = readRendererSource().state === 'current'; } catch (_) {}
+  loadBridge.setReady(codeReady, loadBridge.bridge.error || '');
+  publishRuntimeSettings(extensionAPI);
+  if (!codeReady) return;
+  ownedDesk.restoreMountedHosts(options => {
+    const revision = options.container.closest?.('[data-nautilus-renderer]')?.getAttribute('data-nautilus-renderer');
+    if (revision === String(RENDERER_REVISION)) loadBridge.bridge.registerDeskHost(options);
+    else if (!revision || revision === '1') loadBridge.legacy?.registerDeskHost(options);
+  });
   todayPlanSession?.destroy?.();
   todayPlanSession = createTodayPlanSession({
     extensionAPI,
+    canCreate: () => currentLoad() && loadBridge.owns() && readRendererSource().state === 'current',
     buildComponentString: () => generateTemplateString(extensionAPI, activeRenderStringCore),
     inspectTemplate: () => inspectCanonicalTemplate(activeRenderStringCore),
     freezeTemplate: () => freezeCanonicalTemplate(activeRenderStringCore),
@@ -1084,18 +1152,10 @@ function onunload() {
   completionStampWriter = null;
   calendarPanelState = { action: "", error: "" };
   rendererClockCache.clear();
-  if (typeof window !== "undefined") {
-    // Keep the legacy facade truthful without deleting it; it may still render
-    // an unmigrated block while r2's own bridge is isolated by identity.
-    if (window.nautilusLogExtensionData) {
-      window.nautilusLogExtensionData.running = false;
-      window.nautilusLogExtensionData.timingEnabled = false;
-    }
-    if (window.nautilusLogR2 === r2BridgeOwner) {
-      window.nautilusLogR2.running = false;
-      delete window.nautilusLogR2;
-    }
-  }
+  rendererMigration?.destroy();
+  rendererMigration = null;
+  rendererBridge?.destroy();
+  rendererBridge = null;
   r2BridgeOwner = null;
   // Do not mutate the graph during unload; the render scaffolding is owned by
   // the user's graph and should remain available for a later reload.
@@ -1120,6 +1180,10 @@ export {
   createRendererClockReader,
   changedClockOwners,
   createRendererPlanSession,
+  createRendererMigration,
+  installRendererBridge,
+  inspectRendererScaffold,
+  readRendererSource,
   createTimingCommands,
   createTodayPlanSession,
   createTodayPlanLauncher,
@@ -1132,6 +1196,7 @@ export {
   createTidyCommands,
   settledUidsForTidy,
   readPrimaryPlan,
+  readActivePrimaryPlan,
   readChildren,
   resolveRendererTaskInstance,
   generateTemplateString,
@@ -1141,6 +1206,7 @@ export {
   executionDefaults,
   calendarDefaults,
   completionStampDefaults,
+  planningDefaults,
   normalizeGoogleCalendarEvents,
   normalizeGoogleTasks,
   decideCalendarManagedChange,

@@ -32,9 +32,32 @@ async function mount(opts={}, reload=false) {
     graph=createManagedGraph();date=new Date(2026,8,9,10);watches=[];
     graph.roam.data.addPullWatch=(pattern,lookup,callback)=>{watches.push({pattern,lookup,callback});};
     graph.roam.data.removePullWatch=(pattern,lookup,callback)=>{
-      const index=watches.findIndex(watch=>watch.pattern===pattern&&watch.lookup===lookup&&watch.callback===callback);
+      const index=watches.findIndex(watch=>watch.pattern===pattern&&JSON.stringify(watch.lookup)===JSON.stringify(lookup)&&watch.callback===callback);
       if(index>=0) watches.splice(index,1);
     };
+    if(opts.scenario==='overnight') {
+      date=new Date(2026,10,2,0,30);
+      graph.roam.graph.type='hosted';graph.roam.user={uid:()=> 'fixture-user'};
+      graph.values.set('workday-start',21);graph.values.set('workday-end',2);graph.values.set('timing-line-sidebar',false);
+      if(opts.ownWindow){graph.values.delete('workday-start');graph.values.delete('workday-end');}
+      graph.pages.set('November 1st, 2026','11-01-2026');
+      const render=`${CORE} 22 15 21 "" 2}}`;
+      graph.add({uid:'night-plan',parentUid:'11-01-2026',order:0,string:render});
+      graph.add({uid:'night-task',parentUid:'night-plan',order:0,string:'{{[[TODO]]}} Night work 90m'});
+      graph.add({uid:'night-done',parentUid:'night-plan',order:1,string:'{{[[DONE]]}} Finished work 45m d0:15'});
+      graph.add({uid:'night-drawer',parentUid:'night-done',order:0,string:'LOGBOOK::'});
+      graph.add({uid:'night-closed',parentUid:'night-drawer',order:0,string:'CLOCK: [2026-11-01 Sun 23:30]--[2026-11-02 Mon 00:15] => 0:45'});
+      if(opts.calendarPlan!==false){
+        graph.pages.set('November 2nd, 2026','11-02-2026');
+        graph.add({uid:'today-plan',parentUid:'11-02-2026',order:0,string:render});
+        graph.add({uid:'today-task',parentUid:'today-plan',order:0,string:'{{[[TODO]]}} Next night 30m'});
+      }
+      if(opts.timer==='clock'){
+        graph.add({uid:'night-running-drawer',parentUid:'night-task',order:0,string:'LOGBOOK::'});
+        graph.add({uid:'night-running',parentUid:'night-running-drawer',order:0,string:'CLOCK: [2026-11-01 Sun 23:30]'});
+      }
+      graph.roam.data.block.update=async({block})=>{Object.assign(graph.blocks.get(block.uid),block);graph.trace.push(['update',block.uid]);fireUid(block.uid);};
+    }
     if(opts.scenario==='partial'){let n=0;graph.hooks.beforeCreate=()=>{if(++n===3)throw Error('Injected third request failure');};}
     if(opts.scenario==='unsupported')graph.blocks.get('source-step').string='LOGBOOK::';
     if(opts.scenario==='long-word')graph.blocks.get('source-step')['unsupported-'+ 'long'.repeat(80)]=true;
@@ -46,7 +69,7 @@ async function mount(opts={}, reload=false) {
     if(opts.scenario==='nav-failed')graph.hooks.navigate=()=>{throw Error('Navigation unavailable');};
     if(opts.scenario==='midnight')graph.hooks.afterCreate=()=>{date=new Date(2026,8,10,0,0,1);};
     if(opts.timer==='pomo')graph.values.set('standalone-pomodoro-state',{startedAt:date.getTime()-300000});
-    if(opts.timer==='clock'){
+    if(opts.timer==='clock'&&opts.scenario!=='overnight'){
       graph.add({uid:'clock-task',string:'{{[[TODO]]}} Timed work 20m',parentUid:'notes-page',order:1});
       graph.add({uid:'drawer',string:'LOGBOOK::',parentUid:'clock-task',order:0});
       graph.add({uid:'running-clock',string:'CLOCK: [2026-09-09 Wed 09:50]',parentUid:'drawer',order:0});
@@ -101,6 +124,9 @@ window.realPlan={mount,reload:()=>mount(options,true),cleanup,state:()=>session.
   },
   addManualPlan:()=>{graph.add({uid:'manual-other-plan',string:COMPONENT,parentUid:'day',order:graph.children('day').length});},
   moveRootOffDay:()=>{graph.blocks.get(ROOT).parentUid='notes-page';},
+  runtimeSnapshot:()=>runtime?.getSnapshot(),
+  advanceInstant:async iso=>{date=new Date(iso);await runtime?.requestRefresh({immediate:true,rescanPlan:true});await session.discover({authoritative:true,checkRecord:true});},
+  calendarState:()=>session.getCalendarState(),
   runtimePlanUid:()=>runtime?.getSnapshot()?.planSnapshot?.plan?.uid||null,
   popoverOpen:()=>Boolean(document.querySelector('.nautilus-log-timing__popover')),
   popoverCount:()=>document.querySelectorAll('.nautilus-log-timing__popover').length,

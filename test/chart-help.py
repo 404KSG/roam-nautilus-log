@@ -128,7 +128,7 @@ def run():
                 storage_before = page.evaluate('() => JSON.stringify({...localStorage})')
                 panel = open_help(page, button)
                 expect(panel.locator('.nautilus-log-help-setup')).to_contain_text('05:00–21:00')
-                expect(panel.locator('[data-help-key="left"]')).to_contain_text('full-day Available' if language == 'en' else '全天可安排预算')
+                expect(panel.locator('[data-help-key="left"]')).to_contain_text('full-day Available' if language == 'en' else '全天可安排容量')
                 assert panel.locator('a').get_attribute('rel') == 'noopener noreferrer'
                 assert panel.locator('a').get_attribute('target') == '_blank'
                 assert panel.locator('a').get_attribute('href') == 'https://github.com/404KSG/roam-nautilus-log/blob/' + 'a'*40 + '/docs/guide' + ('.zh-CN' if language == 'zh' else '') + '.md'

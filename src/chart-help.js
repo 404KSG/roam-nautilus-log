@@ -5,14 +5,14 @@ const COPY = {
     title: 'Nautilus Log', intro: 'Give every minute a job.',
     window: 'Window', default: 'Default task', nextDay: 'next day', unknown: 'Check settings', guide: 'Full guide',
     rows: [
-      { key: 'available', label: 'Available & Events', text: 'Remaining / full-day flexible time and fixed-event time, respectively.' },
+      { key: 'available', label: 'Available & Events', text: 'Remaining / full-day flexible time and fixed-event time.' },
       { key: 'planned', label: 'Planned', text: 'Estimated time for unfinished tasks.' },
-      { key: 'left', label: 'left', text: 'Unallocated time ÷ full-day Available. Planned is already deducted. 0% can mean fully planned, not out of time.' },
-      { key: 'schedule', label: 'Schedule', text: 'Events stay fixed; whole tasks follow outline order.' },
-      { key: 'desk', label: 'Desk / Tidy', text: 'Edit original blocks / move completed tasks and past events to the top.' },
-      { key: 'completed', label: 'Completed', text: 'Solid = CLOCK/fixed range; dashed = estimate. Stripes show elapsed time, not execution.' },
+      { key: 'left', label: 'free', text: 'Unassigned budget ÷ full-day Available, after Planned. 0% can mean fully planned.' },
+      { key: 'schedule', label: 'Schedule', text: 'Whole tasks keep order. Respect event positions: default off. DONE keeps fixed ranges reserved.' },
+      { key: 'desk', label: 'Desk / Tidy', text: 'New task adds to Planned; child logs do not. Tidy moves done tasks and past events to the top.' },
+      { key: 'completed', label: 'Completed', text: 'Actual sums CLOCK; its interval does not replay sessions. ≈ = estimate; stripes = elapsed.' },
     ],
-    settings: 'Settings: Roam Depot → Nautilus Log (hours, duration, urgency, Calendar). Execution Layer adds optional CLOCK/POMO. POMO does not record Actual.',
+    settings: 'Settings: Roam Depot → Nautilus Log. CLOCK/POMO use Execution Layer; turn off the separate Roam Logbook. POMO does not record Actual.',
   },
   zh: {
     title: 'Nautilus Log', intro: '给每一分钟一份工作。',
@@ -20,12 +20,12 @@ const COPY = {
     rows: [
       { key: 'available', label: '可安排与事件', text: '分别显示可安排时间与固定事件的剩余／全天时间。' },
       { key: 'planned', label: '已计划', text: '未完成任务所需的估计时间。' },
-      { key: 'left', label: '剩余比例', text: '扣除已计划后，未分配时间占全天可安排预算的比例。0% 可表示预算已排满，不代表今天结束。' },
-      { key: 'schedule', label: '排程', text: '事件固定，整项任务按大纲顺序排入连续空档。' },
-      { key: 'desk', label: 'Desk／整理', text: '编辑原始块／把已完成任务和已过去事件移到大纲前面。' },
-      { key: 'completed', label: '完成项', text: '实线：CLOCK 实录或固定时段；虚线：估时。斜纹表示时间已过去，不证明执行。' },
+      { key: 'left', label: '未分配', text: '扣除已计划后，未分配预算 ÷ 全天可安排容量。0% 可表示排满，并非一天结束。' },
+      { key: 'schedule', label: '排程', text: '整项任务保持顺序；“任务遵循事件位置”默认关闭。DONE 仍保留事件时段。' },
+      { key: 'desk', label: 'Desk／整理', text: '新任务计入预算，子日志不另计。整理把完成任务和已过事件移到前面。' },
+      { key: 'completed', label: '完成项', text: 'Actual 汇总 CLOCK，绘图区间不逐段重放会话。≈ 表示估时，斜纹表示已过去。' },
     ],
-    settings: '在 Roam Depot → Nautilus Log 设置时段、默认时长、紧急标记与日历。可选“执行层”提供 CLOCK／POMO；独立 POMO 不产生 Actual。',
+    settings: 'Roam Depot → Nautilus Log。执行层提供 CLOCK／POMO，先关闭单独的 Roam Logbook；POMO 不产生 Actual。',
   },
 };
 

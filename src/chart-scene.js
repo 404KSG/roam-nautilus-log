@@ -42,10 +42,10 @@ function textMeasure(font, supplied) {
   return text => [...text].reduce((sum, ch) => sum + (/[^\x00-\xff]/.test(ch) ? 13 : 7), 0);
 }
 
-function wrapTitle(text, width, measure) {
+function wrapTitle(text, width, measure, maxLinesOverride = null) {
   const prefix = [...text.slice(0, 512)].slice(0, 256).join('');
   const chars = [...prefix];
-  const maxLines = [...text.slice(0, 161)].length <= 80 ? 80 : 4;
+  const maxLines = maxLinesOverride ?? ([...text.slice(0, 161)].length <= 80 ? 80 : 4);
   function split(limit) {
     const lines = []; let from = 0;
     while (from < chars.length && lines.length <= maxLines) {
@@ -94,7 +94,7 @@ function wrapTitle(text, width, measure) {
 /** Size the frame from the currently displayed columns, not a worst-case future stack. */
 function chartPresentationFrame({ containerWidth, items = [], events = [], timeRadius = 150,
   startMinutes = 300, endMinutes = 1260, font = '500 13px Inter, system-ui, sans-serif', measure, currentLabels = [],
-  nowMinutes, interactive = false } = {}) {
+  nowMinutes, interactive = false, showEstimateCue = false } = {}) {
   const rawWidth = finite(containerWidth, 720), width = rawWidth > 0 ? rawWidth : 720;
   const compact = width <= 520, source = sourceItems(items);
   const viewWidth = compact ? Math.max(160, Math.round(width)) : 720;
@@ -132,7 +132,15 @@ function chartPresentationFrame({ containerWidth, items = [], events = [], timeR
     : plotted.get(item.uid) || ((item.meeting || item.done) && within(item) ? item : null);
   const labels = source.map((item, order) => {
     const title = item.description.replace(/\s+/g, ' ').trim();
-    const wrapped = wrapTitle(title, labelWidth, measured);
+    let wrapped = wrapTitle(title, labelWidth, measured);
+    const estimateCue = showEstimateCue && item.done === true && item.todo === true && !item.meeting && item['duration-source'] !== 'actual';
+    const cueWidth = estimateCue ? measured('≈') + 4 : 0;
+    if (estimateCue) {
+      // Rewrap the SAME visible text into the remaining width. Never discard
+      // title characters merely to fit the cue, or add a universal status row.
+      const truncated = wrapped.truncated;
+      wrapped = { ...wrapTitle(wrapped.lines.join(''), Math.max(12, labelWidth - cueWidth), measured, 80), truncated };
+    }
     // Only a visible Current indicator needs a second row. Potential future
     // indicators must not leave a blank line under every title.
     const interval = placement(item);
@@ -146,7 +154,8 @@ function chartPresentationFrame({ containerWidth, items = [], events = [], timeR
     const sourceSide = sides.left <= sides.right ? 'left' : 'right';
     sides[sourceSide] += titleHeight;
     return { uid: item.uid, order, ...wrapped, width: labelWidth, height,
-      inkWidth: Math.max(0, ...wrapped.lines.map(measured)), sourceSide, fontSize, lineHeight,
+      inkWidth: Math.max(0, ...wrapped.lines.map(measured)) + cueWidth, sourceSide, fontSize, lineHeight,
+      estimateCue, cueWidth, firstLineWidth: measured(wrapped.lines[0] || ''),
       metadataHeight, metadataFontSize: compact ? 9 : 10 };
   });
   const columnHeights = { left: 0, right: 0 };
@@ -194,6 +203,8 @@ function labelLayout(frame, records) {
     const middle = y + titleHeight / 2;
     const textY = y + (titleHeight - label.lines.length * label.lineHeight) / 2 + label.fontSize;
     Object.assign(label, { x, y, side, textX, align: left ? 'end' : 'start', textY,
+      titleTextX: left ? textX - label.cueWidth : textX,
+      cueX: left ? textX : textX + label.firstLineWidth + 4,
       metadataY: textY + (label.lines.length - 1) * label.lineHeight + label.metadataHeight });
     if (record.kind === 'unverified-completion') {
       label.connector = '';
@@ -253,11 +264,11 @@ function labelLayout(frame, records) {
 
 /** Draw observed intervals and explicit planned allocations with distinct claims. */
 function chartScene({ items = [], events = [], containerWidth, startMinutes = 300, endMinutes = 1260,
-  timeRadius = 150, radiusForMinute, font, measure, currentLabels, nowMinutes, interactive = false } = {}) {
+  timeRadius = 150, radiusForMinute, font, measure, currentLabels, nowMinutes, interactive = false, showEstimateCue = false } = {}) {
   const source = sourceItems(items);
   const start = finite(startMinutes, 300), end = finite(endMinutes, 1260);
   const frame = chartPresentationFrame({ items: source, events, containerWidth, timeRadius, startMinutes: start, endMinutes: end,
-    font, measure, currentLabels, nowMinutes, interactive });
+    font, measure, currentLabels, nowMinutes, interactive, showEstimateCue });
   const within = item => validRange(item) && item.end > start && item.start < end;
   const plotted = new Map((Array.isArray(events) ? events : []).filter(event => event?.uid && within(event)).map(event => [event.uid, event]));
   const records = source.map((item, order) => {

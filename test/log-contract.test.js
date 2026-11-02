@@ -5,6 +5,8 @@ const path = require('node:path');
 
 const component = fs.readFileSync(path.join(__dirname, '..', 'src', 'component.cljs'), 'utf8');
 const entry = fs.readFileSync(path.join(__dirname, '..', 'src', 'index.js'), 'utf8');
+const rendererContract = require('../src/renderer-contract');
+const rendererBridge = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer-bridge.js'), 'utf8');
 const helpers = fs.readFileSync(path.join(__dirname, '..', 'src', 'entry-helpers.js'), 'utf8');
 const css = fs.readFileSync(path.join(__dirname, '..', 'extension.css'), 'utf8');
 const packageJson = fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8');
@@ -152,13 +154,13 @@ test('Nautilus Log is the only active product identity', () => {
   ];
 
   assert.match(entry, /const componentName = "Nautilus Log"/);
-  assert.match(entry, /roam-render-Nautilus-Log-r\$\{RENDERER_REVISION\}-cljs/);
+  assert.equal(rendererContract.CODE_UID, 'roam-render-Nautilus-Log-r2-cljs');
   assert.match(packageJson, /"name": "nautilus-log"/);
   for (const legacy of legacyVariants) assert.equal(activeSurface.includes(legacy), false);
 });
 
 test('guides define unassigned capacity against the full-day denominator', () => {
-  assert.match(guide, /`open` is unassigned budget ÷ full-day flexible capacity/);
+  assert.match(guide, /`free` is unassigned budget ÷ full-day flexible capacity/);
   assert.match(guideZh, /`未分配` 是未分配预算 ÷ 全天弹性容量/);
   assert.doesNotMatch(guide, /Planned ÷ Available now/);
   assert.doesNotMatch(guideZh, /Planned ÷ 当前 Available/);
@@ -176,7 +178,7 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested L
   assert.match(entry, /changedClockOwners/);
   assert.match(entry, /rendererClockCache\.invalidate/);
   assert.match(entry, /createRendererPlanSession/);
-  assert.match(entry, /watchGeneration: generation/);
+  assert.match(rendererBridge, /watchGeneration: owner/);
   assert.match(entry, /nautilus-log:clock-changed/);
   assert.match(component, /nautilus-log:clock-changed/);
   assert.match(timingRuntime, /entryTaskUids/);
@@ -202,7 +204,8 @@ test('the Roam renderer delegates schedule and capacity behavior to the tested L
   assert.match(component, /nautilus-log:settings-changed/);
   assert.match(component, /\.addEventListener/);
   assert.match(component, /\.removeEventListener/);
-  assert.match(entry, /window\.nautilusLogR2 = bridge/);
+  assert.match(entry, /installRendererBridge\(/);
+  assert.match(rendererBridge, /host\[BRIDGE_KEY\] = bridge/);
   assert.doesNotMatch(component, /\(abs \(- done-at duration\)\)/);
 });
 
@@ -223,7 +226,7 @@ test('the production scene uses the full source collection and never drops label
   assert.doesNotMatch(sceneCore, /indexPath|spanDegrees|outsideY/);
   assert.doesNotMatch(show, /index-caption|index-summary|indexTrack/);
   assert.match(sceneCore, /'time-claim': !timed \? 'none'/);
-  assert.match(entry, /window\.nautilusLogR2 = bridge/);
+  assert.match(entry, /installRendererBridge\(/);
 });
 
 test('the chart resolves daily task instances through the shared reference-precedence core', () => {
@@ -411,7 +414,8 @@ test('global and overnight windows use continuous minutes and a start-relative s
 
 test('Log scaffolding is isolated and unload is graph-safe', () => {
   assert.match(entry, /Nautilus Log/);
-  assert.match(entry, /roam-render-Nautilus-Log-r\$\{RENDERER_REVISION\}-cljs/);
+  assert.equal(rendererContract.NAMESPACE, 'nautilus-log-r2');
+  assert.match(entry, /CODE_UID as codeBlockUID/);
   assert.match(entry, /workday-end/);
   assert.match(helpers, /state !== true/);
   assert.doesNotMatch(helpers, /replaceRenderString\(/);
@@ -431,7 +435,7 @@ test('Actual Time Tracking is opt-in; lite launcher and create command stay avai
   assert.match(todayPlanLauncher, /TOPBAR_ID/);
   assert.match(todayPlanLauncher, /placeAfterNavigation/);
   assert.doesNotMatch(todayPlanLauncher, /createTimingRuntime|readAllEntries|CLOCK/);
-  assert.match(todayPlanCommands, /Nautilus Log: Create or open today’s plan/);
+  assert.match(todayPlanCommands, /Nautilus Log: Create or open today’s Daily Note plan/);
   assert.doesNotMatch(todayPlanCommands, /Nautilus Log: 1\. Focus current block/);
   assert.match(timingCommands, /Nautilus Log: 1\. Focus current block/);
   assert.match(timingCommands, /Nautilus Log: 2\. Clock out Timing Line/);
@@ -927,12 +931,14 @@ test('Tidy is a stable, reversible direct-child action that does not rewrite sch
   assert.match(component, /:width "18" :height "18" :viewBox "0 0 20 20"/);
   assert.match(component, /:settledUids settled-uids/);
   assert.match(component, /log-core-call "partitionChartEvents" filtered/);
-  assert.match(component, /\(:completedUids history\)/);
+  assert.match(component, /log-core-call "settledPlanUids"/);
   assert.match(logCore, /event\.done !== true/);
   assert.match(logCore, /result\.completedUids\.push\(event\.uid\)/);
   assert.doesNotMatch(component, /not= "source" \(:status-origin %\)/);
-  assert.match(component, /<= \(:end event\) \(:elapsedThroughMinutes timeline-state\)/);
-  assert.match(entry, /tidyPlan: planTidy\.run/);
+  assert.match(component, /:nowMinutes \(when[\s\S]*:timelineMinutes timeline-state/);
+  assert.match(entry, /tidyPlan: ownedTidy\.run/);
+  assert.match(entry, /logCore\.settledPlanUids/);
+  assert.match(tidyPlan, /resolveSettled/);
   assert.match(tidyPlan, /stableTidyOrder/);
   assert.match(tidyPlan, /childOrderMoves/);
   assert.match(tidyPlan, /setOpen/);

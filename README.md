@@ -2,53 +2,21 @@
 
 > **Give every minute a job.**
 
-A visual day planner for Roam Research. Nautilus Log turns one Daily Note into
-a living spiral schedule: fixed events stay fixed, flexible tasks flow into the
-time that remains, and overload never disappears from view.
+A visual day planner for Roam Research. Fixed events keep their time, whole tasks
+fill the remaining gaps in your chosen order, and work that cannot fit stays visible.
+Your Daily Note and its native blocks remain the source of truth.
 
 **English** · [简体中文](./README.zh-CN.md) · [User guide](./docs/guide.md)
 
 ![Nautilus Log visual day planner with Timing, Plan, Review, and right-sidebar views](https://raw.githubusercontent.com/404KSG/roam-nautilus-log/main/docs/assets/nautilus-log-overview.png)
 
-## What it gives you
-
-- **A plan that fits time.** See Planned demand, Available time, fixed Events,
-  remaining capacity, and work that cannot fit today.
-- **Flexible scheduling without a black box.** Events keep their time; unfinished
-  tasks move forward in Roam block order.
-- **A day shaped around you.** Start at any whole hour and continue past midnight
-  when the plan belongs to a late or overnight schedule.
-- **Low-friction execution.** Work from estimates alone, run a standalone POMO,
-  or optionally track tasks with compatible `LOGBOOK::` / `CLOCK:` records.
-- **One task at a time.** Desk uses Roam's native card styles below the chart,
-  hides the duplicate outline, and remembers view mode. Dragging and Move to top
-  reorder original tasks and scheduling priority; plus adds content under this
-  plan. Full-page-style previews stay within the chart's width. Remove from Desk
-  deletes only childless plain reference wrappers; other cards move intact to the
-  owning Daily Note. An eligible outside block from the same window and graph
-  can be added as a bare local block reference, without adding a task marker or changing its original. Native-editor Escape stays
-  with Roam; Close or Escape from Desk chrome returns to the cards. This does not
-  change Roam's own Desk collection. See the [validation limits](./docs/guide.md#safe-outside-block-references).
-- **A useful daily review.** Compare Planned and Actual time without leaving your
-  ordinary Roam blocks.
-- **Optional completion timestamps.** Default off; append a local `dHH:MM` after
-  verified native completion without treating it as Actual or starting CLOCK/POMO.
-
-Scheduling is deterministic: events claim their ranges first, then whole tasks
-fill suitable gaps from the current moment. Tasks that cannot fit appear in
-**Today won't fit** instead of being silently dropped.
-
 ## Quick start
 
-1. Install **Nautilus Log** from Roam Depot. While an update is under review,
-   use the ShortHand shown in that Depot pull request.
-2. Click **+ Create today's plan** in the topbar, or run
-   **Nautilus Log: Create or open today’s plan**. It targets today's Daily Note
-   even when you are viewing another page and copies the complete managed
-   Nautilus template tree, including ordinary nested children, then opens it.
-   One normal click is enough—no panel, confirmation, or manual `;;`.
-3. Add fixed events and TODOs as direct children.
-4. Order the tasks and give each one a rough duration.
+1. Install **Nautilus Log** from Roam Depot. For a draft update, use the ShortHand
+   in its Depot pull request.
+2. Click **+ Create today's plan**. One click copies your managed template into
+   today's Daily Note and opens it. Existing plans are opened without duplication.
+3. Add events and tasks as direct children, then order the tasks and estimate them.
 
 ```text
 05:00-06:00 Morning routine
@@ -57,116 +25,86 @@ fill suitable gaps from the current moment. Tasks that cannot fit appear in
 11:45-12:30 Lunch
 ```
 
-Durations support `30m`, `30min`, `1h`, and `1h30m`. Untimed tasks use the
-configured default. The main controls are **Desk → Help → Sweep (Tidy) → Eye off
-(hide)**. A hidden widget shows **Eye** to expand again. Click **?**, just after Desk,
-for the current chart settings, unassigned budget and a quick feature guide. Completed records
-remain visible whenever the chart is expanded; there is no completed-only filter.
+Durations support `30m`, `30min`, `1h`, and `1h30m`. Ordinary top-level notes also
+count as tasks; a missing estimate uses **Default Todo Duration** (15 minutes by
+default). Child notes and logs stay with their parent and do not add scheduling demand.
+
+The always-available command **Nautilus Log: Create or open today’s Daily Note plan**
+explicitly targets the calendar date. During an active overnight window, the topbar
+launcher instead opens that existing workday's plan. See [overnight workdays](./docs/guide.md#active-overnight-workdays).
+
+## Read and adjust the plan
+
+- **Keep your order.** Scheduling never splits a task or lets a later task jump
+  ahead. **Today won't fit** keeps the remaining queue visible.
+- **Keep commitments explicit.** Marking an event DONE does not cancel its written
+  time range. Edit or remove the range to release it. **Respect event positions**
+  is a separate, default-off setting: when enabled, tasks also wait until all
+  preceding fixed events have ended. With it off, tasks can use earlier gaps.
+- **Read the budget.** `free` means unassigned time divided by the full workday's
+  flexible capacity. Planned demand is already deducted. It measures a time budget,
+  not physical energy or the percentage of the day still on the clock.
+- **Read the evidence.** Actual sums recorded CLOCK sessions. The spiral displays
+  that total as one interval ending at completion; it does not replay each session.
+  Estimated completed records carry a small `≈` cue. Tips explain duration and placement.
+- **Work in Desk.** Its native-style cards edit the original blocks. **New task**
+  inserts an implicit task at the front of the plan without adding a TODO marker.
+  Dragging changes task order; nested logs stay attached. Removal and outside-block
+  drops follow the [native ownership rules](./docs/guide.md#safe-outside-block-references).
+
+The controls are **Desk → Help → crystal-ball Tidy → Eye off**. Help explains the
+current settings and budget. Tidy moves completed tasks and elapsed events to the
+front while preserving pending-task priority and future reservations. The eye hides
+or expands the widget; completed records remain visible in the expanded chart.
+
+## Choose how much to enable
+
+**Planning is the default.** The spiral, Desk, and lightweight create/open launcher
+work with the Execution Layer off. This avoids its execution popover, one-second
+ticker, and CLOCK writer. A chart can still read existing CLOCK history.
+
+**Execution Layer · Advanced** adds **Timing**, **Plan**, and **Review**, plus the
+panel's standalone **POMO** action. CLOCK takes priority over POMO; switching tasks
+closes the previous CLOCK before starting the next. Standalone POMO records no CLOCK
+or Actual, but uses the same execution entry, so the separate Roam Logbook extension
+must be disabled before enabling it. The optional capacity gauge keeps the compact
+`% free · planned duration` summary.
+
+**Completion timestamp** is independent and default off. Confirmed native completion
+can append one `dHH:MM` without starting CLOCK/POMO or measuring Actual. Only a suffix
+still verifiably owned by Nautilus can be removed on reopening. Disable Todo Trigger
+on every client before enabling this option. See [completion timestamps](./docs/guide.md#optional-completion-timestamps).
+
+An existing overnight plan remains the active owner until its END. Capacity, task
+actions, CLOCK totals, and Review use that owner date. Calendar-day creation stays
+explicit, and reaching END does not stop a running CLOCK.
 
 ## Optional Google Calendar sync
 
-Open Nautilus Log settings and click **Connect Google Calendar** to authorize
-your own account with read-only access. The row then reports **Connected ·
-Read-only · Primary calendar + Google Tasks**, and the Blueprint Calendar
-control appears in the chart. Roam Desktop opens the real Google page in the
-system browser and returns automatically to the waiting settings row. The
-Calendar control performs a manual sync for the clicked Nautilus date; it never
-polls Google in the background or creates Daily Notes.
+Connect your account in Nautilus settings using Google's read-only authorization.
+The chart's Calendar button manually imports timed busy events and dated Google
+Tasks for the clicked plan. It does not poll Google or create Daily Notes.
 
-Timed Calendar events become fixed events. Dated Google Tasks become flexible
-TODO/DONE rows. They omit a visible duration and inherit the current configured
-Default Todo Duration because Google's public Tasks API exposes a due date, not
-a reliable time interval. Add an explicit duration such as `30m` only when a
-task needs an override. Imported parent rows carry a quiet `· Google Calendar`
-source suffix; the chart removes that suffix from labels. Normal click preserves
-Roam text you changed.
-Option/Alt-click force-refreshes Google-managed strings while leaving
-user-created children alone. All-day, free/transparent, and declined events are
-ignored. Nautilus normally restores the connection after a Roam reload; users
-never create or paste OAuth client IDs, secrets, or Calendar IDs. Google data is
-requested directly by the Roam client and never passes through the lightweight
-authorization service. Imported `Open` links preserve Google's original event
-target and prefer the connected Primary account when the browser has several
-Google sessions.
+Normal sync preserves local edits; Option/Alt-click restores Google-managed fields
+while preserving user-created children. Imported Google Tasks inherit the default
+task duration unless you add an estimate. Users do not configure OAuth clients or
+paste secrets. See [Calendar setup and recovery](./docs/google-calendar-sync.md)
+and the [privacy contract](./PRIVACY.md).
 
-See [Google Calendar sync](./docs/google-calendar-sync.md) for the block shape,
-authorization, scopes, merge rules, and [privacy contract](./PRIVACY.md).
-Interrupted writes use a graph-local `google-calendar-sync-pending` journal:
-fail closed on unreadable or foreign records, keep local edits and parked
-conflicts, and never treat a missing/blank journal as a wipe of an existing WAL.
-Google reads stay inside a per-paginate budget; incomplete network results do
-not become a successful partial sync. Same-UID graph reads may be reused only
-inside a no-yield interval. These are local correctness bounds, not a claim of
-faster live Google or Roam latency, and old malformed journals are not
-auto-migrated.
+## Upgrades and recovery
 
-## Optional Execution Layer
+Renderer r2 has its own source UID, namespace, and runtime bridge. An upgrade changes
+only the managed template's renderer reference and the active Primary Plan reference;
+prefixes, arguments, child content, and presentation properties are preserved.
+Historical plans remain readable through the compatibility reader. Ambiguous targets
+or unexpected source content produce a notice and are left intact.
 
-A 30px topbar control and one command can create or locate today's Primary Plan
-even while the Execution Layer is off. That launcher does not start CLOCK
-writes, a 1s ticker, or the execution popover. One-click insert freezes and
-copies the complete managed renderer root and ordinary descendant tree with
-fresh UIDs; internal block references are remapped and external references stay
-intact. It does not copy yesterday or alter the source template. Ambiguous
-multiple roots, unsafe top-level template siblings, or unreadable dynamic
-content fail closed and let you open the template to review it. Existing legal
-Nautilus renderers on today's Daily Note, including empty or all-DONE plans,
-are locate-only. Creation requires a confirmed graph identity and Web Locks;
-failed reads offer a read-only check, never an automatic insert.
-
-**Creation incomplete** opens diagnostics and verified-block counts. **Inspect
-created blocks** never clears that status. **Continue creation** is available
-only to the original in-memory operation after checking every written block;
-reloads can verify/open, never resume from a changed template. A graph/date-scoped
-SHA-256 receipt contains destination identifiers and hashes, not template text.
-LOGBOOK/CLOCK history and unsupported properties are refused before template writes.
-Before writing, midnight stops the action; after writing starts, the frozen original
-day is completed and reported without being shown as today's ready plan.
-
-Enable **Execution Layer · Advanced** in Settings when you want more than visual
-planning. The compact topbar panel provides:
-
-- **Timing** for the current CLOCK and recent tasks.
-- **Plan** for today's scheduled and unscheduled work.
-- **Review** for Planned versus Actual results.
-- **POMO** for independent count-up focus without writing a CLOCK.
-
-Switching tasks closes the previous CLOCK before starting the next. Graph-scoped
-Web Locks coordinate CLOCK writes across tabs in the same browser storage partition;
-see the guide for synchronization limits. CLOCK history reads overlay per-owner
-entries with a short TTL and LRU cap; a failed read is not cached as empty history.
-Chart subscriptions bind a provider generation so a replaced watch does not keep
-writing, and a temporary unavailable read stays stale instead of looking like a
-confirmed empty tree. Plan Tidy serializes outline writes, reports partial/unknown
-change flags instead of a fake success, and Undo only reports success after the
-collapsed rows actually expand (the running task stays an exception). Opening the
-execution popover reuses one settings snapshot per synchronous render, and Tidy's
-no-op open scan uses one parent snapshot with at most one write per uid. Those are
-duplicate-work reductions on synthetic fixtures (a prior single-lane run saw 15-row
-settings gets 204→90 and interleaved-n15 child reads 29→6); combined numbers need a
-fresh measurement and are not a claim that live Roam feels faster. Primary Plan
-reads may use a reverse `data.pull` of today's Daily tree and fall back to the
-existing Datalog query when that pull is missing or unreadable. Direct child
-outline reads may use a synchronous `data.pull` of `:block/children` and fall
-back to the existing children query when that pull is missing or unreadable.
-Malformed present
-string/order/parent values fail closed instead of looking like a missing plan;
-that is a local compatibility path, not a measured live-popover or Tidy speedup. The 50ms
-paint-budget fallback, Primary create/locate receipts, CLOCK-over-POMO, and the
-pending shell (no “Checking today's plan” flash) stay. Chart label
-placement may skip a redundant local layout pass; that is an operation-count saving,
-not a measured UI-jank fix. LOGBOOK 256-character variants remain compatible.
-Local OAuth worker `await` and error-shape tests are source-only and not a deployed
-service change. CLOCK takes priority over POMO and can
-keep the active task at the top of Roam's right sidebar. An additional default-off
-**Show capacity as an energy bar** setting can replace the ordinary topbar token
-with a two-level time-capacity gauge: one layered track above a left-aligned
-`% left · planned duration` summary. The two rows fold around the Roam topbar
-centerline, where CLOCK/POMO timing remains centered to the track's right. The
-Execution Layer defaults to off, so estimate-only planning stays light.
-
-See the [user guide](./docs/guide.md) for settings, commands, syntax, history
-rules, and safety boundaries.
+Update every client. Older packages can still change their legacy source blocks or
+template, and no local extension can coordinate all other devices. Migration does
+not scan history or blindly retry an uncertain write. Plan creation likewise keeps
+verified recovery receipts: a reload can inspect or verify an incomplete copy, but
+cannot resume it from a different template. Details are in the
+[user guide](./docs/guide.md#renderer-upgrades).
 
 ## Local verification
 
@@ -175,24 +113,19 @@ npm test
 PYTHONDONTWRITEBYTECODE=1 npm run test:ui
 ```
 
-The browser suites require an existing Python Playwright installation and Chromium.
-They use synthetic local fixtures, not a live Roam graph. The real-session suite
-executes the actual source reader, session, mutation adapter, and both launchers
-over a low-level graph that rejects duplicate UIDs. It checks full-tree single-click
-creation, partial/reload recovery, navigation, tooltip bounds, and timer priority;
-screenshots/results go to `/tmp/nautilus-real-today-plan`. The refinement suite covers
-cross-midnight labels, minute-level capacity consistency, keyboard focus, and scroll
-continuity. Runtime tests cover cross-tab CLOCK coordination and unload cancellation.
-See the [refinement design](./docs/plans/2026-09-09-execution-refinement-design.md)
-for the bounded scope and acceptance criteria.
+Browser checks require an existing Python Playwright installation and Chromium.
+The suites use isolated graph fixtures, including complete old/current CLJS sources,
+real renderer services, template recovery, and overnight runtime/UI cases. Reported
+skips remain unverified. These checks do not certify live Roam Desktop, operating-system
+IME, atomic native Undo, Calendar authorization, or cross-device behavior.
 
 ## Credits
 
-- [Nautilus](https://github.com/tombarys/roam-depot-nautilus) by Tomáš Baránek—the
-  original spiral-planning concept.
-- [Nautilus Enhanced](https://github.com/hopeserena/nautilus-enhanced)—the fork
+- [Nautilus](https://github.com/tombarys/roam-depot-nautilus) by Tomáš Baránek:
+  the original spiral-planning concept.
+- [Nautilus Enhanced](https://github.com/hopeserena/nautilus-enhanced): the fork
   from which this project developed.
-- [Roam Logbook](https://github.com/forrestchang/roam-logbook)—the inspiration
+- [Roam Logbook](https://github.com/forrestchang/roam-logbook): the inspiration
   for compatible CLOCK tracking and focused execution.
 
 The time-allocation philosophy is inspired by the

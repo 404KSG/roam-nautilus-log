@@ -228,6 +228,7 @@ function resolveRendererSettings({ runtime = {}, args = [] } = {}) {
     'workday-start-hour': schedule.startHour,
     'workday-end-hour': schedule.endHour,
     'custom-color-1-tag': trigger === undefined || trigger === null ? '' : String(trigger),
+    'respect-event-order': runtime['respect-event-order'] === true,
     ...(Object.prototype.hasOwnProperty.call(runtime, 'google-calendar-enabled')
       ? { 'google-calendar-enabled': runtime['google-calendar-enabled'] === true }
       : {}),
@@ -310,35 +311,72 @@ function localDayOrdinal(value) {
  * but its capacity cursor and elapsed shading end at the workday boundary.
  * That prevents yesterday's gaps from becoming actionable "Available" slots.
  */
-function resolveActiveWorkday({ now = new Date(), today = null, yesterday = null, runtime = {}, resolveSettings = resolveRendererSettings } = {}) {
+function dateForPlanTitle(title) {
+  const ordinal = localDayOrdinal(title);
+  if (ordinal === null) return null;
+  const utc = new Date(ordinal * 86400000);
+  return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate());
+}
+
+function clockEvidenceBounds({ ownerDate, endMinutes = 1440 } = {}) {
+  const owner = ownerDate instanceof Date ? ownerDate : new Date(ownerDate);
+  if (ownerDate === null || ownerDate === undefined || !Number.isFinite(owner.getTime())) return null;
+  const start = new Date(owner.getFullYear(), owner.getMonth(), owner.getDate());
+  const calendarEnd = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1);
+  const end = Number(endMinutes);
+  const logicalEnd = Number.isFinite(end) && end > 1440
+    ? new Date(start.getFullYear(), start.getMonth(), start.getDate(), 0, end) : calendarEnd;
+  return { dayStartMs: start.getTime(), dayEndMs: Math.max(calendarEnd.getTime(), logicalEnd.getTime()) };
+}
+
+function planWorkdayContext({ now = new Date(), ownerDate, pageTitle = null, pageUid = null, planUid = null, args = [], runtime = {} } = {}) {
+  const current = now instanceof Date ? now : new Date(now);
+  const owner = ownerDate instanceof Date ? ownerDate : new Date(ownerDate);
+  if (ownerDate == null || !Number.isFinite(current.getTime()) || !Number.isFinite(owner.getTime())) return null;
+  const settings = resolveRendererSettings({ runtime, args });
+  const startMinutes = settings['workday-start'], endMinutes = settings['workday-end'];
+  const logicalNowMinutes = current.getHours() * 60 + current.getMinutes()
+    + (localDayOrdinal(current) - localDayOrdinal(owner)) * 1440;
+  return { ownerPageTitle: pageTitle, ownerPageUid: pageUid, planUid, planArgs: args.slice(),
+    startMinutes, endMinutes, startHour: settings['workday-start-hour'], endHour: settings['workday-end-hour'],
+    logicalNowMinutes, respectEventOrder: settings['respect-event-order'],
+    ...clockEvidenceBounds({ ownerDate: owner, endMinutes }) };
+}
+
+function resolveActiveWorkday({ now = new Date(), today = null, yesterday = null, runtime = {} } = {}) {
   const current = now instanceof Date ? now : new Date(now);
   if (!Number.isFinite(current.getTime())) return { state: 'unavailable', reason: 'invalid-now' };
-  // An unreadable previous page is distinct from an absent one: guessing today
-  // could duplicate an active overnight plan, so callers must fail closed.
-  if (yesterday?.state === 'unreadable') return { state: 'unavailable', reason: 'yesterday-unreadable' };
-  const minute = current.getHours() * 60 + current.getMinutes();
-  const contextFor = (candidate, ownerDate, state) => {
-    const settings = resolveSettings({ runtime, args: candidate?.args || candidate?.planArgs || [] });
-    const startMinutes = Number(settings?.['workday-start']);
-    const endMinutes = Number(settings?.['workday-end']);
-    const owner = ownerDate instanceof Date ? ownerDate : new Date(ownerDate);
-    const dayStart = new Date(owner.getFullYear(), owner.getMonth(), owner.getDate());
-    const delta = Math.round((new Date(current.getFullYear(), current.getMonth(), current.getDate())
-      - dayStart) / 86400000);
-    const logicalNowMinutes = minute + delta * 1440;
-    const calendarEnd = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate() + 1).getTime();
-    const logicalEnd = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate(), 0, endMinutes).getTime();
-    return { state, ownerPageTitle: candidate?.pageTitle || null, ownerPageUid: candidate?.pageUid || null,
-      planUid: candidate?.planUid || candidate?.plan?.uid || null, planArgs: candidate?.args || candidate?.planArgs || [],
-      startMinutes, endMinutes, logicalNowMinutes, dayStartMs: dayStart.getTime(),
-      dayEndMs: Math.max(calendarEnd, logicalEnd), calendarPageTitle: today?.pageTitle || null };
+  const unreadable = candidate => ['unreadable','unavailable'].includes(candidate?.state);
+  if (unreadable(yesterday)) return { state: 'unavailable', reason: 'yesterday-unreadable' };
+  const contextFor = (candidate, state) => {
+    const context = planWorkdayContext({ now: current, ownerDate: candidate?.date,
+      pageTitle: candidate?.pageTitle, pageUid: candidate?.pageUid,
+      planUid: candidate?.planUid || candidate?.plan?.uid, args: candidate?.args || candidate?.planArgs || [], runtime });
+    return context ? { ...context, state, calendarPageTitle: today?.pageTitle || null }
+      : { state: 'unavailable', reason: 'invalid-owner-date' };
   };
-  if (yesterday?.plan && yesterday?.date) {
-    const candidate = contextFor(yesterday, yesterday.date, 'active');
-    if (candidate.endMinutes > 1440 && candidate.logicalNowMinutes >= 1440 && candidate.logicalNowMinutes < candidate.endMinutes) return candidate;
+  if (yesterday?.plan) {
+    if (localDayOrdinal(yesterday.date) !== localDayOrdinal(current) - 1) return { state: 'unavailable', reason: 'invalid-previous-date' };
+    const context = contextFor(yesterday, 'active');
+    if (context.state === 'unavailable') return context;
+    if (context.endMinutes > 1440 && context.logicalNowMinutes < context.endMinutes) return context;
   }
-  if (today?.plan && today?.date) return contextFor(today, today.date, 'calendar-today');
+  if (unreadable(today)) return { state: 'unavailable', reason: 'today-unreadable' };
+  if (today?.plan) {
+    if (localDayOrdinal(today.date) !== localDayOrdinal(current)) return { state: 'unavailable', reason: 'invalid-today-date' };
+    return contextFor(today, 'calendar-today');
+  }
   return { state: 'absent', calendarPageTitle: today?.pageTitle || null };
+}
+
+/** Only a local stamp is interpreted within its owning overnight window.
+ * A referenced dateless stamp keeps its existing independent provenance rule. */
+function localCompletionMinute({ minute, startMinutes, endMinutes, lastClockEnd } = {}) {
+  const value = asNumber(minute), start = asNumber(startMinutes), end = asNumber(endMinutes);
+  if (!Number.isFinite(value)) return null;
+  if (value >= 0 && value < start && end > 1440 && value <= end - 1440) return value + 1440;
+  if (value === 0 && end === 1440 && Number(lastClockEnd) === 1440) return 1440;
+  return value;
 }
 
 function timelineDayState({
@@ -547,13 +585,13 @@ function spiralCellInnerHour({ startMinute, endMinutes, windowStartMinutes = 300
 }
 
 /**
- * Return the UIDs of unfinished fixed events whose half-open time ranges
- * overlap. Touching boundaries (for example 10:00–11:00 and 11:00–12:00) are
- * adjacent, not conflicting.
+ * Return the UIDs of written fixed events whose half-open time ranges
+ * overlap. DONE does not cancel a reservation. Touching boundaries (for
+ * example 10:00–11:00 and 11:00–12:00) are adjacent, not conflicting.
  */
 function overlappingFixedEventUids({ events = [] } = {}) {
   const fixedEvents = (Array.isArray(events) ? events : [])
-    .filter((event) => event && event.uid && event.meeting === true && !event.done)
+    .filter((event) => event && event.uid && event.meeting === true)
     .map((event) => ({ ...event, start: asNumber(event.start), end: asNumber(event.end) }))
     .filter((event) => Number.isFinite(event.start) && Number.isFinite(event.end) && event.end > event.start);
   const conflicts = new Set();
@@ -661,6 +699,17 @@ function eventStartFloors(orderedItems = []) {
     }
     return item?.todo === true && item?.done !== true ? { ...item, earliestStart: floor } : { ...item };
   });
+}
+
+function settledPlanUids({ items = [], nowMinutes } = {}) {
+  return (Array.isArray(items) ? items : []).filter(item => {
+    if (!item?.uid) return false;
+    if (item.meeting === true) {
+      return Number.isFinite(item.start) && Number.isFinite(item.end) && item.end > item.start
+        && Number.isFinite(nowMinutes) && item.end <= nowMinutes;
+    }
+    return item.todo === true && item.done === true;
+  }).map(item => item.uid);
 }
 
 function remainingDuration(task) {
@@ -864,7 +913,10 @@ function completedTaskClockSummary({ taskUid, entries = [], dayStartMs, dayEndMs
   return {
     actualMinutes: Math.floor(actualMilliseconds / 60000),
     sessionCount,
-    latestEndMinutes: latestEnd === null ? null : Math.floor((latestEnd - dayStart) / 60000),
+    // Durations measure elapsed time; the anchor is a local wall-clock label.
+    // Keep a DST transition earlier in the owner day from shifting that label.
+    latestEndMinutes: latestEnd === null ? null : Math.floor((latestEnd - dayStart) / 60000
+      + new Date(dayStart).getTimezoneOffset() - new Date(latestEnd).getTimezoneOffset()),
   };
 }
 
@@ -1057,7 +1109,7 @@ const UI_COPY = {
       free: 'free',
       over: 'over',
       noSlot: 'no slot',
-      left: 'left',
+      left: 'free',
     },
     legend: { urgent: 'Urgent', event: 'Event', task: 'Task', unrecorded: 'Past, no record' },
     controls: {
@@ -1121,8 +1173,8 @@ const UI_COPY = {
       estimatedShort: 'Est.',
       actualShort: 'Actual',
       current: 'Current',
-      currentEvent: 'Current event',
-      currentTask: 'Current task',
+      currentEvent: 'Planned event',
+      currentTask: 'Planned now',
       currentTime: 'Current time',
       noCompletionTime: 'No completion time recorded',
       inheritedCompletion: 'Completion status from reference',
@@ -1140,6 +1192,10 @@ const UI_COPY = {
       estimated: 'Estimate',
       outsideWindow: 'Outside chart hours',
       actual: 'Actual',
+      actualTotal: 'total',
+      projectedInterval: 'display interval',
+      actualAggregateExplanation: 'CLOCK durations are summed. The displayed interval is anchored at completion and does not show a continuous session. Individual sessions remain in LOGBOOK.',
+      estimateCueDescription: 'The approximation mark identifies an estimated duration.',
       completionEstimate: 'Estimated interval',
       estimatedAllocation: 'Estimated allocation',
       notRecordedCompletion: 'Not a recorded completion time',
@@ -1175,7 +1231,7 @@ const UI_COPY = {
       free: '余量',
       over: '超载',
       noSlot: '无合适空档',
-      left: '剩余',
+      left: '未分配',
     },
     legend: { urgent: '紧急', event: '事件', task: '任务', unrecorded: '已过无记录' },
     controls: {
@@ -1239,8 +1295,8 @@ const UI_COPY = {
       estimatedShort: '估时',
       actualShort: '实录',
       current: '当前',
-      currentEvent: '当前事件',
-      currentTask: '当前任务',
+      currentEvent: '计划中的事件',
+      currentTask: '当前计划',
       currentTime: '当前时间',
       noCompletionTime: '未记录完成时间',
       inheritedCompletion: '完成状态来自引用',
@@ -1258,6 +1314,10 @@ const UI_COPY = {
       estimated: '估计',
       outsideWindow: '显示时段外',
       actual: '实际记录',
+      actualTotal: '合计',
+      projectedInterval: '绘图区间',
+      actualAggregateExplanation: '这里汇总 CLOCK 时长，并按完成时刻摆放区间，不表示期间持续工作。各次记录仍保留在 LOGBOOK。',
+      estimateCueDescription: '约等号表示时长采用估计值。',
       completionEstimate: '估计区间',
       estimatedAllocation: '估时排布',
       notRecordedCompletion: '不是记录的完成时刻',
@@ -1962,6 +2022,10 @@ module.exports = {
   pastTimelineSegments,
   timelineDayState,
   resolveActiveWorkday,
+  planWorkdayContext,
+  clockEvidenceBounds,
+  dateForPlanTitle,
+  localCompletionMinute,
   pastUnplannedSegments,
   pastUnplannedGroups,
   availableSlotGroups,
@@ -1970,6 +2034,7 @@ module.exports = {
   overlappingFixedEventUids,
   isCurrentPlannedTask,
   eventStartFloors,
+  settledPlanUids,
   scheduleTasks,
   completedTaskClockSummary,
   historicalDoneSlice,

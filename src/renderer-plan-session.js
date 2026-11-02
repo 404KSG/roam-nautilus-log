@@ -54,6 +54,7 @@ export function createRendererPlanSession({
   planUid: initialPlanUid = '',
   getPlanUid = () => initialPlanUid,
   getProvider = defaultGetProvider,
+  canWriteSnapshot = () => true,
 } = {}) {
   const listeners = new Set();
   let destroyed = false;
@@ -62,6 +63,7 @@ export function createRendererPlanSession({
   let stopWatch = null;
   let boundSubscribe = null;
   let boundGeneration = null;
+  let boundReadOnly = false;
   let boundGraphApi = null;
   let boundGraphName = null;
   let boundUid = null;
@@ -115,6 +117,7 @@ export function createRendererPlanSession({
   const bindingMatchesProvider = (provider, planUid) => (
     boundSubscribe === provider.subscribe
     && boundGeneration === (provider.generation ?? 0)
+    && boundReadOnly === (provider.readOnly === true)
     && boundGraphApi === provider.graphApi
     && boundGraphName === (provider.graphName ?? '')
     && boundUid === planUid
@@ -158,7 +161,7 @@ export function createRendererPlanSession({
       graphName: boundGraphName,
     };
     status = 'ready';
-    writesAllowed = true;
+    writesAllowed = !boundReadOnly && canWriteSnapshot(snapshot) === true;
     emit();
   };
 
@@ -177,6 +180,7 @@ export function createRendererPlanSession({
     const planUid = getPlanUid();
     boundSubscribe = provider.subscribe;
     boundGeneration = provider.generation ?? 0;
+    boundReadOnly = provider.readOnly === true;
     boundGraphApi = provider.graphApi;
     boundGraphName = provider.graphName ?? '';
     boundUid = planUid;
@@ -245,6 +249,7 @@ export function createRendererPlanSession({
 
       const sameIdentity = boundSubscribe === provider.subscribe
         && boundGeneration === nextGeneration
+        && boundReadOnly === (provider.readOnly === true)
         && boundGraphApi === nextGraphApi
         && boundGraphName === nextGraphName
         && boundUid === planUid

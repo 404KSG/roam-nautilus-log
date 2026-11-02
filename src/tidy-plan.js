@@ -89,6 +89,8 @@ export function createPlanTidy({
   notifyAction = showActionToast,
   runningTaskUid = () => null,
   setOpen = updateGraphBlockOpen,
+  assertPlan = () => {},
+  resolveSettled = (_uid, _rows, requested) => requested,
   runExclusive,
 } = {}) {
   const undoStates = new Map();
@@ -97,6 +99,8 @@ export function createPlanTidy({
   let queue = Promise.resolve();
   let attempted = 0;
   let confirmed = 0;
+  let activePlanUid = null;
+  let activeEligibility = null;
 
   const assertActive = () => {
     if (destroyed) throw new Error('Tidy was cancelled.');
@@ -111,24 +115,34 @@ export function createPlanTidy({
       || new Set(rows.map((row) => row.uid)).size !== rows.length) {
       throw new Error('The Plan outline is unreadable.');
     }
+    if (activeEligibility && activePlanUid === uid) {
+      const eligible = new Set(resolveSettled(uid, rows, activeEligibility));
+      if (activeEligibility.some(target => !eligible.has(target))) throw new Error(PLAN_CHANGED);
+    }
     return rows;
   };
 
   const write = async (action) => {
     assertActive();
+    assertPlan(activePlanUid);
     attempted += 1;
     await action();
     confirmed += 1;
     assertActive();
+    assertPlan(activePlanUid);
   };
 
   const exclusive = (action, planUid) => {
     const next = queue.then(async () => {
       attempted = 0;
       confirmed = 0;
+      activePlanUid = planUid;
+      activeEligibility = null;
       try {
         assertActive();
-        return await (runExclusive ? runExclusive(action) : guard.run(action));
+        assertPlan(planUid);
+        const operation = () => { assertActive(); assertPlan(planUid); return action(); };
+        return await (runExclusive ? runExclusive(operation) : guard.run(operation));
       } catch (error) {
         if (planUid) undoStates.delete(planUid);
         if (error && typeof error === 'object') {
@@ -137,7 +151,7 @@ export function createPlanTidy({
           error.confirmed = confirmed;
         }
         throw error;
-      }
+      } finally { activePlanUid = null; activeEligibility = null; }
     });
     queue = next.catch(() => {});
     return next;
@@ -294,9 +308,11 @@ export function createPlanTidy({
   const tidyUnlocked = async ({ planUid, settledUids = [] } = {}) => {
     if (!planUid) throw new Error('A Nautilus Log Plan UID is required.');
     let runningUid = runningTaskUid();
-    const safeSettled = (Array.isArray(settledUids) ? settledUids : [])
-      .filter((uid) => uid && uid !== runningUid);
+    const requested = (Array.isArray(settledUids) ? settledUids : []).filter(uid => uid && uid !== runningUid);
     const children = read(planUid);
+    const eligible = new Set(resolveSettled(planUid, children, requested));
+    const safeSettled = requested.filter(uid => eligible.has(uid));
+    activeEligibility = safeSettled;
     const originalUids = uidOrder(children);
     const targetUids = logCore.stableTidyOrder({
       items: originalUids.map((uid) => ({ uid })),

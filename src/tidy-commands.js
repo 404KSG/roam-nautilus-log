@@ -1,4 +1,5 @@
-import { readPrimaryPlan, showToast } from './timing-roam';
+import { readActivePrimaryPlan, showToast } from './timing-roam';
+import { alignIntervalToWindow, settledPlanUids } from './log-core';
 
 export const TIDY_COMMAND_LABEL = 'Nautilus Log: Tidy Primary Plan';
 
@@ -6,24 +7,28 @@ function currentMinute(date = new Date()) {
   return (date.getHours() * 60) + date.getMinutes();
 }
 
-export function settledUidsForTidy(snapshot, nowMinutes = currentMinute()) {
-  const completedTasks = (snapshot?.reviewCandidates || snapshot?.reviewTasks || [])
-    .filter((task) => task?.status === 'DONE')
-    .map((task) => task?.uid);
-  const settledEvents = (snapshot?.fixedEvents || [])
-    // DONE changes presentation only; a future written range still constrains
-    // the outline and therefore cannot be settled ahead of pending tasks.
-    .filter((event) => Number.isFinite(Number(event?.end)) && Number(event.end) <= nowMinutes)
-    .map((event) => event?.uid);
-  return [...new Set([...completedTasks, ...settledEvents].filter(Boolean))];
+export function settledUidsForTidy(snapshot, nowMinutes = undefined) {
+  const workday = snapshot?.workday;
+  const minute = Number.isFinite(nowMinutes) ? nowMinutes : workday?.logicalNowMinutes ?? currentMinute();
+  const tasks = (snapshot?.reviewCandidates || snapshot?.reviewTasks || []).map(task => ({
+    uid: task?.uid, todo:true, done: task?.status === 'DONE',
+  }));
+  const events = (snapshot?.fixedEvents || []).map(event => ({ ...event, meeting:true,
+    ...(workday ? alignIntervalToWindow({ start:event.start,end:event.end,
+      windowStart:workday.startMinutes,windowEnd:workday.endMinutes }) : {}) }));
+  return [...new Set(settledPlanUids({ items:[...tasks,...events], nowMinutes:minute }))];
 }
 
 function primaryTidyTarget(extensionAPI, date = new Date()) {
   const fallbackMinutes = Number(extensionAPI?.settings?.get?.('todo-duration')) || 15;
-  const snapshot = readPrimaryPlan(date, fallbackMinutes);
+  const snapshot = readActivePrimaryPlan(date, {
+    'workday-start': extensionAPI?.settings?.get?.('workday-start'),
+    'workday-end': extensionAPI?.settings?.get?.('workday-end'),
+  }, fallbackMinutes);
+  if (snapshot.rendererReadOnly) throw Error('Update this client before changing a newer renderer plan.');
   return {
     planUid: snapshot?.plan?.uid || null,
-    settledUids: settledUidsForTidy(snapshot, currentMinute(date)),
+    settledUids: settledUidsForTidy(snapshot),
     language: extensionAPI?.settings?.get?.('language') === 'zh' ? 'zh' : 'en',
   };
 }

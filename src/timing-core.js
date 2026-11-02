@@ -7,12 +7,10 @@
  */
 
 const logCore = require('./log-core');
+const { inspectRenderer } = require('./renderer-contract');
 
 const TODO_RE = /\{\{\[\[(TODO|DONE)\]\]\}\}|\{\{(TODO|DONE)\}\}/i;
 const CLOCK_RE = /^\s*:?CLOCK:{1,2}\s*\[([^\]]+)\](?:\s*--\s*\[([^\]]+)\])?(?:\s*=>\s*(\d+:[0-5]\d))?\s*$/i;
-// Recognize rN for locating/deduplicating plans. Only the matching renderer
-// contract owns mutation; recognition alone never authorises a downgrade.
-const NAUTILUS_RENDER_RE = /\{\{\s*\[\[roam\/render\]\]\s*:\s*\(\(roam-render-Nautilus(?:-Log(?:-r\d+)?|-Flow)?-cljs\)\)/i;
 const BLOCK_REF_RE = /\(\(([a-zA-Z0-9_-]{6,})\)\)/g;
 const DURATION_TOKEN_RE = /(?:^|\s)(\d+h(?:\d+(?:min|m))?|\d+(?:min|m))(?=\s|$)/gi;
 const DONE_TIME_RE = /(?:^|\s)d(\d{1,2})(?::(\d{1,2}))?(?=\s|$)/i;
@@ -165,42 +163,29 @@ function capacitySummary(execution = {}, language = 'en') {
 }
 
 function executionProjection(planSnapshot, currentNow, settings = {}) {
-  if (!planSnapshot?.plan) return null;
-  const now = currentNow instanceof Date && Number.isFinite(currentNow.getTime())
-    ? currentNow
-    : new Date();
-  const schedule = logCore.normalizeScheduleSettings({
-    workdayStart: settings.workdayStart,
-    workdayEnd: settings.workdayEnd,
-  });
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
-  const pendingTasks = (planSnapshot.tasks || []).map((task) => ({
-    ...task,
-    todo: true,
-    done: false,
-    duration: Number(task.plannedMinutes) || 0,
-  }));
-  const fixedEvents = (planSnapshot.fixedEvents || []).map((event) => ({
-    ...event,
-    ...logCore.alignIntervalToWindow({
-      start: event.start,
-      end: event.end,
-      windowStart: schedule.startMinutes,
-      windowEnd: schedule.endMinutes,
-    }),
-  }));
+  if (!planSnapshot?.plan || planSnapshot.rendererReadOnly) return null;
+  const now = currentNow instanceof Date && Number.isFinite(currentNow.getTime()) ? currentNow : new Date();
+  const runtime = {
+    'workday-start': settings['workday-start'] ?? settings.workdayStart ?? planSnapshot.workday?.startHour,
+    'workday-end': settings['workday-end'] ?? settings.workdayEnd ?? planSnapshot.workday?.endHour,
+    'respect-event-order': settings['respect-event-order'] ?? settings.respectEventOrder ?? planSnapshot.workday?.respectEventOrder,
+  };
+  const context = logCore.planWorkdayContext({ now,
+    ownerDate: planSnapshot.workday?.dayStartMs ?? planSnapshot.date ?? logCore.dateForPlanTitle(planSnapshot.pageTitle) ?? now,
+    pageTitle: planSnapshot.pageTitle, pageUid: planSnapshot.pageUid, planUid: planSnapshot.plan.uid,
+    args: planSnapshot.planArgs || inspectRenderer(planSnapshot.plan.string).invocation?.args || [], runtime });
+  if (!context) return null;
+  const fixedEvents = (planSnapshot.fixedEvents || []).map(event => ({ ...event,
+    ...logCore.alignIntervalToWindow({ start: event.start, end: event.end,
+      windowStart: context.startMinutes, windowEnd: context.endMinutes }) }));
+  const tasks = (planSnapshot.tasks || []).map(task => ({ ...task, todo: true, done: false, duration: Number(task.plannedMinutes) || 0 }));
+  const ordered = context.respectEventOrder ? logCore.eventStartFloors([...tasks, ...fixedEvents].sort(compareTreeOrder)) : tasks;
+  const pendingTasks = ordered.filter(item => item.todo === true && item.done !== true);
   return {
-    ...logCore.calculateCapacity({
-      startMinutes: schedule.startMinutes,
-      endMinutes: schedule.endMinutes,
-      nowMinutes,
-      fixedEvents,
-      allFixedEvents: fixedEvents,
-      pendingTasks,
-    }),
-    nowMinutes,
-    startMinutes: schedule.startMinutes,
-    endMinutes: schedule.endMinutes,
+    ...logCore.calculateCapacity({ startMinutes: context.startMinutes, endMinutes: context.endMinutes,
+      nowMinutes: context.logicalNowMinutes, fixedEvents, allFixedEvents: fixedEvents, pendingTasks }),
+    nowMinutes: context.logicalNowMinutes, startMinutes: context.startMinutes, endMinutes: context.endMinutes,
+    workday: context,
   };
 }
 
@@ -586,8 +571,9 @@ function compareTreeOrder(left, right) {
 }
 
 function isNautilusComponent(string) {
-  if (typeof string !== 'string') return false;
-  return NAUTILUS_RENDER_RE.test(string);
+  // Future and ambiguous family members still prevent duplicate creation.
+  // Mutation callers separately require a supported, unambiguous contract.
+  return inspectRenderer(string).recognized;
 }
 
 function selectPrimaryPlan(rows = [], pageUid, matcher = isNautilusComponent) {
@@ -728,17 +714,10 @@ function startOfDay(date) {
 }
 
 function actualMinutesToday(taskUid, entries = [], now = new Date(), workday = null) {
-  const ownerStart = Number(workday?.dayStartMs);
-  const dayStartDate = Number.isFinite(ownerStart) ? new Date(ownerStart) : startOfDay(now);
-  const dayStart = dayStartDate.getTime();
-  // Evidence includes the full owner calendar day, extended only for an
-  // overnight logical window. Scheduling remains bounded by the work window.
-  const midnightAfterOwner = new Date(dayStartDate.getFullYear(), dayStartDate.getMonth(), dayStartDate.getDate() + 1).getTime();
-  const logicalEnd = Number(workday?.endMinutes);
-  const extendedEnd = Number.isFinite(logicalEnd) && logicalEnd > 1440
-    ? new Date(dayStartDate.getFullYear(), dayStartDate.getMonth(), dayStartDate.getDate(), 0, logicalEnd).getTime()
-    : midnightAfterOwner;
-  const dayEnd = Math.max(midnightAfterOwner, extendedEnd);
+  const owner = workday ? workday.dayStartMs : startOfDay(now);
+  const bounds = logCore.clockEvidenceBounds({ ownerDate: owner, endMinutes: workday?.endMinutes });
+  if (!bounds) throw new Error('A readable workday is required to summarize CLOCK.');
+  const { dayStartMs: dayStart, dayEndMs: dayEnd } = bounds;
   const nowMs = now.getTime();
   const totalMilliseconds = (Array.isArray(entries) ? entries : []).reduce((total, entry) => {
     if (entry?.taskUid !== taskUid) return total;

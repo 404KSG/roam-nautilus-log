@@ -1,4 +1,6 @@
 import * as timingCore from './timing-core';
+import * as logCore from './log-core';
+import { inspectRenderer } from './renderer-contract';
 
 const DRAWER_LABEL = 'LOGBOOK::';
 const DRAWER_RE = /^\s*:?LOGBOOK:{1,2}\s*$/i;
@@ -340,6 +342,7 @@ export function readPrimaryPlan(date = new Date(), fallbackMinutes = 15) {
   const pageTitle = pageTitleFor(date);
   const rows = readDailyPageTreeRows(pageTitle);
   if (rows.length === 0) return {
+    date: new Date(date.getTime()), planArgs: [], rendererReadOnly: false, rendererKind: 'none',
     pageTitle,
     pageUid: null,
     plan: null,
@@ -368,7 +371,8 @@ export function readPrimaryPlan(date = new Date(), fallbackMinutes = 15) {
     if (!referencedStrings.has(uid)) referencedStrings.set(uid, readBlockString(uid));
     return referencedStrings.get(uid);
   };
-  const projected = plan
+  const renderer = inspectRenderer(plan?.string);
+  const projected = plan && renderer.mutable
     ? normalized.map((row) => row.parentUid === plan.uid
       ? {
         ...row,
@@ -382,15 +386,44 @@ export function readPrimaryPlan(date = new Date(), fallbackMinutes = 15) {
       : row)
     : normalized;
   return {
+    date: new Date(date.getTime()), planArgs: renderer.invocation?.args || [],
+    rendererReadOnly: Boolean(plan && !renderer.mutable), rendererKind: renderer.kind,
     pageTitle,
     pageUid,
     plan,
     rows: projected,
-    tasks: plan ? timingCore.projectPlan(projected, plan.uid, fallbackMinutes) : [],
-    reviewCandidates: plan ? timingCore.projectReviewCandidates(projected, plan.uid, fallbackMinutes) : [],
-    reviewTasks: plan ? timingCore.projectReviewTasks(projected, plan.uid, fallbackMinutes) : [],
-    fixedEvents: plan ? timingCore.projectFixedEvents(projected, plan.uid) : [],
+    tasks: plan && renderer.mutable ? timingCore.projectPlan(projected, plan.uid, fallbackMinutes) : [],
+    reviewCandidates: plan && renderer.mutable ? timingCore.projectReviewCandidates(projected, plan.uid, fallbackMinutes) : [],
+    reviewTasks: plan && renderer.mutable ? timingCore.projectReviewTasks(projected, plan.uid, fallbackMinutes) : [],
+    fixedEvents: plan && renderer.mutable ? timingCore.projectFixedEvents(projected, plan.uid) : [],
   };
+}
+
+/** Resolve at most the dates that can own the current work window. */
+export function readActivePrimaryPlan(date = new Date(), runtime = {}, fallbackMinutes = 15) {
+  const now = new Date(date.getTime());
+  if (!Number.isFinite(now.getTime())) throw new Error('The active plan date is unreadable.');
+  const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const calendarPageTitle = pageTitleFor(todayDate);
+  const has = key => runtime[key] !== undefined && runtime[key] !== null;
+  const knownWindow = has('workday-start') && has('workday-end');
+  const normalized = logCore.resolveRendererSettings({ runtime });
+  const minute = now.getHours() * 60 + now.getMinutes();
+  const mayCarry = !knownWindow || (normalized['workday-end'] > 1440 && minute < normalized['workday-end'] - 1440);
+  if (mayCarry) {
+    const previousDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    // A failed candidate read is not an absent page. Let callers retain a
+    // visible unavailable state rather than authorizing a second plan.
+    const previous = readPrimaryPlan(previousDate, fallbackMinutes);
+    const workday = logCore.resolveActiveWorkday({ now, runtime, yesterday: previous,
+      today: { date: todayDate, pageTitle: calendarPageTitle, plan: null } });
+    if (workday.state === 'unavailable') throw new Error(`Active plan unavailable: ${workday.reason}`);
+    if (workday.state === 'active') return { ...previous, workday, calendarPageTitle };
+  }
+  const today = readPrimaryPlan(todayDate, fallbackMinutes);
+  const workday = logCore.resolveActiveWorkday({ now, runtime, today });
+  if (workday.state === 'unavailable') throw new Error(`Active plan unavailable: ${workday.reason}`);
+  return { ...today, workday, calendarPageTitle };
 }
 
 /**
@@ -449,15 +482,20 @@ export function projectPrimaryPlanPull(pullSnapshot, previous = null, fallbackMi
     uid: planUid,
     string: planString,
   };
+  const renderer = inspectRenderer(planString);
   return {
+    date: previous?.date,
+    workday: previous?.workday,
+    calendarPageTitle: previous?.calendarPageTitle,
+    planArgs: renderer.invocation?.args || [], rendererReadOnly: !renderer.mutable, rendererKind: renderer.kind,
     pageTitle: previous?.pageTitle || '',
     pageUid,
     plan,
     rows,
-    tasks: timingCore.projectPlan(rows, planUid, fallbackMinutes),
-    reviewCandidates: timingCore.projectReviewCandidates(rows, planUid, fallbackMinutes),
-    reviewTasks: timingCore.projectReviewTasks(rows, planUid, fallbackMinutes),
-    fixedEvents: timingCore.projectFixedEvents(rows, planUid),
+    tasks: renderer.mutable ? timingCore.projectPlan(rows, planUid, fallbackMinutes) : [],
+    reviewCandidates: renderer.mutable ? timingCore.projectReviewCandidates(rows, planUid, fallbackMinutes) : [],
+    reviewTasks: renderer.mutable ? timingCore.projectReviewTasks(rows, planUid, fallbackMinutes) : [],
+    fixedEvents: renderer.mutable ? timingCore.projectFixedEvents(rows, planUid) : [],
   };
 }
 
@@ -773,10 +811,11 @@ export async function moveGraphBlock({ uid, parentUid, order }) {
   return true;
 }
 
-export async function ensureDrawer(taskUid, assertActive = () => {}) {
+export async function ensureDrawer(taskUid, assertActive = () => {}, assertBeforeWrite = assertActive) {
   assertActive();
   const existing = readChildren(taskUid).find((child) => DRAWER_RE.test(child.string));
   if (existing) return existing.uid;
+  assertBeforeWrite();
   const uid = await createGraphBlock({ parentUid: taskUid, order: 0, string: DRAWER_LABEL, open: false });
   assertActive();
   const confirmed = readChildren(taskUid).find((child) => child.uid === uid && DRAWER_RE.test(child.string));
@@ -784,9 +823,10 @@ export async function ensureDrawer(taskUid, assertActive = () => {}) {
   return uid;
 }
 
-export async function createRunningClock(taskUid, now, knownTaskString = '', assertActive = () => {}) {
-  const drawerUid = await ensureDrawer(taskUid, assertActive);
+export async function createRunningClock(taskUid, now, knownTaskString = '', assertActive = () => {}, assertBeforeWrite = assertActive) {
+  const drawerUid = await ensureDrawer(taskUid, assertActive, assertBeforeWrite);
   assertActive();
+  assertBeforeWrite();
   const clockUid = await createGraphBlock({
     parentUid: drawerUid,
     order: 0,

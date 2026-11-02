@@ -1,4 +1,5 @@
 import * as timingCore from './timing-core';
+import * as logCore from './log-core';
 import { createPlanDiagnostics, planEntryLabel, planActions, positionTopbarTooltip } from './today-plan-view';
 
 const TOPBAR_ID = 'nautilus-log-timing-topbar';
@@ -104,8 +105,9 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       forgottenMinutes: extensionAPI.settings.get('forgotten-timer-minutes') ?? 120,
       todoDuration: Number(extensionAPI.settings.get('todo-duration')) || 15,
       energyBar: extensionAPI.settings.get('energy-bar-enabled') === true,
-      workdayStart: extensionAPI.settings.get('workday-start') ?? 5,
-      workdayEnd: extensionAPI.settings.get('workday-end') ?? 21,
+      workdayStart: extensionAPI.settings.get('workday-start'),
+      workdayEnd: extensionAPI.settings.get('workday-end'),
+      respectEventOrder: extensionAPI.settings.get('respect-event-order') === true,
       pomodoroMinutes: Number(extensionAPI.settings.get('pomodoro-minutes')) || 45,
     };
   };
@@ -123,7 +125,24 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     ? renderConfig.energyBar
     : extensionAPI.settings.get('energy-bar-enabled') === true);
   const todayPlanState = () => todayPlan?.getState?.() || null;
+  const planUiCopy = () => {
+    const copy = ui().plan;
+    if (state.planSnapshot?.workday?.state !== 'active') return copy;
+    const zh = (renderConfig?.language || extensionAPI.settings.get('language')) === 'zh';
+    return { ...copy, scheduled:zh ? '已安排' : 'Scheduled', unscheduled:zh ? '未排入' : 'Unscheduled' };
+  };
+  const taskInActivePlan = uid => !state.planSnapshot?.rendererReadOnly && Boolean(state.planSnapshot?.tasks?.some(task => task.uid === uid));
+  const taskWorkday = uid => {
+    const plan = state.planSnapshot;
+    if (plan?.reviewCandidates?.some(task => task.uid === uid) || plan?.tasks?.some(task => task.uid === uid)) return plan.workday || null;
+    const entry = state.entries?.find(item => item.taskUid === uid);
+    const ownerDate = logCore.dateForPlanTitle(entry?.pageTitle);
+    return ownerDate ? logCore.planWorkdayContext({ ownerDate, now: state.now, args:entry?.workday?.planArgs || [],
+      runtime: { 'workday-start': renderConfig?.workdayStart, 'workday-end': renderConfig?.workdayEnd } }) : entry?.workday || null;
+  };
   const diagnostics = createPlanDiagnostics(todayPlan, () => trigger);
+  const calendarController = todayPlan?.getCalendarController?.();
+  const calendarDiagnostics = calendarController ? createPlanDiagnostics(calendarController, () => trigger) : null;
   const shouldUseTodayPlanEntry = () => {
     const status = todayPlanState()?.status;
     if (!status) return false;
@@ -183,25 +202,27 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     const planUi = todayPlanState();
     if (!snapshot?.plan || (planUi && (!['ready-present','nav-failed'].includes(planUi.status)
       || (planUi.planUid && planUi.planUid !== snapshot.plan.uid)))) return null;
-    const execution = snapshot?.execution;
-    if (!energyBarEnabled() || !snapshot?.plan) return execution || null;
-    const workdayStart = renderConfig?.workdayStart ?? extensionAPI.settings.get('workday-start') ?? 5;
-    const workdayEnd = renderConfig?.workdayEnd ?? extensionAPI.settings.get('workday-end') ?? 21;
+    const workdayStart = renderConfig ? renderConfig.workdayStart : extensionAPI.settings.get('workday-start');
+    const workdayEnd = renderConfig ? renderConfig.workdayEnd : extensionAPI.settings.get('workday-end');
+    const respectEventOrder = renderConfig?.respectEventOrder ?? (extensionAPI.settings.get('respect-event-order') === true);
     const minute = Math.floor(state.now.getTime() / 60000);
     if (
       liveExecutionCache?.snapshot !== snapshot
       || liveExecutionCache.minute !== minute
       || liveExecutionCache.workdayStart !== workdayStart
       || liveExecutionCache.workdayEnd !== workdayEnd
+      || liveExecutionCache.respectEventOrder !== respectEventOrder
     ) {
       liveExecutionCache = {
         snapshot,
         minute,
         workdayStart,
         workdayEnd,
+        respectEventOrder,
         execution: timingCore.executionProjection(snapshot, state.now, {
           workdayStart,
           workdayEnd,
+          respectEventOrder,
         }),
       };
     }
@@ -574,6 +595,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     copy.append(title);
     const duration = timingCore.durationMetadata({
       taskUid: task.uid,
+      workday: taskWorkday(task.uid),
       plannedMinutes: task.plannedMinutes,
       entries: state.entries,
       now: state.now,
@@ -590,12 +612,13 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     if (planState === 'scheduled') {
       metaText = scheduledTaskMeta(task, planStart, planEnd);
     } else if (planState === 'unscheduled') {
-      metaText = `${text.plan.unscheduled} · ${planDurationText}`;
+      metaText = `${planUiCopy().unscheduled} · ${planDurationText}`;
     } else if (focused) {
       metaText = `${forgotten ? `${text.timing.check} · ` : ''}${timingText}`;
     } else if (recent) {
       metaText = `${text.timing.recent} · ${timingCore.compactMinutes(recentRemaining)} ${text.timing.left} · ${duration.detailLabel}`;
     }
+    if (!taskInActivePlan(task.uid) && entry?.pageTitle) metaText += ` · ${entry.pageTitle}`;
     const liveMeta = focused && !planState;
     const meta = element('div', `nautilus-log-timing__row-meta${liveMeta ? ' is-live' : ''}${forgotten ? ' is-warning' : ''}`, metaText);
     copy.append(meta);
@@ -614,8 +637,10 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     completeAction.classList.add('is-complete');
     timingAction.dataset.focusKey = 'clock';
     completeAction.dataset.focusKey = 'complete';
-    timingAction.disabled = state.status === 'working';
-    completeAction.disabled = state.status === 'working';
+    if (!focused) timingAction.dataset.requiresActivePlan = 'true';
+    completeAction.dataset.requiresActivePlan = 'true';
+    timingAction.disabled = state.status === 'working' || (!focused && !taskInActivePlan(task.uid));
+    completeAction.disabled = state.status === 'working' || !taskInActivePlan(task.uid);
     actions.append(timingAction, completeAction);
     if (focused) {
       const deleteAction = iconButton('trash', text.actions.deleteClock, () => {
@@ -784,6 +809,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
         || activeTask(focused);
       const duration = timingCore.durationMetadata({
         taskUid: focused.taskUid,
+        workday: taskWorkday(focused.taskUid),
         plannedMinutes: task.plannedMinutes,
         entries: state.entries,
         now: state.now,
@@ -799,6 +825,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     const task = activeTask(focused);
     const duration = timingCore.durationMetadata({
       taskUid: task.uid,
+      workday: taskWorkday(task.uid),
       plannedMinutes: task.plannedMinutes,
       entries: state.entries,
       now: state.now,
@@ -809,14 +836,16 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     row.classList.toggle('is-forgotten', forgotten);
     meta.classList.toggle('is-warning', forgotten);
     const text = ui().timing;
-    meta.textContent = `${forgotten ? `${text.check} · ` : ''}${text.timing} ${timingCore.formatElapsed(state.now - focused.start)} · ${duration.detailLabel}`;
+    meta.textContent = `${forgotten ? `${text.check} · ` : ''}${text.timing} ${timingCore.formatElapsed(state.now - focused.start)} · ${duration.detailLabel}`
+      + (!taskInActivePlan(task.uid) && focused.pageTitle ? ` · ${focused.pageTitle}` : '');
   };
 
   const syncActionAvailability = () => {
     if (!popover) return;
     const disabled = state.status === 'working';
     popover.querySelectorAll('.nautilus-log-timing__row-actions button')
-      .forEach((button) => { button.disabled = disabled; });
+      .forEach(button => { button.disabled = disabled || (button.dataset.requiresActivePlan === 'true'
+        && !taskInActivePlan(button.closest('[data-task-uid]')?.dataset.taskUid)); });
   };
 
   const planEmptyNode = (planUi, text) => {
@@ -1010,6 +1039,16 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       header.append(pomodoroAction);
     }
     popover.append(header);
+    const workday = state.planSnapshot?.workday;
+    if (workday?.state === 'active') {
+      const end = new Date(workday.dayStartMs); end.setMinutes(workday.endMinutes);
+      const time = `${String(end.getHours()).padStart(2,'0')}:${String(end.getMinutes()).padStart(2,'0')}`;
+      const label = renderConfig.language === 'zh' ? `活动工作日：${workday.ownerPageTitle} · 截至 ${time}`
+        : `Active workday: ${workday.ownerPageTitle} · until ${time}`;
+      popover.append(element('div', 'nautilus-log-timing__workday', label));
+      identity.title = `${text.identity.locate} · ${workday.ownerPageTitle}`;
+      identity.setAttribute('aria-label', identity.title);
+    }
 
     if (state.notice) {
       const notice = element('div', 'nautilus-log-timing__notice', state.notice);
@@ -1034,7 +1073,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       const unscheduled = execution?.overflowTasks || [];
       if (tasks.length && execution) {
         const scheduledSection = element('section', 'nautilus-log-timing__plan-section is-scheduled');
-        scheduledSection.append(planSectionHeader({ label: text.plan.scheduled, tasks: scheduled }));
+        scheduledSection.append(planSectionHeader({ label: planUiCopy().scheduled, tasks: scheduled }));
         scheduled.forEach((task) => scheduledSection.append(taskRow(task, {
           planState: 'scheduled',
           planStart: task.start,
@@ -1045,7 +1084,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
         if (unscheduled.length) {
           const unscheduledSection = element('section', 'nautilus-log-timing__plan-section is-unscheduled');
           const disclosure = planSectionHeader({
-            label: text.plan.unscheduled,
+            label: planUiCopy().unscheduled,
             tasks: unscheduled,
             collapsible: true,
             expanded: unscheduledExpanded,
@@ -1078,6 +1117,27 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       } else if (!review.rows.length) {
         list.append(element('div', 'nautilus-log-timing__empty', text.empty.noReviewTasks));
       }
+    }
+    if (view === 'plan' && todayPlanState()?.activeWorkday && todayPlan?.getCalendarState) {
+      const calendar = todayPlan.getCalendarState(), zh = renderConfig.language === 'zh';
+      const inspect = ['partial','read-failed','ready-blocked','nav-failed'].includes(calendar.status);
+      const label = inspect ? (zh ? `检查 ${calendar.pageTitle} 的计划` : `Inspect the plan for ${calendar.pageTitle}`)
+        : calendar.calendarPending ? (zh ? '正在准备日历当天的计划…' : 'Preparing the calendar-day plan…')
+          : calendar.labels.calendarCreate;
+      const action = element('button', 'bp3-button bp3-minimal nautilus-log-timing__calendar-plan', label);
+      action.type = 'button'; action.dataset.focusKey = 'calendar-plan'; action.title = label;
+      action.disabled = calendar.calendarPending === true;
+      action.addEventListener('click', () => {
+        if (inspect) return calendarDiagnostics?.show();
+        closePopover();
+        runAction(async () => {
+          const result = await todayPlan.ensureToday({ locateMode:'main', expectedPageTitle:calendar.pageTitle });
+          if (['partial','read-failed','ready-blocked','nav-failed'].includes(result.status)) {
+            if (todayPlanState()?.activeWorkday) calendarDiagnostics?.show(); else diagnostics.show();
+          }
+        });
+      });
+      list.append(action);
     }
     popover.append(list);
     restorePopoverFocus(focus);
@@ -1427,6 +1487,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     invalidateActivation();
     closePopover();
     diagnostics.destroy();
+    calendarDiagnostics?.destroy();
     unsubscribe?.();
     unsubscribe = null;
     unsubscribePlan?.();

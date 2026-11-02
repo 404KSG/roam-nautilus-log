@@ -1,4 +1,4 @@
-const CREATE_PLAN_LABEL = 'Nautilus Log: Create or open today’s plan';
+const CREATE_PLAN_LABEL = 'Nautilus Log: Create or open today’s Daily Note plan';
 
 export function createTodayPlanCommands({
   extensionAPI,

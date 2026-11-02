@@ -1,6 +1,8 @@
 import * as timingCore from './timing-core';
 import { graphName } from './graph-context';
 import { readBlockTree } from './entry-helpers';
+import { withActiveWorkday } from './active-plan-session';
+import { inspectRenderer } from './renderer-contract';
 import { blockUidExists, createDailyPage, createGraphBlock, openPrimaryPlan, pageTitleFor,
   readDailyPageUid, readPlanIdentity, readPrimaryPlan, showToast } from './timing-roam';
 
@@ -15,10 +17,10 @@ const sourceIdentity = frozen => JSON.stringify({kind:frozen.kind, templateUid:f
 /** Single user-intent owner. Receipts are diagnostics, not locks or recovery queues.
  * Only WebLocks serialize participating tabs; devices/manual writers are outside it.
  */
-export function createTodayPlanSession({ extensionAPI, now = () => new Date(), buildComponentString,
+function createCalendarPlanSession({ extensionAPI, now = () => new Date(), buildComponentString,
   inspectTemplate = () => ({kind:'missing'}), freezeTemplate = () => ({kind:'missing'}),
   readTemplateTree = readBlockTree, trackingEnabled = () => false, readTrackingSnapshot = () => null,
-  requestTrackingRefresh, subscribeTracking, notify = showToast } = {}) {
+  requestTrackingRefresh, subscribeTracking, notify = showToast, canCreate = () => true } = {}) {
   const host = hostGlobal();
   const settings = extensionAPI?.settings;
   const get = key => settings?.get?.call(settings, key);
@@ -36,9 +38,11 @@ export function createTodayPlanSession({ extensionAPI, now = () => new Date(), b
     } catch (_) { return 'en'; }
   };
   const labels = () => timingCore.executionCopy(language()).createToday;
+  let lastTrackingOn = false;
   function getState() {
     const text = labels();
-    return {...state, labels:text, language:language(), trackingOn:Boolean(trackingEnabled()),
+    try { lastTrackingOn = Boolean(trackingEnabled()); } catch (_) { /* Keep diagnostics available when settings fail. */ }
+    return {...state, labels:text, language:language(), trackingOn:lastTrackingOn,
       message:[state.error ? text[state.error] || text.failed : '', state.reason].filter(Boolean).join(' ')};
   }
   function setState(patch) {
@@ -49,13 +53,14 @@ export function createTodayPlanSession({ extensionAPI, now = () => new Date(), b
     for (const listener of listeners) { try { listener(getState()); } catch (e) { console.error('[Nautilus Log] plan listener',e); } }
     return getState();
   }
+  const userIdentity = () => { try { return host.roamAlphaAPI?.user?.uid?.() || ''; } catch (_) { return ''; } };
   const targetNow = () => {
     const date = new Date(now().getTime()), name = graphName(host), pageTitle = pageTitleFor(date);
-    return {date,name,pageTitle,roam:host.roamAlphaAPI,key:`${name}:${pageTitle}`};
+    return {date,name,pageTitle,roam:host.roamAlphaAPI,user:userIdentity(),key:`${name}:${pageTitle}`};
   };
   function assertTarget(t, allowDateChange = false) {
     if (destroyed) throw fault('destroyed');
-    if (hostGlobal() !== host || host.roamAlphaAPI !== t.roam || graphName(host) !== t.name) throw fault('graphChanged');
+    if (hostGlobal() !== host || host.roamAlphaAPI !== t.roam || graphName(host) !== t.name || userIdentity() !== t.user) throw fault('graphChanged');
     if (!allowDateChange && pageTitleFor(now()) !== t.pageTitle) throw fault('dateChanged');
   }
   const base = t => ({targetKey:t.key,pageTitle:t.pageTitle,pageUid:null,planUid:null,error:null,reason:null,
@@ -246,14 +251,15 @@ export function createTodayPlanSession({ extensionAPI, now = () => new Date(), b
       return fail(e,t);
     }
   }
-  function discover({authoritative=false,checkRecord=false} = {}) {
+  function discover({authoritative=false,checkRecord=false,targetSnapshot=null} = {}) {
     if (destroyed || operation) return getState();
     let t;
     try {
       t=targetNow();
       const targetChanged = state.targetKey !== t.key;
       if (targetChanged) setState({...base(t),status:'checking'});
-      if (targetChanged || authoritative || checkRecord || !checks.has(t.key)) return checkReceipt(t,authoritative);
+      if (targetSnapshot && targetSnapshot.pageTitle !== t.pageTitle) throw fault('dateChanged');
+      if (targetChanged || authoritative || checkRecord || !checks.has(t.key)) return checkReceipt(t,authoritative,null,targetSnapshot);
       if (checks.get(t.key)?.blocked || checks.get(t.key)?.pending) return getState();
       return projectRead(t,authoritative);
     } catch(e) {return fail(e,t);}
@@ -370,10 +376,13 @@ export function createTodayPlanSession({ extensionAPI, now = () => new Date(), b
         const info=inspectTemplate();
         if(['custom','unsupported'].includes(info.kind)) return absent(t,info);
         const string=await buildComponentString?.();assertTarget(t);
-        if(!timingCore.isNautilusComponent(string)) throw fault('failed','No valid fallback renderer is available.');
+        if(inspectRenderer(string).kind !== 'current' || !inspectRenderer(string).mutable) throw fault('failed','No valid current renderer is available for creation.');
         root={uid:'fallback-root',string,properties:{open:true},children:[]};
       }
       if(!root) throw fault('failed','The template tree could not be frozen.');
+      if (inspectRenderer(root.string).kind !== 'current' || !inspectRenderer(root.string).mutable || !canCreate()) {
+        throw fault('blocked','The renderer must be installed and current before creating a plan.');
+      }
       if(typeof t.roam?.data?.block?.create!=='function' && typeof t.roam?.createBlock!=='function') throw fault('apiUnavailable');
       let pageUid=readDailyPageUid(t.pageTitle) || t.roam?.util?.dateToPageUid?.(t.date);
       if(!pageUid) throw fault('apiUnavailable');
@@ -405,6 +414,7 @@ export function createTodayPlanSession({ extensionAPI, now = () => new Date(), b
     let mutationError = null;
     for(const node of intent.nodes.slice(result.count)) {
       assertTarget(t,intent.attempted);
+      if (!canCreate()) { mutationError = fault('blocked','The renderer changed during plan creation.'); break; }
       if(blockUidExists(node.uid)) break; // a nonparticipating writer: verify, never overwrite
       intent.attempted=true;
       try {
@@ -579,4 +589,8 @@ export function createTodayPlanSession({ extensionAPI, now = () => new Date(), b
     host.document?.removeEventListener?.('visibilitychange',foreground);host.removeEventListener?.('focus',foreground);}
   return {getState,discover,ensureToday,activateToday,locateToday,openTemplate,initialize,destroy,
     subscribe:listener=>{if(!destroyed)listeners.add(listener);return()=>listeners.delete(listener);}};
+}
+
+export function createTodayPlanSession(options) {
+  return withActiveWorkday(options, createCalendarPlanSession);
 }

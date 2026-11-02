@@ -53,6 +53,22 @@ A detected running Todo Trigger blocks Nautilus stamping because it can append i
 
 The scheduler is deterministic and does not generate estimates. A task remains atomic:
 if it cannot fit one gap, it moves to the next suitable gap instead of being split.
+
+**Respect event positions** is independent and **off by default**. Off preserves gap filling
+in task order, even when events are listed first. On gives each pending task the latest end
+of all valid fixed events preceding it in the outline as an earliest start. The floor is
+cumulative: a later-listed, earlier event cannot move it backward. Overlaps still count
+once for capacity. Overnight ranges align to the owning window before floors are applied;
+malformed, reversed, and zero-length ranges supply no floor. Completed task rows do not
+reset it. A floor beyond END leaves the whole remaining ordered queue unscheduled, even
+when there is unused time elsewhere. No task timestamps are written by this option.
+
+A fixed event marked DONE still reserves its written range until that range ends. DONE
+changes presentation, not cancellation; edit or remove the range to release it. Tidy
+leaves future reservations in their relative positions, including nonchronological events,
+and rechecks settlement eligibility before later moves. Pending-task priority and effective
+future-event constraints therefore survive Tidy.
+
 While the current time is inside a fixed event, the next task can correctly keep the same
 start at that event's end. A task that no longer fits before END is unscheduled, not frozen
 at an earlier hour. The minute timer and foreground/visibility/page-return synchronization
@@ -62,7 +78,7 @@ use the same wall-clock snapshot, including its calendar day.
 
 | Metric | Meaning |
 | --- | --- |
-| Planned | Remaining flexible-task demand; `open` is unassigned budget ÷ full-day flexible capacity, not clock time left or energy |
+| Planned | Remaining flexible-task demand; `free` is unassigned budget ÷ full-day flexible capacity, not clock time left or energy |
 | Remaining | Available time left after Planned demand |
 | Overload | Demand beyond available time |
 | No fitting slot | Time exists in total, but no continuous gap can hold an atomic task |
@@ -74,7 +90,7 @@ small flame marks whether the current minute is consuming Available or Event tim
 
 ## Visual language
 
-- Roam blue: flexible tasks; the current task has a stronger fill and outline
+- Roam blue: flexible tasks; the task planned for now has a stronger fill and outline
 - Muted golden yellow: fixed events
 - Gray with a solid outline: completed local CLOCK Actual or an explicit fixed range
 - Gray with dashed outlines: completed flexible tasks using estimated durations; Tips distinguish stamped from estimated placement
@@ -98,7 +114,8 @@ The **continuous shell** draws each timed record as one surface, with rounded tr
 through the radius profile. Hour marks remain as edge ticks rather than lines that visually
 split a task. Titles have no duration/status sublabel: only the active task or event shows
 **Planned now** or **Planned event**, respectively, underneath. Hover/focus Tips retain the
-full duration, Actual and Estimate details.
+full duration, Actual and Estimate details. These labels describe the forecast; a CLOCK
+can be timing another task without changing your task order.
 The center clock uses the shared UI font with tabular numerals, regular weight and secondary
 text color. Its size is capped at 16px and still adapts to narrow views; the date, clock position
 and needle are unchanged. The curves retain the shrinking-radius model and real time boundaries, but
@@ -108,7 +125,12 @@ Hover or keyboard focus emphasizes the surface, its leader and its colored title
 It does not move the chart. English is the default UI language; an explicit Chinese preference
 is preserved, and task titles always remain in their source language. Toolbar icons are unchanged.
 
-Actual is summed CLOCK time; its drawn contiguous interval is a completion-anchored projection, not a session timeline. For example, CLOCK 09:00–09:40 with `d15:00` draws 14:20–15:00; sessions 09:00–09:15 plus 10:00–10:15 draw 09:45–10:15. LOGBOOK sessions remain untouched.
+Actual is summed CLOCK time; its drawn contiguous interval is a completion-anchored projection, not a session timeline. For example, CLOCK 09:00–09:40 with `d15:00` draws 14:20–15:00; sessions 09:00–09:15 plus 10:00–10:15 draw 09:45–10:15. LOGBOOK sessions remain untouched. Tips name the **total** and **display interval** explicitly.
+
+Estimated completed tasks carry a small `≈` before the title, including estimates anchored
+by a completion stamp. The cue participates in title measurement and wrapping; it does not
+remove previously visible title text or add a universal subtitle row. Accessible text and
+Tips explain that the duration is estimated.
 
 Completed tasks without actual timing use their explicit estimate, or Default Todo Duration
 (15 minutes by default). They receive spiral slices and connected labels without requiring
@@ -145,7 +167,7 @@ toolbar colors in light and dark themes, including hover and keyboard focus.
 - **Desk switch:** show or hide unfinished-task cards below the chart. Only the slider is visible; hover or keyboard focus shows its Desk label. The thumb slides right and the track turns blue when open. Click, Space or Enter toggles it; the state also follows fold/expand restoration, control remounts and saved preferences.
 - **Help (?):** immediately after Desk, the question mark opens a native-style quick guide.
   It shows this chart's resolved hours and default task duration, explains Available,
-  Events, Planned and `left`, and summarizes scheduling, Desk/Tidy and completion styles.
+  Events, Planned and `free`, and summarizes scheduling, Desk/Tidy and completion styles.
   It also points to the main settings and the full guide. Help is read-only, not a second
   settings editor. Click again, click outside or press Escape inside Help to close it.
 - **Tidy:** the Blueprint `crystal-ball` glyph runs the existing Tidy action: move completed
@@ -280,7 +302,7 @@ to change ancestor padding and impose a viewport-sized canvas. Only native card
 sizes are retained locally; opening this component must not change page spacing.
 Search and New task share one flex-aligned tool group, with New task at the trailing
 edge. The overview has no duplicate close X; use the chart's Desk switch to hide it.
-Tab moves from Search to New note, then directly to the cards. The focus dialog's
+Tab moves from Search to New task, then directly to the cards. The focus dialog's
 Close button, backdrop dismissal and existing Escape behavior are unchanged.
 
 Read-only card previews keep updating while a task editor or new-note draft is open.
@@ -320,8 +342,9 @@ or copy the editor's uncommitted buffer into the graph.
   the focus header open a native-style draft. The first committed, nonblank input
   creates one direct child at the start of the current Nautilus block, then hands
   editing to Roam. Closing an untouched draft creates no empty block; IME text is
-  not written before composition ends. No TODO marker is forced. Content classified
-  as an event or DONE is saved but excluded from active cards.
+  not written before composition ends. No TODO marker is forced. Ordinary text is an implicit
+  budget task, using the default estimate when no duration is given; its child notes/logs add
+  no independent demand. Content classified as an event or DONE is saved but excluded from active cards.
 - **Native focus editing.** Click a card to edit its original UID, path, and children
   with `renderBlock`; Shift-click opens it in the sidebar. The focus dialog is centered
   in the viewport, up to 880 CSS pixels wide, with 16px side gutters on smaller windows.
@@ -407,7 +430,7 @@ state resolves the reservation and a later confirmed removal may re-add it. A
 different wrapper does not resolve the reservation. Reload checks the same
 reserved UID and never allocates a second UID for that source and plan. Imports require the public
 `data.pull` and `data.block.create` APIs and a verifiable graph/type/user context.
-Progress temporarily uses the existing title area, leaving Search and New note
+Progress temporarily uses the existing title area, leaving Search and New task
 unobstructed. Hover over a truncated message to read it in full. The
 full message is also announced to assistive technology; terminal feedback clears
 after five seconds and restores the title without moving the cards.
@@ -495,15 +518,45 @@ current [site.css](https://roamresearch.com/assets/css/less-compiled/site.css) a
 [route-app.js](https://roamresearch.com/js/compiled/route-app.js). The extension does
 not call private minified functions or bundle the Roam client source.
 
+## Renderer upgrades
+
+Renderer r2 uses source UID `roam-render-Nautilus-Log-r2-cljs`, namespace
+`nautilus-log-r2`, and a version-local runtime bridge. It creates the r2 source only when
+absent and reuses byte-identical content. Different content at that UID, an unknown
+contract, or a newer revision is preserved and reported. A renderer-source behavior change
+must advance revision, UID, and namespace together; Git hashes are display metadata.
+
+Automatic migration is limited to one unambiguous managed template reference and the
+active Primary Plan reference, including an existing previous-date overnight owner. It
+changes only the renderer UID. Prefixes, argument text, attributes, children, and order
+remain intact. Active editors are not overwritten. Multiple/custom templates and newer
+renderer roots are not guessed, renamed, or migrated backward. Newer family members still
+count as existing plans for discovery and duplicate prevention.
+
+A bounded `renderer-migration-pending` record is saved and read back before a reference
+write. It holds graph/user identity, UIDs and SHA-256 hashes, with a 64-record / 32 KiB
+limit and no block text. An uncertain result remains verification-only across reloads;
+there is no automatic retry or replacement-plan fallback. Inspect the referenced block
+and the original request rather than deleting/recreating the plan.
+
+Historical pages are not scanned or migrated. A compatibility reader supports their old
+renderers, including retained sessions across r2 reloads. Current chart, Desk, and Help
+instances use their own bridge ownership. Old packages can still rewrite legacy sources
+or add/repoint template roots; they cannot be controlled retroactively. Update all clients.
+If another loaded package replaces the legacy globals, reload after removing that conflict
+to restore historical views. The r2 renderer does not depend on those globals.
+
 ## Execution Layer
 
 The optional Execution Layer defaults to **off**. Its advanced settings remain hidden
-until enabled. While it is off, Nautilus Log still mounts a 30px today-plan launcher
-and one create-or-open command, but it loads no execution panel, 1s ticker, or CLOCK writer. The chart may still read existing LOGBOOK/CLOCK history.
+until enabled. While it is off, Nautilus Log still mounts a 30px create/open launcher
+and one calendar-day command, but no execution panel, 1s ticker, or CLOCK writer. The chart
+may still read existing LOGBOOK/CLOCK history.
 
-Click **+ Create today's plan** (or the command) to append a frozen copy of the
-single managed Nautilus renderer root and its complete ordinary descendant tree
-to the local-calendar Daily Note, regardless of the page you are viewing. Every
+When no active plan exists, **+ Create today's plan** copies the managed template to the
+calendar date. **Nautilus Log: Create or open today’s Daily Note plan** always targets that
+date explicitly, regardless of the page you are viewing. The action appends a frozen copy
+of the single managed renderer root and its complete ordinary descendant tree. Every
 new block receives a new UID; references inside that tree are remapped and
 external references remain unchanged. Any recognized Nautilus renderer already
 on that page, including an empty or all-DONE plan, is locate-only. Multiple roots,
@@ -537,12 +590,14 @@ already-issued host requests cannot be rolled back. A page created before a late
 pre-template failure may remain empty. Such failures are retryable when no template
 request was made.
 
-No new per-second graph queries are added. With execution on, discovery reuses
-runtime data; with it off, checks occur at initialization, throttled foreground,
-midnight, and explicit actions. A manually inserted template is found at the next
-check, not by scanning on every keystroke.
+No new per-second graph queries are added. Normal discovery can reuse runtime data.
+Overnight selection reads at most the relevant calendar-day and previous-day candidates;
+unknown global hours are resolved from supported plan arguments. Checks occur at
+initialization, foreground return, midnight/END, relevant owner changes, and explicit
+actions. Unchanged tracking ticks do not rediscover the date or reread template receipts.
+A manually inserted plan is found at the next check, not on every keystroke.
 
-When Execution Layer is enabled, the first Nautilus Log on today's Daily Note becomes
+When Execution Layer is enabled, the first Nautilus Log on the active workday's Daily Note becomes
 the **Primary Plan** used by the topbar panel. After a successful create, the existing
 capacity text or 136×4 energy bar returns and the plan is opened in the main window.
 If CLOCK/POMO is already running without a plan, its timer and applicable stop
@@ -556,7 +611,7 @@ block to the top of Roam's right sidebar.
 | --- | --- |
 | Timing | Current Timing Line and recently closed tasks |
 | Plan | Unfinished direct-child tasks from the Primary Plan |
-| Review | Today's Planned, Actual, and valid variance states |
+| Review | Active workday's Planned, Actual, and valid variance states |
 
 Switching tasks closes the previous CLOCK and opens the next at the same instant.
 Before starting, Nautilus checks running CLOCKs rather than trusting a tab's cache.
@@ -573,6 +628,26 @@ preserve focus and list position; completing a row moves focus to a surviving ta
 or the selected tab. Escape closes the panel and returns focus to its trigger.
 Plan times after midnight include an explicit **next day** label.
 
+### Active overnight workdays
+
+For a November 1 plan with a 21:00–02:00 window, 00:30 on November 2 still belongs to
+November 1: the logical minute is 1470 and 90 minutes remain. Plan, capacity, task actions,
+and Review use that owner. Global hours take precedence when present; otherwise supported
+renderer arguments define the window. An unreadable previous candidate is an error, not
+proof that it is absent.
+
+The lightweight launcher opens the active owner and names its date. In the execution
+popover, the workday date and END are visible; a separate dated button opens or creates
+the calendar-day plan. The calendar-day command has the same explicit target. Creation
+retains its frozen date, template, receipts, and no-duplicate checks. It never recreates
+yesterday or silently creates a second plan when an old Open target disappears.
+
+At END, selection returns to the calendar date. No boundary automatically stops a CLOCK
+or completes a task. A previous-owner timer keeps its date and explicit Stop control;
+its task is not exposed as a writable member of the new plan. Queued actions recheck the
+owner under the lock. Once accepted, an action keeps its original owner and instant
+through subsequent CLOCK/completion writes rather than retargeting after rollover.
+
 ### Optional capacity energy bar
 
 Enable **Show capacity as an energy bar** to replace the ordinary one-line
@@ -580,7 +655,7 @@ topbar token with a borderless two-level depth gauge. Its fixed 136×4px capsule
 uses an OpenUsage-like slim profile, with fully rounded ends and no border, shadow,
 or decorative end structure. The
 track sits above the topbar centerline, while the lower row is one left-aligned
-phrase such as `42% left · 3h20m planned`. The two rows fold symmetrically around the
+phrase such as `42% free · 3h20m planned`. The two rows fold symmetrically around the
 centerline. While CLOCK or POMO runs, its timer and stop control remain centered
 on that line instead of aligning to the track:
 
@@ -593,9 +668,8 @@ on that line instead of aligning to the track:
 
 Every width uses the full day's flexible capacity as its denominator. Fixed events
 remain excluded, untimed work uses Default Todo Duration, and the clock contracts
-the bar once per minute without another Roam read or timer. In energy mode, the open
-panel uses the same projection; time-only updates preserve task action nodes.
-Text-only mode retains its existing cached projection. Confirmed completion
+the bar once per minute without another Roam read or timer. Both energy and text modes
+use the same live projection; time-only updates preserve task action nodes. Confirmed completion
 from the panel keeps the exact planned reading visible, confirms that number in
 place, and settles both track layers on one short width transition. A failed write
 changes nothing; external TODO/DONE or duration edits redraw silently without a
@@ -609,7 +683,7 @@ the icon, leaving no detached bar or status text beside Roam search.
 
 - A bare `((source TODO))` keeps its TODO/DONE state in the real source block.
   Completing it from Nautilus Log changes that source TODO to DONE; its CLOCK remains
-  under today's direct wrapper so Actual still belongs to today.
+  under the active workday's direct wrapper, so Actual belongs to that owner.
 - An explicit outer `TODO ((source))` owns today's state. Completing it changes only
   the outer marker and never rewrites the reusable source.
 - A bare reference whose source was already DONE is absent from Plan and Review. If
@@ -619,7 +693,10 @@ the icon, leaving no detached bar or status text beside Roam search.
   watches only the exact sources used by the Primary Plan; it does not add a graph-wide
   status scan.
 
-Recent retention defaults to 45 minutes. The Pomodoro threshold defaults to 45
+Recent retention defaults to 45 minutes. Standalone POMO remains inside **Execution Layer ·
+Advanced** and shares its startup check: disable the separate Roam Logbook extension first,
+even if you only want POMO. It has no independent entry or second timer runtime.
+The Pomodoro threshold defaults to 45
 minutes and changes the live signal without stopping work. When no task CLOCK is
 active, the panel-header stopwatch starts a standalone count-up POMO. It writes no
 Roam blocks and does not affect Actual, Planned, Review, or the spiral; starting a
@@ -633,7 +710,7 @@ Recent or the forgotten-timer warning.
 ## Planned and Actual history
 
 - Unfinished tasks are scheduled from Planned estimates.
-- Completed flexible tasks prefer total valid same-day Actual time.
+- Completed flexible tasks prefer total valid Actual time within the owner's evidence bounds.
 - Multiple CLOCK sessions remain separate in `LOGBOOK::`, while the spiral combines
   their total into one historical slice.
 - Actual time is never capped at Planned time.
@@ -643,8 +720,14 @@ Recent or the forgotten-timer warning.
   around fixed events and anchored history. Dashed outlines and the tip distinguish
   estimated placement from recorded completion times. Genuine capacity overflow retains
   the task's title and duration; missing CLOCK or stamps never erase the estimate.
-- For an overnight chart window, next-day CLOCK time remains part of the owning
-  Daily Note until that window ends.
+- CLOCK evidence starts at the owner's local midnight and includes at least the next
+  calendar midnight, extending to overnight END when that is later. A normal 06:00–20:00
+  budget still counts a 22:00 CLOCK. Local calendar boundaries handle daylight-saving changes;
+  durations measure elapsed time while displayed endpoints remain local clock labels.
+- In a 21:00–02:00 owner window, local `d00:15` is interpreted as next-day 00:15; a local
+  23:30–00:15 CLOCK contributes 45 minutes to both chart and Review. An exact 24:00 endpoint
+  can use matching local CLOCK evidence. Dateless referenced stamps keep their separate
+  interpretation and do not acquire a source completion date.
 
 Todo Trigger is optional. Its completion timestamp can supply the `dHH:MM` anchor,
 but ordinary planning and completion do not require it.
@@ -660,6 +743,7 @@ but ordinary planning and completion do not require it.
 | Legend Max Length | 22 |
 | Default Todo Duration | 15 minutes |
 | Urgent Trigger Word | Empty |
+| Respect event positions | Off |
 | Google Calendar | Not connected; Primary calendar after connection |
 | Completion timestamp | Off |
 | Execution Layer · Advanced | Off |
@@ -695,7 +779,7 @@ flexible TODO/DONE rows with the configured Default Todo Duration. See
 
 The Command Palette exposes:
 
-- **Nautilus Log: Create or open today’s plan** (always available)
+- **Nautilus Log: Create or open today’s Daily Note plan** (always available; calendar date)
 - **Nautilus Log: 1. Focus current block** (Execution Layer on)
 - **Nautilus Log: 2. Clock out Timing Line** (Execution Layer on)
 - **Nautilus Log: 3. Locate Primary Plan** (Execution Layer on)
@@ -712,7 +796,13 @@ Screenshots and results are in `/tmp/nautilus-real-today-plan`. Official Roam sc
 and type evidence, exact integrity rules, and platform limits are documented in the
 [full-template design](./plans/2026-09-10-full-template-creation-design.md).
 No live Roam Desktop graph was used; native mutation/Pull/settings behavior remains
-a live-validation boundary.
+a live-validation boundary. `test:renderer-versions` evaluates complete frozen v1 and
+current CLJS in both orders with real bridge/session/watch/Desk services and actual legacy
+scaffold writes. `test:overnight-ui` checks both launchers, explicit calendar creation,
+owner-date labels, 45-minute Review, absent global hours, and a running CLOCK across END.
+Set `NAUTILUS_VERSION_OUT` or `NAUTILUS_OVERNIGHT_OUT` for separate output directories.
+Skipped cases remain unverified; none of these fixtures certifies OS IME, atomic native
+Undo, Calendar authorization, or cross-device synchronization.
 
 ## Data and safety
 
@@ -726,7 +816,7 @@ Actual time is stored as compatible Org-style graph data:
 
 Disable the separate Roam Logbook extension before enabling Actual Time Tracking;
 Nautilus Log refuses to start a second CLOCK writer. Multiple charts may exist on a
-page, but only the first chart on today's Daily Note becomes the execution panel's
+page, but only the first chart on the active workday's Daily Note becomes the execution panel's
 Primary Plan. Breadcrumb and collapsed-path replicas skip expensive chart rendering;
 right-sidebar views use the compact chart with a folded Schedule section. Unloading
 the extension does not rewrite or delete user blocks.

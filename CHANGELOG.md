@@ -4,11 +4,16 @@
 
 ### Changed
 
-- Move the managed renderer to r2 (`nautilus-log-r2`, an r2 source UID, and an isolated bridge). Legacy renderer blocks remain readable and discoverable but are not rewritten; mismatched or newer renderer contracts fail closed rather than being downgraded.
-- Keep future fixed-event reservations, including DONE events, until their written end. Later tasks use a cumulative outline-order floor; Tidy leaves those future reservations in place.
-- Clarify completion-anchored Actual projections, planned-now wording, unassigned capacity, and Desk **New task / 新任务** without changing task insertion or CLOCK ownership.
+- Isolate renderer r2 by source UID, CLJS namespace, and owned runtime bridge. Migrate only the managed template and active Primary Plan reference, preserving the surrounding text and tree. Legacy source blocks and history remain intact; ambiguous targets, source mismatches, newer contracts, and unresolved writes are preserved with a notice. Retained historical readers can reconnect across r2 reloads.
+- Keep fixed-event reservations, including DONE events, through their written end. The new independent **Respect event positions / 任务遵循事件位置** switch defaults off. When enabled, preceding events impose a cumulative earliest start without splitting or overtaking tasks. Tidy retains future reservations and rechecks eligibility during writes.
+- Show Actual **total** and **display interval** explicitly, add a measured `≈` cue to estimated completed records, and use **Planned now / 当前计划** and **free / 未分配**. Preserve accepted completion-anchor precedence, visible titles, compact geometry, and CLOCK ownership.
+- Rename Desk creation to **New task / 新任务**, including draft and accessible labels, while preserving index-zero insertion, implicit tasks, native editing, and child-log behavior.
+- Clarify the calendar-date command as **Nautilus Log: Create or open today’s Daily Note plan**. Shorten first-use documentation, document the existing execution/POMO entry and legacy Logbook conflict, list completion timestamps and event-order settings, and credit original author Tomáš Baránek.
 
 ### Fixed
+
+- Keep an existing previous-date overnight plan active through END for Plan, capacity, task actions, and Review. Opening it remains separate from explicit calendar-date creation and recovery. Revalidate queued actions and retain accepted owner/instant across in-flight writes; midnight/END never automatically stops CLOCK.
+- Use full owner-day CLOCK evidence, extending through overnight END where needed. Keep ordinary evening CLOCK outside budget hours in Actual, and preserve local endpoint labels through DST changes. Use the same minute projection in both topbar display modes.
 
 - Replace Tidy's glyph with the official Blueprint `crystal-ball` icon. Keep its 18px canvas,
   native toolbar colors, accessible label, tooltip, button states and Tidy action unchanged.
@@ -60,7 +65,7 @@
   completed-record visibility; do not restore the former completed-only Eye filter.
 
 - Add a native-style Help question mark beside the Desk switch. Its read-only
-  popover explains capacity labels (including the full-day denominator for `left`),
+  popover explains capacity labels (including the full-day denominator for `free`),
   resolved chart hours/default duration, core actions and completion styles, with a
   localized full-guide link. Outside click and owned Escape dismiss it; settings,
   folding, navigation, anchor removal and unload release its transient resources.

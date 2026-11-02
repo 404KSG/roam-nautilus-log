@@ -1,11 +1,13 @@
 import cljsFile from "./component.cljs";
 import { isRightSidebarRenderContext } from "./render-context.js";
-export { isRightSidebarRenderContext };
+import { REVISION as RENDERER_REVISION, CODE_UID as CURRENT_CODE_BLOCK_UID,
+  LEGACY_UIDS as LEGACY_CODE_BLOCK_UIDS, rendererIdentity, inspectRenderer,
+  inspectRendererSource } from './renderer-contract';
+export { isRightSidebarRenderContext, RENDERER_REVISION, CURRENT_CODE_BLOCK_UID, LEGACY_CODE_BLOCK_UIDS, rendererIdentity };
 
 const RENDER_PAGE = "roam/render";
 const TEMPLATE_MARKER = "[[roam/templates]]";
 const CURRENT_TEMPLATE_NAME = `Nautilus Log ${TEMPLATE_MARKER}`;
-const RETIRED_TEMPLATE_NAME = "Nautilus Log · Previous template";
 const LEGACY_TEMPLATE_NAMES = new Set([
   `Nautilus Flow ${TEMPLATE_MARKER}`,
   `Nautilus Enhanced ${TEMPLATE_MARKER}`,
@@ -15,32 +17,8 @@ const TEMPLATE_GENERATION_PRIORITY = new Map([
   [`Nautilus Flow ${TEMPLATE_MARKER}`, 20],
   [`Nautilus Enhanced ${TEMPLATE_MARKER}`, 10],
 ]);
-// Renderer identities are a compatibility contract, not a source-version
-// heuristic.  A later embedded source must bump all three values together.
-export const RENDERER_REVISION = 2;
-export const CURRENT_CODE_BLOCK_UID = `roam-render-Nautilus-Log-r${RENDERER_REVISION}-cljs`;
-export const LEGACY_CODE_BLOCK_UIDS = [
-  "roam-render-Nautilus-Log-cljs",
-  "roam-render-Nautilus-Flow-cljs",
-  "roam-render-Nautilus-cljs",
-];
-const LEGACY_RENDER_STRING_CORES = LEGACY_CODE_BLOCK_UIDS.map(
-  (uid) => `{{[[roam/render]]:((${uid}))`,
-);
-const RENDER_UID_RE = /\{\{\s*\[\[roam\/render\]\]\s*:\s*\(\((roam-render-Nautilus(?:-Log(?:-r\d+)?|-Flow)?-cljs)\)\)/ig;
-
-export function rendererIdentity(value) {
-  const match = /roam-render-Nautilus(?:-Log(?:-r(\d+))?|-Flow)?-cljs/.exec(String(value || ''));
-  if (!match) return { kind: 'unsupported', revision: null, uid: null };
-  const uid = match[0];
-  const revision = match[1] ? Number(match[1]) : 1;
-  return { kind: revision === RENDERER_REVISION ? 'current' : revision > RENDERER_REVISION ? 'newer' : 'legacy', revision, uid };
-}
-
-function rendererInvocation(string) {
-  const matches = [...String(string || '').matchAll(RENDER_UID_RE)];
-  return matches.length === 1 ? { uid: matches[0][1], identity: rendererIdentity(matches[0][1]) } : null;
-}
+const LEGACY_RENDER_STRING_CORES = LEGACY_CODE_BLOCK_UIDS.map(uid => `{{[[roam/render]]:((${uid}))`);
+const rendererInvocation = string => inspectRenderer(string).invocation;
 
 const SUPPRESSED_RENDER_CONTEXT_SELECTOR = [
   ".rm-zoom-path",
@@ -67,10 +45,26 @@ function api() {
   return typeof window !== "undefined" ? window.roamAlphaAPI : undefined;
 }
 
-function blockByUid(uid) {
-  const roam = api();
-  if (!roam || !uid) return null;
-  return roam.data?.pull?.("[*]", [":block/uid", uid]) || null;
+function blockByUid(uid, strict = false) {
+  const roam = api(), pull = roam?.data?.pull || roam?.pull;
+  if (typeof pull !== 'function' || !uid) {
+    if (strict) throw Error('Roam block inspection is unavailable.');
+    return null;
+  }
+  const value = pull.call(pull === roam.data?.pull ? roam.data : roam, '[*]', [':block/uid', uid]);
+  if (value == null) return null;
+  const block = normalizeBlock(value);
+  if (!block || typeof block !== 'object' || block.uid !== uid || typeof block.string !== 'string') {
+    if (strict) throw Error('Roam returned unreadable renderer content.');
+    return null;
+  }
+  return block;
+}
+
+export const rendererSourceText = () => `\`\`\`clojure\n ${cljsFile} \`\`\``;
+export function readRendererSource() {
+  const block = blockByUid(CURRENT_CODE_BLOCK_UID, true);
+  return inspectRendererSource(block?.string ?? null, rendererSourceText());
 }
 
 function queryBlock(uid, strict = false) {
@@ -145,7 +139,7 @@ function getPageUidByPageTitle(title) {
 }
 
 function getBlockContentStringByUID(uid) {
-  return queryBlock(uid)?.string || null;
+  return queryBlock(uid)?.string ?? null;
 }
 
 async function createPage(title) {
@@ -205,31 +199,14 @@ function managedRenderCores(renderStringCore) {
   return [...new Set([renderStringCore, ...LEGACY_RENDER_STRING_CORES].filter(Boolean))];
 }
 
-function parseTemplateSettings(string, renderStringCores) {
-  const source = String(string || "");
-  const renderStringCore = renderStringCores.find((core) => source.includes(core));
-  if (!renderStringCore) return null;
-
-  const coreIndex = source.indexOf(renderStringCore);
-  const prefix = source.slice(0, coreIndex).trim();
-  const tail = source.slice(coreIndex + renderStringCore.length);
-  const closingIndex = tail.lastIndexOf("}}");
-  if (closingIndex < 0) return null;
-
-  const tokens = tail.slice(0, closingIndex).trim().match(/"(?:\\.|[^"])*"|\S+/g) || [];
-  const settings = { "prefix-str": prefix };
-  const numericKeys = ["desc-length", "todo-duration", "workday-start"];
-  numericKeys.forEach((key, index) => {
-    const value = Number(tokens[index]);
-    if (Number.isFinite(value)) settings[key] = value;
-  });
-  if (tokens.length >= 4) {
-    settings["color-1-trigger"] = tokens[3].replace(/^"|"$/g, "");
-  }
-  const workdayEnd = Number(tokens[4]);
-  if (Number.isFinite(workdayEnd)) settings["workday-end"] = workdayEnd;
-
-  return { renderStringCore, settings, unsupported: tokens.length > 5 };
+function parseTemplateSettings(string, _renderStringCores) {
+  const source = String(string || ''), info = inspectRenderer(source), item = info.invocation;
+  if (!item) return null;
+  const settings = { 'prefix-str': source.slice(0, item.start).trim() };
+  const keys = ['desc-length','todo-duration','workday-start','color-1-trigger','workday-end'];
+  (item.args || []).forEach((value, index) => { settings[keys[index]] = value; });
+  return { renderStringCore: source.slice(item.start, item.uidEnd + 2), settings,
+    unsupported: !item.supportedArgs || !['current','legacy'].includes(info.kind), identity: info.identity || item.identity };
 }
 
 function managedTemplateCandidates(renderStringCore, strict = false) {
@@ -239,9 +216,8 @@ function managedTemplateCandidates(renderStringCore, strict = false) {
       const knownTemplate = template.string === CURRENT_TEMPLATE_NAME
         || LEGACY_TEMPLATE_NAMES.has(template.string);
       if (!knownTemplate) return null;
-      const renderBlock = childBlocks(template.uid, strict).find((child) => (
-        rendererInvocation(child.string)?.identity.kind !== 'unsupported'
-      ));
+      const renderChildren = childBlocks(template.uid, strict).filter(child => inspectRenderer(child.string).recognized);
+      const renderBlock = renderChildren.length === 1 ? renderChildren[0] : null;
       const parsed = renderBlock
         ? parseTemplateSettings(renderBlock.string, [
           `{{[[roam/render]]:((${rendererInvocation(renderBlock.string)?.uid}))`,
@@ -272,11 +248,10 @@ function preferredTemplateCandidate(candidates, renderStringCore) {
 }
 
 export function readExistingTemplateState(renderStringCore) {
-  const candidate = preferredTemplateCandidate(
-    managedTemplateCandidates(renderStringCore),
-    renderStringCore,
-  );
-  if (!candidate?.parsed) return null;
+  const candidates = managedTemplateCandidates(renderStringCore);
+  if (candidates.length !== 1) return null;
+  const candidate = candidates[0];
+  if (!candidate?.parsed || candidate.parsed.unsupported) return null;
   return {
     renderStringCore: candidate.parsed.renderStringCore,
     settings: { ...candidate.parsed.settings },
@@ -301,10 +276,9 @@ export function freezeCanonicalTemplate(renderStringCore) {
     return unsupported('The template needs one supported managed renderer without extra arguments.');
   }
   const source = candidate.renderBlock.string || '';
-  const renderStringCores = managedRenderCores(renderStringCore);
-  const coreCount = renderStringCores.reduce((count, core) => count + source.split(core).length - 1, 0);
-  if (source.slice(source.lastIndexOf('}}') + 2).trim() || coreCount !== 1
-    || (source.match(/\{\{\s*(?:\[\[)?roam\/render/g) || []).length !== 1) {
+  const identity = inspectRenderer(source);
+  if (identity.kind !== 'current' || !identity.mutable) return unsupported('Upgrade this managed template to the current renderer before creating a plan.');
+  if (source.slice(identity.invocation.end).trim()) {
     return unsupported('The template must contain exactly one renderer and no trailing content.');
   }
   const siblings = childBlocks(candidate.template.uid, true);
@@ -346,112 +320,112 @@ export function templateTreeFingerprint(tree) {
   return tree ? fingerprintTree(tree) : null;
 }
 
-async function updateBlockIfChanged(uid, string) {
-  const roam = api();
-  if (!roam?.updateBlock || !uid || getBlockContentStringByUID(uid) === string) return false;
-  await roam.updateBlock({ block: { uid, string } });
-  return true;
-}
-
 function renderBlockString(renderStringCore, templateString) {
   return templateString || `${renderStringCore}}}`;
 }
 
-/**
- * Creates or repairs only the three known Nautilus scaffold generations on
- * roam/render. It never scans or rewrites historical Daily Note blocks.
- */
+/** Read before installing anything; a newer/custom template is never replaced. */
+export function inspectRendererScaffold(renderStringCore) {
+  if (typeof api()?.q !== 'function') throw Error('Roam template inspection is unavailable.');
+  const code = readRendererSource();
+  if (!['absent','current'].includes(code.state)) throw Error(code.state === 'newer'
+    ? 'This window’s extension is older than the renderer. Update this client.'
+    : 'The renderer code differs from this revision. Existing content was preserved.');
+  const candidates = managedTemplateCandidates(renderStringCore, true);
+  if (candidates.length > 1) throw Error('Multiple managed templates were found. Keep one template before upgrading.');
+  const candidate = candidates[0] || null;
+  if (candidate) {
+    const children = childBlocks(candidate.template.uid, true);
+    if (children.length && (children.length !== 1 || !candidate.renderBlock || candidate.parsed?.unsupported
+      || !inspectRenderer(candidate.renderBlock.string).mutable
+      || candidate.renderBlock.string.slice(rendererInvocation(candidate.renderBlock.string).end).trim())) {
+      throw Error('The managed template is newer, custom, or ambiguous. Its contents were preserved.');
+    }
+  }
+  return { code, candidate };
+}
+
+/** Install immutable r2 code, then seed or narrowly migrate the one template. */
 export async function createRenderBlock(
-  renderPageName,
-  titleblockUID,
-  version,
-  codeBlockUID,
-  componentName,
-  templateString,
-  renderStringCore,
+  renderPageName, titleblockUID, version, codeBlockUID, componentName,
+  templateString, renderStringCore, options = {},
 ) {
   const roam = api();
   if (!roam) return false;
-  const renderPageUID = getPageUidByPageTitle(renderPageName) || await createPage(renderPageName);
-  if (!renderPageUID) return false;
-
-  const existingTitle = blockByUid(titleblockUID);
-  if (!existingTitle) {
-    await createBlock(renderPageUID, "last", componentName, titleblockUID, { heading: 3 });
-  }
-
-  const children = childBlocks(titleblockUID);
-  const templateCandidates = managedTemplateCandidates(renderStringCore);
-  const canonicalTemplate = preferredTemplateCandidate(templateCandidates, renderStringCore);
-  let templateBlock = canonicalTemplate?.template
-    || children.find((child) => child.string === CURRENT_TEMPLATE_NAME);
-  if (!templateBlock) {
-    const templateBlockUID = roam.util.generateUID();
-    await createBlock(titleblockUID, 0, CURRENT_TEMPLATE_NAME, templateBlockUID);
-    templateBlock = { uid: templateBlockUID };
-  } else {
-    await updateBlockIfChanged(templateBlock.uid, CURRENT_TEMPLATE_NAME);
-  }
-
-  // Keep old scaffold blocks for audit and rollback, but remove their template
-  // marker so Roam exposes exactly one Nautilus Log entry in the template menu.
-  await Promise.all(
-    templateCandidates
-      .filter((candidate) => candidate.template.uid !== templateBlock.uid)
-      .map((candidate) => updateBlockIfChanged(
-        candidate.template.uid,
-        RETIRED_TEMPLATE_NAME,
-      )),
-  );
-
-  const templateChildren = childBlocks(templateBlock.uid);
-  const renderStringCores = managedRenderCores(renderStringCore);
-  const renderBlock = templateChildren.find((child) => (
-    renderStringCores.some((core) => child.string?.includes(core))
-  ));
-  if (!renderBlock) {
-    const renderBlockUID = roam.util.generateUID();
-    await createBlock(templateBlock.uid, 0, renderBlockString(renderStringCore, templateString), renderBlockUID);
-  } else {
-    await updateBlockIfChanged(renderBlock.uid, renderBlockString(renderStringCore, templateString));
-  }
-
-  const blockString = `\`\`\`clojure\n ${cljsFile} \`\`\``;
-  const existingCode = blockByUid(codeBlockUID);
-  if (!existingCode) {
-    const codeHeader = children.find((child) => child.string === "code");
-    let codeHeaderUID = codeHeader?.uid;
-    if (!codeHeaderUID) {
-      codeHeaderUID = roam.util.generateUID();
-      await createBlock(titleblockUID, "last", "code", codeHeaderUID, { open: false });
+  if (codeBlockUID !== CURRENT_CODE_BLOCK_UID || renderPageName !== RENDER_PAGE) throw Error('Only the current renderer scaffold may be installed.');
+  const initial = inspectRendererScaffold(renderStringCore);
+  const assertActive = () => {
+    if (api() !== roam) throw Error('The graph provider changed while installing the renderer.');
+    options.assertActive?.();
+  };
+  const createVerified = async (parentUid, order, string, uid, extra = {}) => {
+    assertActive();
+    const existing = blockByUid(uid, true);
+    if (existing) {
+      if (existing.string !== string || !childBlocks(parentUid, true).some(child => child.uid === uid)) throw Error('A renderer scaffold UID is already in use.');
+      return uid;
     }
-    await createBlock(codeHeaderUID, 0, blockString, codeBlockUID);
+    let error;
+    try { await createBlock(parentUid, order, string, uid, extra); } catch (failure) { error = failure; }
+    assertActive();
+    if (blockByUid(uid, true)?.string !== string || !childBlocks(parentUid, true).some(child => child.uid === uid)) throw error || Error('Renderer scaffold creation could not be confirmed.');
+    return uid;
+  };
+  let renderPageUID = getPageUidByPageTitle(renderPageName);
+  if (!renderPageUID) { assertActive(); renderPageUID = await createPage(renderPageName); assertActive(); }
+  if (!renderPageUID) throw Error('The renderer page could not be confirmed.');
+  if (!blockByUid(titleblockUID, true)) await createVerified(renderPageUID, 'last', componentName, titleblockUID, { heading: 3 });
+  if (initial.code.state === 'absent') {
+    const codeHeaderUID = `${CURRENT_CODE_BLOCK_UID}-header`;
+    await createVerified(titleblockUID, 'last', 'code', codeHeaderUID, { open: false });
+    await createVerified(codeHeaderUID, 0, rendererSourceText(), codeBlockUID);
   }
-
-  // A matching r2 body is already current.  A mismatched same revision, an
-  // unknown body, or a newer contract is deliberately visible but never
-  // overwritten: SHA text is display metadata, not an ordering relation.
-  if (existingCode && existingCode.string !== blockString) {
-    console.warn('[Nautilus Log] Renderer source mismatch; keeping the existing renderer block.');
-    return false;
+  assertActive();
+  if (readRendererSource().state !== 'current') throw Error('The current renderer source could not be verified.');
+  const current = inspectRendererScaffold(renderStringCore);
+  if ((current.candidate?.template.uid || null) !== (initial.candidate?.template.uid || null)) throw Error('The managed template changed while installing the renderer.');
+  let template = current.candidate?.template;
+  if (!template) {
+    const uid = `nautilus-log-r${RENDERER_REVISION}-template`;
+    await createVerified(titleblockUID, 0, CURRENT_TEMPLATE_NAME, uid);
+    template = { uid };
   }
-  // Legacy code blocks are read-only historical dependencies.  In particular,
-  // do not update them here: an old renderer can coexist with r2 in one graph.
+  const children = childBlocks(template.uid, true);
+  if (!children.length) {
+    const string = renderBlockString(renderStringCore, templateString);
+    if (inspectRenderer(string).kind !== 'current' || !inspectRenderer(string).mutable) throw Error('A supported current renderer template is required.');
+    await createVerified(template.uid, 0, string, `nautilus-log-r${RENDERER_REVISION}-template-render`);
+    return true;
+  }
+  if (children.length !== 1) throw Error('The managed template changed before migration.');
+  const render = children[0], identity = inspectRenderer(render.string);
+  if (identity.kind === 'current' && identity.mutable) return true;
+  if (identity.kind !== 'legacy' || !identity.mutable || typeof options.migrateReference !== 'function') {
+    throw Error('The legacy template needs verified renderer migration before use.');
+  }
+  const isCurrent = () => {
+    assertActive();
+    const candidates = managedTemplateCandidates(renderStringCore, true);
+    return candidates.length === 1 && candidates[0].template.uid === template.uid
+      && childBlocks(template.uid, true).length === 1 && candidates[0].renderBlock?.uid === render.uid;
+  };
+  const result = await options.migrateReference({ uid: render.uid, kind: 'template', expected: render.string, isCurrent });
+  assertActive();
+  if (!result?.ok || inspectRenderer(blockByUid(render.uid, true)?.string).kind !== 'current') throw Error('The template migration is not confirmed. No second template or plan was created.');
   return true;
 }
 
 export async function updateTemplateString(renderString, renderStringWithSettings) {
   const roam = api();
   if (!roam?.q) return 0;
-  const canonicalTemplate = preferredTemplateCandidate(
-    managedTemplateCandidates(renderString),
-    renderString,
-  );
+  const canonicalTemplate = inspectRendererScaffold(renderString).candidate;
   const renderBlock = canonicalTemplate?.renderBlock;
   if (!renderBlock || renderBlock.string === renderStringWithSettings) return 0;
-  await roam.updateBlock({
-    block: { uid: renderBlock.uid, string: renderStringWithSettings },
-  });
+  if (inspectRenderer(renderBlock.string).kind !== 'current' || inspectRenderer(renderStringWithSettings).kind !== 'current'
+    || !inspectRenderer(renderStringWithSettings).mutable) throw Error('Upgrade and verify the managed template before changing its settings.');
+  if (blockByUid(renderBlock.uid, true)?.string !== renderBlock.string) throw Error('The template changed before its settings could be updated.');
+  await roam.updateBlock({ block: { uid: renderBlock.uid, string: renderStringWithSettings } });
+  if (api() !== roam || blockByUid(renderBlock.uid, true)?.string !== renderStringWithSettings) throw Error('The template settings update could not be confirmed.');
   return 1;
 }
 
@@ -468,6 +442,7 @@ export function toggleRenderComponent(
   codeBlockUID,
   componentName,
   templateString,
+  options = {},
 ) {
   if (state !== true) return Promise.resolve(false);
   return createRenderBlock(
@@ -478,6 +453,7 @@ export function toggleRenderComponent(
     componentName,
     templateString,
     renderStringCore,
+    options,
   );
 }
 

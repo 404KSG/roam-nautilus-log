@@ -179,7 +179,7 @@ function snapshotShape(snapshot) {
   };
 }
 
-const EMPTY_KEYS = ['fixedEvents', 'pageTitle', 'pageUid', 'plan', 'reviewCandidates', 'reviewTasks', 'rows', 'tasks'];
+const EMPTY_KEYS = ['date', 'fixedEvents', 'pageTitle', 'pageUid', 'plan', 'planArgs', 'rendererKind', 'rendererReadOnly', 'reviewCandidates', 'reviewTasks', 'rows', 'tasks'];
 
 function basicTree() {
   return [

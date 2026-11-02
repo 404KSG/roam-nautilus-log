@@ -3,6 +3,42 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
+test('Tidy filters a stale legacy selection against current settlement eligibility', async () => {
+  const extension = await loadExtension('tidy-live-eligibility');
+  const harness = tidyHarness(extension, { resolveSettled: (_uid,_rows,requested) => requested.filter(uid=>uid==='done-a') });
+  harness.mutate(rows=>rows.map(row=>row.uid==='past-event'?{...row,string:'{{[[DONE]]}} 13:00-14:00 Future reservation'}:row));
+  const result = await harness.tidy.run({planUid:'plan',settledUids:['done-a','past-event']});
+  assert.equal(result.ok,true);
+  assert.deepEqual(harness.read().map(row=>row.uid),['done-a','active-a','divider','past-event','active-b']);
+  assert.deepEqual(harness.writes,['done-a']);
+  assert.equal(harness.openWrites.some(row=>row.uid==='past-event'),false);
+});
+
+test('Tidy stops later moves if an elapsed event becomes a future reservation while a write settles', async () => {
+  const extension = await loadExtension('tidy-changed-eligibility'), eligible = new Set(['done-a','past-event']);
+  const harness = tidyHarness(extension, { resolveSettled: (_uid,_rows,requested) => requested.filter(uid=>eligible.has(uid)) });
+  harness.hooks.afterMove=()=>{
+    eligible.delete('past-event');
+    harness.mutate(rows=>rows.map(row=>row.uid==='past-event'?{...row,string:'13:00-14:00 Rescheduled'}:row));
+  };
+  const result = await harness.tidy.run({planUid:'plan',settledUids:['done-a','past-event']});
+  assert.equal(result.ok,false);assert.equal(result.partial,true);
+  assert.deepEqual(harness.writes,['done-a']);
+  assert.deepEqual(harness.read().map(row=>row.uid),['done-a','active-a','divider','past-event','active-b']);
+});
+
+test('a renderer upgrade between Tidy and Undo blocks further outline writes', async () => {
+  const extension = await loadExtension('tidy-renderer-upgrade');
+  const {inspectRenderer}=require('../src/renderer-contract');
+  let root='{{[[roam/render]]:((roam-render-Nautilus-Log-r2-cljs))}}';
+  const harness=tidyHarness(extension,{assertPlan:()=>{if(!inspectRenderer(root).mutable)throw Error('Unsupported renderer');}});
+  const result=await harness.tidy.run({planUid:'plan',settledUids:['done-a','past-event']});
+  assert.equal(result.ok,true);const writes=harness.writes.length;
+  root=root.replace('-r2-cljs','-r3-cljs');
+  await assert.rejects(harness.tidy.undo({planUid:'plan',token:result.token}),/Unsupported renderer/);
+  assert.equal(harness.writes.length,writes);
+});
+
 const ORIGINAL_ORDER = ['active-a', 'done-a', 'divider', 'past-event', 'active-b'];
 const TIDY_ORDER = ['done-a', 'past-event', 'active-a', 'divider', 'active-b'];
 
@@ -67,6 +103,8 @@ function tidyHarness(extension, options = {}) {
     await hooks.afterSetOpen?.(uid, open);
   };
   const createOptions = {
+    assertPlan: options.assertPlan,
+    resolveSettled: options.resolveSettled,
     read,
     move,
     setOpen,

@@ -4,6 +4,7 @@ import { createDeskView } from '../src/desk-view.js';
 import { createChartHelp } from '../src/chart-help.js';
 import { projectPull } from './pull-projection.cjs';
 import { resolveRendererTaskInstance } from '../src/index.js';
+import { installVersionFixture } from './renderer-version-support.js';
 // This is the dependency-free module re-exported by src/entry-helpers.js;
 // production and the renderer exercise the same sidebar selector contract.
 import { isRightSidebarRenderContext } from '../src/render-context.js';
@@ -236,6 +237,7 @@ const sessionSubscribers = new Set();
 
 function publishSession() {
   for (const subscriber of sessionSubscribers) subscriber(sessionState());
+  window.__rendererVersion?.notify();
 }
 
 function createRendererPlanSession(options) {
@@ -371,8 +373,15 @@ if (parameters.get('realDesk') === '1') {
   Object.assign(window.nautilusLogR2, deskBridge);
 }
 
+if (parameters.get('realBridge') === '1') {
+  const data = window.nautilusLogExtensionData;
+  window.__rendererVersion = installVersionFixture({ core:window.nautilusLogCore,taskCore:timingCore,settings:data.settings,
+    getChildren:()=>children,readString:readSyntheticString,resolveTaskInstance,getClockRenderContext:data.getClockRenderContext,pageTitle });
+}
+
 window.__chartHarness = {
   q,
+  syncServiceIntervals() { for (const interval of [...fakeIntervals.values()]) if (interval.delay === 5000) interval.callback(); },
   destroyHelp: () => chartHelp.destroy(),
   traces: () => clone(traces),
   setWidth(width) {

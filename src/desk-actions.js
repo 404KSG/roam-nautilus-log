@@ -1,6 +1,7 @@
 import { createGraphWriteGuard } from './graph-write-guard';
 import { createDeskRemoveController } from './desk-remove';
-import { isNautilusComponent, resolveTaskInstance } from './timing-core';
+import { resolveTaskInstance } from './timing-core';
+import { inspectRenderer } from './renderer-contract';
 import { readChildren, readBlockString, blockUidExists, moveGraphBlock, createGraphBlock, updateGraphBlock } from './timing-roam';
 import { canonicalDeskReference, createModernReferenceAdapter, DeskReferenceImportError, fingerprintDeskReferenceSource, freezeReferenceDrop, isSafeDeskReferenceUid, isUnsupportedReferenceSource, readDeskDropContext, readStrictReferenceEntity, readStrictReferenceOutline, sameDeskDropContext, stableDeskReferenceUid } from './desk-reference-import';
 
@@ -24,7 +25,7 @@ export function createDeskActions({
   const outline = (planUid) => {
     assertActive();
     removal.assertPlanClear(planUid);
-    if (!isNautilusComponent(readString(planUid))) throw new Error('The Nautilus plan is no longer available.');
+    if (!inspectRenderer(readString(planUid)).mutable) throw new Error('The Nautilus plan is unavailable or uses an unsupported renderer.');
     const rows = read(planUid);
     if (!Array.isArray(rows) || rows.some((r) => !r?.uid || typeof r.string !== 'string'
       || !Number.isInteger(r.order) || r.order < 0)

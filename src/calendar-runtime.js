@@ -13,7 +13,7 @@ import {
 import { createCalendarReconciler } from './calendar-reconcile';
 import { graphName } from './graph-context';
 import { readPlanIdentity } from './timing-roam';
-import * as timingCore from './timing-core';
+import { inspectRenderer } from './renderer-contract';
 import {
   isBlockingGoogleReadError,
   refineCalendarRuntimeError,
@@ -226,7 +226,7 @@ export function createCalendarRuntime({
       }
       if (originalRoam) {
         const identity = readPlanIdentity(planUid);
-        if (!identity || identity.pageTitle !== pageTitle || !timingCore.isNautilusComponent(identity.string)) {
+        if (!identity || identity.pageTitle !== pageTitle || !inspectRenderer(identity.string).mutable) {
           throw new Error('The clicked Nautilus Plan changed; Calendar sync was cancelled.');
         }
       }

@@ -1,6 +1,6 @@
-# Nautilus Log Google Calendar privacy
+# Nautilus Log privacy
 
-Last updated: September 12, 2026
+Last updated: November 2, 2026
 
 Google Calendar integration is optional, disabled by default, read-only, and
 activated by the user. Nautilus Log requests only permission to read calendar
@@ -32,6 +32,17 @@ lists, calendar events, Google Task lists, and Google Tasks.
   event's `Open` URL may include it as an encoded Google account hint. The
   original Google event link remains authoritative and is used unchanged when
   the hint is unavailable or unsafe.
+
+## Local plan metadata
+
+Plan-creation recovery, optional completion-stamp ownership, and renderer-reference
+migration use Roam extension settings. Their records contain destination UIDs,
+relevant graph/user identity, and hashes used to verify changes, rather than task
+or template text. Completion ownership and pending renderer migration each have a
+64-record / 32 KiB bound. These records are not sent to the authorization service.
+Unresolved operations remain available for verification; reloading does not authorize
+blind retries. The Calendar pending records described above separately retain the
+managed text needed for Calendar conflict recovery.
 
 ## Use and sharing
 

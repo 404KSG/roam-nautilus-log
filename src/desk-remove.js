@@ -1,6 +1,6 @@
 const { createDeskGraphReader, validUid } = require('./desk-graph-read');
 const { pureDeskReferenceUid, deskCodeSegments } = require('./desk-preview');
-const { isNautilusComponent } = require('./timing-core');
+const { inspectRenderer } = require('./renderer-contract');
 const LIMITS = Object.freeze({ nodes: 4096, depth: 128, children: 2048, membership: 16384, bytes: 8 * 1024 * 1024, references: 128, watches: 8192 });
 class DeskRemoveError extends Error { constructor(message, code = 'remove-unavailable') { super(message || 'Could not safely remove this card.'); this.code = code; } }
 const fail = (message, code) => { throw new DeskRemoveError(message, code); };
@@ -13,7 +13,7 @@ function createModernDeskRemoveAdapter(api, assertContext = () => {}) {
 }
 function validateOwningDailyNote({ adapter, api = adapter.api, planUid }) {
   const plan = adapter.readBlock(planUid);
-  if (!plan || !isNautilusComponent(plan.string) || plan.parents?.length !== 1 || !plan.page) fail('Plan ownership is unavailable.');
+  if (!plan || !inspectRenderer(plan.string).mutable || plan.parents?.length !== 1 || !plan.page) fail('Plan ownership is unavailable.');
   const page = adapter.readPage(plan.page.uid);
   if (plan.page.title !== undefined && plan.page.title !== page.title) fail('Page ownership changed.');
   if (['pageTitleToDate', 'dateToPageTitle', 'dateToPageUid'].some(name => typeof api?.util?.[name] !== 'function')) fail('Daily Note validation is unavailable.');
