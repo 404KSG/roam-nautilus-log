@@ -8,7 +8,7 @@ Your Daily Note and its native blocks remain the source of truth.
 
 **English** · [简体中文](./README.zh-CN.md) · [User guide](./docs/guide.md)
 
-![Nautilus Log visual day planner with Timing, Plan, Review, and right-sidebar views](https://raw.githubusercontent.com/404KSG/roam-nautilus-log/main/docs/assets/nautilus-log-overview.png)
+![Nautilus Log spiral day planner with Desk task cards and a compact right-sidebar view](https://raw.githubusercontent.com/404KSG/roam-nautilus-log/7d99b296faed1509040e5dbc84779517e110d20e/docs/assets/nautilus-log-overview.png)
 
 ## Quick start
 

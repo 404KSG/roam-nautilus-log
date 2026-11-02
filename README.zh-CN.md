@@ -7,7 +7,7 @@
 
 [English](./README.md) · **简体中文** · [使用指南](./docs/guide.zh-CN.md)
 
-![Nautilus Log 螺旋日计划、Timing、Plan、Review 与右侧边栏视图](https://raw.githubusercontent.com/404KSG/roam-nautilus-log/main/docs/assets/nautilus-log-overview.png)
+![Nautilus Log 螺旋日计划、Desk 任务卡片与右侧边栏紧凑视图](https://raw.githubusercontent.com/404KSG/roam-nautilus-log/7d99b296faed1509040e5dbc84779517e110d20e/docs/assets/nautilus-log-overview.png)
 
 ## 快速开始
 
