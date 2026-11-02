@@ -20,7 +20,7 @@ const COPY = {
     rows: [
       { key: 'available', label: '可安排与事件', text: '分别显示可安排时间与固定事件的剩余／全天时间。' },
       { key: 'planned', label: '已计划', text: '未完成任务所需的估计时间。' },
-      { key: 'left', label: '未分配', text: '扣除已计划后，未分配预算 ÷ 全天可安排容量。0% 可表示排满，并非一天结束。' },
+      { key: 'left', label: '未分配', text: '扣除已计划后，未分配预算 ÷ 全天可安排容量。0% 可表示排满，不一定是一天结束。' },
       { key: 'schedule', label: '排程', text: '整项任务保持顺序；“任务遵循事件位置”默认关闭。DONE 仍保留事件时段。' },
       { key: 'desk', label: 'Desk', text: '编辑原始块；新任务计入预算，子日志不另计。' },
       { key: 'completed', label: '完成项', text: 'Actual 汇总 CLOCK，绘图区间不逐段重放会话。≈ 表示估时，斜纹表示已过去。' },

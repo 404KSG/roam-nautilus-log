@@ -2,7 +2,7 @@ import { createGraphWriteGuard } from './graph-write-guard';
 import { graphName } from './graph-context';
 import { sha256 } from './completion-stamp-writer';
 import { readBlockString, updateGraphBlock } from './timing-roam';
-import { CODE_UID, REVISION, inspectRenderer, migrateRendererReference } from './renderer-contract';
+import { CODE_UID, REVISION, migrateRendererReference } from './renderer-contract';
 
 const KEY = 'renderer-migration-pending';
 const FIELDS = ['id','graph','type','user','uid','kind','revision','beforeHash','afterHash'];
@@ -104,7 +104,7 @@ export function createRendererMigration({ extensionAPI, host = globalThis.window
         if (record.kind !== kind) return { ok: false, reason: 'pending-owner-changed', uid };
         const actualHash = await hash(before); assert(frozen, isCurrent);
         if (read(uid) !== before) return { ok: false, reason: 'changed-during-verification', uid };
-        if (actualHash === record.afterHash || (inspectRenderer(before).kind === 'current' && inspectRenderer(before).mutable)) {
+        if (actualHash === record.afterHash) {
           await remove(record); assert(frozen, isCurrent);
           return read(uid) === before ? { ok: true, changed: false, verified: true }
             : { ok: false, reason: 'changed-during-verification', uid };

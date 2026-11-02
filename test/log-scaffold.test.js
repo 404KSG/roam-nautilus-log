@@ -92,6 +92,104 @@ function createRoamMock() {
   return { roam, pages, blocks };
 }
 
+const FIXED_TITLE='roam-render-Nautilus-Log', FIXED_SOURCE='roam-render-Nautilus-Log-r2-cljs', FIXED_HEADER=FIXED_SOURCE+'-header';
+const FIXED_TEMPLATE='nautilus-log-r2-template', FIXED_RENDER='nautilus-log-r2-template-render';
+const expectedRendererSource=()=>`\`\`\`clojure\n ${fs.readFileSync(path.join(__dirname,'../src/component.cljs'),'utf8')} \`\`\``;
+function seedOwnedScaffold(f,{source=false}={}) {
+  f.pages.set('roam/render','render-page');f.pages.set('Foreign notes','foreign-page');
+  f.blocks.set(FIXED_TITLE,{uid:FIXED_TITLE,string:'Nautilus Log',parentUid:'render-page',order:0});
+  f.blocks.set(FIXED_HEADER,{uid:FIXED_HEADER,string:'code',parentUid:FIXED_TITLE,order:0});
+  if(source)f.blocks.set(FIXED_SOURCE,{uid:FIXED_SOURCE,string:expectedRendererSource(),parentUid:FIXED_HEADER,order:0});
+}
+async function loadWithGraph(f) {
+  global.window={roamAlphaAPI:f.roam,dispatchEvent(){}};installTestHostLocks(window);
+  const module=await import(`data:text/javascript;base64,${fs.readFileSync(path.join(__dirname,'../extension.js')).toString('base64')}#scaffold-ownership-${Math.random()}`);
+  const settings=new Map([['language','en']]);
+  await module.default.onload({extensionAPI:{settings:{get:key=>settings.get(key),set:async(key,value)=>settings.set(key,value),panel:{create(){}}}}});
+  return module;
+}
+
+test('fixed scaffold collisions are rejected before any graph write or readiness claim',async t=>{
+  const cases={
+    'title text':f=>{f.blocks.get(FIXED_TITLE).string='Personal notes';},
+    'title parent':f=>{f.blocks.get(FIXED_TITLE).parentUid='foreign-page';},
+    'title with absent render page':f=>{f.pages.delete('roam/render');f.blocks.get(FIXED_TITLE).parentUid='foreign-page';},
+    'header parent':f=>{f.blocks.get(FIXED_HEADER).parentUid='foreign-page';},
+    'header text with current source':f=>{f.blocks.get(FIXED_HEADER).string='Personal code';},
+    'source parent':f=>{f.blocks.get(FIXED_SOURCE).parentUid='foreign-page';},
+    'source ancestor':f=>{f.blocks.get(FIXED_TITLE).parentUid='foreign-page';},
+    'missing title':f=>{f.blocks.delete(FIXED_TITLE);},
+    'missing header':f=>{f.blocks.delete(FIXED_HEADER);},
+    'prospective template UID':f=>{f.blocks.set(FIXED_TEMPLATE,{uid:FIXED_TEMPLATE,string:'Personal template',parentUid:'foreign-page',order:0});},
+    'prospective render UID':f=>{f.blocks.set(FIXED_RENDER,{uid:FIXED_RENDER,string:'Personal content',parentUid:'foreign-page',order:0});},
+  };
+  for(const [name,mutate] of Object.entries(cases))await t.test(name,async()=>{
+    const f=createRoamMock();seedOwnedScaffold(f,{source:!['title text','title parent','title with absent render page','header parent','prospective template UID','prospective render UID'].includes(name)});mutate(f);
+    const before=JSON.stringify({pages:[...f.pages],blocks:[...f.blocks]}),writes=[];
+    for(const [owner,key] of [[f.roam,'createBlock'],[f.roam,'updateBlock'],[f.roam.data.page,'create']]){
+      const fn=owner[key];owner[key]=async value=>{writes.push([key,value.block?.uid||value.page?.uid]);return fn(value);};
+    }
+    const module=await loadWithGraph(f);
+    try {
+      assert.deepEqual(writes,[],name);
+      assert.equal(JSON.stringify({pages:[...f.pages],blocks:[...f.blocks]}),before,name);
+      assert.notEqual(window.nautilusLogR2?.ready,true,name);
+      if(name.includes('source')||name==='missing title'||name==='missing header')assert.throws(()=>module.readRendererSource(),/scaffold|ownership|UID/i);
+    } finally {module.default.onunload();delete global.window;}
+  });
+});
+
+test('scaffold ownership is rechecked after each settled create',async t=>{
+  for(const target of [FIXED_TITLE,FIXED_HEADER])await t.test(target,async()=>{
+    const f=createRoamMock(),writes=[];f.pages.set('Foreign notes','foreign-page');
+    const create=f.roam.createBlock;
+    f.roam.createBlock=async payload=>{
+      writes.push(payload.block.uid);await create(payload);
+      if(payload.block.uid===target)f.blocks.get(target).parentUid='foreign-page';
+    };
+    const module=await loadWithGraph(f);
+    try {
+      assert.equal(writes.at(-1),target);
+      assert.equal(f.blocks.has(FIXED_SOURCE),false);
+      assert.equal(window.nautilusLogR2.ready,false);
+      assert.equal(f.blocks.get(target).parentUid,'foreign-page');
+    } finally {module.default.onunload();delete global.window;}
+  });
+});
+
+test('a reserved template collision appearing during installation stops the next write',async()=>{
+  const f=createRoamMock(),writes=[];f.pages.set('Foreign notes','foreign-page');
+  const create=f.roam.createBlock;
+  f.roam.createBlock=async payload=>{
+    writes.push(payload.block.uid);await create(payload);
+    if(payload.block.uid===FIXED_HEADER)f.blocks.set(FIXED_TEMPLATE,{uid:FIXED_TEMPLATE,string:'Personal block',parentUid:'foreign-page',order:0});
+  };
+  const module=await loadWithGraph(f);
+  try {assert.equal(writes.at(-1),FIXED_HEADER);assert.equal(f.blocks.has(FIXED_SOURCE),false);assert.equal(window.nautilusLogR2.ready,false);}
+  finally {module.default.onunload();delete global.window;}
+});
+
+test('unreadable renderer page identity is not treated as an absent page',async()=>{
+  const f=createRoamMock(),writes=[],query=f.roam.q;
+  f.roam.q=q=>q.includes('pull ?e [:block/uid]')?[[{uid:7}]]:query(q);
+  const create=f.roam.data.page.create;f.roam.data.page.create=async value=>{writes.push(value);return create(value);};
+  const module=await loadWithGraph(f);
+  try {assert.deepEqual(writes,[]);assert.equal(f.blocks.size,0);assert.equal(window.nautilusLogR2.ready,false);}
+  finally {module.default.onunload();delete global.window;}
+});
+
+test('owned current source tolerates legacy siblings and ignores unused deterministic template UIDs',async()=>{
+  const f=createRoamMock();seedOwnedScaffold(f,{source:true});
+  f.blocks.get(FIXED_SOURCE).order=1;
+  f.blocks.set('roam-render-Nautilus-Log-cljs',{uid:'roam-render-Nautilus-Log-cljs',string:'legacy source unchanged',parentUid:FIXED_HEADER,order:0});
+  f.blocks.set('custom-template',{uid:'custom-template',string:'Nautilus Log [[roam/templates]]',parentUid:'render-page',order:1});
+  f.blocks.set('custom-render',{uid:'custom-render',string:`[[Custom]] {{[[roam/render]]:((${FIXED_SOURCE})) 22 15 5 "" 21}}`,parentUid:'custom-template',order:0});
+  for(const uid of [FIXED_TEMPLATE,FIXED_RENDER])f.blocks.set(uid,{uid,string:'Unrelated reserved-looking name',parentUid:'foreign-page',order:0});
+  const before=JSON.stringify([...f.blocks]),module=await loadWithGraph(f);
+  try {assert.equal(window.nautilusLogR2.ready,true);assert.equal(JSON.stringify([...f.blocks]),before);assert.equal(module.readRendererSource().state,'current');}
+  finally {module.default.onunload();delete global.window;}
+});
+
 test('built extension creates Log scaffolding sequentially and unload is graph-safe', async (t) => {
   const { roam, pages, blocks } = createRoamMock();
   const dispatchedEvents = [];

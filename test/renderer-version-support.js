@@ -22,8 +22,9 @@ export function installVersionFixture({ core, taskCore, settings, getChildren, r
     codeGraph.blocks.set(value.uid,value);
   }
   codeGraph.roam.graph = {name:'renderer-version-fixture',type:'hosted'};
-  codeGraph.add({uid:'r2-code-header',parentUid:'render-page',order:1,string:'r2 source'});
-  codeGraph.add({uid:CODE_UID,parentUid:'r2-code-header',order:0,string:rendererSourceText()});
+  codeGraph.add({uid:'roam-render-Nautilus-Log',parentUid:'render-page',order:1,string:'Nautilus Log'});
+  codeGraph.add({uid:CODE_UID+'-header',parentUid:'roam-render-Nautilus-Log',order:0,string:'code'});
+  codeGraph.add({uid:CODE_UID,parentUid:CODE_UID+'-header',order:0,string:rendererSourceText()});
   const watches = new Set(), generations = [];
   const page = {'block/uid':'10-29-2026','node/title':pageTitle,
     'block/children':[{'block/uid':'baseline-plan','block/order':0},{'block/uid':'legacy-plan','block/order':1}]};
@@ -71,6 +72,7 @@ export function installVersionFixture({ core, taskCore, settings, getChildren, r
     },
     ui:{...codeGraph.roam.ui,components:{...codeGraph.roam.ui.components,
       renderBlock({uid,el}){const input=document.createElement('textarea');input.id=`block-input-fixture-${uid}`;input.value=entity(uid)?.['block/string']||'';el.append(input);},
+      unmountNode({el}){el.replaceChildren();},
     }},
   };
   api.createBlock = api.data.block.create;

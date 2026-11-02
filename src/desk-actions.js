@@ -277,7 +277,7 @@ export function createDeskActions({
     if (draft.last === null && draft.attempted) {
       // An ambiguous create is verification-only. Never mint another UID or
       // blindly repeat a create that might still complete in Roam.
-      if (!row || row.string !== draft.pending) throw new Error('Could not confirm the new note. Check the original outline; no duplicate was created.');
+      if (!row || row.string !== draft.pending) throw new Error('Could not confirm the new task. Check the original outline; no duplicate was created.');
       draft.last = row.string;
     }
     if (draft.pendingUpdate !== null) {
@@ -285,7 +285,7 @@ export function createDeskActions({
       draft.last = draft.pendingUpdate;
       draft.pendingUpdate = null;
     }
-    if (draft.last !== null && (!row || row.string !== draft.last)) throw new Error('The new note was changed elsewhere. Desk will not overwrite it.');
+    if (draft.last !== null && (!row || row.string !== draft.last)) throw new Error('The new task was changed elsewhere. Desk will not overwrite it.');
     if (draft.last === null) {
       const expected = [uid, ...rows.map((candidate) => candidate.uid)];
       if (row || exists(uid)) throw new Error('The reserved block UID is already in use.');
@@ -298,10 +298,10 @@ export function createDeskActions({
       assertActive();
       rows = outline(planUid);
       row = rows.find((candidate) => candidate.uid === uid);
-      if (!row || row.string !== string || !sameOrder(rows, expected)) throw failure || new Error('Roam could not confirm the new note and its position.');
+      if (!row || row.string !== string || !sameOrder(rows, expected)) throw failure || new Error('Roam could not confirm the new task and its position.');
       draft.last = string;
     } else if (string !== draft.last) {
-      if (!row || row.string !== draft.last) throw new Error('The new note was changed elsewhere. Desk will not overwrite it.');
+      if (!row || row.string !== draft.last) throw new Error('The new task was changed elsewhere. Desk will not overwrite it.');
       assertActive();
       draft.pendingUpdate = string;
       let failure;

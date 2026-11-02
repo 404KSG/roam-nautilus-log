@@ -55,6 +55,22 @@ test('an uncertain graph update remains verification-only across reload and late
   assert.equal(next.values.get('renderer-migration-pending').items.length,0);
 });
 
+test('a current but different reference cannot retire or replay an uncertain migration',async t=>{
+  const f=await fixture(t,{update:async()=>{throw Error('lost response');}});
+  assert.equal((await f.run()).reason,'unconfirmed');
+  const receipt=structuredClone(f.values.get('renderer-migration-pending'));
+  const next=await fixture(t,{values:f.values,blocks:f.blocks});
+  next.blocks.get('target001').string=after.replace('22 15','28 15');
+  assert.equal((await next.run()).reason,'unconfirmed');
+  assert.deepEqual(next.values.get('renderer-migration-pending'),receipt);
+  next.blocks.get('target001').string=before.replace('22 15','28 15');
+  assert.equal((await next.run()).reason,'unconfirmed');
+  assert.equal(next.writes.length,0);
+  next.blocks.get('target001').string=after;
+  assert.equal((await next.run()).verified,true);
+  assert.equal(next.values.get('renderer-migration-pending').items.length,0);
+});
+
 test('failed, no-op and corrupt metadata cannot authorize a renderer-reference write',async t=>{
   for(const mode of ['reject','no-op','corrupt'])await t.test(mode,async st=>{
     const f=await fixture(st,{persist:async()=>{if(mode==='reject')throw Error('unavailable');}});

@@ -23,7 +23,11 @@ UID, and namespace together. Git hashes are build/display metadata, never versio
 
 An absent r2 source may be created; exact content is reused. Divergent content at the same
 revision, older/unknown content placed at the new UID, and newer contracts are preserved
-with a visible failure. Legacy source UIDs are never rewritten. There is no navigation or
+with a visible failure. Readiness also requires the exact fixed title → code-header → source
+ancestry under `roam/render`. Every prospective reserved UID is preflighted before creating
+any missing page or block; unrelated blocks are never adopted by creating missing parents.
+Checks repeat across awaits, while legacy source siblings and unused reserved-looking UIDs
+remain untouched. Legacy source UIDs are never rewritten. There is no navigation or
 minute-tick source repair. Exact future `rN` family invocations still count as existing
 plans for discovery/deduplication, without granting migration or plan-write authority.
 Ambiguous or unsupported arguments also fail closed for mutation.
@@ -52,8 +56,9 @@ templates are neither selected by guesswork nor retired. Historical pages are no
 `renderer-migration.js` saves and verifies a reservation before issuing a graph update.
 `renderer-migration-pending` contains graph/type/user, UID, kind, revision, and before/after
 SHA-256 hashes, with a 64-item / 32 KiB cap and no block text. Exact confirmed after-state can
-retire the reservation. Rejection, a lost response, or unresolved state does not authorize
-blind replay on reload. Context, source readiness, editable buffers, and exact identity are
+retire the reservation. A current renderer with different text or arguments is not that
+exact after-state and retains the reservation. Rejection, a lost response, or unresolved
+state does not authorize blind replay on reload. Context, source readiness, editable buffers, and exact identity are
 rechecked around asynchronous work. An uncertain migration never creates a second plan.
 
 Calendar-date creation keeps its existing frozen template/date, deterministic destination

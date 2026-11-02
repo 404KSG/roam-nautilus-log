@@ -12,6 +12,9 @@
 
 ### Fixed
 
+- Require the exact recorded after-hash before retiring an uncertain renderer migration.
+  Validate fixed scaffold text and parent ownership before any creation and after asynchronous
+  writes; collisions preserve unrelated blocks and cannot establish renderer readiness.
 - Keep an existing previous-date overnight plan active through END for Plan, capacity, task actions, and Review. Opening it remains separate from explicit calendar-date creation and recovery. Revalidate queued actions and retain accepted owner/instant across in-flight writes; midnight/END never automatically stops CLOCK.
 - Use full owner-day CLOCK evidence, extending through overnight END where needed. Keep ordinary evening CLOCK outside budget hours in Actual, and preserve local endpoint labels through DST changes. Use the same minute projection in both topbar display modes.
 - Show Planned now / Planned event status text in the existing time-pointer red, with

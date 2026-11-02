@@ -49,6 +49,10 @@ def run(page,order):
     page.locator('#chart-root .nautilus-log-help-btn').click()
     expect(page.locator('.nautilus-log-help-popover')).to_have_count(1)
     page.evaluate('''()=>{window.__r2MainBefore=scittle.core.eval_string('nautilus-log-r2/main');window.__r2CoreBefore=nautilusLogR2.core;}''')
+    page.locator('#chart-root .nautilus-desk [data-task-uid="task-reference"]').click()
+    editor=page.locator('.nautilus-desk__native textarea')
+    expect(editor).to_be_visible();editor.fill('Uncommitted native editor buffer')
+    page.evaluate('''()=>{window.__editorBefore=document.querySelector('.nautilus-desk__native textarea');__editorBefore.setSelectionRange(3,9);}''')
     page.evaluate('source=>scittle.core.eval_string(source)',LEGACY)
     assert page.evaluate('()=>window.__r2MainBefore===scittle.core.eval_string("nautilus-log-r2/main")')
     before=page.evaluate('()=>__rendererVersion.currentSource()')
@@ -56,6 +60,12 @@ def run(page,order):
     assert writes and any(row[1]=='roam-render-Nautilus-Log-cljs' for row in writes),writes
     assert page.evaluate('()=>__rendererVersion.currentSource()')==before
     assert not any(row[1]=='roam-render-Nautilus-Log-r2-cljs' for row in writes),writes
+    assert page.evaluate('''()=>__editorBefore===document.querySelector('.nautilus-desk__native textarea')
+      && __editorBefore===document.activeElement && __editorBefore.value==='Uncommitted native editor buffer'
+      && __editorBefore.selectionStart===3 && __editorBefore.selectionEnd===9''')
+    page.locator('.rm-desk__close').click()
+    page.locator('#chart-root .nautilus-log-help-btn').click()
+    expect(page.locator('.nautilus-log-help-popover')).to_have_count(1)
     expect(page.locator('#chart-root .nautilus-desk')).to_have_count(1)
     page.evaluate('()=>__chartHarness.updateChild("task-long","{{[[TODO]]}} After legacy evaluation 45m")')
     page.wait_for_function('''()=>document.querySelector('#chart-root [data-task-uid="task-long"][data-record-title]')?.dataset.recordTitle==='After legacy evaluation' ''')
@@ -93,6 +103,7 @@ def run(page,order):
     expect(page.locator('#chart-root .nautilus-desk .rm-desk-page__new-note')).to_have_attribute('aria-label','新任务')
     expect(page.locator('#chart-root .nautilus-desk .rm-desk-page__new-note')).to_contain_text('新任务')
     page.locator('#chart-root .nautilus-desk [data-task-uid="task-reference"]').click()
+    expect(page.locator('.nautilus-desk__native textarea')).to_be_visible()
     expect(page.locator('.rm-desk__previous')).to_have_attribute('aria-label','新任务')
     page.screenshot(path=str(f.OUT/f'{order}.png'),full_page=True)
     state=page.evaluate('()=>__rendererVersion.state()')

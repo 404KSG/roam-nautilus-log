@@ -6,6 +6,11 @@ import { REVISION as RENDERER_REVISION, CODE_UID as CURRENT_CODE_BLOCK_UID,
 export { isRightSidebarRenderContext, RENDERER_REVISION, CURRENT_CODE_BLOCK_UID, LEGACY_CODE_BLOCK_UIDS, rendererIdentity };
 
 const RENDER_PAGE = "roam/render";
+const RENDER_TITLE_UID = 'roam-render-Nautilus-Log';
+const RENDER_TITLE = 'Nautilus Log';
+const CODE_HEADER_UID = `${CURRENT_CODE_BLOCK_UID}-header`;
+const TEMPLATE_UID = `nautilus-log-r${RENDERER_REVISION}-template`;
+const TEMPLATE_RENDER_UID = `nautilus-log-r${RENDERER_REVISION}-template-render`;
 const TEMPLATE_MARKER = "[[roam/templates]]";
 const CURRENT_TEMPLATE_NAME = `Nautilus Log ${TEMPLATE_MARKER}`;
 const LEGACY_TEMPLATE_NAMES = new Set([
@@ -63,8 +68,32 @@ function blockByUid(uid, strict = false) {
 
 export const rendererSourceText = () => `\`\`\`clojure\n ${cljsFile} \`\`\``;
 export function readRendererSource() {
-  const block = blockByUid(CURRENT_CODE_BLOCK_UID, true);
-  return inspectRendererSource(block?.string ?? null, rendererSourceText());
+  const { source } = readFixedRendererScaffold();
+  return inspectRendererSource(source?.string ?? null, rendererSourceText());
+}
+
+// A matching source body alone cannot grant ownership of user structure.
+// Partial owned scaffolds are resumable; existing children of missing or
+// foreign parents are collisions, never permission to adopt those parents.
+function readFixedRendererScaffold() {
+  const pageUid = getPageUidByPageTitle(RENDER_PAGE, true);
+  const title = blockByUid(RENDER_TITLE_UID, true);
+  const header = blockByUid(CODE_HEADER_UID, true);
+  const source = blockByUid(CURRENT_CODE_BLOCK_UID, true);
+  const owned = (block, parentUid, expectedString) => {
+    if (!block) return;
+    if (!parentUid || (expectedString !== undefined && block.string !== expectedString)) {
+      throw Error(`Renderer scaffold UID ownership is unverified: ${block.uid}`);
+    }
+    const matches = childBlocks(parentUid, true).filter(child => child.uid === block.uid);
+    if (matches.length !== 1 || matches[0].string !== block.string) {
+      throw Error(`Renderer scaffold UID has a different parent or content: ${block.uid}`);
+    }
+  };
+  owned(title, pageUid, RENDER_TITLE);
+  owned(header, title?.uid, 'code');
+  owned(source, header?.uid);
+  return { pageUid, title, header, source };
 }
 
 function queryBlock(uid, strict = false) {
@@ -130,12 +159,18 @@ function fingerprintTree(node) {
   return JSON.stringify(node);
 }
 
-function getPageUidByPageTitle(title) {
+function getPageUidByPageTitle(title, strict = false) {
   const roam = api();
-  if (!roam?.q) return null;
-  return normalizeBlock(roam.q(
-    `[:find (pull ?e [:block/uid]) :where [?e :node/title "${title}"]]`,
-  )?.[0]?.[0])?.uid || null;
+  if (typeof roam?.q !== 'function') {
+    if (strict) throw Error('Roam renderer page inspection is unavailable.');
+    return null;
+  }
+  const rows = roam.q(`[:find (pull ?e [:block/uid]) :where [?e :node/title ${JSON.stringify(title)}]]`);
+  if (strict && (!Array.isArray(rows) || rows.length > 1 || rows.some(row => !Array.isArray(row) || row.length !== 1
+    || typeof normalizeBlock(row[0])?.uid !== 'string' || !normalizeBlock(row[0]).uid))) {
+    throw Error('Roam returned unreadable renderer page ownership.');
+  }
+  return normalizeBlock(rows?.[0]?.[0])?.uid || null;
 }
 
 function getBlockContentStringByUID(uid) {
@@ -342,6 +377,10 @@ export function inspectRendererScaffold(renderStringCore) {
       throw Error('The managed template is newer, custom, or ambiguous. Its contents were preserved.');
     }
   }
+  // Check reserved slots that this installation would use before creating any
+  // missing page/header/source. Unused slots do not claim unrelated blocks.
+  if (!candidate && blockByUid(TEMPLATE_UID, true)) throw Error('The new template scaffold UID is already in use.');
+  if (!candidate?.renderBlock && blockByUid(TEMPLATE_RENDER_UID, true)) throw Error('The new render-reference scaffold UID is already in use.');
   return { code, candidate };
 }
 
@@ -352,11 +391,21 @@ export async function createRenderBlock(
 ) {
   const roam = api();
   if (!roam) return false;
-  if (codeBlockUID !== CURRENT_CODE_BLOCK_UID || renderPageName !== RENDER_PAGE) throw Error('Only the current renderer scaffold may be installed.');
+  if (codeBlockUID !== CURRENT_CODE_BLOCK_UID || renderPageName !== RENDER_PAGE
+    || titleblockUID !== RENDER_TITLE_UID || componentName !== RENDER_TITLE) throw Error('Only the current renderer scaffold may be installed.');
   const initial = inspectRendererScaffold(renderStringCore);
-  const assertActive = () => {
+  let renderPageUID = getPageUidByPageTitle(renderPageName, true);
+  const assertScope = () => {
     if (api() !== roam) throw Error('The graph provider changed while installing the renderer.');
     options.assertActive?.();
+  };
+  const assertActive = () => {
+    assertScope();
+    inspectRendererScaffold(renderStringCore);
+    if (renderPageUID && getPageUidByPageTitle(renderPageName, true) !== renderPageUID) {
+      throw Error('Renderer scaffold ownership changed while installing.');
+    }
+    assertScope();
   };
   const createVerified = async (parentUid, order, string, uid, extra = {}) => {
     assertActive();
@@ -371,14 +420,12 @@ export async function createRenderBlock(
     if (blockByUid(uid, true)?.string !== string || !childBlocks(parentUid, true).some(child => child.uid === uid)) throw error || Error('Renderer scaffold creation could not be confirmed.');
     return uid;
   };
-  let renderPageUID = getPageUidByPageTitle(renderPageName);
   if (!renderPageUID) { assertActive(); renderPageUID = await createPage(renderPageName); assertActive(); }
   if (!renderPageUID) throw Error('The renderer page could not be confirmed.');
-  if (!blockByUid(titleblockUID, true)) await createVerified(renderPageUID, 'last', componentName, titleblockUID, { heading: 3 });
+  await createVerified(renderPageUID, 'last', componentName, titleblockUID, { heading: 3 });
   if (initial.code.state === 'absent') {
-    const codeHeaderUID = `${CURRENT_CODE_BLOCK_UID}-header`;
-    await createVerified(titleblockUID, 'last', 'code', codeHeaderUID, { open: false });
-    await createVerified(codeHeaderUID, 0, rendererSourceText(), codeBlockUID);
+    await createVerified(titleblockUID, 'last', 'code', CODE_HEADER_UID, { open: false });
+    await createVerified(CODE_HEADER_UID, 0, rendererSourceText(), codeBlockUID);
   }
   assertActive();
   if (readRendererSource().state !== 'current') throw Error('The current renderer source could not be verified.');
@@ -386,7 +433,7 @@ export async function createRenderBlock(
   if ((current.candidate?.template.uid || null) !== (initial.candidate?.template.uid || null)) throw Error('The managed template changed while installing the renderer.');
   let template = current.candidate?.template;
   if (!template) {
-    const uid = `nautilus-log-r${RENDERER_REVISION}-template`;
+    const uid = TEMPLATE_UID;
     await createVerified(titleblockUID, 0, CURRENT_TEMPLATE_NAME, uid);
     template = { uid };
   }
@@ -394,7 +441,7 @@ export async function createRenderBlock(
   if (!children.length) {
     const string = renderBlockString(renderStringCore, templateString);
     if (inspectRenderer(string).kind !== 'current' || !inspectRenderer(string).mutable) throw Error('A supported current renderer template is required.');
-    await createVerified(template.uid, 0, string, `nautilus-log-r${RENDERER_REVISION}-template-render`);
+    await createVerified(template.uid, 0, string, TEMPLATE_RENDER_UID);
     return true;
   }
   if (children.length !== 1) throw Error('The managed template changed before migration.');

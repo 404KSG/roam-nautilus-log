@@ -609,7 +609,7 @@ export function createDeskView({
         } catch (error) {
           if (inScope() && mode === 'draft' && draft === current) {
             editorStatus.hidden = false;
-            editorMessage.textContent = error?.message || 'Could not save the new note.';
+            editorMessage.textContent = error?.message || 'Could not save the new task.';
             retryEditor.hidden = false;
           } else noticeError(error);
         } finally {
@@ -840,7 +840,7 @@ export function createDeskView({
       count.textContent = status === 'ready' ? ` · ${tasks.length}` : '';
       empty.hidden = visible.length > 0;
       empty.textContent = status !== 'ready' ? 'Could not read this plan. Refresh or hide Desk to inspect the outline.'
-        : !tasks.length ? 'Nothing unfinished in this plan. Start a new note.'
+        : !tasks.length ? 'Nothing unfinished in this plan. Start a new task.'
           : search && previews.size < tasks.length ? 'Searching...'
             : search && [...previews.values()].some((model) => model.error) ? 'Some notes could not be searched. Refresh to try again.' : 'No notes match.';
       retryRead.hidden = status === 'ready' && !removeError && !actions?.hasUnconfirmedRemoval?.(planUid) && ![...previews.values()].some(model => model.error);

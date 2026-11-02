@@ -127,7 +127,7 @@ is preserved, and task titles always remain in their source language. Toolbar ic
 
 Actual is summed CLOCK time; its drawn contiguous interval is a completion-anchored projection, not a session timeline. For example, CLOCK 09:00–09:40 with `d15:00` draws 14:20–15:00; sessions 09:00–09:15 plus 10:00–10:15 draw 09:45–10:15. LOGBOOK sessions remain untouched. Tips name the **total** and **display interval** explicitly.
 
-Estimated completed tasks carry a small `≈` before the title, including estimates anchored
+Estimated completed tasks carry a small `≈` beside the title, including estimates anchored
 by a completion stamp. The cue participates in title measurement and wrapping; it does not
 remove previously visible title text or add a universal subtitle row. Accessible text and
 Tips explain that the duration is estimated.
@@ -519,7 +519,10 @@ not call private minified functions or bundle the Roam client source.
 Renderer r2 uses source UID `roam-render-Nautilus-Log-r2-cljs`, namespace
 `nautilus-log-r2`, and a version-local runtime bridge. It creates the r2 source only when
 absent and reuses byte-identical content. Different content at that UID, an unknown
-contract, or a newer revision is preserved and reported. A renderer-source behavior change
+contract, or a newer revision is preserved and reported. Fixed title/header/source UIDs
+must have their expected text and ancestry under `roam/render`; collisions are rejected
+before creating any missing scaffold. Matching source content at a foreign location does
+not establish readiness. A renderer-source behavior change
 must advance revision, UID, and namespace together; Git hashes are display metadata.
 
 Automatic migration is limited to one unambiguous managed template reference and the
@@ -532,7 +535,8 @@ count as existing plans for discovery and duplicate prevention.
 A bounded `renderer-migration-pending` record is saved and read back before a reference
 write. It holds graph/user identity, UIDs and SHA-256 hashes, with a 64-record / 32 KiB
 limit and no block text. An uncertain result remains verification-only across reloads;
-there is no automatic retry or replacement-plan fallback. Inspect the referenced block
+there is no automatic retry or replacement-plan fallback. Only the exact recorded after-hash
+can retire a reservation; a different r2 invocation is not confirmation. Inspect the referenced block
 and the original request rather than deleting/recreating the plan.
 
 Historical pages are not scanned or migrated. A compatibility reader supports their old
