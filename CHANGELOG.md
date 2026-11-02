@@ -6,18 +6,21 @@
 
 - Isolate renderer r2 by source UID, CLJS namespace, and owned runtime bridge. Migrate only the managed template and active Primary Plan reference, preserving the surrounding text and tree. Legacy source blocks and history remain intact; ambiguous targets, source mismatches, newer contracts, and unresolved writes are preserved with a notice. Retained historical readers can reconnect across r2 reloads.
 - Keep fixed-event reservations, including DONE events, through their written end. The new independent **Respect event positions / 任务遵循事件位置** switch defaults off. When enabled, preceding events impose a cumulative earliest start without splitting or overtaking tasks.
-- Show Actual **total** and **display interval** explicitly, add a measured `≈` cue to estimated completed records, and use **Planned now / 当前计划** and **free / 未分配**. Preserve accepted completion-anchor precedence, visible titles, compact geometry, and CLOCK ownership.
+- Show Actual **total** and **display interval** explicitly, add a measured `≈` cue to estimated completed records, and use **Current task / 当前任务**, **Current event / 当前事件** and **free / 未分配**. Preserve accepted completion-anchor precedence, visible titles, compact geometry, and CLOCK ownership.
 - Rename Desk creation to **New task / 新任务**, including draft and accessible labels, while preserving index-zero insertion, implicit tasks, native editing, and child-log behavior.
 - Clarify the calendar-date command as **Nautilus Log: Create or open today’s Daily Note plan**. Shorten first-use documentation, document the existing execution/POMO entry and legacy Logbook conflict, list completion timestamps and event-order settings, and credit original author Tomáš Baránek.
 
 ### Fixed
 
+- Restore Current task / Current event (当前任务／当前事件) for the current chart interval.
+  Keep the pointer-red status color and separate CLOCK ownership. Update shared locale copy
+  without rewriting immutable renderer source, migrating plans or changing scheduling.
 - Require the exact recorded after-hash before retiring an uncertain renderer migration.
   Validate fixed scaffold text and parent ownership before any creation and after asynchronous
   writes; collisions preserve unrelated blocks and cannot establish renderer readiness.
 - Keep an existing previous-date overnight plan active through END for Plan, capacity, task actions, and Review. Opening it remains separate from explicit calendar-date creation and recovery. Revalidate queued actions and retain accepted owner/instant across in-flight writes; midnight/END never automatically stops CLOCK.
 - Use full owner-day CLOCK evidence, extending through overnight END where needed. Keep ordinary evening CLOCK outside budget hours in Actual, and preserve local endpoint labels through DST changes. Use the same minute projection in both topbar display modes.
-- Show Planned now / Planned event status text in the existing time-pointer red, with
+- Show Current task / Current event status text in the existing time-pointer red, with
   the lighter dark-theme variant. Keep title colors, the center clock, typography,
   layout and current-state timing unchanged; retain system colors in forced-color mode.
 - Preserve removal of the obsolete outline-reordering control, command, execution/Undo logic and

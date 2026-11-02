@@ -1804,7 +1804,7 @@ def continuous_shell_contract(page):
           return {records,gradients,fill,inlineMaterial:svg.style.getPropertyValue('--nautilus-log-task-future-fill'),oldHourSectors:svg.querySelectorAll('.nautilus-log-grid .nautilus-log-slice').length,outline:svg.querySelector('.nautilus-log-shell-outline').getAttribute('d'),base:svg.querySelector('.nautilus-log-shell-base').getAttribute('d')};
         }''')
         assert all(r['count'] == 1 and r['path'] == r['expected'] and r['path'].count('M') == 1 and r['path'].endswith('Z') and r['indicatorInside'] for r in proof['records']), proof
-        assert all(r['legacyMetadata'] == 0 and r['indicator'] == (('Planned event' if r['category'] == 'event' else 'Planned now') if r['current'] else None) for r in proof['records']), proof
+        assert all(r['legacyMetadata'] == 0 and r['indicator'] == (('Current event' if r['category'] == 'event' else 'Current task') if r['current'] else None) for r in proof['records']), proof
         assert len(proof['gradients']) == 4 and len({g['id'] for g in proof['gradients']}) == 4, proof
         assert proof['inlineMaterial'].startswith('url(#nautilus-shell-') and 'url(' in proof['fill'], 'Reagent CSS variables must use string keys and actually paint the gradients'
         assert proof['oldHourSectors'] == 0 and proof['outline'] == proof['base'], proof
@@ -1855,7 +1855,7 @@ def current_only_labels_contract(page):
         settle_renderer(page)
         expected_red = 'rgb(229, 143, 140)' if classes else 'rgb(194, 75, 75)'
         title_colors = {'task': 'rgb(142, 192, 222)', 'event': 'rgb(215, 191, 112)'} if classes else {'task': 'rgb(16, 107, 163)', 'event': 'rgb(123, 101, 26)'}
-        words = {'task': 'Planned now', 'event': 'Planned event'} if language == 'en' else {'task': '当前计划', 'event': '计划中的事件'}
+        words = {'task': 'Current task', 'event': 'Current event'} if language == 'en' else {'task': '当前任务', 'event': '当前事件'}
         def indicators():
             values = page.locator('.nautilus-log-record-current').evaluate_all('''nodes=>nodes.map(e=>{const owner=e.closest('[data-task-uid]'),r=e.getBoundingClientRect(),h=owner.querySelector('.nautilus-log-label-hit').getBoundingClientRect();return {uid:owner.dataset.taskUid,category:owner.dataset.category,text:e.textContent,current:owner.getAttribute('aria-current'),fill:getComputedStyle(e).fill,weight:getComputedStyle(e).fontWeight,titleFill:getComputedStyle(owner.querySelector('.nautilus-log-record-title')).fill,inside:r.left>=h.left-1&&r.right<=h.right+1&&r.bottom<=h.bottom+1};})''')
             assert all(v['text'] == words[v['category']] and v['current'] == 'true' and v['inside'] for v in values), values
@@ -1864,7 +1864,15 @@ def current_only_labels_contract(page):
             return values
         initial = indicators()
         assert [v['uid'] for v in initial] == ['task-reference'], initial
-        before = state(page); select(page, 'task-long')
+        rows_before = page.evaluate('()=>__chartHarness.sourceRows()')
+        before = state(page)
+        page.evaluate('()=>__chartHarness.setClockEntries([{taskUid:"task-long",start:"2026-10-29T08:00:00",running:true}])')
+        settle_renderer(page)
+        assert indicators() == initial, 'a running CLOCK on another task must not move the chart-time label'
+        assert_rect_equal(before, state(page), 'CLOCK notification must not resize the chart-time indicator')
+        page.evaluate('()=>__chartHarness.setClockEntries([])'); settle_renderer(page)
+        assert indicators() == initial, 'Current does not require a running CLOCK'
+        select(page, 'task-long')
         assert indicators() == initial, 'hover must not create or transfer Current'
         assert_rect_equal(before, state(page), 'hover does not move Current or resize the frame')
         expect(page.locator('.nautilus-log-detail-meta')).to_contain_text('1h30m')
@@ -1884,7 +1892,8 @@ def current_only_labels_contract(page):
         for iso in ['2026-10-29T04:59:00', '2026-10-29T21:00:00', '2026-10-30T08:01:00', '2026-10-28T08:01:00']:
             set_clock(page, iso); assert indicators() == [], iso
         assert state(page)['writes'] == 0
-        report[f'{theme}-{width}-{language}'] = {'taskAndEventCurrent': True, 'typedCurrent': True, 'hoverIndependent': True, 'nonCurrentHasNoSublabel': True, 'detailsRetainedInTips': True, 'fill': expected_red, 'contrast': contrast_ratio, 'titleAndClockColorsPreserved': True}
+        assert page.evaluate('()=>__chartHarness.sourceRows()') == rows_before
+        report[f'{theme}-{width}-{language}'] = {'taskAndEventCurrent': True, 'typedCurrent': True, 'hoverIndependent': True, 'clockFocusIndependent': True, 'sourceRowsPreserved': True, 'nonCurrentHasNoSublabel': True, 'detailsRetainedInTips': True, 'fill': expected_red, 'contrast': contrast_ratio, 'titleAndClockColorsPreserved': True}
     load(page, 'mixed', 'main', 720)
     page.emulate_media(forced_colors='active'); settle_renderer(page)
     forced = page.locator('.nautilus-log-record-current').evaluate('e=>({fill:getComputedStyle(e).fill,title:getComputedStyle(e.closest("[data-task-uid]").querySelector(".nautilus-log-record-title")).fill})')

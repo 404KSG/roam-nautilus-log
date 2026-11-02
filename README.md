@@ -54,7 +54,8 @@ launcher instead opens that existing workday's plan. See [overnight workdays](./
 
 The controls are **Desk → Help → Eye off**, followed by optional Calendar. Help explains
 the current settings and budget. The eye hides or expands the widget; completed records
-remain visible in the expanded chart. Planned-now status uses the time-pointer red,
+remain visible in the expanded chart. **Current task / Current event** identifies the
+current chart interval, not a running CLOCK. These labels use the time-pointer red,
 while titles retain their category colors. Task order changes only through your outline
 edits or explicit Desk moves.
 
