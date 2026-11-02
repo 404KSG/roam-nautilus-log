@@ -12,6 +12,10 @@
 
 ### Fixed
 
+- Keep first native completions observable while Roam commits or redraws a cold editor.
+  Use separate bounded observation and pre-write preparation windows, and let an issued
+  stamp finish its own confirmation/receipt flow. Report genuine expiry without backfill
+  or blind retries; retain editor, source/wrapper, context and Undo protections.
 - Require the exact recorded after-hash before retiring an uncertain renderer migration.
   Validate fixed scaffold text and parent ownership before any creation and after asynchronous
   writes; collisions preserve unrelated blocks and cannot establish renderer readiness.

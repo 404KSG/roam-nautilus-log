@@ -76,6 +76,44 @@ def main():
             page.evaluate('()=>completionStampHarness.setBufferDelay(0)')
             result['checks'].append('trusted Cmd/Ctrl+Enter waits for the native raw-buffer commit and keeps current text')
 
+            page.evaluate('''()=>{const h=completionStampHarness;
+                h.blocks.set('edit-src1','Editorial fixture 20m');
+                h.block('#main','settle001','{{[[TODO]]}} ((edit-src1))');h.edit('settle001');
+                h.block('#desk','settle001','same block, second view');h.setBufferDelay(550)}''')
+            complete('settle001','#desk');stamped('settle001','d10:37')
+            assert text('settle001')=='{{[[DONE]]}} ((edit-src1)) d10:37'
+            assert text('edit-src1')=='Editorial fixture 20m'
+            assert page.evaluate('completionStampHarness.stampUpdates.filter(x=>x.uid==="settle001").length')==1
+            page.evaluate('()=>completionStampHarness.setBufferDelay(0)')
+            complete('settle001','#desk')
+            page.wait_for_function('completionStampHarness.blocks.get("settle001")==="{{[[TODO]]}} ((edit-src1))"')
+            result['checks'].append('first Desk click stamps an outer wrapper after a 550ms editor redraw without changing its referenced source')
+
+            page.evaluate('''()=>{const h=completionStampHarness;h.block('#desk','cold00001','{{[[TODO]]}} Cold native commit');h.setNativeDelay(900)}''')
+            complete('cold00001','#desk');stamped('cold00001','d10:37')
+            assert page.evaluate('completionStampHarness.stampUpdates.filter(x=>x.uid==="cold00001").length')==1
+            page.evaluate('()=>completionStampHarness.setNativeDelay(0)')
+            result['checks'].append('a 900ms native commit is handled by the first trusted gesture')
+
+            page.evaluate('''()=>{const h=completionStampHarness;h.block('#desk','slow00001','{{[[TODO]]}} Slow stamp response');h.setStampDelay(1000)}''')
+            complete('slow00001','#desk');stamped('slow00001','d10:37')
+            page.wait_for_function('completionStampHarness.hasReceipt("slow00001")')
+            complete('slow00001','#desk')
+            page.wait_for_function('completionStampHarness.blocks.get("slow00001")==="{{[[TODO]]}} Slow stamp response"')
+            assert not page.evaluate('completionStampHarness.hasReceipt("slow00001")')
+            page.evaluate('()=>completionStampHarness.setStampDelay(0)')
+            result['checks'].append('an issued 1000ms write retains ownership and reopening removes only its verified suffix')
+
+            page.evaluate('''()=>{const h=completionStampHarness;h.block('#desk','expire001','{{[[TODO]]}} Beyond observation budget');h.setNativeDelay(2700)}''')
+            notices_before=page.evaluate('completionStampHarness.notices.length')
+            complete('expire001','#desk')
+            page.wait_for_function('completionStampHarness.blocks.get("expire001").includes("DONE")')
+            drained();assert text('expire001')=='{{[[DONE]]}} Beyond observation budget'
+            assert page.evaluate('completionStampHarness.stampUpdates.filter(x=>x.uid==="expire001").length')==0
+            assert page.evaluate('(n)=>completionStampHarness.notices.slice(n).some(x=>x.includes("in time"))',notices_before)
+            page.evaluate('()=>completionStampHarness.setNativeDelay(0)')
+            result['checks'].append('a change beyond the bounded observation window remains unstamped with a visible timeout, never passive backfill')
+
             page.evaluate('''()=>{const h=completionStampHarness;h.block('#main','ime--0001','{{[[TODO]]}} IME task');h.edit('ime--0001')}''')
             field=page.locator('textarea[id$="ime--0001"]')
             field.dispatch_event('compositionstart');field.press('Control+Enter')

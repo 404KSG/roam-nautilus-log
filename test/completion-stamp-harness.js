@@ -4,7 +4,7 @@ import * as core from '../src/completion-stamp-core';
 
 const values = new Map([['completion-stamps-enabled', false]]), blocks = new Map(), watches = new Map(), views = new Map();
 const stampUpdates = [], nativeUpdates = [], notices = [], keys = [];
-let serial = 0, minute = 31, nativeDelay = 0, bufferDelay = 0;
+let serial = 0, minute = 31, nativeDelay = 0, bufferDelay = 0, stampDelay = 0;
 const settings = { get: key => values.get(key), set: async (key, value) => values.set(key, JSON.parse(JSON.stringify(value))) };
 const lookupUid = lookup => {
   if (typeof lookup !== 'string') throw Error('Native watches require EDN lookup strings.');
@@ -22,7 +22,10 @@ function apply(uid, string, origin) {
   if (origin === 'native' && bufferDelay) setTimeout(renderAll, bufferDelay); else renderAll();
 }
 window.roamAlphaAPI = { graph: { name: 'completion-fixture', type: 'hosted' }, user: { uid: () => 'fixture-user' }, data: {
-  pull, block: { update: async ({ block }) => apply(block.uid, block.string, 'stamp') },
+  pull, block: { update: async ({ block }) => {
+    if (stampDelay) await new Promise(resolve => setTimeout(resolve, stampDelay));
+    apply(block.uid, block.string, 'stamp');
+  } },
   addPullWatch: (_pattern, lookup, callback) => {
     const uid = lookupUid(lookup), set = watches.get(uid) || new Set(); set.add(callback); watches.set(uid, set);
     return undefined; // No invented unsubscribe-return API.
@@ -117,6 +120,8 @@ document.addEventListener('keydown', event => {
 });
 window.completionStampHarness = { block, nested, reference, edit, select, setEnabled, blocks, stampUpdates, nativeUpdates, notices, keys,
   setMinute: value => { minute = value; }, setNativeDelay: value => { nativeDelay = value; }, setBufferDelay: value => { bufferDelay = value; },
+  setStampDelay: value => { stampDelay = value; },
+  hasReceipt: uid => Boolean(values.get('completion-stamp-receipts')?.items?.some(item => item.uid === uid)),
   passive: (uid, string) => { blocks.set(uid, string); renderAll(); notify(uid); },
   watchCount: () => [...watches.values()].reduce((n, set) => n + set.size, 0),
   direct: uid => writer.finishDirect({ uid, instant: new Date(2026, 10, 1, 10, minute) }),

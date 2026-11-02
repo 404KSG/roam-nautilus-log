@@ -3,8 +3,9 @@
 import * as core from './completion-stamp-core';
 
 const UID_RE = /^[A-Za-z0-9_-]{6,128}$/;
-const WATCH_DELAYS = [0, 50, 150, 400];
-const TIMEOUT_MS = 750;
+const WATCH_DELAYS = [0, 50, 150, 400, 800, 1300, 1900, 2400];
+const PHASE_TIMEOUT_MS = 2500;
+const phaseBudget = value => Number.isFinite(value) && value > 0 ? Math.min(PHASE_TIMEOUT_MS, value) : PHASE_TIMEOUT_MS;
 const MAX_PENDING = 64;
 
 function publicPull(host, uid) {
@@ -79,14 +80,18 @@ function undoGesture(event) {
 
 export function createCompletionStampAdapter({ writer, host = globalThis.window || globalThis,
   document = host?.document, now = () => new Date(), read = uid => publicPull(host, uid),
+  observationTimeoutMs = PHASE_TIMEOUT_MS, preparationTimeoutMs = PHASE_TIMEOUT_MS,
+  monotonicNow = () => host?.performance?.now?.() ?? globalThis.performance?.now?.() ?? Date.now(),
 } = {}) {
   let destroyed = false, listening = false, epoch = 0, sequence = 0;
+  const observationBudget = phaseBudget(observationTimeoutMs), preparationBudget = phaseBudget(preparationTimeoutMs);
   const jobs = new Map(), seenEvents = new WeakSet();
   const report = text => { try { writer?.reportFailure?.(text); } catch (_error) {} };
   const pull = uid => { try { return read(uid); } catch (_error) { return null; } };
-  const current = action => !destroyed && !action.cancelled && writer?.enabled?.() === true
+  const active = action => !destroyed && !action.cancelled && writer?.enabled?.() === true
     && action.epoch === epoch && jobs.get(action.uid) === action
     && writer.contextCurrent(action.context);
+  const current = action => active(action) && (action.phase === 'issued' || monotonicNow() < action.expiresAt);
 
   function releaseWatch(action) {
     action.removeRequested = true;
@@ -108,8 +113,28 @@ export function createCompletionStampAdapter({ writer, host = globalThis.window 
     epoch++;
     for (const action of [...jobs.values()]) cancel(action);
   }
+  function expire(action) {
+    if (!active(action)) { cancel(action); return; }
+    if (action.phase === 'issued') return;
+    if (!action.gesture.noticeReported) {
+      action.gesture.noticeReported = true;
+      report(action.phase === 'waiting'
+        ? 'A completion timestamp was skipped: Roam did not confirm the native change and editor state in time. No timestamp write was issued for that task.'
+        : 'A completion timestamp follow-up could not start in time. No timestamp write was issued for that task.');
+    }
+    cancel(action);
+  }
+  function armDeadline(action, duration) {
+    if (action.deadline !== null) host.clearTimeout(action.deadline);
+    action.expiresAt = monotonicNow() + duration;
+    const phase = action.phase, expiresAt = action.expiresAt;
+    action.deadline = host.setTimeout(() => {
+      if (action.phase !== phase || action.expiresAt !== expiresAt) return;
+      action.deadline = null; expire(action);
+    }, duration);
+  }
   function inspect(action) {
-    if (!current(action)) { cancel(action); return; }
+    if (!current(action)) { expire(action); return; }
     if (writer.refuseConflict()) { cancel(action); return; }
     if (action.phase !== 'waiting') return;
     const value = pull(action.uid);
@@ -117,11 +142,33 @@ export function createCompletionStampAdapter({ writer, host = globalThis.window 
     // Graph notification can precede React's editor-buffer commit. Wait only
     // inside this gesture's finite window; never replace an uncommitted buffer.
     if (!writer.isEditorSafe(action.uid, value.string)) return;
-    action.phase = 'writing'; stopObserving(action);
+    if (!current(action)) { expire(action); return; }
+    action.phase = 'preparing'; stopObserving(action);
+    // Observing Roam and acquiring/preparing the write are separate budgets.
+    // Once issued, the writer owns its bounded settlement and receipt path;
+    // this adapter must not cancel a valid in-flight write at the old deadline.
+    armDeadline(action, preparationBudget);
     Promise.resolve().then(() => writer.stampNative({ uid: action.uid, before: action.before,
       instant: action.instant, frozenContext: action.context, signal: action.abort.signal,
-      isCurrent: () => current(action) }))
-      .catch(() => { if (!destroyed) report('Completion timestamp outcome could not be confirmed. No automatic retry was made.'); })
+      isCurrent: () => current(action),
+      onWriteIssued: () => {
+        if (!current(action)) throw Error('Completion intent expired before writing.');
+        action.phase = 'issued';
+        if (action.deadline !== null) { host.clearTimeout(action.deadline); action.deadline = null; }
+      } }))
+      .then(result => {
+        if (!active(action)) return;
+        if (action.phase !== 'issued' && monotonicNow() >= action.expiresAt) { expire(action); return; }
+        if (['no-confirmed-transition','changed-before-write'].includes(result?.reason) && !action.gesture.noticeReported) {
+          action.gesture.noticeReported = true;
+          report('A completion timestamp was skipped because the task or editor changed during confirmation. The newer text was preserved.');
+        }
+      })
+      .catch(() => {
+        if (!active(action)) return;
+        if (action.phase !== 'issued' && monotonicNow() >= action.expiresAt) expire(action);
+        else report('Completion timestamp outcome could not be confirmed. No automatic retry was made.');
+      })
       .finally(() => {
         if (action.deadline !== null) { host.clearTimeout(action.deadline); action.deadline = null; }
         if (jobs.get(action.uid) === action) jobs.delete(action.uid);
@@ -163,13 +210,13 @@ export function createCompletionStampAdapter({ writer, host = globalThis.window 
     }
     if (jobs.size >= MAX_PENDING) { report('Too many pending completion actions; the native task change was left intact.'); return; }
     const action = { uid, before, instant: gesture.instant, context: gesture.context,
-      epoch: gesture.epoch, id: gesture.id, abort: new AbortController(), phase: 'waiting', cancelled: false,
-      timers: new Set(), deadline: null, registration: null, remove: null, removeRequested: false, removed: false };
+      epoch: gesture.epoch, id: gesture.id, gesture, abort: new AbortController(), phase: 'waiting', cancelled: false,
+      timers: new Set(), deadline: null, expiresAt: null, registration: null, remove: null, removeRequested: false, removed: false };
     jobs.set(uid, action);
-    action.deadline = host.setTimeout(() => cancel(action), TIMEOUT_MS);
+    armDeadline(action, observationBudget);
     addWatch(action);
     if (!current(action) || action.phase !== 'waiting') return;
-    for (const delay of WATCH_DELAYS) {
+    for (const delay of WATCH_DELAYS.filter(delay => delay < observationBudget)) {
       const timer = host.setTimeout(() => { action.timers.delete(timer); inspect(action); }, delay);
       action.timers.add(timer);
     }

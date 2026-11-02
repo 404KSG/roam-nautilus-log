@@ -119,11 +119,13 @@ export function createCompletionStampWriter({ extensionAPI, host = globalThis.wi
     request.then(value => finish(value));
     if (signal?.aborted || destroyed) cancel();
   });
-  const writeOnce = async ({ uid, before, after, frozen, isCurrent = () => true, signal }) => {
+  const writeOnce = async ({ uid, before, after, frozen, isCurrent = () => true, signal, onWriteIssued }) => {
     assertActive(frozen, isCurrent);
     const key = receiptKey(frozen, uid);
     if (pendingWrites.has(key)) throw new Error('An earlier completion write is still unresolved.');
     if (readBlock(uid) !== before || !isEditorSafe(uid, before)) return { confirmed: false, reason: 'changed-before-write' };
+    assertActive(frozen, isCurrent);
+    onWriteIssued?.();
     assertActive(frozen, isCurrent);
     let issued;
     try { issued = updateBlock(uid, after); } catch (error) { issued = Promise.reject(error); }
@@ -162,7 +164,7 @@ export function createCompletionStampWriter({ extensionAPI, host = globalThis.wi
     return string;
   };
 
-  async function complete({ uid, before, instant, frozen, direct, isCurrent = () => true, signal }) {
+  async function complete({ uid, before, instant, frozen, direct, isCurrent = () => true, signal, onWriteIssued }) {
     assertActive(frozen, isCurrent);
     const done = direct ? core.doneMarkerString(before) : before;
     let prepared = null, after = done, reason = '';
@@ -191,7 +193,7 @@ export function createCompletionStampWriter({ extensionAPI, host = globalThis.wi
       }
     }
     if (!direct && !prepared) return { stamped: false, reason };
-    const result = await writeOnce({ uid, before, after, frozen, isCurrent, signal });
+    const result = await writeOnce({ uid, before, after, frozen, isCurrent, signal, onWriteIssued });
     if (!result.confirmed) {
       if (direct) throw new Error('Task completion could not be confirmed.');
       return { stamped: false, ...result };
@@ -206,7 +208,7 @@ export function createCompletionStampWriter({ extensionAPI, host = globalThis.wi
     }
   }
 
-  const stampNative = async ({ uid, before, instant, isCurrent = () => true, frozenContext, signal } = {}) => {
+  const stampNative = async ({ uid, before, instant, isCurrent = () => true, frozenContext, signal, onWriteIssued } = {}) => {
     if (!enabled() || !isCurrent()) return { stamped: false, reason: 'cancelled' };
     const frozen = frozenContext || freezeContext();
     if (!UID_RE.test(uid || '') || !frozen.provider || !frozen.graph || !frozen.userUid) {
@@ -217,7 +219,7 @@ export function createCompletionStampWriter({ extensionAPI, host = globalThis.wi
       assertActive(frozen, isCurrent);
       if (refuseConflict()) return { stamped: false, reason: 'todo-trigger' };
       const value = readBlock(uid), transition = core.nativeTransition(before, value);
-      if (transition === 'complete') return complete({ uid, before: value, instant, frozen, direct: false, isCurrent, signal });
+      if (transition === 'complete') return complete({ uid, before: value, instant, frozen, direct: false, isCurrent, signal, onWriteIssued });
       if (transition !== 'reopen') return { stamped: false, reason: 'no-confirmed-transition' };
       const parsed = loadReceipts();
       if (!parsed.ok) { warn('The existing completion time was preserved because ownership is unreadable.'); return { stamped: false, reason: 'receipt-unreadable' }; }
@@ -237,7 +239,7 @@ export function createCompletionStampWriter({ extensionAPI, host = globalThis.wi
         warn('The completion time was preserved because ownership removal could not be confirmed.');
         return { stamped: false, reason: 'receipt-removal-unconfirmed' };
       }
-      const result = await writeOnce({ uid, before: value, after: expected, frozen, isCurrent, signal });
+      const result = await writeOnce({ uid, before: value, after: expected, frozen, isCurrent, signal, onWriteIssued });
       if (!result.confirmed) return { stamped: false, ...result };
       return { stamped: true, removed: true, string: expected };
     }, { signal });

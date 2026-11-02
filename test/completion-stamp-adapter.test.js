@@ -55,8 +55,11 @@ async function setup(t, options = {}) {
   if (options.watch === 'absent') provider.data = {};
   f.changeContext({ provider });
   const adapter = f.api.createCompletionStampAdapter({ writer: f.writer, host: f.host, document,
-    read: uid => f.blocks.has(uid) ? { uid, string: f.blocks.get(uid) } : null,
+    read: uid => { options.beforeAdapterRead?.(uid); return f.blocks.has(uid) ? { uid, string: f.blocks.get(uid) } : null; },
     now: options.now || (() => new Date(2026, 10, 1, 10, 31)),
+    observationTimeoutMs: options.observationTimeoutMs,
+    preparationTimeoutMs: options.preparationTimeoutMs,
+    monotonicNow: options.monotonicNow,
   });
   t.after(() => { adapter.destroy(); for (const timer of timers) clearTimeout(timer); });
   const nativeChange = (uid, string) => { f.blocks.set(uid, string); for (const item of [...callbacks]) if (item.uid===uid) item.callback(); };
@@ -64,6 +67,44 @@ async function setup(t, options = {}) {
   const setEnabled = value => { f.values.set('completion-stamps-enabled', value); events.fire('nautilus-log:settings-changed'); };
   return { ...f, document, events, timers, registered, callbacks, adapter, nativeChange, toggle, setEnabled };
 }
+
+test('a cold native commit after 750ms still stamps the first confirmed action',async t=>{
+  const f=await setup(t);f.document.fire('click',click(target('task00001').input));
+  await wait(850);f.toggle('task00001');await flush();await wait(10);
+  assert.equal(f.blocks.get('task00001'),'{{[[DONE]]}} Task 30m d10:31');
+  assert.equal(f.updates.length,1);assert.equal(f.timers.size,0);
+});
+
+test('an editor that settles after the old final poll is checked again without another toggle',async t=>{
+  const f=await setup(t),node=target('task00001');
+  const editor={...node.node,tagName:'TEXTAREA',value:f.blocks.get('task00001'),matches:()=>true};
+  f.document.editors=[editor];f.document.fire('click',click(node.input));f.toggle('task00001');
+  await wait(550);assert.equal(f.updates.length,0);editor.value=f.blocks.get('task00001');
+  await wait(350);assert.equal(f.updates.length,1);assert.ok(f.blocks.get('task00001').endsWith(' d10:31'));
+});
+
+test('finite fallback reads cover a native commit after 400ms when watches are unavailable',async t=>{
+  const f=await setup(t,{watch:'absent'});f.document.fire('click',click(target('task00001').input));
+  await wait(600);f.toggle('task00001');await wait(300);
+  assert.equal(f.updates.length,1);assert.ok(f.blocks.get('task00001').endsWith(' d10:31'));
+});
+
+test('confirmed completion gets a separate bounded opportunity to acquire the CLOCK lock',async t=>{
+  const lock=deferred(),f=await setup(t,{lock});f.document.fire('click',click(target('task00001').input));f.toggle('task00001');
+  await wait(850);lock.resolve();await flush();await wait(10);
+  assert.equal(f.updates.length,1);assert.ok(f.blocks.get('task00001').endsWith(' d10:31'));
+});
+
+test('an issued slow write keeps its receipt and can be safely removed on reopening',async t=>{
+  const f=await setup(t,{preparationTimeoutMs:30,writeTimeoutMs:2000,update:async(uid,string,blocks)=>{await wait(950);blocks.set(uid,string);}});
+  const input=target('task00001').input;
+  f.document.fire('click',click(input));f.toggle('task00001');await wait(1050);
+  assert.equal(f.blocks.get('task00001'),'{{[[DONE]]}} Task 30m d10:31');
+  assert.equal(f.values.get('completion-stamp-receipts')?.items?.length,1);
+  f.document.fire('click',click(input));f.toggle('task00001');await wait(1050);
+  assert.equal(f.blocks.get('task00001'),'{{[[TODO]]}} Task 30m');
+  assert.equal(f.updates.length,2);assert.equal(f.timers.size,0);
+});
 
 for (const watch of ['undefined', 'null', 'sync-transition', 'reject-installed', 'throw-installed']) {
   test(`native registration ${watch} stamps once and removes the exact watch`, async t => {
@@ -81,11 +122,11 @@ for (const watch of ['undefined', 'null', 'sync-transition', 'reject-installed',
 
 for (const exit of ['disable','destroy','timeout']) {
   test(`late registration is removed after ${exit} rather than installed after cleanup`,async t=>{
-    const f=await setup(t,{watch:'delayed'});
+    const f=await setup(t,{watch:'delayed',observationTimeoutMs:exit==='timeout'?30:undefined});
     f.document.fire('click',click(target('task00001').input));
     if(exit==='disable')f.setEnabled(false);
     else if(exit==='destroy')f.adapter.destroy();
-    else await wait(780);
+    else await wait(60);
     assert.equal(f.registered[0].removes,0);
     f.registered[0].release();await flush();
     assert.equal(f.registered[0].removes,1);assert.equal(f.callbacks.size,0);assert.equal(f.updates.length,0);assert.equal(f.timers.size,0);
@@ -96,6 +137,60 @@ for (const exit of ['disable','destroy','timeout']) {
 test('without public watches finite post-event reads still confirm the native transition',async t=>{
   const f=await setup(t,{watch:'absent'});f.document.fire('click',click(target('task00001').input));f.toggle('task00001');
   await wait(25);assert.equal(f.updates.length,1);assert.equal(f.timers.size,0);
+});
+
+test('an observation deadline reports once and never backfills a later native change',async t=>{
+  const f=await setup(t,{observationTimeoutMs:30});
+  f.document.fire('click',click(target('task00001').input));await wait(60);
+  f.toggle('task00001');await flush();await wait(10);
+  assert.equal(f.blocks.get('task00001'),'{{[[DONE]]}} Task 30m');assert.equal(f.updates.length,0);
+  assert.equal(f.notices.filter(n=>/in time/.test(n)).length,1);assert.equal(f.timers.size,0);assert.equal(f.callbacks.size,0);
+});
+
+test('a suspended timer cannot revive an expired observation or lock-waiting intent',async t=>{
+  for(const stage of ['observation','preparation'])await t.test(stage,async st=>{
+    let elapsed=0;const lock=stage==='preparation'?deferred():null;
+    const f=await setup(st,{lock,monotonicNow:()=>elapsed});
+    f.document.fire('click',click(target('task00001').input));
+    if(lock){f.toggle('task00001');await flush();}
+    elapsed=3000;
+    if(lock)lock.resolve();else f.toggle('task00001');
+    await flush();assert.equal(f.updates.length,0);assert.equal(f.saves.length,0);
+    assert.equal(f.callbacks.size,0);assert.equal(f.timers.size,0);
+  });
+});
+
+test('expiry before the writer microtask still reports the skipped follow-up',async t=>{
+  let elapsed=0;const f=await setup(t,{monotonicNow:()=>elapsed});
+  f.document.fire('click',click(target('task00001').input));f.toggle('task00001');elapsed=3000;
+  await flush();assert.equal(f.updates.length,0);assert.equal(f.saves.length,0);
+  assert.equal(f.notices.filter(n=>/in time/.test(n)).length,1);assert.equal(f.timers.size,0);
+});
+
+test('newer task text during confirmation is preserved with a visible skip reason',async t=>{
+  const f=await setup(t);f.document.fire('click',click(target('task00001').input));f.toggle('task00001');
+  f.blocks.set('task00001','{{[[DONE]]}} Edited during confirmation');await flush();
+  assert.equal(f.updates.length,0);assert.equal(f.blocks.get('task00001'),'{{[[DONE]]}} Edited during confirmation');
+  assert.equal(f.notices.filter(n=>/changed during confirmation/.test(n)).length,1);assert.equal(f.timers.size,0);
+});
+
+test('a slow confirming read cannot grant a new preparation window after observation expired',async t=>{
+  let elapsed=0,slow=false;
+  const f=await setup(t,{monotonicNow:()=>elapsed,beforeAdapterRead:()=>{if(slow)elapsed=3000;}});
+  f.document.fire('click',click(target('task00001').input));slow=true;f.toggle('task00001');
+  await flush();assert.equal(f.updates.length,0);assert.equal(f.saves.length,0);
+  assert.equal(f.callbacks.size,0);assert.equal(f.timers.size,0);
+});
+
+test('an issued timeout remains unconfirmed and cannot issue a second stamp while the host is unresolved',async t=>{
+  const gate=deferred(),f=await setup(t,{writeTimeoutMs:30,update:()=>gate.promise});
+  const input=target('task00001').input;
+  f.document.fire('click',click(input));f.toggle('task00001');await wait(60);
+  assert.equal(f.updates.length,1);assert.equal(f.saves.length,0);assert.equal(f.callbacks.size,0);assert.equal(f.timers.size,0);
+  f.document.fire('click',click(input));f.toggle('task00001');await flush();
+  f.document.fire('click',click(input));f.toggle('task00001');await flush();
+  assert.equal(f.updates.length,1);assert.equal(f.saves.length,0);
+  gate.resolve();await flush();
 });
 
 test('off/on ABA, undo/redo and navigation invalidate lock-delayed gestures',async t=>{
@@ -110,8 +205,8 @@ test('off/on ABA, undo/redo and navigation invalidate lock-delayed gestures',asy
 });
 
 test('timeout prevents an unissued stamp waiting for the clock lock',async t=>{
-  const lock=deferred(),f=await setup(t,{lock});f.document.fire('click',click(target('task00001').input));f.toggle('task00001');
-  await wait(780);lock.resolve();await flush();assert.equal(f.updates.length,0);assert.equal(f.timers.size,0);
+  const lock=deferred(),f=await setup(t,{lock,preparationTimeoutMs:30});f.document.fire('click',click(target('task00001').input));f.toggle('task00001');
+  await wait(60);lock.resolve();await flush();assert.equal(f.updates.length,0);assert.equal(f.timers.size,0);
 });
 
 test('newer toggle supersedes an earlier gesture even when text returns to the same DONE value',async t=>{
@@ -185,7 +280,7 @@ test('editable buffers and composition are distinct from committed graph data, a
 
 test('a shortcut may stamp a newly committed textarea only after the host confirms that exact buffer', async t => {
   for (const committed of [true, false]) await t.test(String(committed), async st => {
-    const f = await setup(st), node = target('task00001');
+    const f = await setup(st,{observationTimeoutMs:100}), node = target('task00001');
     const editor = { ...node.node, tagName: 'TEXTAREA', value: '{{[[TODO]]}} New user text', matches: () => true };
     f.document.editors = [editor];
     f.document.fire('keydown', key(editor));
@@ -196,7 +291,7 @@ test('a shortcut may stamp a newly committed textarea only after the host confir
       assert.equal(f.blocks.get('task00001'), '{{[[DONE]]}} New user text d10:31');
       assert.equal(f.updates.length, 1);
     } else {
-      await wait(780); assert.equal(f.updates.length, 0);
+      await wait(130); assert.equal(f.updates.length, 0);
       assert.equal(editor.value, '{{[[TODO]]}} New user text');
     }
   });
