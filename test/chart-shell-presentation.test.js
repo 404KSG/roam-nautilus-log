@@ -28,7 +28,7 @@ test('the visible Current label has room without reserving inactive subtitle row
 
 test('compact columns fit typed Current labels without shrinking text or clock-driven reflow', () => {
   const input = { items: [task], startMinutes: 360, endMinutes: 1200, containerWidth: 280,
-    measure: text => text.length * 5.5, currentLabels: ['Planned now', 'Planned event'] };
+    measure: text => text.length * 5.5, currentLabels: ['Current task', 'Current event'] };
   const a = chartScene({ ...input, events: [{ ...task, start: 810, end: 855 }] });
   const b = chartScene({ ...input, events: [{ ...task, start: 811, end: 856 }] });
   assert.ok(a.frame.labelWidth >= 61);
@@ -47,7 +47,7 @@ test('measuring current indicators cannot change the font used to wrap titles', 
   try {
     const item = { ...task, description: 'Expected font' };
     const scene = chartScene({ items: [item], events: [{ ...item, start: 810, end: 855 }],
-      containerWidth: 520, startMinutes: 360, endMinutes: 1200, currentLabels: ['Planned now', 'Planned event'] });
+      containerWidth: 520, startMinutes: 360, endMinutes: 1200, currentLabels: ['Current task', 'Current event'] });
     const label = scene.records[0].label;
     assert.equal(label.inkWidth, item.description.length * label.fontSize * .5);
   } finally {

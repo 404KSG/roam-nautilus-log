@@ -114,10 +114,11 @@ Completed records and estimates remain visible and occupy their intervals; they 
 The **continuous shell** draws each timed record as one surface, with rounded transitions
 through the radius profile. Hour marks remain as edge ticks rather than lines that visually
 split a task. Titles have no duration/status sublabel: only the active task or event shows
-**Planned now** or **Planned event**, respectively, in the same theme-aware red as the
-current-time pointer. Task/event titles keep their category colors. Hover/focus Tips retain
-full duration, Actual and Estimate details. These labels describe the forecast; a CLOCK
-can be timing another task without changing your task order.
+**Current task** or **Current event**, respectively, in the same theme-aware red as the
+current-time pointer. Here Current means the item at this chart's current time, not proof
+of execution or an active CLOCK. Task/event titles keep their category colors. Hover/focus
+Tips retain full duration, Actual and Estimate details. A CLOCK can be timing another task
+without changing the chart-time label or your task order.
 The center clock uses the shared UI font with tabular numerals, regular weight and secondary
 text color. Its size is capped at 16px and still adapts to narrow views; the date, clock position
 and needle are unchanged. The curves retain the shrinking-radius model and real time boundaries, but

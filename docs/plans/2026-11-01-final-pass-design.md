@@ -134,8 +134,11 @@ separate interpretation of dateless referenced stamps is unchanged.
 
 Estimated completed records show a measured `≈` cue without removing previously visible
 title characters or adding a universal subtitle row. Accessible names and Tips retain the
-full meaning. **Planned now / 当前计划** describes the forecast, independently of CLOCK focus,
-and uses the current-time pointer's theme-aware red. Titles retain their category colors.
+full meaning. **Current task / 当前任务** and **Current event / 当前事件** identify the item
+at the chart's current time, independently of CLOCK focus. They use the time-pointer red;
+titles retain their category colors. Current does not certify execution or a running timer.
+The wording correction uses shared locale copy only: immutable r2 CLJS, renderer identity,
+source receipts and the archived v1 fixture remain unchanged.
 **free / 未分配** is unassigned budget divided by full-day flexible capacity after deducting
 Planned, not remaining clock time or physiological energy. Both topbar display modes use
 the same minute projection.
