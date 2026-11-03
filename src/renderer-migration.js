@@ -97,10 +97,11 @@ function createMigrationEngine({ extensionAPI, host = globalThis.window || globa
   const migrate = ({ uid, kind, expected, isCurrent } = {}) => {
     const frozen = { ...getContext() };
     if (!frozen.provider || !frozen.graph || !frozen.user || typeof uid !== 'string' || !uid
-      || !spec.kinds.includes(kind) || (spec.source && (uid !== CODE_UID || typeof isCurrent !== 'function'))) {
+      || !spec.kinds.includes(kind) || (isCurrent !== undefined && typeof isCurrent !== 'function')
+      || (spec.source && (uid !== CODE_UID || typeof isCurrent !== 'function'))) {
       return Promise.resolve({ ok: false, reason: 'unverified-context' });
     }
-    isCurrent ||= () => true;
+    if (isCurrent === undefined) isCurrent = () => true;
     return guard.run(async () => {
       assert(frozen, isCurrent);
       const before = read(uid);

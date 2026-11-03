@@ -44,6 +44,14 @@ test('a migration changes only the renderer UID and verifies its persistent rese
   assert.equal((await f.run()).changed,false);assert.equal(f.writes.length,1);
 });
 
+test('an explicitly invalid ownership predicate cannot fall back to migration authority',async t=>{
+  for(const isCurrent of [false,null,'true',{}]) {
+    const f=await fixture(t);
+    assert.equal((await f.run({isCurrent})).ok,false);
+    assert.equal(f.writes.length,0);assert.equal(f.blocks.get('target001').string,before);
+  }
+});
+
 test('an uncertain graph update remains verification-only across reload and late settlement',async t=>{
   const f=await fixture(t,{update:async()=>{throw Error('lost response');}});
   assert.equal((await f.run()).reason,'unconfirmed');
