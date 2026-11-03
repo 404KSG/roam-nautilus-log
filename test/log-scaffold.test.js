@@ -190,6 +190,41 @@ test('owned current source tolerates legacy siblings and ignores unused determin
   finally {module.default.onunload();delete global.window;}
 });
 
+test('duplicate renderer roots produce a specific diagnostic and an archived empty legacy root stays retired', async () => {
+  const f = createRoamMock(); seedOwnedScaffold(f, { source: true });
+  const current = `[[Nautilus Log]] {{[[roam/render]]:((${FIXED_SOURCE})) 22 15 6 "" 20}}`;
+  f.blocks.set('managed-template', { uid:'managed-template', string:'Nautilus Log [[roam/templates]]', parentUid:FIXED_TITLE, order:1 });
+  f.blocks.set('legacy-holder', { uid:'legacy-holder', string:'code · v1', parentUid:FIXED_TITLE, order:2, open:false });
+  f.blocks.set('legacy-empty', { uid:'legacy-empty', string:current.replace(FIXED_SOURCE,'roam-render-Nautilus-Log-cljs'), parentUid:'managed-template', order:0 });
+  f.blocks.set('current-root', { uid:'current-root', string:current, parentUid:'managed-template', order:1, open:false, heading:2 });
+  f.blocks.set('template-task', { uid:'template-task', string:'{{[[TODO]]}} Example work 30m', parentUid:'current-root', order:0 });
+  f.blocks.set('template-note', { uid:'template-note', string:'Keep this nested context.', parentUid:'template-task', order:0, open:false });
+  const before = JSON.stringify([...f.blocks]);
+  let module = await loadWithGraph(f);
+  try {
+    assert.equal(window.nautilusLogR2.ready, true, 'the current installed renderer remains usable');
+    assert.match(window.nautilusLogR2.error, /2 renderer blocks/);
+    assert.doesNotMatch(window.nautilusLogR2.error, /newer, custom, or ambiguous/);
+    assert.throws(() => module.inspectRendererScaffold(`{{[[roam/render]]:((${FIXED_SOURCE}))`),
+      error => error.code === 'templateMultipleRenderers' && error.templateUid === 'managed-template');
+    assert.equal(JSON.stringify([...f.blocks]), before, 'diagnosis must not choose, rewrite, or delete a root');
+    module.default.onunload();
+    // Model an explicit, non-destructive user repair. Startup must not recreate
+    // an empty legacy reference that is retained outside the active template.
+    f.blocks.get('legacy-empty').parentUid = 'legacy-holder';
+    f.blocks.get('current-root').order = 0;
+    const repaired = JSON.stringify([...f.blocks]);
+    for (let pass = 0; pass < 2; pass++) {
+      module = await loadWithGraph(f);
+      assert.equal(window.nautilusLogR2.ready, true);
+      assert.equal(window.nautilusLogR2.error, '');
+      assert.equal(module.freezeCanonicalTemplate(`{{[[roam/render]]:((${FIXED_SOURCE}))`).kind, 'standard');
+      assert.equal(JSON.stringify([...f.blocks]), repaired);
+      module.default.onunload();
+    }
+  } finally { module.default.onunload(); delete global.window; }
+});
+
 test('built extension creates Log scaffolding sequentially and unload is graph-safe', async (t) => {
   const { roam, pages, blocks } = createRoamMock();
   const dispatchedEvents = [];

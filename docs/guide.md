@@ -537,6 +537,14 @@ remain intact. Active editors are not overwritten. Multiple/custom templates and
 renderer roots are not guessed, renamed, or migrated backward. Newer family members still
 count as existing plans for discovery and duplicate prevention.
 
+If a template reports **multiple renderer blocks**, inspect the single template container
+under `roam/render`: an empty legacy reference may sit beside the intended current root.
+Keep the intended renderer and its full subtree; move unused references outside the
+`[[roam/templates]]` container to a suitable history section. Preserve their UIDs and
+content rather than deleting them. Reload after correcting the structure to clear the
+startup notice. The extension never chooses or removes a root automatically. Notices
+follow whole-widget folding and remain available when the chart is expanded.
+
 A bounded `renderer-migration-pending` record is saved and read back before a reference
 write. It holds graph/user identity, UIDs and SHA-256 hashes, with a 64-record / 32 KiB
 limit and no block text. An uncertain result remains verification-only across reloads;

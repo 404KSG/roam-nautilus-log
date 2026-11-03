@@ -24,6 +24,9 @@
 
 ### Fixed
 
+- Identify multiple renderer blocks inside one managed template explicitly, while preserving
+  every root and descendant. Renderer notices now hide with the folded widget and return
+  on expansion, preventing a zero-height sidebar instance from covering the following outline.
 - Keep first native completions observable while Roam commits or redraws a cold editor.
   Use separate bounded observation and pre-write preparation windows, and let an issued
   stamp finish its own confirmation/receipt flow. Report genuine expiry without backfill

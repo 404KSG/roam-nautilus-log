@@ -375,6 +375,11 @@ export function inspectRendererScaffold(renderStringCore) {
     if (children.length && (children.length !== 1 || !candidate.renderBlock || candidate.parsed?.unsupported
       || !inspectRenderer(candidate.renderBlock.string).mutable
       || candidate.renderBlock.string.slice(rendererInvocation(candidate.renderBlock.string).end).trim())) {
+      const renderers = children.filter(child => inspectRenderer(child.string).recognized);
+      if (renderers.length > 1) {
+        throw Object.assign(new Error(`The managed template has ${renderers.length} renderer blocks. Keep one renderer root and move unused references outside the template, then reload. Contents were preserved.`),
+          { code: 'templateMultipleRenderers', templateUid: candidate.template.uid });
+      }
       throw Error('The managed template is newer, custom, or ambiguous. Its contents were preserved.');
     }
   }

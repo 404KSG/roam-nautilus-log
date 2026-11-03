@@ -1008,6 +1008,12 @@
   display: none !important;
 }
 
+/* Folding hides this renderer's notice with the rest of the widget. Leaving
+ * it in flow inside a zero-height root overlaps the following outline. */
+.nautilus-log-container.nautilus-log-collapsed > .nautilus-log-renderer-notice {
+  display: none;
+}
+
 @container (max-width: 520px) {
   .nautilus-log-container {
     padding: 10px 4px 6px;
