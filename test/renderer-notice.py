@@ -13,7 +13,7 @@ spec = importlib.util.spec_from_file_location('notice_chart_fixture', ROOT / 'te
 f = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(f)
 OUT = f.OUT
-MESSAGE = 'The managed template has 2 renderer blocks. Keep one renderer root and move unused references outside the template, then reload. Contents were preserved.'
+MESSAGE = 'The managed template has 2 renderer blocks. Keep one root; check unused references before removing them, then reload. Contents were preserved.'
 
 
 def set_notice(page, text, language):

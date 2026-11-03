@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { installTestHostLocks } = require('./test-host-locks.cjs');
 
 const delay = () => new Promise((resolve) => setTimeout(resolve, 2));
@@ -95,6 +96,7 @@ function createRoamMock() {
 const FIXED_TITLE='roam-render-Nautilus-Log', FIXED_SOURCE='roam-render-Nautilus-Log-r2-cljs', FIXED_HEADER=FIXED_SOURCE+'-header';
 const FIXED_TEMPLATE='nautilus-log-r2-template', FIXED_RENDER='nautilus-log-r2-template-render';
 const expectedRendererSource=()=>`\`\`\`clojure\n ${fs.readFileSync(path.join(__dirname,'../src/component.cljs'),'utf8')} \`\`\``;
+const blockFingerprint=f=>crypto.createHash('sha256').update(JSON.stringify([...f.blocks])).digest('hex');
 function seedOwnedScaffold(f,{source=false}={}) {
   f.pages.set('roam/render','render-page');f.pages.set('Foreign notes','foreign-page');
   f.blocks.set(FIXED_TITLE,{uid:FIXED_TITLE,string:'Nautilus Log',parentUid:'render-page',order:0});
@@ -188,6 +190,101 @@ test('owned current source tolerates legacy siblings and ignores unused determin
   const before=JSON.stringify([...f.blocks]),module=await loadWithGraph(f);
   try {assert.equal(window.nautilusLogR2.ready,true);assert.equal(JSON.stringify([...f.blocks]),before);assert.equal(module.readRendererSource().state,'current');}
   finally {module.default.onunload();delete global.window;}
+});
+
+test('renamed owned templates retain their UID and complete content across reloads', async () => {
+  const f=createRoamMock();seedOwnedScaffold(f,{source:true});
+  f.blocks.set('owned-template',{uid:'owned-template',string:'Nautilus Log [[roam/templates]]',parentUid:FIXED_TITLE,order:1});
+  f.blocks.set('owned-render',{uid:'owned-render',string:`[[Routine]] {{[[roam/render]]:((${FIXED_SOURCE})) 24 20 6 "" 20}}`,parentUid:'owned-template',order:0,heading:2,open:false});
+  f.blocks.set('owned-child',{uid:'owned-child',string:'{{[[TODO]]}} Example 20m',parentUid:'owned-render',order:0});
+  f.blocks.set('owned-note',{uid:'owned-note',string:'Keep this context.',parentUid:'owned-child',order:0,open:false});
+  let module=await loadWithGraph(f);
+  try {
+    module.default.onunload();
+    f.blocks.get('owned-template').string='Morning routine [[roam/templates]]';
+    const count=f.blocks.size,before=blockFingerprint(f);
+    for(let pass=0;pass<2;pass++) {
+      module=await loadWithGraph(f);
+      assert.equal(f.blocks.size,count,'a renamed owned template must not cause another default template');
+      assert.equal(blockFingerprint(f),before);
+      assert.equal(window.nautilusLogR2.ready,true);assert.equal(window.nautilusLogR2.error,'');
+      const frozen=module.freezeCanonicalTemplate(`{{[[roam/render]]:((${FIXED_SOURCE}))`);
+      assert.equal(frozen.kind,'standard');assert.equal(frozen.templateUid,'owned-template');assert.equal(frozen.root.uid,'owned-render');
+      assert.equal(frozen.root.children[0].children[0].string,'Keep this context.');
+      module.default.onunload();
+    }
+  } finally {module.default.onunload();delete global.window;}
+});
+
+test('owned renamed template conflicts never seed a second template or become missing fallback', async t => {
+  for(const mode of ['empty','foreign-root','dynamic-args','extra-sibling','two-roots','two-markers','legacy-coexist'])await t.test(mode,async()=>{
+    const f=createRoamMock();seedOwnedScaffold(f,{source:true});
+    f.blocks.set('owned-template',{uid:'owned-template',string:'Routine [[roam/templates]]',parentUid:FIXED_TITLE,order:1});
+    if(mode!=='empty')f.blocks.set('owned-render',{uid:'owned-render',string:mode==='foreign-root'?'Personal content':mode==='dynamic-args'
+      ?`{{[[roam/render]]:((${FIXED_SOURCE})) (inc 1)}}`:`{{[[roam/render]]:((${FIXED_SOURCE}))}}`,parentUid:'owned-template',order:0});
+    if(mode==='extra-sibling')f.blocks.set('extra',{uid:'extra',string:'User context',parentUid:'owned-template',order:1});
+    if(mode==='two-roots')f.blocks.set('second-root',{uid:'second-root',string:`{{[[roam/render]]:((${FIXED_SOURCE}))}}`,parentUid:'owned-template',order:1});
+    if(mode==='two-markers'||mode==='legacy-coexist') {
+      f.blocks.set('second-template',{uid:'second-template',string:mode==='two-markers'?'Another [[roam/templates]]':'Nautilus Flow [[roam/templates]]',parentUid:mode==='two-markers'?FIXED_TITLE:'render-page',order:2});
+      f.blocks.set('second-render',{uid:'second-render',string:'{{[[roam/render]]:((roam-render-Nautilus-Flow-cljs))}}',parentUid:'second-template',order:0});
+    }
+    const count=f.blocks.size,before=blockFingerprint(f);let module;
+    try {
+      module=await loadWithGraph(f);
+      assert.equal(f.blocks.size,count,mode);assert.equal(blockFingerprint(f),before,mode);
+      assert.equal(module.freezeCanonicalTemplate(`{{[[roam/render]]:((${FIXED_SOURCE}))`).kind,'unsupported',mode);
+      assert.ok(window.nautilusLogR2.error,mode);
+    } finally {module?.default.onunload();delete global.window;}
+  });
+});
+
+test('renamed marker ownership rejects a foreign title and inconsistent discovery reads', async () => {
+  const f=createRoamMock();seedOwnedScaffold(f,{source:true});
+  f.blocks.set('owned-template',{uid:'owned-template',string:'Routine [[roam/templates]]',parentUid:FIXED_TITLE,order:1});
+  f.blocks.set('owned-render',{uid:'owned-render',string:`{{[[roam/render]]:((${FIXED_SOURCE}))}}`,parentUid:'owned-template',order:0});
+  f.blocks.get(FIXED_TITLE).string='Personal notes';
+  const before=blockFingerprint(f);const module=await loadWithGraph(f);
+  try {
+    assert.equal(window.nautilusLogR2.ready,false);assert.equal(blockFingerprint(f),before);
+    assert.throws(()=>module.freezeCanonicalTemplate(`{{[[roam/render]]:((${FIXED_SOURCE}))`),/ownership|parent|content/i);
+    f.blocks.get(FIXED_TITLE).string='Nautilus Log';
+    const query=f.roam.q;let armed=false;
+    f.roam.q=text=>{
+      if(armed && text.includes(`[?parent :block/uid "${FIXED_TITLE}"]`) && text.includes(':block/children')) {
+        armed=false;f.blocks.get('owned-template').string='Changed label [[roam/templates]]';
+      }
+      const result=query(text);
+      if(text.includes('clojure.string/includes?'))armed=true;
+      return result;
+    };
+    assert.throws(()=>module.freezeCanonicalTemplate(`{{[[roam/render]]:((${FIXED_SOURCE}))`),/changed during discovery/);
+    f.roam.q=text=>{
+      const rows=query(text);
+      return text.includes(`[?parent :block/uid "${FIXED_TITLE}"]`) && text.includes(':block/children')
+        ? [...rows,...rows.filter(row=>row[0].uid==='owned-template')] : rows;
+    };
+    assert.throws(()=>module.freezeCanonicalTemplate(`{{[[roam/render]]:((${FIXED_SOURCE}))`),/changed during discovery/);
+    assert.equal(f.blocks.has(FIXED_TEMPLATE),false);assert.equal(f.blocks.has(FIXED_RENDER),false);
+  } finally {module.default.onunload();delete global.window;}
+});
+
+test('unrelated markers stay foreign while a named empty template can complete its first setup', async () => {
+  const f=createRoamMock();seedOwnedScaffold(f,{source:true});
+  f.blocks.set('owned-template',{uid:'owned-template',string:'Nautilus Log [[roam/templates]]',parentUid:FIXED_TITLE,order:1});
+  f.blocks.set('foreign-title',{uid:'foreign-title',string:'Personal templates',parentUid:'render-page',order:2});
+  f.blocks.set('foreign-template',{uid:'foreign-template',string:'Another [[roam/templates]]',parentUid:'foreign-title',order:0});
+  f.blocks.set('foreign-child',{uid:'foreign-child',string:'Personal content',parentUid:'foreign-template',order:0});
+  f.blocks.set('code-example',{uid:'code-example',string:'Document `[[roam/templates]]` literally',parentUid:FIXED_TITLE,order:2});
+  f.blocks.set('example-render',{uid:'example-render',string:`{{[[roam/render]]:((${FIXED_SOURCE}))}}`,parentUid:'code-example',order:0});
+  const unrelated=()=>JSON.stringify(['foreign-template','foreign-child','code-example','example-render'].map(uid=>f.blocks.get(uid)));
+  const foreign=unrelated();
+  const module=await loadWithGraph(f);
+  try {
+    assert.equal(window.nautilusLogR2.ready,true);assert.equal(window.nautilusLogR2.error,'');
+    assert.equal(f.blocks.get(FIXED_RENDER).parentUid,'owned-template');assert.equal(f.blocks.has(FIXED_TEMPLATE),false);
+    assert.equal(unrelated(),foreign);
+    assert.equal(module.freezeCanonicalTemplate(`{{[[roam/render]]:((${FIXED_SOURCE}))`).templateUid,'owned-template');
+  } finally {module.default.onunload();delete global.window;}
 });
 
 test('duplicate renderer roots produce a specific diagnostic and an archived empty legacy root stays retired', async () => {

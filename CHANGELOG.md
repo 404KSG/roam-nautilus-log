@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Reuse the existing managed template UID and full subtree when its label changes inside
+  the verified Nautilus Log section. Incomplete or conflicting owned templates cannot
+  trigger another default template or an empty fallback plan. Keep seed/container IDs
+  stable across renderer revisions; no registry or automatic archive layer is introduced.
 - Quiet the chart toolbar with a neutral Desk switch and smaller line-style Help/Eye icons.
   Keep the existing click targets, control order, and visible collapsed restore action;
   add clear keyboard focus and system-color switch states. Supported browsers apply r2-only

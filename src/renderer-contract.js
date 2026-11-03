@@ -98,4 +98,4 @@ function inspectRendererSource(string, expected) {
 }
 
 module.exports = { REVISION, CODE_UID, NAMESPACE, BRIDGE_KEY, LEGACY_UIDS,
-  rendererIdentity, rendererInvocations, inspectRenderer, migrateRendererReference, inspectRendererSource };
+  rendererIdentity, rendererInvocations, inspectRenderer, migrateRendererReference, inspectRendererSource, maskCode };

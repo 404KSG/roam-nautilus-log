@@ -51,6 +51,33 @@ test('one real session clones all ordinary content and preserves daily and exter
   assert.deepEqual(g.trace.filter(r=>r[0]==='open'),[['open',ROOT]]);
 });
 
+test('renamed owned template is copied completely instead of falling back to an empty plan', async t=>{
+  const {g,make}=await setup(t);
+  g.add({uid:'roam-render-Nautilus-Log',string:'Nautilus Log',parentUid:'render-page',order:0});
+  g.blocks.get('template').parentUid='roam-render-Nautilus-Log';
+  g.blocks.get('template').string='Morning routine [[roam/templates]]';
+  const before=JSON.stringify([...g.blocks]);let fallbackCalls=0;
+  const result=await make({buildComponentString:()=>{fallbackCalls++;return COMPONENT;}}).ensureToday();
+  assert.equal(result.status,'ready-present');assert.equal(fallbackCalls,0);
+  assert.equal(g.blocks.get(ROOT).string,COMPONENT);
+  assert.equal(g.children(ROOT).length,5);assert.equal(g.children(g.children(ROOT)[1].uid).length,1);
+  assert.equal(JSON.stringify([...g.blocks].filter(([uid])=>!uid.startsWith('clone-')&&uid!==ROOT)),before);
+});
+
+for(const mode of ['empty','foreign-root','two-roots','extra-sibling'])test(`renamed owned ${mode} cannot create an empty fallback plan`,async t=>{
+  const {g,make}=await setup(t);
+  g.add({uid:'roam-render-Nautilus-Log',string:'Nautilus Log',parentUid:'render-page',order:0});
+  g.blocks.get('template').parentUid='roam-render-Nautilus-Log';g.blocks.get('template').string='Routine [[roam/templates]]';
+  if(mode==='empty')for(const uid of ['source-root','source-event','source-task','source-step','source-done','source-rule','source-ref'])g.blocks.delete(uid);
+  if(mode==='foreign-root')g.blocks.get('source-root').string='Personal note';
+  if(mode==='two-roots')g.add({uid:'second-root',string:COMPONENT,parentUid:'template',order:1});
+  if(mode==='extra-sibling')g.add({uid:'extra',string:'User context',parentUid:'template',order:1});
+  const before=JSON.stringify([...g.blocks]);let fallbackCalls=0;
+  const result=await make({buildComponentString:()=>{fallbackCalls++;return COMPONENT;}}).ensureToday();
+  assert.equal(result.status,'ready-blocked');assert.equal(result.templateUid,'template');assert.equal(fallbackCalls,0);
+  assert.equal(g.trace.filter(row=>row[0]==='request').length,0);assert.equal(JSON.stringify([...g.blocks]),before);
+});
+
 test('partial stays partial on locate, ticks, discover and reload; only explicit same-memory resume fills missing nodes', async t=>{
   const {g,make,tick}=await setup(t);
   let n=0;g.hooks.beforeCreate=()=>{if(++n===3)throw Error('Nth create failure');};

@@ -533,17 +533,31 @@ must advance revision, UID, and namespace together; Git hashes are display metad
 Automatic migration is limited to one unambiguous managed template reference and the
 active Primary Plan reference, including an existing previous-date overnight owner. It
 changes only the renderer UID. Prefixes, argument text, attributes, children, and order
-remain intact. Active editors are not overwritten. Multiple/custom templates and newer
+remain intact. Active editors are not overwritten. Multiple or structurally unsupported templates and newer
 renderer roots are not guessed, renamed, or migrated backward. Newer family members still
 count as existing plans for discovery and duplicate prevention.
 
-If a template reports **multiple renderer blocks**, inspect the single template container
-under `roam/render`: an empty legacy reference may sit beside the intended current root.
-Keep the intended renderer and its full subtree; move unused references outside the
-`[[roam/templates]]` container to a suitable history section. Preserve their UIDs and
-content rather than deleting them. Reload after correcting the structure to clear the
-startup notice. The extension never chooses or removes a root automatically. Notices
-follow whole-widget folding and remain available when the chart is expanded.
+Keep one managed template in `roam/render` → `Nautilus Log`. Its label may change while
+retaining `[[roam/templates]]`: the verified owning section and single renderer root identify
+it, so startup, settings updates, and plan creation reuse the existing UIDs and full subtree.
+Incomplete or conflicting marker blocks in that section are reported as unsupported, not
+missing; they do not authorize another default template or a blank fallback plan. Existing
+legacy-name templates on `roam/render` remain part of the same ambiguity check. Unrelated
+templates under other owners are not adopted. Keep the managed template in this section;
+there is no registry that follows arbitrary moves outside it.
+
+Default template, render-reference, and code-group UIDs are stable opaque identities rather
+than per-revision names to regenerate. Normal updates add no archive layer. Referenced source
+revisions may coexist under one `code` group to keep historical diagrams working; they are
+runtime dependencies, not additional templates.
+
+If a template reports **multiple renderer blocks**, inspect the container before changing it.
+Keep the intended renderer and its complete subtree. A genuinely obsolete empty reference
+or empty administrative holder can be deleted after checking that it has no incoming links.
+Referenced source code and meaningful user content need separate handling, not automatic
+cleanup. Reload after correcting the structure to clear the startup notice. The extension
+never chooses or deletes an ambiguous root automatically. Notices follow whole-widget
+folding and remain available when the chart is expanded.
 
 A bounded `renderer-migration-pending` record is saved and read back before a reference
 write. It holds graph/user identity, UIDs and SHA-256 hashes, with a 64-record / 32 KiB

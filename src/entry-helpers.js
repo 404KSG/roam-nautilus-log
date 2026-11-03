@@ -2,25 +2,22 @@ import cljsFile from "./component.cljs";
 import { isRightSidebarRenderContext } from "./render-context.js";
 import { REVISION as RENDERER_REVISION, CODE_UID as CURRENT_CODE_BLOCK_UID,
   LEGACY_UIDS as LEGACY_CODE_BLOCK_UIDS, rendererIdentity, inspectRenderer,
-  inspectRendererSource } from './renderer-contract';
+  inspectRendererSource, maskCode } from './renderer-contract';
 export { isRightSidebarRenderContext, RENDERER_REVISION, CURRENT_CODE_BLOCK_UID, LEGACY_CODE_BLOCK_UIDS, rendererIdentity };
 
 const RENDER_PAGE = "roam/render";
 const RENDER_TITLE_UID = 'roam-render-Nautilus-Log';
 const RENDER_TITLE = 'Nautilus Log';
-const CODE_HEADER_UID = `${CURRENT_CODE_BLOCK_UID}-header`;
-const TEMPLATE_UID = `nautilus-log-r${RENDERER_REVISION}-template`;
-const TEMPLATE_RENDER_UID = `nautilus-log-r${RENDERER_REVISION}-template-render`;
+// Stable scaffold identities, independent of renderer revisions. These existing
+// UID strings are opaque identities; retain them when a future code UID changes.
+const CODE_HEADER_UID = 'roam-render-Nautilus-Log-r2-cljs-header';
+const TEMPLATE_UID = 'nautilus-log-r2-template';
+const TEMPLATE_RENDER_UID = 'nautilus-log-r2-template-render';
 const TEMPLATE_MARKER = "[[roam/templates]]";
 const CURRENT_TEMPLATE_NAME = `Nautilus Log ${TEMPLATE_MARKER}`;
 const LEGACY_TEMPLATE_NAMES = new Set([
   `Nautilus Flow ${TEMPLATE_MARKER}`,
   `Nautilus Enhanced ${TEMPLATE_MARKER}`,
-]);
-const TEMPLATE_GENERATION_PRIORITY = new Map([
-  [CURRENT_TEMPLATE_NAME, 30],
-  [`Nautilus Flow ${TEMPLATE_MARKER}`, 20],
-  [`Nautilus Enhanced ${TEMPLATE_MARKER}`, 10],
 ]);
 const LEGACY_RENDER_STRING_CORES = LEGACY_CODE_BLOCK_UIDS.map(uid => `{{[[roam/render]]:((${uid}))`);
 const rendererInvocation = string => inspectRenderer(string).invocation;
@@ -76,24 +73,25 @@ export function readRendererSource() {
 // A matching source body alone cannot grant ownership of user structure.
 // Partial owned scaffolds are resumable; existing children of missing or
 // foreign parents are collisions, never permission to adopt those parents.
+function assertScaffoldOwner(block, parentUid, expectedString) {
+  if (!block) return;
+  if (!parentUid || (expectedString !== undefined && block.string !== expectedString)) {
+    throw Error(`Renderer scaffold UID ownership is unverified: ${block.uid}`);
+  }
+  const matches = childBlocks(parentUid, true).filter(child => child.uid === block.uid);
+  if (matches.length !== 1 || matches[0].string !== block.string) {
+    throw Error(`Renderer scaffold UID has a different parent or content: ${block.uid}`);
+  }
+}
+
 function readFixedRendererScaffold() {
   const pageUid = getPageUidByPageTitle(RENDER_PAGE, true);
   const title = blockByUid(RENDER_TITLE_UID, true);
   const header = blockByUid(CODE_HEADER_UID, true);
   const source = blockByUid(CURRENT_CODE_BLOCK_UID, true);
-  const owned = (block, parentUid, expectedString) => {
-    if (!block) return;
-    if (!parentUid || (expectedString !== undefined && block.string !== expectedString)) {
-      throw Error(`Renderer scaffold UID ownership is unverified: ${block.uid}`);
-    }
-    const matches = childBlocks(parentUid, true).filter(child => child.uid === block.uid);
-    if (matches.length !== 1 || matches[0].string !== block.string) {
-      throw Error(`Renderer scaffold UID has a different parent or content: ${block.uid}`);
-    }
-  };
-  owned(title, pageUid, RENDER_TITLE);
-  owned(header, title?.uid, 'code');
-  owned(source, header?.uid);
+  assertScaffoldOwner(title, pageUid, RENDER_TITLE);
+  assertScaffoldOwner(header, title?.uid, 'code');
+  assertScaffoldOwner(source, header?.uid);
   return { pageUid, title, header, source };
 }
 
@@ -247,11 +245,41 @@ function parseTemplateSettings(string, _renderStringCores) {
 
 function managedTemplateCandidates(renderStringCore, strict = false) {
   const renderStringCores = managedRenderCores(renderStringCore);
-  return pageBlocksContaining(TEMPLATE_MARKER, strict)
+  const templates = pageBlocksContaining(TEMPLATE_MARKER, strict);
+  const knownName = template => template.string === CURRENT_TEMPLATE_NAME || LEGACY_TEMPLATE_NAMES.has(template.string);
+  const owned = new Set();
+  if (templates.some(template => !knownName(template))) {
+    try {
+      const title = blockByUid(RENDER_TITLE_UID, true);
+      assertScaffoldOwner(title, getPageUidByPageTitle(RENDER_PAGE, true), RENDER_TITLE);
+      if (title) {
+        const direct = new Map();
+        for (const child of childBlocks(title.uid, true)) {
+          // Keep duplicate UID rows ambiguous instead of overwriting them.
+          direct.set(child.uid, direct.has(child.uid) ? null : child);
+        }
+        for (const template of templates) {
+          if (knownName(template) || !direct.has(template.uid)) continue;
+          const child = direct.get(template.uid);
+          if (!child || child.string !== template.string) {
+            throw Error('The managed template changed during discovery. No replacement was created.');
+          }
+          // Location and marker establish the candidate; the renderer/tree
+          // checks below still decide whether it may be used or changed.
+          if (maskCode(template.string).includes(TEMPLATE_MARKER)) owned.add(template.uid);
+        }
+      }
+    } catch (error) {
+      if (strict) throw error;
+      // Read-only settings recovery cannot grant ownership after a failed
+      // preflight. Strict installation/creation will report that failure.
+      owned.clear();
+    }
+  }
+  return templates
     .map((template, index) => {
-      const knownTemplate = template.string === CURRENT_TEMPLATE_NAME
-        || LEGACY_TEMPLATE_NAMES.has(template.string);
-      if (!knownTemplate) return null;
+      const knownTemplate = knownName(template);
+      if (!knownTemplate && !owned.has(template.uid)) return null;
       const renderChildren = childBlocks(template.uid, strict).filter(child => inspectRenderer(child.string).recognized);
       const renderBlock = renderChildren.length === 1 ? renderChildren[0] : null;
       const parsed = renderBlock
@@ -260,27 +288,9 @@ function managedTemplateCandidates(renderStringCore, strict = false) {
           ...renderStringCores,
         ])
         : null;
-      return { template, renderBlock, parsed, index };
+      return { template, renderBlock, parsed, index, knownTemplate };
     })
     .filter(Boolean);
-}
-
-function templateCandidateScore(candidate, renderStringCore) {
-  const prefix = candidate.parsed?.settings?.["prefix-str"];
-  const customPrefix = typeof prefix === "string" && prefix !== "[[Nautilus Log]]";
-  return (customPrefix ? 1000 : 0)
-    + (Object.keys(candidate.parsed?.settings || {}).length > 1 ? 100 : 0)
-    + (TEMPLATE_GENERATION_PRIORITY.get(candidate.template.string) || 0)
-    + (candidate.parsed?.renderStringCore === renderStringCore ? 5 : 0);
-}
-
-function preferredTemplateCandidate(candidates, renderStringCore) {
-  return [...candidates].sort((left, right) => (
-    templateCandidateScore(right, renderStringCore)
-      - templateCandidateScore(left, renderStringCore)
-    || String(left.template.uid).localeCompare(String(right.template.uid))
-    || left.index - right.index
-  ))[0] || null;
 }
 
 export function readExistingTemplateState(renderStringCore) {
@@ -372,12 +382,14 @@ export function inspectRendererScaffold(renderStringCore) {
   const candidate = candidates[0] || null;
   if (candidate) {
     const children = childBlocks(candidate.template.uid, true);
-    if (children.length && (children.length !== 1 || !candidate.renderBlock || candidate.parsed?.unsupported
+    // Only a known empty seed may be completed. An empty renamed/unknown
+    // marker under our title is existing user structure, not a fresh slot.
+    if ((children.length || !candidate.knownTemplate) && (children.length !== 1 || !candidate.renderBlock || candidate.parsed?.unsupported
       || !inspectRenderer(candidate.renderBlock.string).mutable
       || candidate.renderBlock.string.slice(rendererInvocation(candidate.renderBlock.string).end).trim())) {
       const renderers = children.filter(child => inspectRenderer(child.string).recognized);
       if (renderers.length > 1) {
-        throw Object.assign(new Error(`The managed template has ${renderers.length} renderer blocks. Keep one renderer root and move unused references outside the template, then reload. Contents were preserved.`),
+        throw Object.assign(new Error(`The managed template has ${renderers.length} renderer blocks. Keep one root; check unused references before removing them, then reload. Contents were preserved.`),
           { code: 'templateMultipleRenderers', templateUid: candidate.template.uid });
       }
       throw Error('The managed template is newer, custom, or ambiguous. Its contents were preserved.');
