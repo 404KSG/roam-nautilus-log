@@ -651,7 +651,7 @@ def full_tip_palette_contract(page):
             colors:[...document.querySelectorAll('.nautilus-log-html-legend .nautilus-log-legend-dot')].slice(0,3).map(e=>getComputedStyle(e).backgroundColor)};
         }''')
         assert data['title'] == text and data['colors'] == ['rgb(194, 75, 75)', 'rgb(173, 139, 36)', 'rgb(19, 124, 189)'], data
-        assert data['positive'] == '#277a59' and data['switchColor'] == 'rgb(19, 124, 189)', 'preserve the user-selected native blue and positive green references'
+        assert data['positive'] == '#277a59' and data['switchColor'] == 'rgb(115, 125, 138)', 'semantic green stays unchanged while Desk uses neutral toolbar ink'
         assert data['gradient'] == 'none', 'full-width content must use semantic text colors, not a gradient'
         assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).color') == page.locator('[data-task-uid="connection-done-0"] .nautilus-log-record-title').evaluate('e=>getComputedStyle(e).fill')
         assert data['heading'] == 'rgb(123, 101, 26)' and data['marker'] == 'rgb(173, 139, 36)', data

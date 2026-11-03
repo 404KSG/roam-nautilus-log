@@ -931,7 +931,7 @@ test('Log keeps a hover-labeled Desk switch and remaining quiet icon controls wi
   assert.equal((component.match(/:data-nautilus-tooltip/g) || []).length, 4);
   assert.match(component, /:role "switch"/);
   assert.doesNotMatch(component, /nautilus-log-desk-switch-label/);
-  assert.match(css, /\.nautilus-log-desk-btn\[aria-checked="true"\] \.nautilus-log-desk-switch-thumb\s*\{[^}]*translateX\(12px\)/);
+  assert.match(css, /\.nautilus-log-desk-btn\[aria-checked="true"\] \.nautilus-log-desk-switch-thumb\s*\{[^}]*translateX\(10px\)/);
   assert.match(css, /\.nautilus-log-toggle-btn\s*\{[\s\S]*?width:\s*32px !important;[\s\S]*?height:\s*32px !important;[\s\S]*?padding:\s*7px !important;/);
   assert.match(css, /\.nautilus-log-toggle-btn\[data-nautilus-tooltip\]::after/);
   assert.match(css, /\.nautilus-log-toggle-btn\[data-nautilus-tooltip\]:hover::after/);
@@ -1175,10 +1175,10 @@ test('the chart uses Roam-blue, deeper yellow and muted red with a readable Unfi
   assert.match(css, /\.nautilus-log-legend-dot--task\s*\{\s*background:\s*var\(--nautilus-log-task\);\s*\}/);
 });
 
-test('native blue and positive green stay intact while actual tagged urgency uses the new red', () => {
+test('semantic colors stay intact while Desk uses neutral toolbar chrome', () => {
   assert.match(css, /\.nautilus-log-container\s*\{[^}]*--nautilus-log-chart-focus:\s*#137cbd/s);
   assert.match(css, /\.nautilus-log-container\s*\{[^}]*--nautilus-log-positive:\s*#277a59/s);
-  assert.match(css, /\.nautilus-log-desk-btn\[aria-checked="true"\] \.nautilus-log-desk-switch-track\s*\{\s*background:\s*var\(--nautilus-log-chart-focus\)/);
+  assert.match(css, /\.nautilus-log-desk-btn\[aria-checked="true"\] \.nautilus-log-desk-switch-track\s*\{\s*background:\s*var\(--nautilus-log-toolbar-icon\)/);
   assert.match(css, /--nautilus-log-task-text:\s*#106ba3/);
   assert.match(component, /\(def custom-color-1 "rgba\(194,75,75,0\.72\)"\)/);
   assert.match(css, /\.nautilus-log-compact-dot--urgent\s*\{\s*background:\s*#c24b4b/);

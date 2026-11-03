@@ -4,6 +4,11 @@
 
 ### Changed
 
+- Quiet the chart toolbar with a neutral Desk switch and smaller line-style Help/Eye icons.
+  Keep the existing click targets, control order, and visible collapsed restore action;
+  add clear keyboard focus and system-color switch states. Supported browsers apply r2-only
+  SVG paint through CSS; other browsers and historical renderers retain native filled
+  geometry. The published renderer source, native buttons, and graph data are unchanged.
 - Batch Desk card-height reads before row-span writes, preventing one synchronous browser
   layout per card. Keep native geometry and immediate resize behavior. Loaded previews
   now skip unused placeholder-text parsing during search and card refreshes.

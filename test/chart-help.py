@@ -22,9 +22,13 @@ def assert_toolbar_icon(button, name):
     expect(svg).to_have_attribute('viewBox', ICONS['viewBox'])
     expect(svg.locator('path')).to_have_attribute('d', ICONS['icons'][name])
     expect(svg.locator('path')).to_have_attribute('fill-rule', ICONS['fillRule'])
+    # DOM geometry remains the immutable native fallback. Supporting clients
+    # get the quieter stroke through CSS presentation only.
     assert svg.evaluate('e=>getComputedStyle(e).stroke') == 'none'
+    assert svg.locator('path').evaluate('e=>getComputedStyle(e).fill') == 'none'
+    assert svg.locator('path').evaluate('e=>getComputedStyle(e).stroke') == button.evaluate('e=>getComputedStyle(e).color')
     box = svg.bounding_box()
-    assert abs(box['width'] - 18) < .5 and abs(box['height'] - 18) < .5, box
+    assert abs(box['width'] - 16) < .5 and abs(box['height'] - 16) < .5, box
 
 
 def track_listeners(page):
@@ -105,7 +109,7 @@ def run():
                 positions = controls.evaluate_all('nodes=>nodes.map(e=>e.getBoundingClientRect().x)')
                 assert positions == sorted(positions) and len(set(positions)) == 3
                 expect(page.locator('.nautilus-log-tidy-btn,[data-icon="crystal-ball"]')).to_have_count(0)
-                expected_ink = 'rgb(167, 182, 194)' if dark else 'rgb(92, 112, 128)'
+                expected_ink = 'rgb(167, 182, 194)' if dark else 'rgb(115, 125, 138)'
                 for selector in ['.nautilus-log-help-btn', '.nautilus-log-collapse-btn']:
                     control = page.locator(selector)
                     for phase in ['idle', 'hover', 'focus']:
@@ -113,7 +117,8 @@ def run():
                         if phase == 'focus': control.focus()
                         f.settle_renderer(page)
                         page.wait_for_function('selector=>document.querySelector(selector).getAnimations().every(a=>a.playState==="finished")', arg=selector)
-                        assert control.locator('path').evaluate('e=>getComputedStyle(e).fill') == expected_ink, (selector, phase)
+                        assert control.locator('path').evaluate('e=>getComputedStyle(e).fill') == 'none', (selector, phase)
+                        assert control.locator('path').evaluate('e=>getComputedStyle(e).stroke') == expected_ink, (selector, phase)
                     control.evaluate('e=>e.blur()'); page.mouse.move(1, 1)
                 assert_toolbar_icon(page.locator('.nautilus-log-collapse-btn'), 'eye-off')
                 expect(page.locator('.nautilus-log-collapse-btn')).to_have_attribute('aria-expanded', 'true')
@@ -184,7 +189,7 @@ def run():
             for selector in ['.nautilus-log-help-btn', '.nautilus-log-collapse-btn', '.nautilus-log-calendar-btn']:
                 page.keyboard.press('Tab'); expect(page.locator(selector)).to_be_focused()
             assert f.state(page)['writes'] == 0
-            results['toolbarOrderAndEye'] = {'default': ['Desk', 'Help', 'Eye off'], 'calendarIsFourth': True, 'officialGlyphs': True, 'keyboardRoundTrip': True}
+            results['toolbarOrderAndEye'] = {'default': ['Desk', 'Help', 'Eye off'], 'calendarIsFourth': True, 'officialFallbackGlyphs': True, 'quietStrokePaint': True, 'keyboardRoundTrip': True}
 
             # Existing collapsed preferences survive reload with the correct
             # Show/Eye glyph; expanding restores all completed records too.
