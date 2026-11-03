@@ -696,28 +696,36 @@
 
 /* Quiet r2 paint only: keep the published renderer and original SVG attributes
  * immutable. Gate all paint overrides on the complete paths; other engines and
- * renderer families retain the visible native filled glyphs. No extra asset,
- * DOM replacement, listener, or graph migration is needed. */
-@supports (d: path("M14.17 8 A6.17 6.17 0 1 1 1.83 8 A6.17 6.17 0 1 1 14.17 8 Z M6.33 6.13 A1.67 1.67 0 0 1 9.6 6.6 C9.6 7.53 8 7.8 8 8.93 M8 11.2 L8 11.201"))
+ * renderer families retain the visible native filled glyphs. The two direct
+ * control paths belong to this immutable renderer; nested charts cannot borrow
+ * an ancestor's paint. No asset, DOM replacement, listener, or migration. */
+@supports selector(:is(*))
+  and (d: path("M14.17 8 A6.17 6.17 0 1 1 1.83 8 A6.17 6.17 0 1 1 14.17 8 Z M6.33 6.13 A1.67 1.67 0 0 1 9.6 6.6 C9.6 7.53 8 7.8 8 8.93 M8 11.2 L8 11.201"))
   and (d: path("M2.5 2.5 L17.5 17.5 M7.92 4.58 A9 9 0 0 1 10 4.33 C14.5 4.33 17.5 10 17.5 10 A15 15 0 0 1 15.25 13 M5.5 5.5 C3.5 6.83 2.5 10 2.5 10 S5.5 15.67 10 15.67 A9.17 9.17 0 0 0 14.5 14.5 M8.33 8.33 A2.33 2.33 0 0 0 11.67 11.67"))
   and (d: path("M2.5 10 C4.5 6.2 6.8 4.33 10 4.33 S15.5 6.2 17.5 10 C15.5 13.8 13.2 15.67 10 15.67 S4.5 13.8 2.5 10 Z M12.33 10 A2.33 2.33 0 1 1 7.67 10 A2.33 2.33 0 1 1 12.33 10 Z")) {
-  .nautilus-log-container[data-nautilus-renderer="2"] .nautilus-log-help-btn > svg[data-icon="help"] > path,
-  .nautilus-log-container[data-nautilus-renderer="2"] .nautilus-log-collapse-btn > svg[data-icon="eye-off"] > path,
-  .nautilus-log-container[data-nautilus-renderer="2"] .nautilus-log-collapse-btn > svg[data-icon="eye-open"] > path {
+  :is(.nautilus-log-container[data-nautilus-renderer="2"] > .nautilus-log-controls-top,
+      .nautilus-log-container[data-nautilus-renderer="2"] > .nautilus-log-shell > .nautilus-log-header > .nautilus-log-header-actions > .nautilus-log-controls-top) > .nautilus-log-help-btn > svg[data-icon="help"] > path,
+  :is(.nautilus-log-container[data-nautilus-renderer="2"] > .nautilus-log-controls-top,
+      .nautilus-log-container[data-nautilus-renderer="2"] > .nautilus-log-shell > .nautilus-log-header > .nautilus-log-header-actions > .nautilus-log-controls-top) > .nautilus-log-collapse-btn > svg[data-icon="eye-off"] > path,
+  :is(.nautilus-log-container[data-nautilus-renderer="2"] > .nautilus-log-controls-top,
+      .nautilus-log-container[data-nautilus-renderer="2"] > .nautilus-log-shell > .nautilus-log-header > .nautilus-log-header-actions > .nautilus-log-controls-top) > .nautilus-log-collapse-btn > svg[data-icon="eye-open"] > path {
     fill: none;
     stroke: currentColor;
     stroke-width: 1.45px;
     stroke-linecap: round;
     stroke-linejoin: round;
   }
-  .nautilus-log-container[data-nautilus-renderer="2"] .nautilus-log-help-btn > svg[data-icon="help"] > path {
+  :is(.nautilus-log-container[data-nautilus-renderer="2"] > .nautilus-log-controls-top,
+      .nautilus-log-container[data-nautilus-renderer="2"] > .nautilus-log-shell > .nautilus-log-header > .nautilus-log-header-actions > .nautilus-log-controls-top) > .nautilus-log-help-btn > svg[data-icon="help"] > path {
     d: path("M14.17 8 A6.17 6.17 0 1 1 1.83 8 A6.17 6.17 0 1 1 14.17 8 Z M6.33 6.13 A1.67 1.67 0 0 1 9.6 6.6 C9.6 7.53 8 7.8 8 8.93 M8 11.2 L8 11.201");
     stroke-width: 1.15px;
   }
-  .nautilus-log-container[data-nautilus-renderer="2"] .nautilus-log-collapse-btn > svg[data-icon="eye-off"] > path {
+  :is(.nautilus-log-container[data-nautilus-renderer="2"] > .nautilus-log-controls-top,
+      .nautilus-log-container[data-nautilus-renderer="2"] > .nautilus-log-shell > .nautilus-log-header > .nautilus-log-header-actions > .nautilus-log-controls-top) > .nautilus-log-collapse-btn > svg[data-icon="eye-off"] > path {
     d: path("M2.5 2.5 L17.5 17.5 M7.92 4.58 A9 9 0 0 1 10 4.33 C14.5 4.33 17.5 10 17.5 10 A15 15 0 0 1 15.25 13 M5.5 5.5 C3.5 6.83 2.5 10 2.5 10 S5.5 15.67 10 15.67 A9.17 9.17 0 0 0 14.5 14.5 M8.33 8.33 A2.33 2.33 0 0 0 11.67 11.67");
   }
-  .nautilus-log-container[data-nautilus-renderer="2"] .nautilus-log-collapse-btn > svg[data-icon="eye-open"] > path {
+  :is(.nautilus-log-container[data-nautilus-renderer="2"] > .nautilus-log-controls-top,
+      .nautilus-log-container[data-nautilus-renderer="2"] > .nautilus-log-shell > .nautilus-log-header > .nautilus-log-header-actions > .nautilus-log-controls-top) > .nautilus-log-collapse-btn > svg[data-icon="eye-open"] > path {
     d: path("M2.5 10 C4.5 6.2 6.8 4.33 10 4.33 S15.5 6.2 17.5 10 C15.5 13.8 13.2 15.67 10 15.67 S4.5 13.8 2.5 10 Z M12.33 10 A2.33 2.33 0 1 1 7.67 10 A2.33 2.33 0 1 1 12.33 10 Z");
   }
 }

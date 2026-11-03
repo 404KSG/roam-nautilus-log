@@ -195,26 +195,43 @@ def run():
                 assert supported_ink[selector] < fallback_ink[selector] * .85, (selector,supported_ink,fallback_ink)
             assert f.state(page)['svg'] == geometry
             page.locator(SELECTORS[1]).press('Enter'); expect(page.get_by_role('dialog', name='Nautilus Log', exact=True)).to_be_visible()
-            page.keyboard.press('Escape'); page.locator(SELECTORS[2]).press('Space'); assert_glyph(glyph_state(page, SELECTORS[2]), False)
+            page.keyboard.press('Escape')
+            page.locator(SELECTORS[2]).press('Space')
+            expect(page.locator(SELECTORS[2])).to_have_attribute('aria-expanded', 'false')
+            expect(page.locator(SELECTORS[2] + ' svg[data-icon="eye-open"]')).to_be_visible()
+            assert_glyph(glyph_state(page, SELECTORS[2]), False)
             page.locator(SELECTORS[2]).press('Enter'); settle(page)
             page.locator('.nautilus-log-header').screenshot(path=str(OUT / 'fallback-header.png'))
             report['fallback'] = {'usable':True,'attributeGeometryUnchanged':True,'supportedInk':supported_ink,'fallbackInk':fallback_ink}
 
-            # Classes alone cannot opt an older/future renderer into r2 path paint.
+            # The nearest renderer owns paint, including nested charts in a Desk
+            # or embed. Exercise both immutable expanded and direct control paths.
             f.load(page, 'untimed')
-            legacy = page.evaluate('''() => {
-              const source=document.querySelector('.nautilus-log-controls-top');const results=[];
-              for(const revision of [null,'1','3']) {
+            ownership = page.evaluate('''() => {
+              const source=document.querySelector('.nautilus-log-controls-top'), results=[];
+              const container=revision=>{
                 const root=document.createElement('div');root.className='nautilus-log-container';
-                if(revision)root.dataset.nautilusRenderer=revision;
-                root.append(source.cloneNode(true));document.body.append(root);
-                results.push([...root.querySelectorAll('svg path')].map(path=>({fill:getComputedStyle(path).fill,stroke:getComputedStyle(path).stroke})));
-                root.remove();
+                if(revision!==null)root.dataset.nautilusRenderer=revision;return root;
+              };
+              for(const outer of ['body',null,'1','2','3']) for(const inner of [null,'1','2','3']) for(const layout of ['expanded','direct']) {
+                const host=outer==='body'?document.createElement('div'):container(outer),root=container(inner);
+                const controls=source.cloneNode(true);
+                if(layout==='expanded') {
+                  const shell=document.createElement('div'),header=document.createElement('header'),actions=document.createElement('div');
+                  shell.className='nautilus-log-shell';header.className='nautilus-log-header';actions.className='nautilus-log-header-actions';
+                  actions.append(controls);header.append(actions);shell.append(header);root.append(shell);
+                } else root.append(controls);
+                host.append(root);document.body.append(host);
+                const paint=[...controls.querySelectorAll('svg path')].map(path=>({fill:getComputedStyle(path).fill,stroke:getComputedStyle(path).stroke}));
+                results.push({outer,inner,layout,paint});host.remove();
               }
               return results;
             }''')
-            assert all(row['fill'] != 'none' and row['stroke'] == 'none' for values in legacy for row in values)
-            report['rendererScope'] = {'unversionedAndV1AndFutureKeepNativePaint':True}
+            failures = [row for row in ownership if not all(
+                (paint['fill'] == 'none' and paint['stroke'] != 'none') if row['inner'] == '2'
+                else (paint['fill'] != 'none' and paint['stroke'] == 'none') for paint in row['paint'])]
+            assert not failures, failures
+            report['rendererScope'] = {'nearestOwnerOnly':True,'cases':len(ownership),'matrix':ownership}
 
             # Calendar responses are fixture promises; no OAuth or real sync is invoked.
             page.evaluate("()=>{Object.assign(nautilusLogR2.settings,{'google-calendar-enabled':true,'google-calendar-configured':true});window.dispatchEvent(new Event('nautilus-log:settings-changed'));window.quietCalendarCalls=0;nautilusLogR2.syncCalendarPlan=()=>{quietCalendarCalls++;return new Promise((resolve,reject)=>{window.quietCalendarResolve=resolve;window.quietCalendarReject=reject})};}")

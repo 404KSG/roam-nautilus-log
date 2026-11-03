@@ -299,7 +299,8 @@ def contrast(page):
       let ancestry=[];for(let n=document.querySelector('.nautilus-log-chart-stage');n;n=n.parentElement)ancestry.unshift(n);
       const background=ancestry.reduce((b,n)=>blend(rgb(getComputedStyle(n).backgroundColor),b),[255,255,255]);
       const paint=(selector,prop)=>{const e=document.querySelector(selector);if(!e)throw Error('Missing paint '+selector);
-        const s=getComputedStyle(e),c=rgb(s[prop]);let a=Number(s[prop==='stroke'?'strokeOpacity':'fillOpacity']);
+        const s=getComputedStyle(e),channel=prop==='visible'?(s.fill==='none'?'stroke':'fill'):prop;
+        const c=rgb(s[channel]);let a=Number(s[channel==='stroke'?'strokeOpacity':'fillOpacity']);
         for(let n=e;n;n=n.parentElement)a*=Number(getComputedStyle(n).opacity);c[3]=(c[3]??1)*a;return c};
       return {background,
         task:paint('[data-task-uid="task-reference"] .nautilus-log-record-title','fill'),
@@ -309,8 +310,8 @@ def contrast(page):
         focus:paint('.nautilus-log-available-slot:focus .nautilus-log-available-slot-hit','stroke'),
         now:paint('.nautilus-log-now-needle-line','stroke'),
         clock:paint('.nautilus-log-center-now','fill'),
-        control:paint('.nautilus-log-collapse-btn svg path','fill'),
-        helpControl:paint('.nautilus-log-help-btn svg path','fill')};
+        control:paint('.nautilus-log-collapse-btn svg path','visible'),
+        helpControl:paint('.nautilus-log-help-btn svg path','visible')};
     }''')
     scores = {k: ratio(v, paints['background']) for k, v in paints.items() if k != 'background'}
     assert min(scores[k] for k in ('task', 'event', 'completed', 'clock')) >= 4.5, scores
