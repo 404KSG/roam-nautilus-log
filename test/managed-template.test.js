@@ -51,6 +51,20 @@ test('one real session clones all ordinary content and preserves daily and exter
   assert.deepEqual(g.trace.filter(r=>r[0]==='open'),[['open',ROOT]]);
 });
 
+test('an intentionally empty renderer template creates only an empty plan and never pulls preserved notes back in',async t=>{
+  const {g,make}=await setup(t);
+  g.add({uid:'preserved-notes',string:'Previous routine notes',parentUid:'notes-page',order:1});
+  const ordinary=g.children('source-root').map(node=>node.uid);
+  for(const uid of ordinary)g.blocks.get(uid).parentUid='preserved-notes';
+  const before=JSON.stringify([...g.blocks]);let fallbackCalls=0;
+  const result=await make({buildComponentString:()=>{fallbackCalls++;return COMPONENT;}}).ensureToday();
+  assert.equal(result.status,'ready-present');assert.equal(fallbackCalls,0);
+  assert.equal(g.blocks.get(ROOT).string,COMPONENT);assert.deepEqual(g.children(ROOT),[]);
+  assert.deepEqual(g.children('preserved-notes').map(node=>node.uid),ordinary);
+  assert.equal(g.trace.filter(row=>row[0]==='create').length,1);
+  assert.equal(JSON.stringify([...g.blocks].filter(([uid])=>uid!==ROOT)),before);
+});
+
 test('renamed owned template is copied completely instead of falling back to an empty plan', async t=>{
   const {g,make}=await setup(t);
   g.add({uid:'roam-render-Nautilus-Log',string:'Nautilus Log',parentUid:'render-page',order:0});

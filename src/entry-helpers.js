@@ -65,9 +65,12 @@ function blockByUid(uid, strict = false) {
 
 let rendererSourceCache;
 export const rendererSourceText = () => rendererSourceCache ??= `\`\`\`clojure\n ${cljsFile} \`\`\``;
-export function readRendererSource() {
+export function readOwnedRendererSourceText() {
   const { source } = readFixedRendererScaffold();
-  return inspectRendererSource(source?.string ?? null, rendererSourceText());
+  return source?.string ?? null;
+}
+export function readRendererSource() {
+  return inspectRendererSource(readOwnedRendererSourceText(), rendererSourceText());
 }
 
 // A matching source body alone cannot grant ownership of user structure.
@@ -374,7 +377,7 @@ function renderBlockString(renderStringCore, templateString) {
 export function inspectRendererScaffold(renderStringCore) {
   if (typeof api()?.q !== 'function') throw Error('Roam template inspection is unavailable.');
   const code = readRendererSource();
-  if (!['absent','current'].includes(code.state)) throw Error(code.state === 'newer'
+  if (!['absent','current','older'].includes(code.state)) throw Error(code.state === 'newer'
     ? 'This window’s extension is older than the renderer. Update this client.'
     : 'The renderer code differs from this revision. Existing content was preserved.');
   const candidates = managedTemplateCandidates(renderStringCore, true);
@@ -402,7 +405,8 @@ export function inspectRendererScaffold(renderStringCore) {
   return { code, candidate };
 }
 
-/** Install immutable r2 code, then seed or narrowly migrate the one template. */
+/** Keep one canonical source block, then seed or narrowly migrate the template.
+ * Older source bytes require a separately verified forward-upgrade receipt. */
 export async function createRenderBlock(
   renderPageName, titleblockUID, version, codeBlockUID, componentName,
   templateString, renderStringCore, options = {},
@@ -412,6 +416,9 @@ export async function createRenderBlock(
   if (codeBlockUID !== CURRENT_CODE_BLOCK_UID || renderPageName !== RENDER_PAGE
     || titleblockUID !== RENDER_TITLE_UID || componentName !== RENDER_TITLE) throw Error('Only the current renderer scaffold may be installed.');
   const initial = inspectRendererScaffold(renderStringCore);
+  if (initial.code.state === 'absent' && options.hasPendingSource?.()) {
+    throw Error('A canonical source update is unresolved; its missing block was not recreated.');
+  }
   let renderPageUID = getPageUidByPageTitle(renderPageName, true);
   const assertScope = () => {
     if (api() !== roam) throw Error('The graph provider changed while installing the renderer.');
@@ -444,6 +451,16 @@ export async function createRenderBlock(
   if (initial.code.state === 'absent') {
     await createVerified(titleblockUID, 'last', 'code', CODE_HEADER_UID, { open: false });
     await createVerified(CODE_HEADER_UID, 0, rendererSourceText(), codeBlockUID);
+  }
+  if (initial.code.state === 'older' || typeof options.ensureSource === 'function') {
+    if (typeof options.ensureSource !== 'function') throw Error('A verified canonical source upgrade is required.');
+    const expected = readOwnedRendererSourceText();
+    const result = await options.ensureSource({ expected, isCurrent: () => {
+      assertActive();
+      return readOwnedRendererSourceText() !== null;
+    } });
+    assertActive();
+    if (!result?.ok) throw Error('The canonical renderer source update is unconfirmed. No replacement code block was created.');
   }
   assertActive();
   if (readRendererSource().state !== 'current') throw Error('The current renderer source could not be verified.');

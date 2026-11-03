@@ -7,6 +7,8 @@ import {
   shouldSuppressRenderContext,
   inspectRendererScaffold,
   readRendererSource,
+  readOwnedRendererSourceText,
+  rendererSourceText,
   toggleRenderComponent,
   updateTemplateString,
 } from "./entry-helpers";
@@ -37,7 +39,7 @@ import { createPlanWatchBridge } from "./plan-watch";
 import { createRendererPlanSession } from "./renderer-plan-session";
 import { REVISION as RENDERER_REVISION, CODE_UID as codeBlockUID, BRIDGE_KEY, inspectRenderer } from './renderer-contract';
 import { installRendererBridge } from './renderer-bridge';
-import { createRendererMigration } from './renderer-migration';
+import { createRendererMigration, createRendererSourceUpgrade } from './renderer-migration';
 import { graphName } from './graph-context';
 import { createDeskView } from "./desk-view";
 import { createChartHelp } from "./chart-help";
@@ -113,6 +115,7 @@ let lifecycleGeneration = 0;
 let r2BridgeOwner = null;
 let rendererBridge = null;
 let rendererMigration = null;
+let rendererSourceUpgrade = null;
 function rendererScope() {
   const provider = typeof window === 'undefined' ? null : window.roamAlphaAPI;
   let user = '';
@@ -900,6 +903,8 @@ async function onload({ extensionAPI }) {
   trackingRequest += 1;
   trackingQueue = Promise.resolve();
   const currentLoad = () => generation === lifecycleGeneration;
+  rendererSourceUpgrade?.destroy();
+  rendererSourceUpgrade = null;
   rendererMigration?.destroy();
   rendererMigration = null;
   rendererBridge?.destroy();
@@ -965,6 +970,13 @@ async function onload({ extensionAPI }) {
     notify: message => showToast(message, 'warning'),
   });
   const loadMigration = rendererMigration;
+  rendererSourceUpgrade = createRendererSourceUpgrade({ extensionAPI,
+    expectedSource: rendererSourceText, read: readOwnedRendererSourceText,
+    sourceReady: () => currentLoad() && loadBridge.owns() && ['current','older'].includes(readRendererSource().state),
+    notify: message => showToast(message, 'warning'),
+  });
+  const loadSourceUpgrade = rendererSourceUpgrade;
+  const sourceConfirmed = () => readRendererSource().state === 'current' && !loadSourceUpgrade.hasPending();
   // A legacy template may provide settings, never r2 mutation authority over
   // its code UID. New creation and template repair always target r2.
   const recoveredTemplateState = readExistingTemplateState(renderStringCore);
@@ -1008,7 +1020,9 @@ async function onload({ extensionAPI }) {
   try {
     await toggleRenderComponent(true, titleblockUID, version, activeRenderStringCore,
       disabledReplacementString, activeCodeBlockUID, componentName, templateString,
-      { assertActive: assertRendererLoad, migrateReference: loadMigration.migrate });
+      { assertActive: assertRendererLoad, migrateReference: loadMigration.migrate,
+        hasPendingSource: loadSourceUpgrade.hasPending,
+        ensureSource: options => sourceConfirmed() ? { ok: true, changed: false } : loadSourceUpgrade.upgrade(options) });
     assertRendererLoad();
     // Only the current plan is considered. The shared active-workday reader
     // supplies the overnight owner when that context is available.
@@ -1030,7 +1044,7 @@ async function onload({ extensionAPI }) {
   }
   if (!currentLoad()) return;
   let codeReady = false;
-  try { codeReady = readRendererSource().state === 'current'; } catch (_) {}
+  try { codeReady = sourceConfirmed(); } catch (_) {}
   loadBridge.setReady(codeReady, loadBridge.bridge.error || '');
   publishRuntimeSettings(extensionAPI);
   if (!codeReady) return;
@@ -1042,7 +1056,7 @@ async function onload({ extensionAPI }) {
   todayPlanSession?.destroy?.();
   todayPlanSession = createTodayPlanSession({
     extensionAPI,
-    canCreate: () => currentLoad() && loadBridge.owns() && readRendererSource().state === 'current',
+    canCreate: () => currentLoad() && loadBridge.owns() && sourceConfirmed(),
     buildComponentString: () => generateTemplateString(extensionAPI, activeRenderStringCore),
     inspectTemplate: () => inspectCanonicalTemplate(activeRenderStringCore),
     freezeTemplate: () => freezeCanonicalTemplate(activeRenderStringCore),
@@ -1110,6 +1124,8 @@ function onunload() {
   completionStampWriter = null;
   calendarPanelState = { action: "", error: "" };
   rendererClockCache.clear();
+  rendererSourceUpgrade?.destroy();
+  rendererSourceUpgrade = null;
   rendererMigration?.destroy();
   rendererMigration = null;
   rendererBridge?.destroy();
@@ -1139,6 +1155,7 @@ export {
   changedClockOwners,
   createRendererPlanSession,
   createRendererMigration,
+  createRendererSourceUpgrade,
   installRendererBridge,
   inspectRendererScaffold,
   readRendererSource,

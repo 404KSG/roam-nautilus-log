@@ -103,13 +103,31 @@ function seedOwnedScaffold(f,{source=false}={}) {
   f.blocks.set(FIXED_HEADER,{uid:FIXED_HEADER,string:'code',parentUid:FIXED_TITLE,order:0});
   if(source)f.blocks.set(FIXED_SOURCE,{uid:FIXED_SOURCE,string:expectedRendererSource(),parentUid:FIXED_HEADER,order:0});
 }
-async function loadWithGraph(f) {
-  global.window={roamAlphaAPI:f.roam,dispatchEvent(){}};installTestHostLocks(window);
+async function loadWithGraph(f, settings = new Map([['language','en']])) {
+  global.window={roamAlphaAPI:f.roam,crypto:crypto.webcrypto,dispatchEvent(){}};installTestHostLocks(window);
   const module=await import(`data:text/javascript;base64,${fs.readFileSync(path.join(__dirname,'../extension.js')).toString('base64')}#scaffold-ownership-${Math.random()}`);
-  const settings=new Map([['language','en']]);
   await module.default.onload({extensionAPI:{settings:{get:key=>settings.get(key),set:async(key,value)=>settings.set(key,value),panel:{create(){}}}}});
   return module;
 }
+
+test('source upgrade receipts gate bootstrap and readiness without adding another source',async t=>{
+  for(const mode of ['exact-after','different-after','missing-source','foreign-graph'])await t.test(mode,async()=>{
+    const f=createRoamMock();seedOwnedScaffold(f,{source:mode!=='missing-source'});
+    f.blocks.set(FIXED_TEMPLATE,{uid:FIXED_TEMPLATE,string:'Nautilus Log [[roam/templates]]',parentUid:FIXED_TITLE,order:1});
+    f.blocks.set(FIXED_RENDER,{uid:FIXED_RENDER,string:`{{[[roam/render]]:((${FIXED_SOURCE}))}}`,parentUid:FIXED_TEMPLATE,order:0});
+    const hash=text=>crypto.createHash('sha256').update(text).digest('hex');
+    const receipt={version:1,items:[{id:'source-reservation',graph:mode==='foreign-graph'?'another-graph':'scaffold-test-graph',type:'hosted',user:'scaffold-user',uid:FIXED_SOURCE,kind:'source',revision:2,
+      beforeHash:hash('previous release'),afterHash:hash(mode==='different-after'?'different source':expectedRendererSource())}]};
+    const settings=new Map([['language','en'],['renderer-source-upgrade-pending',receipt]]),before=blockFingerprint(f);
+    const module=await loadWithGraph(f,settings);
+    try {
+      assert.equal(blockFingerprint(f),before);assert.equal(f.blocks.has('roam-render-Nautilus-Log-r3-cljs'),false);
+      assert.equal(window.nautilusLogR2.ready,['exact-after','foreign-graph'].includes(mode));
+      assert.equal(settings.get('renderer-source-upgrade-pending').items.length,mode==='exact-after'?0:1);
+      if(mode==='missing-source')assert.equal(f.blocks.has(FIXED_SOURCE),false);
+    } finally {module.default.onunload();delete global.window;}
+  });
+});
 
 test('fixed scaffold collisions are rejected before any graph write or readiness claim',async t=>{
   const cases={

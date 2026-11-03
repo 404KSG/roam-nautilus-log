@@ -1,6 +1,11 @@
 /* One renderer-family contract shared by discovery, mutation and migration. */
 const REVISION = 2;
-const CODE_UID = `roam-render-Nautilus-Log-r${REVISION}-cljs`;
+// One permanent graph entry. The historical "r2" spelling is an opaque UID,
+// not a request to create a new block when the source revision advances.
+const CODE_UID = 'roam-render-Nautilus-Log-r2-cljs';
+const RELEASED_RENDERER_SOURCES = Object.freeze([
+  Object.freeze({ revision: 2, sha256: '5abc676245d7078959f19e804a65a355c3323d5e9af4fc1c067c70f3c57af81e' }),
+]);
 const NAMESPACE = `nautilus-log-r${REVISION}`;
 const BRIDGE_KEY = `nautilusLogR${REVISION}`;
 const LEGACY_UIDS = Object.freeze(['roam-render-Nautilus-Log-cljs', 'roam-render-Nautilus-Flow-cljs', 'roam-render-Nautilus-cljs']);
@@ -11,7 +16,7 @@ function rendererIdentity(uid) {
   if (typeof uid !== 'string') return { kind: 'unsupported', uid: null, revision: null };
   const match = UID_RE.exec(uid);
   if (!match) return { kind: 'unsupported', uid: null, revision: null };
-  const revision = match[1] ? Number(match[1]) : 1;
+  const revision = uid === CODE_UID ? REVISION : match[1] ? Number(match[1]) : 1;
   const kind = uid === CODE_UID ? 'current' : LEGACY_UIDS.includes(uid) ? 'legacy'
     : Number.isSafeInteger(revision) && revision > REVISION ? 'newer' : 'unsupported';
   return { kind, uid, revision };
@@ -87,15 +92,26 @@ function migrateRendererReference(string) {
   return { changed: true, string: string.slice(0, uidStart) + CODE_UID + string.slice(uidEnd) };
 }
 
+function rendererSourceRevision(string) {
+  if (typeof string !== 'string') return null;
+  const match = /^```clojure\s*\n\s*;; nautilus-renderer ([1-9]\d*)\s*\n/.exec(string);
+  return match && Number.isSafeInteger(Number(match[1])) ? Number(match[1]) : null;
+}
+
 function inspectRendererSource(string, expected) {
   if (string === null || string === undefined) return { state: 'absent' };
   if (typeof string !== 'string') return { state: 'unreadable' };
-  const match = /^```clojure\s*\n\s*;; nautilus-renderer ([1-9]\d*)\s*\n/.exec(string);
-  const revision = match ? Number(match[1]) : null;
+  const revision = rendererSourceRevision(string);
   if (revision > REVISION) return { state: 'newer', revision };
   if (revision === REVISION && string === expected) return { state: 'current', revision };
+  if (revision < REVISION && RELEASED_RENDERER_SOURCES.some(source => source.revision === revision)) {
+    // A candidate only. The installer must verify its published hash and
+    // source ownership before any in-place upgrade can be issued.
+    return { state: 'older', revision };
+  }
   return { state: 'mismatch', revision };
 }
 
 module.exports = { REVISION, CODE_UID, NAMESPACE, BRIDGE_KEY, LEGACY_UIDS,
+  RELEASED_RENDERER_SOURCES, rendererSourceRevision,
   rendererIdentity, rendererInvocations, inspectRenderer, migrateRendererReference, inspectRendererSource, maskCode };

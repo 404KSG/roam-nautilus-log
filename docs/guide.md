@@ -521,14 +521,21 @@ not call private minified functions or bundle the Roam client source.
 
 ## Renderer upgrades
 
-Renderer r2 uses source UID `roam-render-Nautilus-Log-r2-cljs`, namespace
-`nautilus-log-r2`, and a version-local runtime bridge. It creates the r2 source only when
-absent and reuses byte-identical content. Different content at that UID, an unknown
-contract, or a newer revision is preserved and reported. Fixed title/header/source UIDs
-must have their expected text and ancestry under `roam/render`; collisions are rejected
-before creating any missing scaffold. Matching source content at a foreign location does
-not establish readiness. A renderer-source behavior change
-must advance revision, UID, and namespace together; Git hashes are display metadata.
+This single-entry policy supersedes earlier per-revision source-UID guidance.
+
+The canonical source UID is permanently `roam-render-Nautilus-Log-r2-cljs`. The `r2`
+spelling is retained as an opaque graph identity; it does not request another code block
+when a future source revision is released. The current source is revision 2, with namespace
+`nautilus-log-r2` and a version-local runtime bridge. Future source changes advance the
+source marker, namespace, and bridge revision while retaining this code UID.
+
+An absent canonical source is created once; byte-identical content is reused. A forward
+upgrade replaces that same block only when its old bytes match a bundled published-source
+SHA-256 and its title/header/source ancestry still verifies under `roam/render`. Custom,
+same-revision divergent, unknown, or newer code is preserved and reported. Source ownership,
+editor state, graph/user scope, and content are checked again after asynchronous work.
+Git hashes remain build metadata, not version ordering. Source history belongs in Git;
+normal upgrades do not create archived graph copies.
 
 Automatic migration is limited to one unambiguous managed template reference and the
 active Primary Plan reference, including an existing previous-date overnight owner. It
@@ -546,10 +553,16 @@ legacy-name templates on `roam/render` remain part of the same ambiguity check. 
 templates under other owners are not adopted. Keep the managed template in this section;
 there is no registry that follows arbitrary moves outside it.
 
-Default template, render-reference, and code-group UIDs are stable opaque identities rather
-than per-revision names to regenerate. Normal updates add no archive layer. Referenced source
-revisions may coexist under one `code` group to keep historical diagrams working; they are
-runtime dependencies, not additional templates.
+An intentionally empty template is valid: it has one renderer root and no task/event
+children. Reloading preserves that empty tree, and creating a plan copies only the root.
+Ordinary notes stored elsewhere are never pulled back in or used to refill it.
+
+Default template, render-reference, code-group, and canonical source UIDs are stable
+identities. Graphs with legacy code can be explicitly consolidated: inspect every incoming
+reference, change only supported renderer UID spans to the canonical entry, verify the
+unchanged surrounding text and tree, then remove the old source only after its references
+reach zero. Do not choose a template merely because it is populated or uses the newer UID;
+an empty template may be intentional. Resolve that choice with the owner.
 
 If a template reports **multiple renderer blocks**, inspect the container before changing it.
 Keep the intended renderer and its complete subtree. A genuinely obsolete empty reference
@@ -566,12 +579,19 @@ there is no automatic retry or replacement-plan fallback. Only the exact recorde
 can retire a reservation; a different r2 invocation is not confirmation. Inspect the referenced block
 and the original request rather than deleting/recreating the plan.
 
-Historical pages are not scanned or migrated. A compatibility reader supports their old
-renderers, including retained sessions across r2 reloads. Current chart, Desk, and Help
-instances use their own bridge ownership. Old packages can still rewrite legacy sources
-or add/repoint template roots; they cannot be controlled retroactively. Update all clients.
-If another loaded package replaces the legacy globals, reload after removing that conflict
-to restore historical views. The r2 renderer does not depend on those globals.
+Source upgrades use a separate bounded `renderer-source-upgrade-pending` store with the
+same exact-after-hash confirmation rule. No source body is stored in settings. A pending
+source update cannot be retried or replaced by creating a second code block; a missing
+canonical block is not recreated while its prior update is unresolved. Source readiness
+and plan creation remain blocked until that receipt is confirmed.
+
+Startup does not scan or rewrite historical pages. Explicit reference consolidation is a
+separate operation; after it, those pages render through the same latest code entry while
+their note content remains unchanged. A compatibility reader remains for graphs that have
+not consolidated legacy references. Current chart, Desk, and Help retain their own bridge
+ownership. Update all clients: older packages cannot be controlled retroactively and may
+recreate legacy structures or retain old loaded code. Reload updated clients after a source
+upgrade. The current renderer does not depend on mutable legacy globals.
 
 ## Execution Layer
 
