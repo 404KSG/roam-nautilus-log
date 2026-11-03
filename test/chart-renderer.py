@@ -1631,9 +1631,15 @@ def reference_completion_contract(page):
         for marker in ['', '{{[[DONE]]}} ']:
             page.evaluate('(s)=>__chartHarness.updateChild("completion-wrapper",s)', marker + '((completion-source)) d25:00')
             expect(record).to_have_attribute('data-chart-kind', 'unverified-completion')
-            assert event()['done'] is True and event()['status-origin'] == ('local' if marker else 'source')
-            assert event()['reference-completion']['reason'] == 'invalid-local-time'
-            assert event().get('start') is None
+            # Both origins share the same DOM kind; wait for the new model,
+            # not an attribute that can already describe the previous frame.
+            expected_origin = 'local' if marker else 'source'
+            page.wait_for_function('''origin=>{const e=__chartHarness.scene().records.find(r=>r.uid==='completion-wrapper')?.event;
+              return e?.done===true&&e['status-origin']===origin}''', arg=expected_origin)
+            value = event()
+            assert value['done'] is True and value['status-origin'] == expected_origin
+            assert value['reference-completion']['reason'] == 'invalid-local-time'
+            assert value.get('start') is None
             hover()
             page.get_by_role('button', name='Full text' if lang == 'en' else '全文', exact=True).click(); settle_renderer(page)
             expect(detail).to_contain_text('Local completion time is invalid' if lang == 'en' else '本地完成时间格式不正确')
