@@ -47,6 +47,11 @@
 
 ### Fixed
 
+- Capture Desk Cmd/Ctrl+Enter completion from the verified raw editor buffer even
+  when its TODO marker has not reached the graph yet. Rapidly cycling a plain task
+  through TODO to DONE now receives one timestamp after Roam saves it. Require a
+  new, exact committed transition; preserve divergent editors, existing DONE text,
+  referenced sources and all receipt, timeout and context checks.
 - Keep verified Desk previews visible while committed edits are revalidated. Patch text,
   checkbox state and row order without replacing unchanged rows or images, preventing
   background cards from flashing and collapsing during focus-dialog or sidebar editing.

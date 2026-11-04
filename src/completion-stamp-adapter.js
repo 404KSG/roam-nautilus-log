@@ -138,7 +138,8 @@ export function createCompletionStampAdapter({ writer, host = globalThis.window 
     if (writer.refuseConflict()) { cancel(action); return; }
     if (action.phase !== 'waiting') return;
     const value = pull(action.uid);
-    if (!value || value.uid !== action.uid || !core.nativeTransition(action.before, value.string)) return;
+    if (!value || value.uid !== action.uid || value.string === action.committedBefore
+      || !core.nativeTransition(action.before, value.string)) return;
     // Graph notification can precede React's editor-buffer commit. Wait only
     // inside this gesture's finite window; never replace an uncommitted buffer.
     if (!writer.isEditorSafe(action.uid, value.string)) return;
@@ -197,19 +198,18 @@ export function createCompletionStampAdapter({ writer, host = globalThis.window 
     if (previous) cancel(previous);
     const value = pull(uid);
     if (!value || value.uid !== uid) { report('Completion timestamp skipped because the target block could not be read.'); return; }
-    if (!core.oneStatus(value.string)) return;
     let before = value.string;
-    // Cmd/Ctrl+Enter may commit the user's current textarea and change its
-    // marker together. Freeze that buffer as an expectation only; never write
-    // it ourselves. The graph must later match its exact native transition.
+    // Cmd/Ctrl+Enter changes the raw buffer before Roam's debounced save. Its
+    // TODO may not exist in the graph yet. Freeze the verified buffer only as
+    // an expectation; inspection still requires new, matching committed text.
     const buffer = gesture.buffers.get(uid);
-    if (typeof buffer === 'string' && core.oneStatus(buffer) && core.status(buffer) === core.status(before)
-      && writer.isEditorSafe(uid, buffer)) before = buffer;
+    if (typeof buffer === 'string' && core.oneStatus(buffer) && writer.isEditorSafe(uid, buffer)) before = buffer;
+    if (!core.oneStatus(before)) return;
     if (!writer.isEditorSafe(uid, before)) {
       report('Completion timestamp skipped while this block has uncommitted text or input-method composition.'); return;
     }
     if (jobs.size >= MAX_PENDING) { report('Too many pending completion actions; the native task change was left intact.'); return; }
-    const action = { uid, before, instant: gesture.instant, context: gesture.context,
+    const action = { uid, before, committedBefore: value.string, instant: gesture.instant, context: gesture.context,
       epoch: gesture.epoch, id: gesture.id, gesture, abort: new AbortController(), phase: 'waiting', cancelled: false,
       timers: new Set(), deadline: null, expiresAt: null, registration: null, remove: null, removeRequested: false, removed: false };
     jobs.set(uid, action);

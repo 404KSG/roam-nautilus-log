@@ -5,6 +5,7 @@ import * as core from '../src/completion-stamp-core';
 const values = new Map([['completion-stamps-enabled', false]]), blocks = new Map(), watches = new Map(), views = new Map();
 const stampUpdates = [], nativeUpdates = [], notices = [], keys = [];
 let serial = 0, minute = 31, nativeDelay = 0, bufferDelay = 0, stampDelay = 0;
+const KEYBOARD_COMMIT_DELAY_MS = 700;
 const settings = { get: key => values.get(key), set: async (key, value) => values.set(key, JSON.parse(JSON.stringify(value))) };
 const lookupUid = lookup => {
   if (typeof lookup !== 'string') throw Error('Native watches require EDN lookup strings.');
@@ -93,14 +94,26 @@ function edit(uid, value) {
   const field = document.createElement('textarea'); field.className = 'rm-block-input'; field.id = `block-input-${view.windowId}-${uid}`;
   field.value = value ?? blocks.get(uid); view.editor = field; view.uncommitted = value !== undefined && value !== blocks.get(uid);
   field.addEventListener('compositionstart', () => { view.composing = true; }); field.addEventListener('compositionend', () => { view.composing = false; });
+  field.addEventListener('input', () => {
+    // Roam updates its raw editing buffer immediately and debounces the graph
+    // save by 700ms. Successive shortcuts can arrive before that first save.
+    view.uncommitted = true;
+    clearTimeout(view.keyboardTimer);
+    view.keyboardTimer = setTimeout(() => {
+      view.keyboardTimer = null; view.uncommitted = false;
+      apply(uid, field.value, 'native');
+    }, KEYBOARD_COMMIT_DELAY_MS);
+  });
   field.addEventListener('keydown', event => {
     keys.push({ key: event.key, defaultPrevented: event.defaultPrevented });
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.shiftKey && !view.composing) {
-      // Uncommitted input is deliberately independent from the graph. The host
-      // commits its own text; the extension must never overwrite that buffer.
-      setTimeout(() => {
-        blocks.set(uid, field.value); view.uncommitted = false; nativeToggle(uid);
-      }, nativeDelay);
+      // Native editor cycle: no marker -> TODO -> DONE -> no marker. This is
+      // different from clicking a checkbox, which toggles the graph directly.
+      const state = core.status(field.value);
+      field.value = state === 'TODO' ? core.doneMarkerString(field.value)
+        : state === 'DONE' ? field.value.replace(/\{\{(?:\[\[DONE\]\]|DONE)\}\}/i, '').trimStart()
+          : `{{[[TODO]]}} ${field.value}`;
+      field.dispatchEvent(new Event('input', { bubbles: true }));
     }
   });
   view.main.replaceChildren(field); return field.id;

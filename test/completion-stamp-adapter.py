@@ -67,6 +67,19 @@ def main():
             assert text('main-0001').count(' d')==1
             result['checks'].append('multiple views share one owned stamp; reopen removes it and recompletion uses a new minute')
 
+            for uid,chord in [('rapid0001','Meta+Enter'),('rapid0002','Control+Enter')]:
+                page.evaluate('''uid=>{const h=completionStampHarness;h.blocks.set('draftsrc1','Reusable plain source 30m');
+                    h.block('#desk',uid,'((draftsrc1))');h.edit(uid)}''',uid)
+                field=page.locator(f'textarea[id$="{uid}"]')
+                field.press(chord);field.press(chord)
+                assert text(uid)=='((draftsrc1))', 'the native editor has not saved its new marker yet'
+                assert field.input_value()=='{{[[DONE]]}} ((draftsrc1))'
+                assert page.evaluate('uid=>completionStampHarness.stampUpdates.filter(x=>x.uid===uid).length',uid)==0
+                stamped(uid,'d10:37')
+                assert text('draftsrc1')=='Reusable plain source 30m'
+                assert page.evaluate('uid=>completionStampHarness.stampUpdates.filter(x=>x.uid===uid).length',uid)==1
+            result['checks'].append('both native keyboard shortcuts complete an unsaved TODO in Desk after the debounced graph save, with one wrapper stamp and no source edit')
+
             for uid,chord in [('keybd-001','Control+Enter'),('keybd-002','Meta+Enter')]:
                 page.evaluate('(uid)=>{const h=completionStampHarness;h.block("#main",uid,"{{[[TODO]]}} Keyboard task");h.edit(uid)}',uid)
                 page.locator(f'textarea[id$="{uid}"]').press(chord);stamped(uid,'d10:37')

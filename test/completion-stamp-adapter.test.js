@@ -68,6 +68,48 @@ async function setup(t, options = {}) {
   return { ...f, document, events, timers, registered, callbacks, adapter, nativeChange, toggle, setEnabled };
 }
 
+test('a native editor can complete its unsaved TODO after the graph commit', async t => {
+  const f=await setup(t),node=target('task00001');
+  f.blocks.set('task00001','((source001))');
+  f.blocks.set('source001','Reusable plain source 30m');
+  const editor={...node.node,tagName:'TEXTAREA',value:'{{[[TODO]]}} ((source001))',matches:()=>true};
+  f.document.editors=[editor];f.document.fire('keydown',key(editor));
+  assert.equal(f.updates.length,0,'capturing the raw buffer must not save it');
+  editor.value='{{[[DONE]]}} ((source001))';
+  f.nativeChange('task00001',editor.value);await flush();await wait(5);
+  assert.equal(f.blocks.get('task00001'),'{{[[DONE]]}} ((source001)) d10:31');
+  assert.equal(f.blocks.get('source001'),'Reusable plain source 30m');
+  assert.equal(f.updates.length,1);
+});
+
+test('a buffered shortcut still preserves a divergent editor copy', async t => {
+  const f=await setup(t),node=target('task00001');f.blocks.set('task00001','Plain task');
+  const editor={...node.node,tagName:'TEXTAREA',value:'{{[[TODO]]}} Plain task',matches:()=>true};
+  const other={...editor,id:'block-input-sidebar-window-task00001',value:'Uncommitted different text'};
+  f.document.editors=[editor,other];f.document.fire('keydown',key(editor));
+  editor.value='{{[[DONE]]}} Plain task';f.nativeChange('task00001',editor.value);
+  await flush();assert.equal(f.updates.length,0);assert.equal(other.value,'Uncommitted different text');
+});
+
+test('a buffered shortcut cannot restamp an already saved DONE string without graph progress', async t => {
+  const f=await setup(t,{observationTimeoutMs:30}),node=target('task00001');
+  f.blocks.set('task00001','{{[[DONE]]}} Plain task');
+  const editor={...node.node,tagName:'TEXTAREA',value:'{{[[TODO]]}} Plain task',matches:()=>true};
+  f.document.editors=[editor];f.document.fire('keydown',key(editor));
+  editor.value='{{[[DONE]]}} Plain task';f.nativeChange('task00001',editor.value);
+  await wait(60);assert.equal(f.updates.length,0);assert.equal(f.saves.length,0);
+  assert.equal(f.blocks.get('task00001'),'{{[[DONE]]}} Plain task');
+});
+
+test('edits after a buffered completion shortcut are not replaced by its expectation', async t => {
+  const f=await setup(t,{observationTimeoutMs:30}),node=target('task00001');f.blocks.set('task00001','Plain task');
+  const editor={...node.node,tagName:'TEXTAREA',value:'{{[[TODO]]}} Plain task',matches:()=>true};
+  f.document.editors=[editor];f.document.fire('keydown',key(editor));
+  editor.value='{{[[DONE]]}} Newer task text';f.nativeChange('task00001',editor.value);
+  await wait(60);assert.equal(f.updates.length,0);assert.equal(f.saves.length,0);
+  assert.equal(f.blocks.get('task00001'),editor.value);
+});
+
 test('a cold native commit after 750ms still stamps the first confirmed action',async t=>{
   const f=await setup(t);f.document.fire('click',click(target('task00001').input));
   await wait(850);f.toggle('task00001');await flush();await wait(10);
