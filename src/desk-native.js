@@ -52,7 +52,7 @@ export function nativeElements(document) {
     const state = imageStates.get(imageParent);
     if (state) {
       state.active = false; state.notify = null; state.generation = (state.generation || 0) + 1;
-      for (const record of state.records || []) { record.retired = true; record.notify = null; }
+      for (const record of state.records || []) record.retired = true;
       state.records = [];
     }
     imageStates.delete(imageParent);
@@ -78,15 +78,17 @@ export function nativeElements(document) {
     // is a new lifetime; text, alt, and hidden-tail edits are not.
     const owned = () => state;
     const detachRecord = record => {
-      record.retired = true; record.notify = null;
+      record.retired = true;
       const node = record.node; record.node = null;
-      if (!node?.isConnected) return;
+      // Search detaches a cached tile without retiring its preview. Remove the
+      // old node from that subtree too, before the card can re-enter the grid.
+      if (!node) return;
       const cell = node.closest('.rm-desk-tile__images-cell');
       (cell || node).remove();
     };
     const createRecord = image => {
       const node = document.createElement('img');
-      const record = { src: image.src, node, failed: false, retired: false, generation: owned().generation, notify: owned().notify };
+      const record = { src: image.src, node, failed: false, retired: false, generation: owned().generation };
       node.alt = image.alt; node.loading = 'lazy';
       const current = () => !record.retired && record.generation === owned().generation && owned().active;
       node.addEventListener('load', () => { if (current()) owned().notify?.(); }, { once: true });
@@ -109,7 +111,7 @@ export function nativeElements(document) {
       const holder = existingHolder || el('div', state.mode === 'single' ? 'rm-desk-tile__image' : 'rm-desk-tile__images');
       if (!holder.parentElement) imageParent.append(holder);
       if (state.mode === 'single') {
-        if (live[0].node.parentElement !== holder) holder.append(live[0].node);
+        reconcileChildren(holder, [live[0].node]);
         return;
       }
       const cells = live.map(record => {
@@ -141,7 +143,6 @@ export function nativeElements(document) {
         const queue = queues.get(image.src);
         const record = queue?.shift();
         if (!record) return createRecord(image);
-        record.notify = state.notify;
         if (record.node && record.node.alt !== image.alt) record.node.alt = image.alt;
         return record;
       });
@@ -152,7 +153,6 @@ export function nativeElements(document) {
     };
     if (state?.mode === imageMode && imageMode !== 'empty') {
       state.notify = onImageChange;
-      for (const record of state.records) if (!record.retired) record.notify = onImageChange;
       matchVisible();
     } else {
       retireImages(imageParent);

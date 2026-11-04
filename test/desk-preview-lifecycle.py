@@ -750,6 +750,48 @@ def rejected_preview_retry(page, images):
     return {'visibleFailureAndExplicitRetry': True}
 
 
+def image_granularity_search_reentry(page, images):
+    """A detached search result must retire its old single image before reuse."""
+    prepare(page)
+    page.evaluate('''host => {
+      deskHarness.api.setString('task-3', '{{[[TODO]]}} Gallery search note');
+      deskHarness.api.addChild('search-image', 'task-3', '![](' + host + '/search-a.png)');
+    }''', HOST)
+    open_desk(page)
+    all_loaded(page)
+    search = page.get_by_role('textbox', name='Search Desk', exact=True)
+    search.fill('gallery search')
+    expect(card(page)).to_be_visible()
+    all_loaded(page)
+    wait_decoded(page, 1)
+    card(page).evaluate('tile => window.searchTile = tile')
+    replacements = []
+    for name in ['b', 'c']:
+        page.evaluate('window.searchOldImage = searchTile.querySelector("img")')
+        search.fill('gallery search absent')
+        expect(card(page)).to_have_count(0)
+        assert page.evaluate('!searchTile.isConnected')
+        page.evaluate('''url => {
+          deskHarness.api.setString('search-image', '![](' + url + ')');
+        }''', HOST + '/search-' + name + '.png')
+        page.wait_for_function('''suffix => searchTile.dataset.previewState === 'ready'
+          && [...searchTile.querySelectorAll('img')].some(img => img.src.endsWith(suffix))''', arg='/search-' + name + '.png')
+        proof = page.evaluate('''() => ({
+          detached: !searchTile.isConnected,
+          sources: [...searchTile.querySelectorAll('img')].map(img => new URL(img.src).pathname),
+          oldRemoved: !searchTile.contains(searchOldImage),
+          writes: deskHarness.api.stats.writes.length
+        })''')
+        expected = {'detached': True, 'sources': ['/search-' + name + '.png'], 'oldRemoved': True, 'writes': 0}
+        assert proof == expected, {'expected': expected, 'actual': proof}
+        search.fill('gallery search')
+        expect(card(page)).to_be_visible()
+        wait_decoded(page, 1)
+        assert page.evaluate('document.querySelector(\'[data-task-uid="task-3"]\') === searchTile')
+        replacements.append(proof)
+    return {'sameSearchCard': True, 'singleImageReplacements': replacements, 'graphWrites': 0}
+
+
 def image_granularity_hidden_fourth(page, images):
     """Changing only a hidden image must not recreate the three visible ones."""
     prepare(page)
@@ -947,6 +989,7 @@ def image_granularity_duplicate_product(page, images):
     open_desk(page); all_loaded(page); wait_decoded(page, 3); stash_images(page)
     initial = image_view(page)
     assert initial['srcs'] == ['/gallery-a.png', '/gallery-b.png', '/gallery-c.png'], initial
+    # The existing model deduplicates a,b,c,a before this renderer sees it.
     assert initial['badge'] is None, initial
     assert initial['requests'] == {'/gallery-a.png': 1, '/gallery-b.png': 1, '/gallery-c.png': 1}, initial
     commit_task(page, task_markup(['a', 'b', 'c', 'd']))
@@ -1194,6 +1237,7 @@ def run():
               ('folded-composition', folded_composition), ('composition-close', composition_close),
               ('composition-pending-create', composition_pending_create),
               ('overflow-geometry', overflow), ('late-native-editor', late_editor),
+              ('image-granularity-search-reentry', image_granularity_search_reentry),
               ('image-granularity-hidden-fourth', image_granularity_hidden_fourth),
               ('image-granularity-one-visible', image_granularity_one_visible),
               ('image-granularity-reorder-badge', image_granularity_reorder_badge),
