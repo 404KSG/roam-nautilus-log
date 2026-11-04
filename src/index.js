@@ -952,21 +952,22 @@ async function onload({ extensionAPI }) {
     isActive: () => currentLoad() && loadBridge.owns(),
   });
   templatePresentation = loadTemplatePresentation;
+  const sourceProgramReady = (allowOlder = false) => {
+    const source = readRendererSource();
+    return source.programIsolated && (source.state === 'current' || (allowOlder && source.state === 'older'));
+  };
   rendererMigration = createRendererMigration({ extensionAPI,
-    sourceReady: () => currentLoad() && loadBridge.owns() && readRendererSource().state === 'current',
+    sourceReady: () => currentLoad() && loadBridge.owns() && sourceProgramReady(),
     notify: message => showToast(message, 'warning'),
   });
   const loadMigration = rendererMigration;
   rendererSourceUpgrade = createRendererSourceUpgrade({ extensionAPI,
     expectedSource: rendererSourceText, read: readOwnedRendererSourceText,
-    sourceReady: () => currentLoad() && loadBridge.owns() && ['current','older'].includes(readRendererSource().state),
+    sourceReady: () => currentLoad() && loadBridge.owns() && sourceProgramReady(true),
     notify: message => showToast(message, 'warning'),
   });
   const loadSourceUpgrade = rendererSourceUpgrade;
-  const sourceConfirmed = () => {
-    const source = readRendererSource();
-    return source.state === 'current' && source.programIsolated && !loadSourceUpgrade.hasPending();
-  };
+  const sourceConfirmed = () => sourceProgramReady() && !loadSourceUpgrade.hasPending();
   // A legacy template may provide settings, never r2 mutation authority over
   // its code UID. New creation and template repair always target r2.
   const recoveredTemplateState = readExistingTemplateState(renderStringCore);

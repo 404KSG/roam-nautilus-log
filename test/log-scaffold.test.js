@@ -158,6 +158,36 @@ test('isolated old code headers upgrade in place without changing source or temp
   } finally { module.default.onunload(); delete global.window; }
 });
 
+test('owned generic headers isolate before source-byte or receipt refusals', async t => {
+  for (const mode of ['custom', 'newer', 'missing-pending', 'current-pending']) await t.test(mode, async () => {
+    const f = createRoamMock(); seedOwnedScaffold(f, { source: mode !== 'missing-pending' });
+    f.blocks.get(FIXED_HEADER).string = 'code';
+    f.blocks.set(FIXED_TEMPLATE, { uid: FIXED_TEMPLATE, string: 'Nautilus Log [[roam/templates]]', parentUid: FIXED_TITLE, order: 1 });
+    f.blocks.set(FIXED_RENDER, { uid: FIXED_RENDER, string: `{{[[roam/render]]:((${FIXED_SOURCE}))}}`, parentUid: FIXED_TEMPLATE, order: 0 });
+    if (mode === 'custom') f.blocks.get(FIXED_SOURCE).string += '\n;; preserved local source';
+    if (mode === 'newer') f.blocks.get(FIXED_SOURCE).string = expectedRendererSource().replace(';; nautilus-renderer 2', ';; nautilus-renderer 3');
+    const beforeSource = f.blocks.get(FIXED_SOURCE)?.string, beforeUids = [...f.blocks.keys()], writes = [];
+    const update = f.roam.updateBlock, create = f.roam.createBlock;
+    f.roam.updateBlock = async payload => { writes.push(['update', payload.block.uid]); return update(payload); };
+    f.roam.createBlock = async payload => { writes.push(['create', payload.block.uid]); return create(payload); };
+    const settings = new Map([['language', 'en']]);
+    if (mode.endsWith('pending')) {
+      const hash = text => crypto.createHash('sha256').update(text).digest('hex');
+      settings.set('renderer-source-upgrade-pending', { version: 1, items: [{ id: 'pending-source', graph: 'scaffold-test-graph', type: 'hosted', user: 'scaffold-user', uid: FIXED_SOURCE, kind: 'source', revision: 2,
+        beforeHash: hash('earlier source'), afterHash: hash('unconfirmed source') }] });
+    }
+    const module = await loadWithGraph(f, settings);
+    try {
+      assert.equal(f.blocks.get(FIXED_HEADER).string, 'renderer', 'metadata isolation must precede a source refusal');
+      assert.deepEqual(writes, [['update', FIXED_HEADER]]);
+      assert.equal(f.blocks.get(FIXED_SOURCE)?.string, beforeSource);
+      assert.deepEqual([...f.blocks.keys()], beforeUids);
+      assert.equal(window.nautilusLogR2.ready, false);
+      if (mode.endsWith('pending')) assert.equal(settings.get('renderer-source-upgrade-pending').items.length, 1);
+    } finally { module.default.onunload(); delete global.window; }
+  });
+});
+
 test('an owned empty legacy header resumes without another code group or source UID', async () => {
   const f = createRoamMock(); seedOwnedScaffold(f); f.blocks.get(FIXED_HEADER).string = 'code';
   const module = await loadWithGraph(f);
@@ -228,6 +258,7 @@ test('header isolation confirms the result and stops on post-write ownership cha
 test('mixed native renderer programs fail closed before graph writes', async t => {
   for (const name of ['legacy-first', 'legacy-last', 'foreign-code', 'missing-current-source']) await t.test(name, async () => {
     const f = createRoamMock(); seedOwnedScaffold(f, { source: name !== 'missing-current-source' });
+    f.blocks.get(FIXED_HEADER).string = 'code';
     const siblingUid = name === 'foreign-code' ? 'foreign-source' : 'roam-render-Nautilus-Log-cljs';
     const siblingText = name === 'foreign-code' ? '```javascript\nfunction other(){return null;}\n```'
       : '```clojure\n(ns nautilus-log-v1)\n(defn main [_] [:div "legacy"])\n```';
@@ -245,6 +276,35 @@ test('mixed native renderer programs fail closed before graph writes', async t =
       assert.throws(() => module.readRendererSource(), /source group|code group|isolation/i);
     } finally { module.default.onunload(); delete global.window; }
   });
+});
+
+test('source group checks reuse one synchronous child snapshot but re-read on every call', async () => {
+  const f = createRoamMock(); seedOwnedScaffold(f, { source: true });
+  const module = await loadWithGraph(f), query = f.roam.q;
+  let headerReads = 0;
+  f.roam.q = text => { if (text.includes(`[?parent :block/uid "${FIXED_HEADER}"]`)) headerReads++; return query(text); };
+  try {
+    assert.equal(module.readRendererSource().state, 'current');
+    assert.equal(headerReads, 1, 'membership and isolation must use the same in-call snapshot');
+    f.blocks.set('late-source', { uid: 'late-source', string: 'foreign source', parentUid: FIXED_HEADER, order: 1 });
+    assert.throws(() => module.readRendererSource(), /source group/);
+    assert.equal(headerReads, 2, 'the next inspection must not reuse an old snapshot');
+    f.blocks.delete('late-source'); f.blocks.get(FIXED_SOURCE).string += '\n;; local change';
+    assert.equal(module.readRendererSource().state, 'mismatch');
+    assert.equal(headerReads, 3);
+  } finally { module.default.onunload(); delete global.window; }
+});
+
+test('a missing direct source read with a present child row is not an empty group', async () => {
+  const f = createRoamMock(); seedOwnedScaffold(f, { source: true });
+  const pull = f.roam.data.pull;
+  f.roam.data.pull = (pattern, lookup) => lookup?.[1] === FIXED_SOURCE ? null : pull(pattern, lookup);
+  const before = blockFingerprint(f), module = await loadWithGraph(f);
+  try {
+    assert.equal(window.nautilusLogR2.ready, false);
+    assert.equal(blockFingerprint(f), before);
+    assert.throws(() => module.readRendererSource(), /source group/);
+  } finally { module.default.onunload(); delete global.window; }
 });
 
 test('source upgrade receipts gate bootstrap and readiness without adding another source',async t=>{

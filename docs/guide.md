@@ -528,10 +528,18 @@ when v1 and r2 share a parent.
 The generic **code** label is reserved for legacy compatibility: older installers search
 for that exact label when recreating their source. A verified empty or single-source
 current header still named `code` is renamed in place to `renderer`, preserving its UID, source
-bytes and properties. Active or unsaved header editors are left alone. Mixed groups are
-blocked before readiness or further scaffold writes; existing code is not moved, deleted
-or silently adopted. Repair an existing mixed group only with the owner's authorization,
-keeping legacy sources in a separate container and preserving their UIDs and references.
+bytes and properties. Header isolation runs before source/template admission, including
+custom, newer, or unresolved source states; their bytes and receipts remain untouched and
+cannot authorize source creation or upgrade. Active or unsaved header editors are left
+alone. Mixed groups are blocked before readiness or further scaffold writes; existing code
+is not moved, deleted or silently adopted.
+
+Repair an existing mixed group only with the owner's authorization. Preserve genuinely
+referenced legacy code in a separate container. If both indexed backlinks and a textual
+reference scan show no remaining use, remove the obsolete source after updating clients;
+do not create a permanent legacy container merely to park unused code. Check empty legacy
+template stubs too: a literal renderer invocation can exist without an indexed backlink.
+Keep the intended current template root and its full subtree.
 
 An absent canonical source is created once; byte-identical content is reused. A forward
 upgrade replaces that same block only when its old bytes match a bundled published-source

@@ -71,21 +71,23 @@ export function readOwnedRendererSourceText() {
   const { source } = readFixedRendererScaffold();
   return source?.string ?? null;
 }
-export function readRendererSource() {
-  const { header, source } = readFixedRendererScaffold();
+function rendererSourceState({ header, source }) {
   return { ...inspectRendererSource(source?.string ?? null, rendererSourceText()),
     programIsolated: header?.string === CODE_HEADER_NAME };
+}
+export function readRendererSource() {
+  return rendererSourceState(readFixedRendererScaffold());
 }
 
 // A matching source body alone cannot grant ownership of user structure.
 // Partial owned scaffolds are resumable; existing children of missing or
 // foreign parents are collisions, never permission to adopt those parents.
-function assertScaffoldOwner(block, parentUid, expectedString) {
+function assertScaffoldOwner(block, parentUid, expectedString, siblings) {
   if (!block) return;
   if (!parentUid || (expectedString !== undefined && block.string !== expectedString)) {
     throw Error(`Renderer scaffold UID ownership is unverified: ${block.uid}`);
   }
-  const matches = childBlocks(parentUid, true).filter(child => child.uid === block.uid);
+  const matches = (siblings ?? childBlocks(parentUid, true)).filter(child => child.uid === block.uid);
   if (matches.length !== 1 || matches[0].string !== block.string) {
     throw Error(`Renderer scaffold UID has a different parent or content: ${block.uid}`);
   }
@@ -98,11 +100,12 @@ function readFixedRendererScaffold() {
   const source = blockByUid(CURRENT_CODE_BLOCK_UID, true);
   assertScaffoldOwner(title, pageUid, RENDER_TITLE);
   assertScaffoldOwner(header, title?.uid, header?.string === CODE_HEADER_NAME ? CODE_HEADER_NAME : 'code');
-  assertScaffoldOwner(source, header?.uid);
+  // One synchronous snapshot serves both checks; no cache survives this call.
+  const children = header ? childBlocks(header.uid, true) : [];
+  assertScaffoldOwner(source, header?.uid, undefined, children);
   if (header) {
     // Roam compiles a referenced code block's siblings as one program. A valid
     // r2 body is not enough: an earlier v1 namespace can select the v1 entry.
-    const children = childBlocks(header.uid, true);
     if (children.some(child => child.uid !== CURRENT_CODE_BLOCK_UID) || (!source && children.length)) {
       throw Object.assign(new Error('Renderer source group is not isolated. Keep the current source in its own renderer container; existing blocks were preserved.'),
         { code: 'rendererSourceGroupMixed' });
@@ -111,12 +114,11 @@ function readFixedRendererScaffold() {
   return { pageUid, title, header, source };
 }
 
-async function isolateOwnedCodeHeader(roam, assertActive) {
-  const header = readFixedRendererScaffold().header;
+async function isolateOwnedCodeHeader(roam, assertProgramScope) {
+  const { header } = assertProgramScope();
   if (header?.string !== 'code') return;
   // Only a verified empty/single-source scaffold may change its generic label.
   // Mixed groups require an explicit structural repair, never silent moves.
-  assertActive();
   const focused = roam.ui?.getFocusedBlock?.();
   if (focused?.['block-uid'] === CODE_HEADER_UID) throw Error('The renderer header is being edited. Finish editing before reloading.');
   const document = typeof window !== 'undefined' ? window.document : null;
@@ -131,8 +133,8 @@ async function isolateOwnedCodeHeader(roam, assertActive) {
   let error;
   try { await roam.updateBlock({ block: { uid: CODE_HEADER_UID, string: CODE_HEADER_NAME } }); }
   catch (failure) { error = failure; }
-  assertActive();
-  if (readFixedRendererScaffold().header?.string !== CODE_HEADER_NAME) {
+  const confirmed = assertProgramScope();
+  if (confirmed.header?.string !== CODE_HEADER_NAME) {
     throw error || Error('Renderer header isolation could not be confirmed. No replacement source was created.');
   }
 }
@@ -425,8 +427,10 @@ function renderBlockString(renderStringCore, templateString) {
 
 /** Read before installing anything; a newer/custom template is never replaced. */
 export function inspectRendererScaffold(renderStringCore) {
+  return inspectRendererScaffoldState(renderStringCore, readRendererSource());
+}
+function inspectRendererScaffoldState(renderStringCore, code) {
   if (typeof api()?.q !== 'function') throw Error('Roam template inspection is unavailable.');
-  const code = readRendererSource();
   if (!['absent','current','older'].includes(code.state)) throw Error(code.state === 'newer'
     ? 'This window’s extension is older than the renderer. Update this client.'
     : 'The renderer code differs from this revision. Existing content was preserved.');
@@ -465,22 +469,36 @@ export async function createRenderBlock(
   if (!roam) return false;
   if (codeBlockUID !== CURRENT_CODE_BLOCK_UID || renderPageName !== RENDER_PAGE
     || titleblockUID !== RENDER_TITLE_UID || componentName !== RENDER_TITLE) throw Error('Only the current renderer scaffold may be installed.');
-  const initial = inspectRendererScaffold(renderStringCore);
-  if (initial.code.state === 'absent' && options.hasPendingSource?.()) {
-    throw Error('A canonical source update is unresolved; its missing block was not recreated.');
-  }
   let renderPageUID = getPageUidByPageTitle(renderPageName, true);
   const assertScope = () => {
     if (api() !== roam) throw Error('The graph provider changed while installing the renderer.');
     options.assertActive?.();
   };
-  const assertActive = () => {
+  const assertProgramScope = () => {
     assertScope();
-    inspectRendererScaffold(renderStringCore);
-    if (renderPageUID && getPageUidByPageTitle(renderPageName, true) !== renderPageUID) {
+    const scaffold = readFixedRendererScaffold();
+    if (renderPageUID && scaffold.pageUid !== renderPageUID) {
       throw Error('Renderer scaffold ownership changed while installing.');
     }
     assertScope();
+    return scaffold;
+  };
+  // Protect owned metadata before source/template admission, including custom,
+  // newer or pending source states. Their bytes and receipts remain untouched.
+  await isolateOwnedCodeHeader(roam, assertProgramScope);
+  const initial = inspectRendererScaffold(renderStringCore);
+  if (initial.code.state === 'absent' && options.hasPendingSource?.()) {
+    throw Error('A canonical source update is unresolved; its missing block was not recreated.');
+  }
+  if (!renderPageUID) renderPageUID = getPageUidByPageTitle(renderPageName, true);
+  const assertActive = () => {
+    const scaffold = assertProgramScope();
+    if (scaffold.header && scaffold.header.string !== CODE_HEADER_NAME) {
+      throw Error('Renderer header isolation changed while installing. Existing content was preserved.');
+    }
+    const inspected = inspectRendererScaffoldState(renderStringCore, rendererSourceState(scaffold));
+    assertScope();
+    return inspected;
   };
   const createVerified = async (parentUid, order, string, uid, extra = {}) => {
     assertActive();
@@ -499,7 +517,6 @@ export async function createRenderBlock(
   if (!renderPageUID) throw Error('The renderer page could not be confirmed.');
   await createVerified(renderPageUID, 'last', componentName, titleblockUID, { heading: 3 });
   if (initial.code.state === 'absent') {
-    await isolateOwnedCodeHeader(roam, assertActive);
     await createVerified(titleblockUID, 'last', CODE_HEADER_NAME, CODE_HEADER_UID, { open: false });
     await createVerified(CODE_HEADER_UID, 0, rendererSourceText(), codeBlockUID);
   }
@@ -513,10 +530,9 @@ export async function createRenderBlock(
     assertActive();
     if (!result?.ok) throw Error('The canonical renderer source update is unconfirmed. No replacement code block was created.');
   }
-  assertActive();
-  if (readRendererSource().state !== 'current') throw Error('The current renderer source could not be verified.');
-  await isolateOwnedCodeHeader(roam, assertActive);
-  const current = inspectRendererScaffold(renderStringCore);
+  // No await separates this fresh verification from the template decision.
+  const current = assertActive();
+  if (current.code.state !== 'current' || !current.code.programIsolated) throw Error('The current renderer source could not be verified.');
   if ((current.candidate?.template.uid || null) !== (initial.candidate?.template.uid || null)) throw Error('The managed template changed while installing the renderer.');
   let template = current.candidate?.template;
   if (!template) {
