@@ -750,6 +750,426 @@ def rejected_preview_retry(page, images):
     return {'visibleFailureAndExplicitRetry': True}
 
 
+def image_granularity_hidden_fourth(page, images):
+    """Changing only a hidden image must not recreate the three visible ones."""
+    prepare(page)
+    page.evaluate('''host => {
+      const urls = ['a', 'b', 'c', 'd'].map(name => host + '/gallery-' + name + '.png');
+      deskHarness.api.setString('task-3', '{{[[TODO]]}} Gallery ' + urls.map(url => '![](' + url + ')').join(' '));
+    }''', HOST)
+    open_desk(page)
+    all_loaded(page)
+    page.wait_for_function('''() => {
+      const imgs = [...document.querySelectorAll('[data-task-uid="task-3"] img')];
+      return imgs.length === 3 && imgs.every(img => img.naturalWidth === 640)
+        && document.querySelector('[data-task-uid="task-3"] .rm-desk-tile__images-more')?.textContent === '+1';
+    }''')
+    page.evaluate('''() => {
+      const imgs = [...document.querySelectorAll('[data-task-uid="task-3"] img')];
+      window.galleryProof = {imgs, undecoded: 0, sampling: true};
+      const sample = () => {
+        if (!galleryProof.sampling) return;
+        if (galleryProof.imgs.some(img => !img.isConnected || img.naturalWidth === 0)) galleryProof.undecoded++;
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    }''')
+    page.evaluate('''host => {
+      window.galleryReads = deskHarness.api.stats.reads.length;
+      const urls = ['a', 'b', 'c', 'e'].map(name => host + '/gallery-' + name + '.png');
+      deskHarness.api.setString('task-3', '{{[[TODO]]}} Gallery ' + urls.map(url => '![](' + url + ')').join(' '));
+    }''', HOST)
+    page.wait_for_function('''() => deskHarness.api.stats.reads.length > galleryReads
+      && document.querySelector('[data-task-uid="task-3"]').dataset.previewState === "ready"''')
+    settle(page)
+    proof = page.evaluate('''() => {
+      galleryProof.sampling = false;
+      const imgs = [...document.querySelectorAll('[data-task-uid="task-3"] img')];
+      const count = path => receivedImages.filter(item => item === path).length;
+      return {
+        sameNodes: galleryProof.imgs.length === 3 && galleryProof.imgs.every((img, index) => imgs[index] === img && img.isConnected),
+        connected: galleryProof.imgs.map(img => img.isConnected),
+        srcs: imgs.map(img => new URL(img.src).pathname),
+        undecoded: galleryProof.undecoded,
+        requests: {
+          '/gallery-a.png': count('/gallery-a.png'),
+          '/gallery-b.png': count('/gallery-b.png'),
+          '/gallery-c.png': count('/gallery-c.png'),
+          '/gallery-d.png': count('/gallery-d.png'),
+          '/gallery-e.png': count('/gallery-e.png')
+        },
+        badge: document.querySelector('[data-task-uid="task-3"] .rm-desk-tile__images-more')?.textContent || null,
+        writes: deskHarness.api.stats.writes.length
+      };
+    }''')
+    expected = {
+        'sameNodes': True,
+        'connected': [True, True, True],
+        'srcs': ['/gallery-a.png', '/gallery-b.png', '/gallery-c.png'],
+        'undecoded': 0,
+        'requests': {
+            '/gallery-a.png': 1, '/gallery-b.png': 1, '/gallery-c.png': 1,
+            '/gallery-d.png': 0, '/gallery-e.png': 0,
+        },
+        'badge': '+1',
+        'writes': 0,
+    }
+    assert proof == expected, {'expected': expected, 'actual': proof}
+    return {'sameVisibleNodes': True, 'hiddenReplacementRequests': 0, 'graphWrites': 0}
+
+
+def task_markup(names, text='Gallery', alts=None):
+    parts = []
+    for index, name in enumerate(names):
+        alt = '' if alts is None else alts[index]
+        parts.append(f'![{alt}]({HOST}/gallery-{name}.png)')
+    return '{{[[TODO]]}} ' + text + ' ' + ' '.join(parts)
+
+
+def commit_task(page, string, uid='task-3', card='task-3'):
+    page.evaluate('''({uid, string}) => {
+      window.previewReads = deskHarness.api.stats.reads.length;
+      deskHarness.api.setString(uid, string);
+    }''', {'uid': uid, 'string': string})
+    page.wait_for_function('''(card) => deskHarness.api.stats.reads.length > previewReads
+      && document.querySelector(`[data-task-uid="${card}"]`).dataset.previewState === "ready"''', arg=card)
+    settle(page)
+
+
+def wait_decoded(page, count, uid='task-3'):
+    page.wait_for_function('''({uid, count}) => {
+      const imgs = [...document.querySelectorAll(`[data-task-uid="${uid}"] img`)];
+      return imgs.length === count && imgs.every(img => img.naturalWidth === 640);
+    }''', arg={'uid': uid, 'count': count})
+
+
+def stash_images(page, uid='task-3'):
+    page.evaluate('''(uid) => { window.keptImages = [...document.querySelectorAll(`[data-task-uid="${uid}"] img`)]; }''', uid)
+
+
+def image_view(page, uid='task-3'):
+    return page.evaluate('''(uid) => {
+      const imgs = [...document.querySelectorAll(`[data-task-uid="${uid}"] img`)];
+      const badge = document.querySelector(`[data-task-uid="${uid}"] .rm-desk-tile__images-more`);
+      const requests = receivedImages.reduce((acc, path) => { acc[path] = (acc[path] || 0) + 1; return acc; }, {});
+      return {
+        connected: window.keptImages.map(img => img.isConnected),
+        order: window.keptImages.map(img => imgs.indexOf(img)),
+        srcs: imgs.map(img => new URL(img.src).pathname),
+        alts: imgs.map(img => img.alt),
+        widths: imgs.map(img => img.naturalWidth),
+        heights: imgs.map(img => img.naturalHeight),
+        badge: badge ? badge.textContent : null,
+        badgeSrc: badge?.parentElement?.querySelector('img') ? new URL(badge.parentElement.querySelector('img').src).pathname : null,
+        requests, writes: deskHarness.api.stats.writes.length
+      };
+    }''', uid)
+
+
+def image_granularity_one_visible(page, images):
+    prepare(page)
+    page.evaluate('(s) => deskHarness.api.setString("task-3", s)', task_markup(['a', 'b', 'c'], alts=['A', 'B', 'C']))
+    open_desk(page); all_loaded(page); wait_decoded(page, 3); stash_images(page)
+    commit_task(page, task_markup(['a', 'e', 'c'], alts=['A', 'E', 'C']))
+    wait_decoded(page, 3)
+    proof = image_view(page)
+    assert proof['connected'] == [True, False, True], proof
+    assert proof['order'] == [0, -1, 2], proof
+    assert proof['srcs'] == ['/gallery-a.png', '/gallery-e.png', '/gallery-c.png'], proof
+    assert proof['alts'] == ['A', 'E', 'C'], proof
+    assert proof['widths'] == [640, 640, 640], proof
+    assert proof['requests'] == {'/gallery-a.png': 1, '/gallery-b.png': 1, '/gallery-c.png': 1, '/gallery-e.png': 1}, proof
+    assert proof['writes'] == 0, proof
+    return {'replacedOnlyMiddleImage': True, 'graphWrites': 0}
+
+
+def image_granularity_reorder_badge(page, images):
+    prepare(page)
+    page.evaluate('(s) => deskHarness.api.setString("task-3", s)', task_markup(['a', 'b', 'c', 'd'], alts=['A', 'B', 'C', 'D']))
+    open_desk(page); all_loaded(page); wait_decoded(page, 3); stash_images(page)
+    commit_task(page, task_markup(['c', 'a', 'b', 'd'], alts=['C', 'A', 'B', 'D']))
+    proof = image_view(page)
+    assert proof['connected'] == [True, True, True], proof
+    assert proof['order'] == [1, 2, 0], proof
+    assert proof['srcs'] == ['/gallery-c.png', '/gallery-a.png', '/gallery-b.png'], proof
+    assert proof['alts'] == ['C', 'A', 'B'], proof
+    assert proof['widths'] == [640, 640, 640], proof
+    assert proof['badge'] == '+1' and proof['badgeSrc'] == '/gallery-b.png', proof
+    assert proof['requests'] == {'/gallery-a.png': 1, '/gallery-b.png': 1, '/gallery-c.png': 1}, proof
+    assert proof['writes'] == 0, proof
+    return {'reorderedWithoutReload': True, 'badgeOwner': '/gallery-b.png', 'graphWrites': 0}
+
+
+def image_granularity_hidden_count(page, images):
+    prepare(page)
+    page.evaluate('(s) => deskHarness.api.setString("task-3", s)', task_markup(['a', 'b', 'c', 'd']))
+    open_desk(page); all_loaded(page); wait_decoded(page, 3); stash_images(page)
+    expect(card(page).locator('.rm-desk-tile__images-more')).to_have_text('+1')
+    commit_task(page, task_markup(['a', 'b', 'c', 'd', 'e']))
+    added = image_view(page)
+    assert added['connected'] == [True, True, True] and added['order'] == [0, 1, 2], added
+    assert added['widths'] == [640, 640, 640] and added['badge'] == '+2', added
+    assert added['requests'] == {'/gallery-a.png': 1, '/gallery-b.png': 1, '/gallery-c.png': 1}, added
+    commit_task(page, task_markup(['a', 'b', 'c']))
+    removed = image_view(page)
+    assert removed['connected'] == [True, True, True] and removed['order'] == [0, 1, 2], removed
+    assert removed['srcs'] == ['/gallery-a.png', '/gallery-b.png', '/gallery-c.png'], removed
+    assert removed['badge'] is None and removed['widths'] == [640, 640, 640], removed
+    assert removed['requests'] == {'/gallery-a.png': 1, '/gallery-b.png': 1, '/gallery-c.png': 1}, removed
+    assert removed['writes'] == 0, removed
+    return {'badge': ['+1', '+2', None], 'graphWrites': 0}
+
+
+def image_granularity_text_alt(page, images):
+    prepare(page)
+    page.evaluate('''(s) => {
+      deskHarness.api.setString('task-3', s);
+      deskHarness.api.addChild('gran-note', 'task-3', 'Initial note');
+    }''', task_markup(['a', 'b', 'c'], text='Caption', alts=['A', 'B', 'C']))
+    open_desk(page); all_loaded(page); wait_decoded(page, 3); stash_images(page)
+    commit_task(page, task_markup(['a', 'b', 'c'], text='Caption revised', alts=['A', 'B', 'C']))
+    expect(card(page).locator('.rm-desk-tile__title')).to_have_text('Caption revised')
+    commit_task(page, 'Note revised', 'gran-note')
+    expect(card(page).locator('.rm-desk-tile__text')).to_have_text(['Note revised'])
+    commit_task(page, task_markup(['a', 'b', 'c'], text='Caption revised', alts=['A', 'Updated', 'C']))
+    proof = image_view(page)
+    assert proof['connected'] == [True, True, True] and proof['order'] == [0, 1, 2], proof
+    assert proof['alts'] == ['A', 'Updated', 'C'], proof
+    assert proof['widths'] == [640, 640, 640], proof
+    assert proof['requests'] == {'/gallery-a.png': 1, '/gallery-b.png': 1, '/gallery-c.png': 1}, proof
+    assert proof['writes'] == 0, proof
+    return {'sameNodesAfterTextAndAlt': True, 'graphWrites': 0}
+
+
+def image_granularity_duplicate_product(page, images):
+    prepare(page)
+    page.evaluate('(s) => deskHarness.api.setString("task-3", s)', task_markup(['a', 'b', 'c', 'a']))
+    open_desk(page); all_loaded(page); wait_decoded(page, 3); stash_images(page)
+    initial = image_view(page)
+    assert initial['srcs'] == ['/gallery-a.png', '/gallery-b.png', '/gallery-c.png'], initial
+    assert initial['badge'] is None, initial
+    assert initial['requests'] == {'/gallery-a.png': 1, '/gallery-b.png': 1, '/gallery-c.png': 1}, initial
+    commit_task(page, task_markup(['a', 'b', 'c', 'd']))
+    proof = image_view(page)
+    assert proof['connected'] == [True, True, True] and proof['order'] == [0, 1, 2], proof
+    assert proof['badge'] == '+1' and proof['widths'] == [640, 640, 640], proof
+    assert proof['requests'] == {'/gallery-a.png': 1, '/gallery-b.png': 1, '/gallery-c.png': 1}, proof
+    assert proof['writes'] == 0, proof
+    return {'duplicateCollapsedToOneRequest': True, 'hiddenUniqueDoesNotReplaceVisible': True, 'graphWrites': 0}
+
+
+def image_granularity_duplicate_renderer(page, images):
+    prepare(page)
+    page.evaluate('''host => {
+      const native = deskHarness.nativeElements(document);
+      const parent = document.createElement('div'); parent.id = 'direct-preview';
+      const lines = document.createElement('div'); document.body.append(parent, lines);
+      const item = (name, alt) => ({src: host + '/direct-' + name + '.png', alt});
+      native.preview(parent, lines, {images: [item('a', 'first'), item('a', 'second'), item('b', 'third')], rows: []}, () => {});
+      window.directPreview = {native, parent, lines, item};
+    }''', HOST)
+    page.wait_for_function('''() => {
+      const imgs = [...document.querySelectorAll('#direct-preview img')];
+      return imgs.length === 3 && imgs.every(img => img.naturalWidth === 640);
+    }''')
+    page.evaluate('''() => {
+      const imgs = [...document.querySelectorAll('#direct-preview img')];
+      window.directNodes = {a1: imgs[0], a2: imgs[1], b: imgs[2]};
+      window.directRequests = receivedImages.length;
+      const desc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+      window.srcWrites = 0; window.srcDesc = desc;
+      Object.defineProperty(HTMLImageElement.prototype, 'src', {
+        configurable: true, enumerable: desc.enumerable,
+        get() { return desc.get.call(this); },
+        set(value) { window.srcWrites += 1; return desc.set.call(this, value); }
+      });
+    }''')
+    page.evaluate('''() => {
+      const {native, parent, lines, item} = directPreview;
+      native.preview(parent, lines, {images: [item('b', 'third-new'), item('a', 'first-new'), item('a', 'second-new')], rows: []}, () => {});
+    }''')
+    proof = page.evaluate('''() => {
+      const imgs = [...document.querySelectorAll('#direct-preview img')];
+      return {
+        order: [imgs[0] === directNodes.b, imgs[1] === directNodes.a1, imgs[2] === directNodes.a2],
+        relative: imgs.indexOf(directNodes.a1) < imgs.indexOf(directNodes.a2),
+        alts: imgs.map(img => img.alt), widths: imgs.map(img => img.naturalWidth),
+        srcs: imgs.map(img => new URL(img.src).pathname), srcWrites: window.srcWrites,
+        extra: receivedImages.slice(directRequests), writes: deskHarness.api.stats.writes.length
+      };
+    }''')
+    page.evaluate('() => Object.defineProperty(HTMLImageElement.prototype, "src", srcDesc)')
+    assert proof['order'] == [True, True, True], proof
+    assert proof['relative'] is True and proof['alts'] == ['third-new', 'first-new', 'second-new'], proof
+    assert proof['widths'] == [640, 640, 640] and proof['srcWrites'] == 0, proof
+    assert proof['srcs'] == ['/direct-b.png', '/direct-a.png', '/direct-a.png'], proof
+    assert proof['extra'] == [] and proof['writes'] == 0, proof
+    return {'duplicateNodesReorderedWithoutSrcWrite': True, 'graphWrites': 0}
+
+
+def image_granularity_failed_persists(page, images):
+    images.failed.add('/gallery-b.png')
+    prepare(page)
+    page.evaluate('''(s) => {
+      deskHarness.api.setString('task-3', s);
+      deskHarness.api.addChild('gran-note', 'task-3', 'Initial note');
+    }''', task_markup(['a', 'b', 'c', 'd'], alts=['A', 'B', 'C', 'D']))
+    open_desk(page); all_loaded(page); images.wait('/gallery-b.png'); wait_decoded(page, 2); stash_images(page)
+    commit_task(page, 'Revised note', 'gran-note')
+    expect(card(page).locator('.rm-desk-tile__text')).to_have_text(['Revised note'])
+    edited = image_view(page)
+    assert edited['connected'] == [True, True] and edited['order'] == [0, 1], edited
+    assert edited['srcs'] == ['/gallery-a.png', '/gallery-c.png'], edited
+    assert images.requests.count('/gallery-b.png') == 1, images.requests
+    commit_task(page, task_markup(['a', 'b', 'c', 'e'], alts=['A', 'B', 'C', 'E']))
+    hidden = image_view(page)
+    assert hidden['connected'] == [True, True] and hidden['order'] == [0, 1], hidden
+    assert hidden['srcs'] == ['/gallery-a.png', '/gallery-c.png'], hidden
+    assert images.requests.count('/gallery-b.png') == 1 and images.requests.count('/gallery-e.png') == 0, images.requests
+    commit_task(page, task_markup(['a', 'f', 'c', 'e'], alts=['A', 'F', 'C', 'E']))
+    images.wait('/gallery-f.png'); wait_decoded(page, 3)
+    replaced = image_view(page)
+    assert replaced['connected'] == [True, True] and replaced['order'] == [0, 2], replaced
+    assert replaced['srcs'] == ['/gallery-a.png', '/gallery-f.png', '/gallery-c.png'], replaced
+    assert images.requests.count('/gallery-b.png') == 1 and images.requests.count('/gallery-f.png') == 1, images.requests
+    commit_task(page, task_markup(['a', 'c', 'e', 'b'], alts=['A', 'C', 'E', 'B']))
+    images.wait('/gallery-e.png'); wait_decoded(page, 3)
+    parked = image_view(page)
+    assert parked['connected'] == [True, True] and parked['srcs'] == ['/gallery-a.png', '/gallery-c.png', '/gallery-e.png'], parked
+    assert images.requests.count('/gallery-b.png') == 1, images.requests
+    commit_task(page, task_markup(['a', 'b', 'c'], alts=['A', 'B', 'C']))
+    page.wait_for_function('() => receivedImages.filter(path => path === "/gallery-b.png").length === 2')
+    wait_decoded(page, 2)
+    again = image_view(page)
+    assert again['connected'] == [True, True] and again['order'] == [0, 1], again
+    assert again['srcs'] == ['/gallery-a.png', '/gallery-c.png'], again
+    assert images.requests.count('/gallery-a.png') == images.requests.count('/gallery-c.png') == 1, images.requests
+    assert images.requests.count('/gallery-b.png') == 2, images.requests
+    assert again['writes'] == 0, again
+    return {'failedOccurrenceDoesNotRetryForTextOrHiddenChange': True, 'newLifetimeMayRequest': True, 'graphWrites': 0}
+
+
+def image_granularity_slow_retain(page, images):
+    images.held.add('/gallery-b.png')
+    prepare(page)
+    page.evaluate('''(s) => {
+      deskHarness.api.setString('task-3', s);
+      deskHarness.api.addChild('gran-note', 'task-3', 'Initial note');
+    }''', task_markup(['a', 'b', 'c'], alts=['A', 'B', 'C']))
+    open_desk(page); all_loaded(page); images.wait('/gallery-b.png')
+    page.wait_for_function('''() => {
+      const imgs = [...document.querySelectorAll('[data-task-uid="task-3"] img')];
+      return imgs.length === 3 && [imgs[0].naturalWidth, imgs[1].naturalWidth, imgs[2].naturalWidth].join() === '640,0,640';
+    }''')
+    stash_images(page)
+    commit_task(page, 'Revised note', 'gran-note')
+    expect(card(page).locator('.rm-desk-tile__text')).to_have_text(['Revised note'])
+    commit_task(page, task_markup(['c', 'a', 'b'], alts=['C', 'A', 'B']))
+    moved = image_view(page)
+    assert moved['connected'] == [True, True, True] and moved['order'] == [1, 2, 0], moved
+    assert moved['srcs'] == ['/gallery-c.png', '/gallery-a.png', '/gallery-b.png'], moved
+    assert moved['widths'] == [640, 640, 0], moved
+    assert images.requests.count('/gallery-b.png') == 1, images.requests
+    commit_task(page, task_markup(['c', 'e', 'b'], alts=['C', 'E', 'B']))
+    page.wait_for_function('''() => {
+      const imgs = [...document.querySelectorAll('[data-task-uid="task-3"] img')];
+      return imgs.length === 3 && new URL(imgs[1].src).pathname === '/gallery-e.png' && imgs[1].naturalWidth === 640;
+    }''')
+    page.evaluate('window.replacementImage = document.querySelectorAll(\'[data-task-uid="task-3"] img\')[1]')
+    images.finish('/gallery-b.png', TALL_PNG)
+    page.wait_for_function('() => keptImages[1].naturalWidth === 320 && keptImages[1].naturalHeight === 640')
+    proof = page.evaluate('''() => {
+      const imgs = [...document.querySelectorAll('[data-task-uid="task-3"] img')];
+      return {
+        replacementSame: imgs[1] === replacementImage && replacementImage.isConnected,
+        replacement: {src: new URL(replacementImage.src).pathname, width: replacementImage.naturalWidth, height: replacementImage.naturalHeight},
+        heldDecoded: keptImages[1].isConnected && imgs[2] === keptImages[1],
+        keptC: imgs[0] === keptImages[2],
+        writes: deskHarness.api.stats.writes.length,
+        bRequests: receivedImages.filter(path => path === '/gallery-b.png').length
+      };
+    }''')
+    assert proof['replacementSame'] and proof['replacement'] == {'src': '/gallery-e.png', 'width': 640, 'height': 360}, proof
+    assert proof['heldDecoded'] and proof['keptC'] and proof['bRequests'] == 1 and proof['writes'] == 0, proof
+    return {'heldNodeDecodedAfterReorder': True, 'replacementUnchanged': True, 'graphWrites': 0}
+
+
+def image_granularity_retire_callback(page, images):
+    images.held.add('/gallery-c.png')
+    prepare(page)
+    page.evaluate('(s) => deskHarness.api.setString("task-3", s)', task_markup(['a', 'b', 'c', 'd']))
+    open_desk(page); all_loaded(page); images.wait('/gallery-c.png')
+    page.wait_for_function('''() => {
+      const imgs = [...document.querySelectorAll('[data-task-uid="task-3"] img')];
+      return imgs.length === 3 && [imgs[0].naturalWidth, imgs[1].naturalWidth, imgs[2].naturalWidth].join() === '640,640,0';
+    }''')
+    page.evaluate('''() => {
+      const imgs = [...document.querySelectorAll('[data-task-uid="task-3"] img')];
+      window.retiredImage = imgs[2]; window.keptImages = imgs.slice(0, 2);
+    }''')
+    commit_task(page, task_markup(['a', 'b', 'd', 'c']))
+    images.wait('/gallery-d.png'); wait_decoded(page, 3)
+    page.evaluate('''() => {
+      window.liveAfterRetire = [...document.querySelectorAll('[data-task-uid="task-3"] img')];
+      window.retireMutations = [];
+      window.retireObserver = new MutationObserver(records => {
+        for (const record of records) if (record.type === 'attributes') retireMutations.push(record.attributeName);
+      });
+      retireObserver.observe(document.querySelector('.nautilus-desk__grid'), {subtree: true, attributes: true});
+    }''')
+    images.finish('/gallery-c.png', TALL_PNG)
+    page.wait_for_function('() => retiredImage.naturalWidth === 320')
+    page.evaluate('() => retiredImage.dispatchEvent(new Event("error"))')
+    settle(page)
+    desk_proof = page.evaluate('''() => ({
+      mutations: retireMutations.slice(),
+      same: liveAfterRetire.every((img, index) => document.querySelectorAll('[data-task-uid="task-3"] img')[index] === img && img.isConnected),
+      srcs: [...document.querySelectorAll('[data-task-uid="task-3"] img')].map(img => new URL(img.src).pathname),
+      retiredConnected: retiredImage.isConnected,
+      writes: deskHarness.api.stats.writes.length,
+      cRequests: receivedImages.filter(path => path === '/gallery-c.png').length
+    })''')
+    page.evaluate('() => retireObserver.disconnect()')
+    assert desk_proof['same'] and desk_proof['mutations'] == [] and desk_proof['retiredConnected'] is False, desk_proof
+    assert desk_proof['srcs'] == ['/gallery-a.png', '/gallery-b.png', '/gallery-d.png'], desk_proof
+    assert desk_proof['cRequests'] == 1 and desk_proof['writes'] == 0, desk_proof
+    page.evaluate('''host => {
+      const native = deskHarness.nativeElements(document);
+      const oldParent = document.createElement('div'); oldParent.id = 'old-card';
+      const newParent = document.createElement('div'); newParent.id = 'new-card';
+      const oldLines = document.createElement('div'), newLines = document.createElement('div');
+      document.body.append(oldParent, newParent, oldLines, newLines);
+      const counts = {oldNotifies: 0, newNotifies: 0};
+      const model = name => ({images: [{src: host + '/retire-' + name + '.png', alt: name}], rows: []});
+      native.preview(oldParent, oldLines, model('old'), () => { counts.oldNotifies += 1; });
+      const oldImage = oldParent.querySelector('img');
+      native.clearPreview(oldParent, oldLines);
+      native.preview(newParent, newLines, model('new'), () => { counts.newNotifies += 1; });
+      window.retireDirect = {counts, oldImage, newImage: newParent.querySelector('img')};
+    }''', HOST)
+    page.wait_for_function('''() => {
+      const img = document.querySelector('#new-card img');
+      return img && img.naturalWidth === 640 && retireDirect.counts.oldNotifies === 0;
+    }''')
+    page.evaluate('''() => {
+      retireDirect.oldImage.dispatchEvent(new Event('error'));
+      retireDirect.oldImage.dispatchEvent(new Event('load'));
+    }''')
+    settle(page)
+    direct = page.evaluate('''() => ({
+      oldNotifies: retireDirect.counts.oldNotifies, newNotifies: retireDirect.counts.newNotifies,
+      oldConnected: retireDirect.oldImage.isConnected,
+      newSame: document.querySelector('#new-card img') === retireDirect.newImage && retireDirect.newImage.isConnected,
+      newSrc: new URL(retireDirect.newImage.src).pathname, newAlt: retireDirect.newImage.alt,
+      oldEmpty: document.querySelector('#old-card').childElementCount,
+      writes: deskHarness.api.stats.writes.length
+    })''')
+    assert direct['oldNotifies'] == 0 and direct['oldConnected'] is False and direct['oldEmpty'] == 0, direct
+    assert direct['newSame'] and direct['newSrc'] == '/retire-new.png' and direct['newAlt'] == 'new', direct
+    assert direct['newNotifies'] == 1 and direct['writes'] == 0, direct
+    return {'retiredLoadDoesNotChangeVisibleCard': True, 'clearPreviewDropsCallback': True, 'graphWrites': 0}
+
+
 def run():
     fixture.bundle()
     results = []
@@ -773,7 +1193,17 @@ def run():
               ('deferred-code-and-context', deferred_code_and_context), ('image-only-heading', image_only_heading),
               ('folded-composition', folded_composition), ('composition-close', composition_close),
               ('composition-pending-create', composition_pending_create),
-              ('overflow-geometry', overflow), ('late-native-editor', late_editor)]
+              ('overflow-geometry', overflow), ('late-native-editor', late_editor),
+              ('image-granularity-hidden-fourth', image_granularity_hidden_fourth),
+              ('image-granularity-one-visible', image_granularity_one_visible),
+              ('image-granularity-reorder-badge', image_granularity_reorder_badge),
+              ('image-granularity-hidden-count', image_granularity_hidden_count),
+              ('image-granularity-text-alt', image_granularity_text_alt),
+              ('image-granularity-duplicate-product', image_granularity_duplicate_product),
+              ('image-granularity-duplicate-renderer', image_granularity_duplicate_renderer),
+              ('image-granularity-failed-persists', image_granularity_failed_persists),
+              ('image-granularity-slow-retain', image_granularity_slow_retain),
+              ('image-granularity-retire-callback', image_granularity_retire_callback)]
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         try:

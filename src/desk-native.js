@@ -50,7 +50,11 @@ export function nativeElements(document) {
   const rowRecords = new WeakMap();
   const retireImages = imageParent => {
     const state = imageStates.get(imageParent);
-    if (state) { state.active = false; state.notify = null; state.nodes = []; state.sources = []; }
+    if (state) {
+      state.active = false; state.notify = null; state.generation = (state.generation || 0) + 1;
+      for (const record of state.records || []) { record.retired = true; record.notify = null; }
+      state.records = [];
+    }
     imageStates.delete(imageParent);
   };
   const clearPreview = (imageParent, parent) => {
@@ -66,48 +70,98 @@ export function nativeElements(document) {
   };
   const preview = (imageParent, parent, model, onImageChange) => {
     const images = model.images || [];
+    const visibleImages = images.slice(0, 3);
+    const imageMode = visibleImages.length > 1 ? 'multi' : visibleImages.length === 1 ? 'single' : 'empty';
     let state = imageStates.get(imageParent);
-    const sameImages = state && state.sources.length === images.length
-      && images.every((image, index) => image.src === state.sources[index]);
-    if (sameImages) {
-      // Text edits must not restart loading/decoding, including failed slots.
-      // Explicit reset or changed image sources allow a retry. Refresh the
-      // callback owner so a retained load can finish after a newer text revision.
+    // One record is one displayed occurrence. Match the visible three by source,
+    // FIFO so duplicate URLs keep distinct nodes. A hidden or replaced occurrence
+    // is a new lifetime; text, alt, and hidden-tail edits are not.
+    const owned = () => state;
+    const detachRecord = record => {
+      record.retired = true; record.notify = null;
+      const node = record.node; record.node = null;
+      if (!node?.isConnected) return;
+      const cell = node.closest('.rm-desk-tile__images-cell');
+      (cell || node).remove();
+    };
+    const createRecord = image => {
+      const node = document.createElement('img');
+      const record = { src: image.src, node, failed: false, retired: false, generation: owned().generation, notify: owned().notify };
+      node.alt = image.alt; node.loading = 'lazy';
+      const current = () => !record.retired && record.generation === owned().generation && owned().active;
+      node.addEventListener('load', () => { if (current()) owned().notify?.(); }, { once: true });
+      node.addEventListener('error', () => {
+        if (!current()) return;
+        record.failed = true; record.node = null;
+        const cell = node.closest('.rm-desk-tile__images-cell');
+        const holder = node.closest('.rm-desk-tile__image, .rm-desk-tile__images');
+        (cell || holder || node).remove();
+        if (holder?.isConnected && !holder.querySelector('img')) holder.remove();
+        owned().notify?.();
+      }, { once: true });
+      node.src = image.src;
+      return record;
+    };
+    const placeVisible = () => {
+      const live = state.records.filter(record => record.node && !record.failed);
+      const existingHolder = [...imageParent.children].find(node => node.classList.contains(state.mode === 'single' ? 'rm-desk-tile__image' : 'rm-desk-tile__images'));
+      if (!live.length) { existingHolder?.remove(); return; }
+      const holder = existingHolder || el('div', state.mode === 'single' ? 'rm-desk-tile__image' : 'rm-desk-tile__images');
+      if (!holder.parentElement) imageParent.append(holder);
+      if (state.mode === 'single') {
+        if (live[0].node.parentElement !== holder) holder.append(live[0].node);
+        return;
+      }
+      const cells = live.map(record => {
+        const cell = record.node.closest('.rm-desk-tile__images-cell') || el('div', 'rm-desk-tile__images-cell');
+        if (record.node.parentElement !== cell) cell.append(record.node);
+        return cell;
+      });
+      const retained = new Set(cells);
+      for (const child of [...holder.children]) if (!retained.has(child)) child.remove();
+      cells.forEach((cell, index) => { if (holder.children[index] !== cell) holder.insertBefore(cell, holder.children[index] || null); });
+      const third = state.records[2];
+      const thirdCell = third?.node && !third.failed ? third.node.closest('.rm-desk-tile__images-cell') : null;
+      const badgeText = images.length > 3 && thirdCell ? `+${images.length - 3}` : '';
+      const badge = holder.querySelector('.rm-desk-tile__images-more');
+      if (!badgeText) badge?.remove();
+      else {
+        const node = badge || el('span', 'rm-desk-tile__images-more', badgeText);
+        if (node.textContent !== badgeText) node.textContent = badgeText;
+        if (node.parentElement !== thirdCell) thirdCell.append(node);
+      }
+    };
+    const matchVisible = () => {
+      const queues = new Map();
+      for (const record of state.records) {
+        if (record.retired) continue;
+        const queue = queues.get(record.src); if (queue) queue.push(record); else queues.set(record.src, [record]);
+      }
+      const next = visibleImages.map(image => {
+        const queue = queues.get(image.src);
+        const record = queue?.shift();
+        if (!record) return createRecord(image);
+        record.notify = state.notify;
+        if (record.node && record.node.alt !== image.alt) record.node.alt = image.alt;
+        return record;
+      });
+      const kept = new Set(next);
+      for (const record of state.records) if (!kept.has(record)) detachRecord(record);
+      state.records = next;
+      placeVisible();
+    };
+    if (state?.mode === imageMode && imageMode !== 'empty') {
       state.notify = onImageChange;
-      state.nodes.forEach((node, index) => { if (node && node.alt !== images[index].alt) node.alt = images[index].alt; });
+      for (const record of state.records) if (!record.retired) record.notify = onImageChange;
+      matchVisible();
     } else {
       retireImages(imageParent);
       imageParent.replaceChildren();
-      state = { active: true, sources: images.map(image => image.src), nodes: [], notify: onImageChange };
-      imageStates.set(imageParent, state);
-      const current = node => state.active && imageParent.contains(node);
-      const imageNode = (image, holder) => {
-        const node = document.createElement('img'), slot = state.nodes.length;
-        node.alt = image.alt; node.loading = 'lazy'; state.nodes.push(node);
-        node.addEventListener('load', () => { if (current(node)) state.notify?.(); }, { once: true });
-        node.addEventListener('error', () => {
-          if (!current(node)) return;
-          state.nodes[slot] = null;
-          const cell = node.closest('.rm-desk-tile__images-cell');
-          (cell || holder).remove();
-          if (!holder.querySelector('img')) holder.remove();
-          state.notify?.();
-        }, { once: true });
-        node.src = image.src;
-        return node;
-      };
-      if (images.length === 1) {
-        const holder = el('div', 'rm-desk-tile__image');
-        holder.append(imageNode(images[0], holder)); imageParent.append(holder);
-      } else if (images.length > 1) {
-        const holder = el('div', 'rm-desk-tile__images');
-        images.slice(0, 3).forEach((image, index) => {
-          const cell = el('div', 'rm-desk-tile__images-cell');
-          cell.append(imageNode(image, holder));
-          if (index === 2 && images.length > 3) cell.append(el('span', 'rm-desk-tile__images-more', `+${images.length - 3}`));
-          holder.append(cell);
-        });
-        imageParent.append(holder);
+      if (imageMode !== 'empty') {
+        state = { active: true, generation: 1, mode: imageMode, records: [], notify: onImageChange };
+        imageStates.set(imageParent, state);
+        state.records = visibleImages.map(image => createRecord(image));
+        placeVisible();
       }
     }
     const previous = new Map([...parent.children].flatMap(node => {

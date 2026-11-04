@@ -47,6 +47,10 @@
 
 ### Fixed
 
+- Reuse each visible Desk preview image on its own. Text, alt text, hidden images beyond
+  the third, hidden-count changes, and reordering keep the decoded images that remain;
+  replacing one displayed image reloads only that image. A failed image stays failed across
+  those edits and can retry only for a new displayed occurrence or an explicit reset.
 - Capture Desk Cmd/Ctrl+Enter completion from the verified raw editor buffer even
   when its TODO marker has not reached the graph yet. Rapidly cycling a plain task
   through TODO to DONE now receives one timestamp after Roam saves it. Require a

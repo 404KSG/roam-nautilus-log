@@ -305,11 +305,14 @@ Read-only card previews keep updating while a task editor or new-note draft is o
 Committed graph changes, including descendant folds, text and images, refresh the
 background card and its masonry height without closing or remounting the editor.
 During refresh, cards retain their last verified preview instead of clearing images and
-rows before the replacement is ready. Text edits update existing rows and preserve unchanged
-image elements, so editing in the focus dialog or sidebar does not repeatedly collapse and
-rebuild the background cards. Image-source changes, folds and real content changes still
-update the preview; read failures remain explicit. Failed images are retried on a source
-change or explicit preview reset, not on every unrelated text edit.
+rows before the replacement is ready. Text edits update existing rows and reuse each unchanged
+visible image individually, so editing in the focus dialog or sidebar does not repeatedly collapse and
+rebuild the background cards. Hidden images beyond the third, changes to that hidden count, and
+reordering do not recreate the visible images that remain. Replacing one displayed source reloads
+only that image. Switching between a single image and several images may rebuild that image area.
+Image-source changes, folds and real content changes still update the preview; read failures remain
+explicit. A failed image is not retried for text, alt text, or hidden-source changes. A new displayed
+lifetime or an explicit preview reset may retry it.
 
 The background stays inert while the focus dialog is open. These reads do not save an
 unfinished input composition or copy the editor's uncommitted buffer into the graph.

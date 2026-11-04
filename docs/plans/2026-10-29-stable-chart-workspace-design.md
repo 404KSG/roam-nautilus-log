@@ -369,12 +369,15 @@ exclude a dirty card based on an obsolete search projection. Unreadable data sti
 the existing explicit preview error. Scope loss closes immediately; removal, folding,
 explicit reset and teardown retire cached image callbacks and preview state.
 
-The read-only DOM renderer reuses unchanged image groups and row nodes keyed by source-row
-UID. Text, checkbox state, depth and order update only where needed. Unrelated cards stay
-in place. Text or alt-text edits do not reload the same image URLs, including failed slots;
-source changes or an explicit reset allow retry. Image completion belongs to the currently
-retained DOM and card/view lifetime, not the text-read generation which created it. Detached
-or replaced images cannot mutate a newer preview or its masonry.
+The read-only DOM renderer reuses each visible image independently and reuses row nodes
+keyed by source-row UID. Text, checkbox state, depth and order update only where needed.
+Unrelated cards stay in place. Text, alt text, hidden images beyond the third, hidden-count
+changes, and reordering do not recreate the visible images that remain. Replacing one displayed
+URL reloads only that image. Moving between a single image and several images may rebuild that
+holder. A failed displayed occurrence is not retried for text, alt, or hidden-source changes; a
+new displayed lifetime or an explicit reset may retry. Image completion belongs to the currently
+retained DOM and card/view lifetime, not the text-read generation which created it. A callback
+from a retired image cannot notify, remove a newer cell, or mutate a newer preview or its masonry.
 
 This does not freeze previews while editing or add a debounce delay. Committed content
 continues to refresh behind task/draft editors and alongside sidebar editing. Native editor
@@ -385,8 +388,9 @@ Regression coverage includes four root/descendant × focus/sidebar typing cases 
 raster responses, delayed watch admission, intermediate-frame sampling, image/row/checkbox
 identity checks, and external IME buffers. Additional cases cover image completion during a
 pending refresh without ResizeObserver, alt-text changes, failed-image retry isolation and
-explicit-reset recovery. Existing late-image, fold, removal, unreadable-source, search,
-watch-lifecycle and editor cases remain required.
+explicit-reset recovery. Per-image cases keep identity across hidden-tail, hidden-count, reorder,
+duplicate, and slow-load updates, and prove retired callbacks cannot affect a newer card. Existing
+late-image, fold, removal, unreadable-source, search, watch-lifecycle and editor cases remain required.
 
 ## Verification and boundaries
 

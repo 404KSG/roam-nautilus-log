@@ -4,6 +4,7 @@ import { createDeskView } from '../src/desk-view';
 import { createDeskActions } from '../src/desk-actions';
 import { createPlanWatchBridge } from '../src/plan-watch';
 import { readBlockString, readChildren } from '../src/timing-roam';
+import { nativeElements } from '../src/desk-native';
 import { projectPull } from './pull-projection.cjs';
 
 let cleanup = () => {};
@@ -359,4 +360,4 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     destroy: cleanup,
   };
 }
-window.deskHarness = { mount, destroy: () => cleanup() };
+window.deskHarness = { mount, destroy: () => cleanup(), nativeElements };
