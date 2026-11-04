@@ -210,6 +210,8 @@ function resolveRendererSettings({ runtime = {}, args = [] } = {}) {
   });
   const trigger = runtimeOrFallback(runtime, 'color-1-trigger', argTrigger);
 
+  // Published r2 renderers still probe the retired event-position flag. Keep
+  // it absent so an old saved true value cannot enable that branch again.
   return {
     'legend-len-limit': boundedInteger(
       runtimeOrFallback(runtime, 'desc-length', argLength),
@@ -228,7 +230,6 @@ function resolveRendererSettings({ runtime = {}, args = [] } = {}) {
     'workday-start-hour': schedule.startHour,
     'workday-end-hour': schedule.endHour,
     'custom-color-1-tag': trigger === undefined || trigger === null ? '' : String(trigger),
-    'respect-event-order': runtime['respect-event-order'] === true,
     ...(Object.prototype.hasOwnProperty.call(runtime, 'google-calendar-enabled')
       ? { 'google-calendar-enabled': runtime['google-calendar-enabled'] === true }
       : {}),
@@ -339,7 +340,7 @@ function planWorkdayContext({ now = new Date(), ownerDate, pageTitle = null, pag
     + (localDayOrdinal(current) - localDayOrdinal(owner)) * 1440;
   return { ownerPageTitle: pageTitle, ownerPageUid: pageUid, planUid, planArgs: args.slice(),
     startMinutes, endMinutes, startHour: settings['workday-start-hour'], endHour: settings['workday-end-hour'],
-    logicalNowMinutes, respectEventOrder: settings['respect-event-order'],
+    logicalNowMinutes,
     ...clockEvidenceBounds({ ownerDate: owner, endMinutes }) };
 }
 
@@ -689,18 +690,6 @@ function effectiveNow({ startMinutes, endMinutes, nowMinutes }) {
   return Number.isFinite(now) ? clamp(now, startMinutes, endMinutes) : startMinutes;
 }
 
-function eventStartFloors(orderedItems = []) {
-  let floor = 0;
-  return (Array.isArray(orderedItems) ? orderedItems : []).map((item) => {
-    if (item?.meeting === true) {
-      const start = asNumber(item.start), end = asNumber(item.end);
-      if (Number.isFinite(start) && Number.isFinite(end) && end > start) floor = Math.max(floor, end);
-      return { ...item };
-    }
-    return item?.todo === true && item?.done !== true ? { ...item, earliestStart: floor } : { ...item };
-  });
-}
-
 function remainingDuration(task) {
   if (!task || task.done) return 0;
   const rawDuration = asNumber(task.duration);
@@ -748,8 +737,8 @@ function scheduleTasks({
   for (const task of tasks) {
     const duration = remainingDuration(task);
     if (!duration) continue;
-    const earliestStart = asNumber(task.earliestStart);
-    if (Number.isFinite(earliestStart)) cursor = Math.max(cursor, earliestStart);
+    // Outline positions relative to fixed events are not timing constraints.
+    // Ignore retired earliestStart hints retained in old in-memory snapshots.
 
     let placed = false;
     while (cursor < end && !placed) {
@@ -1978,7 +1967,6 @@ module.exports = {
   spiralCellInnerHour,
   overlappingFixedEventUids,
   isCurrentPlannedTask,
-  eventStartFloors,
   scheduleTasks,
   completedTaskClockSummary,
   historicalDoneSlice,

@@ -95,8 +95,6 @@ const executionDefaults = {
   "forgotten-timer-minutes": 120,
 };
 
-const planningDefaults = { 'respect-event-order': false };
-
 const completionStampDefaults = {
   // Deliberately separate from template defaults: this is extension-local
   // opt-in metadata, never a renderer argument or graph block field.
@@ -244,7 +242,6 @@ function runtimeSettings(extensionAPI) {
     "google-calendar-enabled": calendarEnabled,
     "google-calendar-configured": calendarConfigured,
     "google-calendar-tasks-configured": Number(calendarConnection?.version) >= 2,
-    "respect-event-order": extensionAPI.settings.get("respect-event-order") === true,
     "completion-stamps-enabled": extensionAPI.settings.get("completion-stamps-enabled") === true,
     language: extensionAPI.settings.get("language") || "en",
   };
@@ -287,7 +284,7 @@ async function generateTemplateString(extensionAPI, renderCore = activeRenderStr
 }
 
 async function setDefaultSettings(extensionAPI, recoveredTemplateSettings = null) {
-  await Promise.all(Object.entries({ ...defaults, ...executionDefaults, ...planningDefaults, ...completionStampDefaults, ...calendarDefaults }).map(async ([key, fallback]) => {
+  await Promise.all(Object.entries({ ...defaults, ...executionDefaults, ...completionStampDefaults, ...calendarDefaults }).map(async ([key, fallback]) => {
     const current = extensionAPI.settings.get(key);
     const hasRecovered = recoveredTemplateSettings
       && Object.prototype.hasOwnProperty.call(recoveredTemplateSettings, key);
@@ -492,8 +489,6 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
       durationDesc: "没有写时长的弹性任务默认占用的分钟数。",
       color: "紧急触发词",
       colorDesc: "使任务显示为紧急红色的关键词（不可包含空格，例如：重要）。",
-      eventOrder: "任务遵循事件位置",
-      eventOrderDesc: "默认关闭。开启后，写在固定事件后面的任务会等到该事件结束；关闭时保留按任务顺序填入全天空档的方式。",
       completionStamps: "完成时间戳",
       completionStampsDesc: "可选，默认关闭。在大纲、侧栏和 Desk 完成任务后添加 dHH:MM，不启动 CLOCK/POMO，也不计入 Actual。请先停用 Todo Trigger；手写、旧插件及归属不明的时间戳会保留。",
       tracking: "执行层 · 进阶",
@@ -541,8 +536,6 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
       durationDesc: "Default minutes for an untimed flexible task.",
       color: "Urgent Trigger Word",
       colorDesc: "Keyword that colors a task urgent red (no spaces, for example urgent).",
-      eventOrder: "Respect event positions",
-      eventOrderDesc: "Off by default. When enabled, tasks listed after a fixed event wait until it ends. Off keeps existing task order filling the day's available gaps.",
       completionStamps: "Completion timestamp",
       completionStampsDesc: "Off by default. Adds dHH:MM after completion in the outline, sidebar, and Desk. It does not start CLOCK/POMO or measure Actual. Disable Todo Trigger first. Manual, legacy, and unverified timestamps stay intact.",
       tracking: "Execution Layer · Advanced",
@@ -833,17 +826,6 @@ function panelConfig(extensionAPI, language, calendarUiState = calendarPanelStat
             }
           },
         },
-      },
-      {
-        id: "respect-event-order",
-        name: labels.eventOrder,
-        description: labels.eventOrderDesc,
-        action: { type: "switch", defaultValue: extensionAPI.settings.get("respect-event-order") === true,
-          onChange: async value => {
-            await extensionAPI.settings.set("respect-event-order", typeof value === 'boolean' ? value : Boolean(value?.target?.checked));
-            publishRuntimeSettings(extensionAPI);
-            await timingRuntime?.requestRefresh?.();
-          } },
       },
       {
         id: "completion-stamps-enabled",
@@ -1196,7 +1178,6 @@ export {
   executionDefaults,
   calendarDefaults,
   completionStampDefaults,
-  planningDefaults,
   normalizeGoogleCalendarEvents,
   normalizeGoogleTasks,
   decideCalendarManagedChange,

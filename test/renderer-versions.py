@@ -91,14 +91,15 @@ def run(page,order):
     expect(page.locator('#chart-root .nautilus-desk')).to_have_count(1)
     expect(page.locator('.nautilus-log-help-popover')).to_have_count(1)
     assert page.evaluate('()=>nautilusLogR2.core===window.__r2CoreBefore')
-    # Actual CLJS feeds the optional event floors into the production scheduler.
+    # Retired settings cannot reactivate event-position floors in published CLJS.
     default_start=page.evaluate('()=>__chartHarness.scene().records.find(row=>row.uid==="task-reference").event.start')
     assert default_start==481,default_start
     page.evaluate('''()=>{nautilusLogR2.settings['respect-event-order']=true;window.dispatchEvent(new CustomEvent('nautilus-log:settings-changed'));}''')
-    page.wait_for_function('()=>__chartHarness.scene().records.find(row=>row.uid==="task-reference").event.start===570')
+    f.settle_renderer(page)
+    assert page.evaluate('()=>__chartHarness.scene().records.find(row=>row.uid==="task-reference").event.start')==481
     page.evaluate('()=>__chartHarness.updateChild("event-standup","{{[[DONE]]}} 09:00-09:30 Stand-up")')
     page.wait_for_function('()=>__chartHarness.scene().records.find(row=>row.uid==="event-standup").event.done===true')
-    assert page.evaluate('()=>__chartHarness.scene().records.find(row=>row.uid==="task-reference").event.start')==570
+    assert page.evaluate('()=>__chartHarness.scene().records.find(row=>row.uid==="task-reference").event.start')==481
     page.evaluate('''()=>{nautilusLogR2.settings.language='zh';window.dispatchEvent(new CustomEvent('nautilus-log:settings-changed'));}''')
     expect(page.locator('#chart-root .nautilus-desk .rm-desk-page__new-note')).to_have_attribute('aria-label','新任务')
     expect(page.locator('#chart-root .nautilus-desk .rm-desk-page__new-note')).to_contain_text('新任务')

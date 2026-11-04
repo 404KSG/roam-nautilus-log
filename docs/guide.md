@@ -56,19 +56,14 @@ A detected running Todo Trigger blocks Nautilus stamping because it can append i
 The scheduler is deterministic and does not generate estimates. A task remains atomic:
 if it cannot fit one gap, it moves to the next suitable gap instead of being split.
 
-**Respect event positions** is independent and **off by default**. Off preserves gap filling
-in task order, even when events are listed first. On gives each pending task the latest end
-of all valid fixed events preceding it in the outline as an earliest start. The floor is
-cumulative: a later-listed, earlier event cannot move it backward. Overlaps still count
-once for capacity. Overnight ranges align to the owning window before floors are applied;
-malformed, reversed, and zero-length ranges supply no floor. Completed task rows do not
-reset it. A floor beyond END leaves the whole remaining ordered queue unscheduled, even
-when there is unused time elsewhere. No task timestamps are written by this option.
+Flexible tasks use the day's free gaps in their own order, regardless of where fixed-event
+rows appear in the outline. The event-position constraint has been removed; old saved
+values no longer affect scheduling.
 
 A fixed event marked DONE still reserves its written range until that range ends. DONE
-changes presentation, not cancellation; edit or remove the range to release it. Only your
-explicit outline edits or Desk moves change task order. Moving a task across an event can
-change its earliest start when Respect event positions is enabled.
+changes presentation, not cancellation; edit or remove the range to release it. Explicit
+outline edits or Desk moves can change relative task priority. Moving a task across a
+fixed-event row alone does not impose an additional start-time restriction.
 
 While the current time is inside a fixed event, the next task can correctly keep the same
 start at that event's end. A task that no longer fits before END is unscheduled, not frozen
@@ -799,7 +794,6 @@ but ordinary planning and completion do not require it.
 | Legend Max Length | 22 |
 | Default Todo Duration | 15 minutes |
 | Urgent Trigger Word | Empty |
-| Respect event positions | Off |
 | Google Calendar | Not connected; Primary calendar after connection |
 | Completion timestamp | Off |
 | Execution Layer · Advanced | Off |

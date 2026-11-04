@@ -36,22 +36,15 @@ const {
   stripGoogleCalendarSourceSuffix,
   alignIntervalToWindow,
   timelineDayState,
-  eventStartFloors,
   resolveActiveWorkday,
 } = require('../src/log-core');
 
-test('event floors are cumulative, including future DONE reservations, without overtaking', () => {
-  const outline = eventStartFloors([
-    { uid: 'late', meeting: true, start: 840, end: 900, done: false },
-    { uid: 'a', todo: true, duration: 30, done: false },
-    { uid: 'early-done', meeting: true, start: 720, end: 780, done: true },
-    { uid: 'nap', todo: true, duration: 30, done: false },
-  ]);
-  assert.equal(outline[1].earliestStart, 900);
-  assert.equal(outline[3].earliestStart, 900);
-  const plan = scheduleTasks({ startMinutes: 480, endMinutes: 960, nowMinutes: 480,
-    tasks: outline.filter((item) => item.todo), fixedEvents: outline.filter((item) => item.meeting) });
-  assert.deepEqual(plan.scheduledTasks.map(({ uid, start }) => [uid, start]), [['a', 900], ['nap', 930]]);
+test('retired event-position hints do not prevent using gaps before fixed reservations', () => {
+  const tasks = [{ uid:'a', duration:30, earliestStart:900 }, { uid:'next', duration:30, earliestStart:900 }];
+  const fixedEvents = [{ meeting:true, start:840, end:900 }, { meeting:true, start:720, end:780, done:true }];
+  const plan = scheduleTasks({ startMinutes:480, endMinutes:960, nowMinutes:480, tasks, fixedEvents });
+  assert.deepEqual(plan.scheduledTasks.map(({ uid, start }) => [uid, start]), [['a',480],['next',510]]);
+  assert.equal(plan.fixedMinutes,120);
 });
 
 test('active overnight workday keeps its owner and full-day evidence bounds', () => {
@@ -879,7 +872,6 @@ test('runtime extension settings override stale or nested render arguments', () 
       'workday-start-hour': 6,
       'workday-end-hour': 21,
       'custom-color-1-tag': '#Top',
-      'respect-event-order': false,
       language: 'en',
     },
   );

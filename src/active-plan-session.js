@@ -19,8 +19,7 @@ export function withActiveWorkday(options, createCalendarSession) {
     }
   };
   const runtime = () => ({ 'workday-start': settings?.get?.('workday-start'),
-    'workday-end': settings?.get?.('workday-end'),
-    'respect-event-order': settings?.get?.('respect-event-order') === true });
+    'workday-end': settings?.get?.('workday-end') });
   const calendar = createCalendarSession({ ...options, trackingEnabled: () => {
     if (!tracking()) return false;
     const snapshot = trackingSnapshot()?.planSnapshot, title = snapshot?.pageTitle;

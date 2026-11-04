@@ -168,7 +168,6 @@ function executionProjection(planSnapshot, currentNow, settings = {}) {
   const runtime = {
     'workday-start': settings['workday-start'] ?? settings.workdayStart ?? planSnapshot.workday?.startHour,
     'workday-end': settings['workday-end'] ?? settings.workdayEnd ?? planSnapshot.workday?.endHour,
-    'respect-event-order': settings['respect-event-order'] ?? settings.respectEventOrder ?? planSnapshot.workday?.respectEventOrder,
   };
   const context = logCore.planWorkdayContext({ now,
     ownerDate: planSnapshot.workday?.dayStartMs ?? planSnapshot.date ?? logCore.dateForPlanTitle(planSnapshot.pageTitle) ?? now,
@@ -178,9 +177,7 @@ function executionProjection(planSnapshot, currentNow, settings = {}) {
   const fixedEvents = (planSnapshot.fixedEvents || []).map(event => ({ ...event,
     ...logCore.alignIntervalToWindow({ start: event.start, end: event.end,
       windowStart: context.startMinutes, windowEnd: context.endMinutes }) }));
-  const tasks = (planSnapshot.tasks || []).map(task => ({ ...task, todo: true, done: false, duration: Number(task.plannedMinutes) || 0 }));
-  const ordered = context.respectEventOrder ? logCore.eventStartFloors([...tasks, ...fixedEvents].sort(compareTreeOrder)) : tasks;
-  const pendingTasks = ordered.filter(item => item.todo === true && item.done !== true);
+  const pendingTasks = (planSnapshot.tasks || []).map(task => ({ ...task, todo: true, done: false, duration: Number(task.plannedMinutes) || 0 }));
   return {
     ...logCore.calculateCapacity({ startMinutes: context.startMinutes, endMinutes: context.endMinutes,
       nowMinutes: context.logicalNowMinutes, fixedEvents, allFixedEvents: fixedEvents, pendingTasks }),

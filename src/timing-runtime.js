@@ -69,7 +69,6 @@ export function createTimingRuntime({
   const planningSettings = () => ({
     'workday-start': extensionAPI.settings.get('workday-start'),
     'workday-end': extensionAPI.settings.get('workday-end'),
-    'respect-event-order': extensionAPI.settings.get('respect-event-order') === true,
   });
   let planningSnapshot = planningSettings();
   const fallbackMinutes = () => Number(extensionAPI.settings.get('todo-duration')) || 15;

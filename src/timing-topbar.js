@@ -107,7 +107,6 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       energyBar: extensionAPI.settings.get('energy-bar-enabled') === true,
       workdayStart: extensionAPI.settings.get('workday-start'),
       workdayEnd: extensionAPI.settings.get('workday-end'),
-      respectEventOrder: extensionAPI.settings.get('respect-event-order') === true,
       pomodoroMinutes: Number(extensionAPI.settings.get('pomodoro-minutes')) || 45,
     };
   };
@@ -204,25 +203,21 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
       || (planUi.planUid && planUi.planUid !== snapshot.plan.uid)))) return null;
     const workdayStart = renderConfig ? renderConfig.workdayStart : extensionAPI.settings.get('workday-start');
     const workdayEnd = renderConfig ? renderConfig.workdayEnd : extensionAPI.settings.get('workday-end');
-    const respectEventOrder = renderConfig?.respectEventOrder ?? (extensionAPI.settings.get('respect-event-order') === true);
     const minute = Math.floor(state.now.getTime() / 60000);
     if (
       liveExecutionCache?.snapshot !== snapshot
       || liveExecutionCache.minute !== minute
       || liveExecutionCache.workdayStart !== workdayStart
       || liveExecutionCache.workdayEnd !== workdayEnd
-      || liveExecutionCache.respectEventOrder !== respectEventOrder
     ) {
       liveExecutionCache = {
         snapshot,
         minute,
         workdayStart,
         workdayEnd,
-        respectEventOrder,
         execution: timingCore.executionProjection(snapshot, state.now, {
           workdayStart,
           workdayEnd,
-          respectEventOrder,
         }),
       };
     }

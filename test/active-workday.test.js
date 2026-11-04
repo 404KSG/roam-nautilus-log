@@ -48,7 +48,7 @@ async function setup(t, { today = true, running = false, now = new Date(2026,10,
     Object.assign(g.blocks.get(block.uid),block); g.trace.push(['update',block.uid]);
   };
   for (const [key,value] of Object.entries({ 'workday-start':21,'workday-end':2,'timing-line-sidebar':false,
-    'actual-time-tracking':true,'energy-bar-enabled':false,'respect-event-order':false })) g.values.set(key,value);
+    'actual-time-tracking':true,'energy-bar-enabled':false })) g.values.set(key,value);
   const host = global.window = { roamAlphaAPI:g.roam, crypto:webcrypto, navigator:{locks:exclusiveLocks()},
     addEventListener(){},removeEventListener(){},document:{addEventListener(){},removeEventListener(){}},
     setInterval(fn){tick=fn;return 1;},clearInterval(){},
@@ -68,7 +68,7 @@ async function setup(t, { today = true, running = false, now = new Date(2026,10,
   };
   t.after(()=>{controllers.forEach(value=>value.destroy());realTimers.forEach(clearTimeout);delete global.window;});
   return {api,g,host,makeRuntime,makeSession,timers,setNow:value=>{instant=value;},setUser:value=>{actor=value;},tick:()=>tick?.(),
-    planning:()=>Object.fromEntries(['workday-start','workday-end','respect-event-order'].map(key=>[key,g.values.get(key)]))};
+    planning:()=>Object.fromEntries(['workday-start','workday-end'].map(key=>[key,g.values.get(key)]))};
 }
 
 test('00:30 selects the previous overnight owner even when a calendar-today plan exists', async t => {
@@ -265,7 +265,7 @@ test('fallback creation refuses legacy and newer renderer sources before creatin
   assert.equal(g.trace.filter(row=>row[0]==='request'||row[0]==='page-request').length,0);
 });
 
-test('event positions are optional and a future DONE event still reserves its written range', async t => {
+test('retired event-position settings are ignored while future DONE ranges remain reserved', async t => {
   const {api,g}=await setup(t,{now:new Date(2026,10,2,9)});
   g.blocks.get('today-task').string='{{[[TODO]]}} Before 60m';
   g.add({uid:'later-event',parentUid:'today-plan',order:1,string:'{{[[DONE]]}} 12:00-13:00 Reserved'});
@@ -274,7 +274,7 @@ test('event positions are optional and a future DONE event still reserves its wr
   const off=timingCore.executionProjection(snapshot,new Date(2026,10,2,9),{workdayStart:9,workdayEnd:18});
   const on=timingCore.executionProjection(snapshot,new Date(2026,10,2,9),{workdayStart:9,workdayEnd:18,respectEventOrder:true});
   assert.deepEqual(off.scheduledTasks.map(task=>[task.uid,task.start]),[['today-task',540],['after-event',600]]);
-  assert.deepEqual(on.scheduledTasks.map(task=>[task.uid,task.start]),[['today-task',540],['after-event',780]]);
+  assert.deepEqual(on.scheduledTasks.map(task=>[task.uid,task.start]),[['today-task',540],['after-event',600]]);
   assert.equal(on.fixedMinutes,60);
   assert.equal(g.trace.filter(row=>row[0]==='request'||row[0]==='update-request').length,0);
 });

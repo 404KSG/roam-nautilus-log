@@ -38,9 +38,8 @@ launcher instead opens that existing workday's plan. See [overnight workdays](./
 - **Keep your order.** Scheduling never splits a task or lets a later task jump
   ahead. **Today won't fit** keeps the remaining queue visible.
 - **Keep commitments explicit.** Marking an event DONE does not cancel its written
-  time range. Edit or remove the range to release it. **Respect event positions**
-  is a separate, default-off setting: when enabled, tasks also wait until all
-  preceding fixed events have ended. With it off, tasks can use earlier gaps.
+  time range. Edit or remove the range to release it. Flexible tasks fill free gaps
+  in their own order; fixed-event rows do not impose an extra ordering restriction.
 - **Read the budget.** `free` means unassigned time divided by the full workday's
   flexible capacity. Planned demand is already deducted. It measures a time budget,
   not physical energy or the percentage of the day still on the clock.

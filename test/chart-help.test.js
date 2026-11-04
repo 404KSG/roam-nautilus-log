@@ -29,7 +29,8 @@ test('Help is English by default and explains the unassigned budget denominator'
   assert.match(model.rows.find(row => row.key === 'left').text, /full-day Available/);
   assert.match(model.rows.find(row => row.key === 'left').text, /fully planned/);
   assert.equal(model.rows.find(row => row.key === 'left').label, 'free');
-  assert.match(model.rows.find(row => row.key === 'schedule').text, /default off/);
+  assert.match(model.rows.find(row => row.key === 'schedule').text, /free gaps in order/);
+  assert.doesNotMatch(JSON.stringify(model), /Respect event positions|default off/);
   assert.match(model.settings, /POMO does not record Actual/);
   assert.deepEqual(model.rows.find(row => row.key === 'desk'), {
     key: 'desk', label: 'Desk', text: 'Edit original blocks. New task adds to Planned; child logs do not.',
@@ -43,7 +44,7 @@ test('Help honors explicit Chinese, logical overnight hours, and zero without in
   const model = chartHelpModel({ language: 'zh', startMinutes: 1260, endMinutes: 1560, defaultDuration: 0 });
   assert.match(model.setup, /21:00.*次日 02:00.*0m/);
   assert.equal(model.rows.find(row => row.key === 'desk').label, 'Desk');
-  assert.doesNotMatch(JSON.stringify(model), /整理|移到大纲前面/);
+  assert.doesNotMatch(JSON.stringify(model), /整理|移到大纲前面|任务遵循事件位置/);
   assert.match(model.rows.find(row => row.key === 'left').text, /全天可安排/);
   assert.equal(model.rows.find(row => row.key === 'left').label, '未分配');
   assert.match(model.guideUrl, /guide\.zh-CN\.md$/);

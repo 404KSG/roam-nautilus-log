@@ -39,8 +39,8 @@ def prepare(page, context, width, window='undated'):
       const rows=__chartHarness.sourceRows();
       for(const row of rows.slice(8))__chartHarness.removeChild(row['block/uid']);
       __chartHarness.updateChild(rows[6]['block/uid'],'{{[[TODO]]}} First routine task 45m');
-      __chartHarness.updateChild(rows[7]['block/uid'],'{{[[TODO]]}} Second routine task 30m');
-      Object.assign(nautilusLogR2.settings,{'workday-start':6,'workday-end':20,'respect-event-order':true});
+      __chartHarness.updateChild(rows[7]['block/uid'],'{{[[TODO]]}} Second routine task 600m');
+      Object.assign(nautilusLogR2.settings,{'workday-start':6,'workday-end':20});
       dispatchEvent(new Event('nautilus-log:settings-changed'));
     }''')
     f.set_clock(page,'2026-10-29T18:42:00')
@@ -60,7 +60,7 @@ def run():
             page.on('request',lambda request:requests.append(request.url) if request.url.startswith(('http:','https:')) else None)
             for context,width in [('main',720),('sidebar',280),('embed',520)]:
                 original=prepare(page,context,width)
-                assert f.state(page)['pendingQueue']['minutes']==30
+                assert f.state(page)['pendingQueue']['minutes']==600
                 metrics=page.locator('.nautilus-log-container > .nautilus-log-shell > .nautilus-log-header > .nautilus-log-header-copy > .nautilus-log-metrics')
                 metrics.wait_for(state='attached')
                 initial_metrics_visible=metrics.is_visible()
