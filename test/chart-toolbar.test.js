@@ -7,7 +7,7 @@ const icons = require('./fixtures/blueprint-toolbar-icons.json');
 const component = fs.readFileSync(path.join(__dirname, '../src/component.cljs'), 'utf8');
 const section = (start, end) => component.slice(component.indexOf(start), component.indexOf(end));
 
-test('quiet toolbar preserves the published r2 source and native fallback glyphs', () => {
+test('native toolbar preserves the published r2 source and original Blueprint glyphs', () => {
   assert.equal(crypto.createHash('sha256').update(component).digest('hex'),
     '2351148d35786212b68e285c4afc173325c0104a710150b1a7cbcdc7315dfe86',
     'paint changes must not silently rewrite the published renderer');

@@ -23,11 +23,11 @@
   the verified Nautilus Log section. Incomplete or conflicting owned templates cannot
   trigger another default template or an empty fallback plan. Keep seed/container IDs
   stable across renderer revisions; no registry or automatic archive layer is introduced.
-- Quiet the chart toolbar with a neutral Desk switch and smaller line-style Help/Eye icons.
-  Keep the existing click targets, control order, and visible collapsed restore action;
-  add clear keyboard focus and system-color switch states. Supported browsers apply r2-only
-  SVG paint through CSS; other browsers and historical renderers retain native filled
-  geometry. The published renderer source, native buttons, and graph data are unchanged.
+- Restore the original filled Blueprint Help/Eye artwork and native Desk-switch shape.
+  Keep the existing click targets, control order, collapsed restore action, keyboard
+  focus, and system-color support. Use a neutral filled off track, blue on track,
+  and brief 100ms feedback without substitute SVG paths or button scaling. The published
+  renderer source and all control actions remain unchanged.
 - Batch Desk card-height reads before row-span writes, preventing one synchronous browser
   layout per card. Keep native geometry and immediate resize behavior. Loaded previews
   now skip unused placeholder-text parsing during search and card refreshes.
@@ -39,7 +39,7 @@
 - Keep fixed-event reservations, including DONE events, through their written end. Whole tasks fill available gaps in their existing order without splitting or overtaking.
 - Show Actual **total** and **display interval** explicitly, add a measured `≈` cue to estimated completed records, and use **Current task / 当前任务**, **Current event / 当前事件** and **free / 未分配**. Preserve accepted completion-anchor precedence, visible titles, compact geometry, and CLOCK ownership.
 - Rename Desk creation to **New task / 新任务**, including draft and accessible labels, while preserving index-zero insertion, implicit tasks, native editing, and child-log behavior.
-- Clarify the calendar-date command as **Nautilus Log: Create or open today’s Daily Note plan**. Shorten first-use documentation, document the existing execution/POMO entry and legacy Logbook conflict, list completion timestamps and event-order settings, and credit original author Tomáš Baránek.
+- Clarify the calendar-date command as **Nautilus Log: Create or open today’s Daily Note plan**. Shorten first-use documentation, document the existing execution/POMO entry and legacy Logbook conflict, document completion timestamps and gap-filling task order, and credit original author Tomáš Baránek.
 
 ### Fixed
 

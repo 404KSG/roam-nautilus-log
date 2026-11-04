@@ -159,12 +159,12 @@ Past gaps describe the chart allocation, not proof that time was idle or wasted.
 ## Chart controls
 
 The three main controls are **Desk → Help → Eye**. A connected Calendar
-appears after them as the fourth control. The toolbar uses a quiet neutral palette,
-small line-style Help/Eye icons where supported, and clear keyboard focus. Older
-renderers or browsers retain native filled glyphs with the same actions. The visible
-artwork is smaller; click targets remain unchanged.
+appears after them as the fourth control. Help and Eye use the original filled Blueprint
+artwork at 18px. The Desk switch uses a filled track with a clear off/on position. Hover
+and switch feedback lasts about 100ms, with no icon morphing or button scaling; reduced
+motion makes the feedback effectively immediate. Click targets and keyboard focus remain.
 
-- **Desk switch:** show or hide unfinished-task cards below the chart. Only the slider is visible; hover or keyboard focus shows its Desk label. The thumb slides right and the neutral track fills when open; the closed state uses an outlined track. Click, Space or Enter toggles it; the state also follows fold/expand restoration, control remounts and saved preferences.
+- **Desk switch:** show or hide unfinished-task cards below the chart. Only the slider is visible; hover or keyboard focus shows its Desk label. The thumb slides right and the track turns blue when open; the closed state uses a neutral filled track. Click, Space or Enter toggles it; the state also follows fold/expand restoration, control remounts and saved preferences.
 - **Help (?):** immediately after Desk, the question mark opens a native-style quick guide.
   It shows this chart's resolved hours and default task duration, explains Available,
   Events, Planned and `free`, and summarizes scheduling, Desk and completion styles.
