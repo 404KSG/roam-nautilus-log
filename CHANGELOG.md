@@ -26,11 +26,12 @@
   the verified Nautilus Log section. Incomplete or conflicting owned templates cannot
   trigger another default template or an empty fallback plan. Keep seed/container IDs
   stable across renderer revisions; no registry or automatic archive layer is introduced.
-- Restore the original filled Blueprint Help/Eye artwork and native Desk-switch shape.
-  Keep the existing click targets, control order, collapsed restore action, keyboard
-  focus, and system-color support. Use a neutral filled off track, blue on track,
-  and brief 100ms feedback without substitute SVG paths or button scaling. The published
-  renderer source and all control actions remain unchanged.
+- Balance the original Blueprint controls with a 16px Help glyph beside the 18px Eye,
+  a muted blue Desk on-state, and 6px control/legend spacing (4px in narrow layouts).
+  Keep the 28×16px switch, existing click targets, control order, collapsed restore
+  action, keyboard focus and system-color support. Use color-only hover and 120ms
+  feedback, disabled under reduced motion. The renderer source, chart geometry and
+  control actions remain unchanged; no substitute SVG paths or button scaling.
 - Batch Desk card-height reads before row-span writes, preventing one synchronous browser
   layout per card. Keep native geometry and immediate resize behavior. Loaded previews
   now skip unused placeholder-text parsing during search and card refreshes.

@@ -302,7 +302,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 2px;
+  gap: 6px;
   min-width: max-content;
 }
 
@@ -666,7 +666,7 @@
   position: static;
   flex: 0 0 auto;
   display: flex;
-  gap: 2px;
+  gap: 6px;
   opacity: 1;
   transition: opacity 0.2s ease;
   z-index: 10;
@@ -679,9 +679,11 @@
 
 .nautilus-log-container .nautilus-log-toggle-btn {
   --nautilus-log-toolbar-icon: #5c7080;
+  --nautilus-log-toolbar-icon-hover: #394b59;
   --nautilus-log-toolbar-thumb: #fff;
   --nautilus-log-toolbar-switch-off: #7c8b99;
-  --nautilus-log-toolbar-switch-on: #137cbd;
+  --nautilus-log-toolbar-switch-on: #3d6d8c;
+  --nautilus-log-toolbar-switch-on-hover: #325a73;
   --nautilus-log-control-tooltip-bg: #fff;
   --nautilus-log-control-tooltip-border: rgba(16, 22, 26, 0.2);
   --nautilus-log-control-tooltip-text: #182026;
@@ -710,23 +712,32 @@
   font: inherit;
   overflow: visible;
   position: relative;
-  transition: background-color 100ms ease-out, color 100ms ease-out;
+  transition: background-color 120ms ease-out, color 120ms ease-out;
 }
 
 :where(.bp3-dark,.rm-dark-theme,.dark) .nautilus-log-container .nautilus-log-toggle-btn,
 .nautilus-log-container:where(.bp3-dark,.rm-dark-theme,.dark) .nautilus-log-toggle-btn {
   --nautilus-log-toolbar-icon: #a7b6c2;
+  --nautilus-log-toolbar-icon-hover: #e1e8ed;
+  --nautilus-log-toolbar-thumb: #f5f8fa;
   --nautilus-log-toolbar-switch-off: #627587;
+  --nautilus-log-toolbar-switch-on: #477a9c;
+  --nautilus-log-toolbar-switch-on-hover: #568bab;
 }
 
 .nautilus-log-container .nautilus-log-toggle-btn .bp3-icon {
   color: inherit;
 }
 
-/* Use the original Blueprint SVG paths supplied by the renderer. */
+/* Preserve the native paths; the solid Help disc needs a smaller optical size. */
 .nautilus-log-container .nautilus-log-toggle-btn > svg {
   width: 18px;
   height: 18px;
+}
+
+.nautilus-log-container .nautilus-log-help-btn > svg {
+  width: 16px;
+  height: 16px;
 }
 
 .nautilus-log-toggle-btn[data-nautilus-tooltip]::before,
@@ -791,11 +802,13 @@
   transform: translateY(0);
 }
 
-.nautilus-log-container .nautilus-log-toggle-btn:hover,
+.nautilus-log-container .nautilus-log-toggle-btn:hover {
+  color: var(--nautilus-log-toolbar-icon-hover);
+}
+
 .nautilus-log-container .nautilus-log-toggle-btn:focus-visible,
 .nautilus-log-container .nautilus-log-help-btn[aria-expanded="true"] {
   background-color: var(--nautilus-log-hover) !important;
-  color: var(--nautilus-log-toolbar-icon);
 }
 
 .nautilus-log-container .nautilus-log-toggle-btn:focus-visible {
@@ -1034,6 +1047,7 @@
   }
 
   .nautilus-log-header--compact .nautilus-log-header-actions {
+    gap: 4px;
     min-width: 0;
   }
 
@@ -1055,7 +1069,7 @@
   }
 
   .nautilus-log-controls-top {
-    gap: 0;
+    gap: 4px;
   }
 
   .nautilus-log-svg {
@@ -1096,6 +1110,11 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
+  }
+  .nautilus-log-controls-top *,
+  .nautilus-log-controls-top *::before,
+  .nautilus-log-controls-top *::after {
+    transition-duration: 0ms !important;
   }
 }
 
@@ -2774,9 +2793,10 @@ body:has(.nautilus-desk__focus-layer) #rm-modal-portal:has(.rm-enhanced-image-mo
   padding: 4px 6px !important;
 }
 .nautilus-log-desk-btn[data-nautilus-tooltip]::after { white-space: nowrap; overflow-wrap: normal; word-break: normal; }
-.nautilus-log-desk-switch-track { position: relative; flex: 0 0 28px; width: 28px; height: 16px; border-radius: 8px; background: var(--nautilus-log-toolbar-switch-off); box-shadow: none; transition: background-color 100ms ease-out; }
-.nautilus-log-desk-switch-thumb { position: absolute; left: 2px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--nautilus-log-toolbar-thumb); box-shadow: none; transition: transform 100ms ease-out; }
+.nautilus-log-desk-switch-track { position: relative; flex: 0 0 28px; width: 28px; height: 16px; border-radius: 8px; background: var(--nautilus-log-toolbar-switch-off); box-shadow: none; transition: background-color 120ms ease-out; }
+.nautilus-log-desk-switch-thumb { position: absolute; left: 2px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--nautilus-log-toolbar-thumb); box-shadow: none; transition: transform 120ms ease-out; }
 .nautilus-log-desk-btn[aria-checked="true"] .nautilus-log-desk-switch-track { background: var(--nautilus-log-toolbar-switch-on); }
+.nautilus-log-desk-btn[aria-checked="true"]:hover .nautilus-log-desk-switch-track { background: var(--nautilus-log-toolbar-switch-on-hover); }
 .nautilus-log-desk-btn[aria-checked="true"] .nautilus-log-desk-switch-thumb { transform: translateX(12px); }
 .nautilus-log-desk-btn[aria-expanded="true"]:not([role="switch"]) { background: var(--nautilus-log-hover) !important; }
 
@@ -2784,9 +2804,11 @@ body:has(.nautilus-desk__focus-layer) #rm-modal-portal:has(.rm-enhanced-image-mo
   .nautilus-log-container .nautilus-log-toggle-btn {
     color: ButtonText;
     --nautilus-log-toolbar-icon: ButtonText;
+    --nautilus-log-toolbar-icon-hover: ButtonText;
     --nautilus-log-toolbar-thumb: ButtonText;
     --nautilus-log-toolbar-switch-off: Canvas;
     --nautilus-log-toolbar-switch-on: Highlight;
+    --nautilus-log-toolbar-switch-on-hover: Highlight;
   }
   .nautilus-log-container .nautilus-log-toggle-btn:focus-visible { outline-color: Highlight; }
   .nautilus-log-desk-switch-track { box-shadow: none; outline: 1px solid ButtonText; outline-offset: -1px; }

@@ -51,10 +51,10 @@ def glyph(page,selector):
     }''')
 
 
-def native_glyph(state):
+def native_glyph(state, size=18):
     assert state['computed']==state['original'],state
     assert state['fill']==state['color'] and state['stroke']=='none',state
-    assert state['width']==state['height']==18,state
+    assert state['width']==state['height']==size,state
 
 
 def switch_colors(page):
@@ -78,7 +78,7 @@ def run():
             for name,context,width,dark,forced,lang in [
                 ('light','main',720,False,False,'en'),('dark','main',720,True,False,'en'),
                 ('sidebar','sidebar',280,False,False,'en'),('embed-zh','embed',520,False,False,'zh'),
-                ('forced','main',720,False,True,'en')]:
+                ('forced','main',720,False,True,'en'),('forced-dark','main',720,True,True,'en')]:
                 page.emulate_media(forced_colors='active' if forced else 'none',reduced_motion='reduce')
                 f.load(page,'untimed',context,width,lang=lang,real_desk=True)
                 page.locator('body').evaluate("(e,d)=>{e.classList.toggle('bp3-dark',d);e.style.background=d?'#1d1e21':'#fff';e.style.color=d?'#ecedef':'#222326'}",dark)
@@ -86,11 +86,17 @@ def run():
                 assert controls.count()==3
                 assert controls.evaluate_all('es=>es.map(e=>e.matches("[role=switch]")?"Desk":e.querySelector("svg").dataset.icon)')==['Desk','help','eye-off']
                 assert controls.evaluate_all('es=>es.map(e=>[e.getBoundingClientRect().width,e.getBoundingClientRect().height,getComputedStyle(e).opacity])')==[[40,32,'1'],[32,32,'1'],[32,32,'1']]
-                for selector in SELECTORS[1:]:native_glyph(glyph(page,selector))
+                page.mouse.move(1,1);settle(page)
+                for selector in SELECTORS[1:]:native_glyph(glyph(page,selector),16 if selector==SELECTORS[1] else 18)
+                geometry=page.locator('.nautilus-log-header').evaluate('''header=>({height:header.getBoundingClientRect().height,
+                  controlGap:getComputedStyle(header.querySelector('.nautilus-log-controls-top')).gap,
+                  legendGap:getComputedStyle(header.querySelector('.nautilus-log-header-actions')).gap,
+                  fits:[...header.querySelectorAll('button')].every(e=>{const r=e.getBoundingClientRect(),h=header.getBoundingClientRect();return r.left>=h.left-1&&r.right<=h.right+1})})''')
+                assert geometry=={'height':58,'controlGap':'6px' if width>520 else '4px','legendGap':'6px' if width>520 else '4px','fits':True},geometry
                 assert glyph(page,SELECTORS[2])['attribute']==ICONS['icons']['eye-off']
                 switch=page.locator(SELECTORS[0])
                 if switch.get_attribute('aria-checked')=='true':switch.click()
-                settle(page);off=switch.locator('.nautilus-log-desk-switch-thumb').bounding_box();off_colors=switch_colors(page)
+                page.mouse.move(1,1);settle(page);off=switch.locator('.nautilus-log-desk-switch-thumb').bounding_box();off_colors=switch_colors(page)
                 assert switch.locator('.nautilus-log-desk-switch-track').evaluate('e=>e.offsetWidth===28&&e.offsetHeight===16')
                 switch.focus();switch.press('Space');expect(switch).to_have_attribute('aria-checked','true');settle(page)
                 on=switch.locator('.nautilus-log-desk-switch-thumb').bounding_box();on_colors=switch_colors(page)
@@ -102,6 +108,9 @@ def run():
                 help_state=glyph(page,SELECTORS[1]);paper=rgb(on_colors['paper'])
                 ratios={'icon':contrast(rgb(help_state['fill']),paper),'thumbOn':contrast(rgb(on_colors['thumb']),rgb(on_colors['track'])),'thumbOff':contrast(rgb(off_colors['thumb']),rgb(off_colors['track']))}
                 assert min(ratios.values())>=3,ratios
+                if not forced:
+                    assert on_colors['track']==('rgb(71, 122, 156)' if dark else 'rgb(61, 109, 140)'),on_colors
+                    assert off_colors['track']==('rgb(98, 117, 135)' if dark else 'rgb(124, 139, 153)'),off_colors
                 help_button=page.locator(SELECTORS[1]);help_button.press('Enter')
                 expect(page.get_by_role('dialog',name='Nautilus Log',exact=True)).to_be_visible()
                 page.keyboard.press('Escape');expect(help_button).to_be_focused()
@@ -112,17 +121,19 @@ def run():
                 page.mouse.move(1,1);page.evaluate('()=>document.activeElement.blur()');settle(page)
                 page.locator('.nautilus-log-header').screenshot(path=str(OUT/f'{name}-header.png'))
                 assert f.state(page)['writes']==0
-                report['matrix'].append({'case':name,'nativeGlyphs':True,'contrast':ratios,'targetGeometry':True,'keyboardAndRestore':True})
+                report['matrix'].append({'case':name,'nativeGlyphs':True,'contrast':ratios,'targetGeometry':True,'headerGeometry':geometry,'keyboardAndRestore':True})
             # Feedback is brief and never changes the chart's bounds.
             page.emulate_media(forced_colors='none',reduced_motion='no-preference')
             f.load(page,'untimed','main',720,real_desk=True)
             before=f.state(page)['svg'];page.locator(SELECTORS[1]).hover();settle(page)
+            assert page.locator(SELECTORS[1]).evaluate('e=>getComputedStyle(e).backgroundColor')=='rgba(0, 0, 0, 0)'
+            assert glyph(page,SELECTORS[1])['color']=='rgb(57, 75, 89)'
             motion=page.locator('.nautilus-log-controls-top').evaluate('''root=>[...root.querySelectorAll('button,.nautilus-log-desk-switch-track,.nautilus-log-desk-switch-thumb')].map(e=>({duration:getComputedStyle(e).transitionDuration,transform:getComputedStyle(e).transform,button:e.tagName==='BUTTON'}))''')
             assert all(all(float(v.strip().removesuffix('s'))<=.12 for v in row['duration'].split(',')) for row in motion),motion
             assert all(row['transform']=='none' for row in motion if row['button']),motion
             assert f.state(page)['svg']==before
             page.emulate_media(reduced_motion='reduce');settle(page)
-            assert page.locator('.nautilus-log-controls-top').evaluate("root=>[...root.querySelectorAll('button,.nautilus-log-desk-switch-thumb')].every(e=>getComputedStyle(e).transitionDuration.split(',').every(v=>parseFloat(v)<=.00001))")
+            assert page.locator('.nautilus-log-controls-top').evaluate("root=>[...root.querySelectorAll('button,.nautilus-log-desk-switch-thumb')].every(e=>getComputedStyle(e).transitionDuration.split(',').every(v=>parseFloat(v)===0))")
             report['feedback']={'maximumSeconds':.12,'chartBoundsUnchanged':True,'reducedMotion':True}
             # No renderer, including a nested one, receives substitute path paint.
             ownership=page.evaluate('''()=>{
@@ -147,6 +158,10 @@ def run():
             expect(page.locator('.nautilus-log-calendar-popover--error')).to_contain_text('native-toolbar-test-calendar-error')
             assert page.evaluate('()=>nativeCalendarCalls')==2 and f.state(page)['writes']==0
             report['calendar']={'fourth':True,'syntheticCalls':2,'graphWrites':0}
+            for width in [280,520]:
+                page.evaluate('w=>__chartHarness.setWidth(w)',width);settle(page)
+                assert page.locator('.nautilus-log-controls-top button').evaluate_all('es=>es.length===4&&es.every(e=>{const r=e.getBoundingClientRect(),h=e.closest(".nautilus-log-header").getBoundingClientRect();return r.width>=32&&r.height===32&&r.left>=h.left&&r.right<=h.right})')
+            report['calendar']['narrowFourControlWidths']=[280,520]
             touch=browser.new_page(viewport={'width':400,'height':900},has_touch=True)
             f.load(touch,'untimed','main',280,real_desk=True)
             for selector in SELECTORS:expect(touch.locator(selector)).to_be_visible()

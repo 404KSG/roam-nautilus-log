@@ -641,6 +641,7 @@ def full_tip_palette_contract(page):
         if toggle.get_attribute('aria-checked') != 'true': toggle.click()
         page.wait_for_function('document.querySelector(".nautilus-desk")?.dataset.status==="ready"')
         settle_renderer(page); before = state(page)['svg']; select(page, 'connection-done-0'); after = coverage(page)
+        page.mouse.move(1, 1)
         page.wait_for_function('''()=>document.querySelector('.nautilus-log-desk-switch-track').getAnimations().every(a=>a.playState==='finished')''')
         data = page.evaluate('''()=>{
           const region=document.querySelector('.nautilus-log-detail-region'),tip=region.querySelector('.nautilus-log-detail-content'),title=region.querySelector('.nautilus-log-detail-title');
@@ -652,7 +653,7 @@ def full_tip_palette_contract(page):
             colors:[...document.querySelectorAll('.nautilus-log-html-legend .nautilus-log-legend-dot')].slice(0,3).map(e=>getComputedStyle(e).backgroundColor)};
         }''')
         assert data['title'] == text and data['colors'] == ['rgb(194, 75, 75)', 'rgb(173, 139, 36)', 'rgb(19, 124, 189)'], data
-        assert data['positive'] == '#277a59' and data['switchColor'] == 'rgb(19, 124, 189)', 'semantic green stays unchanged while Desk retains its native blue on-state'
+        assert data['positive'] == '#277a59' and data['switchColor'] == 'rgb(61, 109, 140)', 'semantic green and task blue stay unchanged while the view switch uses muted blue'
         assert data['gradient'] == 'none', 'full-width content must use semantic text colors, not a gradient'
         assert page.locator('.nautilus-log-detail-title').evaluate('e=>getComputedStyle(e).color') == page.locator('[data-task-uid="connection-done-0"] .nautilus-log-record-title').evaluate('e=>getComputedStyle(e).fill')
         assert data['heading'] == 'rgb(123, 101, 26)' and data['marker'] == 'rgb(173, 139, 36)', data

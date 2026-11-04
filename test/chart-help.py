@@ -109,14 +109,17 @@ def run():
                 assert positions == sorted(positions) and len(set(positions)) == 3
                 expect(page.locator('.nautilus-log-tidy-btn,[data-icon="crystal-ball"]')).to_have_count(0)
                 expected_ink = 'rgb(167, 182, 194)' if dark else 'rgb(92, 112, 128)'
+                hover_ink = 'rgb(225, 232, 237)' if dark else 'rgb(57, 75, 89)'
                 for selector in ['.nautilus-log-help-btn', '.nautilus-log-collapse-btn']:
                     control = page.locator(selector)
                     for phase in ['idle', 'hover', 'focus']:
                         if phase == 'hover': control.hover()
-                        if phase == 'focus': control.focus()
+                        if phase == 'focus':
+                            page.mouse.move(1, 1)
+                            control.focus()
                         f.settle_renderer(page)
                         page.wait_for_function('selector=>document.querySelector(selector).getAnimations().every(a=>a.playState==="finished")', arg=selector)
-                        assert control.locator('path').evaluate('e=>getComputedStyle(e).fill') == expected_ink, (selector, phase)
+                        assert control.locator('path').evaluate('e=>getComputedStyle(e).fill') == (hover_ink if phase == 'hover' else expected_ink), (selector, phase)
                         assert control.locator('path').evaluate('e=>getComputedStyle(e).stroke') == 'none', (selector, phase)
                     control.evaluate('e=>e.blur()'); page.mouse.move(1, 1)
                 assert_toolbar_icon(page.locator('.nautilus-log-collapse-btn'), 'eye-off')
