@@ -4,6 +4,9 @@
 
 ### Removed
 
+- Remove the temporary Desk debugging commands, report panel, layout/event collection
+  and JSON export. Normal Desk editing, navigation, preferences and cleanup remain;
+  plan-creation error and recovery notices are unchanged.
 - Remove the event-position constraint and its Settings switch. Flexible tasks keep
   their own order while using free gaps around fixed events, regardless of event-row
   position. Old saved flags and cached earliest-start hints cannot re-enable the rule;
@@ -271,15 +274,6 @@
   labels. Left/right halves choose before/after (mirrored in RTL). The previous
   custom footer badge is removed. Alt-only blue counters retain visible first-nine behavior. Ready updates reconcile
   detached sources and clear stale drag state without attempting a stale move.
-- The Draft preview includes opt-in Desk diagnostics through the command palette.
-  It defaults off, retains at most 40 local in-memory geometry/reason events, and
-  clears on stop, panel close, or unload. It does not record note/input text, raw
-  keys, URLs, graph identifiers, or credentials, and does not send data or write
-  to the graph. A report can be downloaded only by an explicit user action.
-  The native page-scope cause of horizontal movement is fixed below; confirmation
-  in the updated live Desktop build and unrelated whitespace remain separate.
-  The editor-first Escape fix covers the simulated copy prelude only; the live
-  macro's clipboard/navigation/send workflow remains unvalidated.
 - Nautilus Desk reuses Roam's native Desk/Blueprint styles, native grid-span
   masonry, and the same local width as the chart above. It hides only the
   original plan's child outline while active and restores it on close or unload.

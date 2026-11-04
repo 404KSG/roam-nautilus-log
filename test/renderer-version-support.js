@@ -81,7 +81,7 @@ export function installVersionFixture({ core, taskCore, settings, getChildren, r
   const notify = () => {for(const value of [...watches])value.callback();};
   const install = () => {
     const watcher=createPlanWatchBridge({roam:api,readString:uid=>entity(uid)?.['block/string']||''});
-    const desk=createDeskView({host:window,document,readPlan:watcher.read,watchPlan:watcher.subscribe,getSettings:()=>settings,revision:'fixture-r2'});
+    const desk=createDeskView({host:window,document,readPlan:watcher.read,watchPlan:watcher.subscribe,getSettings:()=>settings});
     const help=createChartHelp({host:window,document,revision:'f'.repeat(40)});
     const handle=installRendererBridge({host:window,core,taskCore,
       getScope:()=>({provider:window.roamAlphaAPI,graph:window.roamAlphaAPI.graph.name,user:window.roamAlphaAPI.user.uid()}),

@@ -46,7 +46,6 @@ import { createDeskView } from "./desk-view";
 import { createChartHelp } from "./chart-help";
 import { createTemplatePresentation } from './template-presentation';
 import { createDeskActions } from "./desk-actions";
-import { createDeskDiagnosticCommands } from "./desk-diagnostics";
 import {
   decideCalendarManagedChange,
   normalizeGoogleCalendarEvents,
@@ -136,7 +135,6 @@ let deskView = null;
 let chartHelp = null;
 let templatePresentation = null;
 let deskActions = null;
-let deskDiagnosticCommands = null;
 let calendarRuntime = null;
 let completionStampWriter = null;
 let completionStampAdapter = null;
@@ -909,7 +907,6 @@ async function onload({ extensionAPI }) {
   chartHelp = createChartHelp({
     revision: typeof __NAUTILUS_SOURCE_REVISION__ === 'string' ? __NAUTILUS_SOURCE_REVISION__ : 'unknown',
   });
-  deskDiagnosticCommands?.destroy();
   deskView?.destroy();
   deskActions?.destroy();
   planWatchBridge?.destroy();
@@ -919,7 +916,6 @@ async function onload({ extensionAPI }) {
   let loadTemplatePresentation = null;
   deskActions = createDeskActions();
   deskView = createDeskView({
-    revision: typeof __NAUTILUS_SOURCE_REVISION__ === 'string' ? __NAUTILUS_SOURCE_REVISION__ : 'unknown',
     actions: deskActions,
     notify: (message) => showToast(message, 'warning'),
     openTask: (uid, sidebar) => sidebar ? openTaskInRightSidebar(uid) : openPrimaryPlan(uid),
@@ -929,11 +925,6 @@ async function onload({ extensionAPI }) {
     readChildren,
     getSettings: () => loadBridge?.bridge.settings || {},
   });
-  deskDiagnosticCommands = createDeskDiagnosticCommands({
-    extensionAPI, diagnostics: deskView.diagnostics,
-    notify: (message) => showToast(message, 'info'),
-  });
-  deskDiagnosticCommands.initialize();
   const ownedDesk = deskView, ownedHelp = chartHelp, ownedWatch = planWatchBridge;
   loadBridge = installRendererBridge({ host: window, core: logCore, taskCore: timingCore,
     getScope: rendererScope,
@@ -1106,8 +1097,6 @@ function onunload() {
   templatePresentation = null;
   chartHelp?.destroy();
   chartHelp = null;
-  deskDiagnosticCommands?.destroy();
-  deskDiagnosticCommands = null;
   deskView?.destroy();
   deskView = null;
   deskActions?.destroy();
