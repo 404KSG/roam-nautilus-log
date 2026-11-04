@@ -11,6 +11,8 @@ const RENDER_TITLE = 'Nautilus Log';
 // Stable scaffold identities, independent of renderer revisions. These existing
 // UID strings are opaque identities; retain them when a future code UID changes.
 const CODE_HEADER_UID = 'roam-render-Nautilus-Log-r2-cljs-header';
+// Older clients adopt any child literally named "code" for their v1 source.
+const CODE_HEADER_NAME = 'renderer';
 const TEMPLATE_UID = 'nautilus-log-r2-template';
 const TEMPLATE_RENDER_UID = 'nautilus-log-r2-template-render';
 const TEMPLATE_MARKER = "[[roam/templates]]";
@@ -70,7 +72,9 @@ export function readOwnedRendererSourceText() {
   return source?.string ?? null;
 }
 export function readRendererSource() {
-  return inspectRendererSource(readOwnedRendererSourceText(), rendererSourceText());
+  const { header, source } = readFixedRendererScaffold();
+  return { ...inspectRendererSource(source?.string ?? null, rendererSourceText()),
+    programIsolated: header?.string === CODE_HEADER_NAME };
 }
 
 // A matching source body alone cannot grant ownership of user structure.
@@ -93,9 +97,44 @@ function readFixedRendererScaffold() {
   const header = blockByUid(CODE_HEADER_UID, true);
   const source = blockByUid(CURRENT_CODE_BLOCK_UID, true);
   assertScaffoldOwner(title, pageUid, RENDER_TITLE);
-  assertScaffoldOwner(header, title?.uid, 'code');
+  assertScaffoldOwner(header, title?.uid, header?.string === CODE_HEADER_NAME ? CODE_HEADER_NAME : 'code');
   assertScaffoldOwner(source, header?.uid);
+  if (header) {
+    // Roam compiles a referenced code block's siblings as one program. A valid
+    // r2 body is not enough: an earlier v1 namespace can select the v1 entry.
+    const children = childBlocks(header.uid, true);
+    if (children.some(child => child.uid !== CURRENT_CODE_BLOCK_UID) || (!source && children.length)) {
+      throw Object.assign(new Error('Renderer source group is not isolated. Keep the current source in its own renderer container; existing blocks were preserved.'),
+        { code: 'rendererSourceGroupMixed' });
+    }
+  }
   return { pageUid, title, header, source };
+}
+
+async function isolateOwnedCodeHeader(roam, assertActive) {
+  const header = readFixedRendererScaffold().header;
+  if (header?.string !== 'code') return;
+  // Only a verified empty/single-source scaffold may change its generic label.
+  // Mixed groups require an explicit structural repair, never silent moves.
+  assertActive();
+  const focused = roam.ui?.getFocusedBlock?.();
+  if (focused?.['block-uid'] === CODE_HEADER_UID) throw Error('The renderer header is being edited. Finish editing before reloading.');
+  const document = typeof window !== 'undefined' ? window.document : null;
+  if (document?.querySelectorAll) {
+    const editors = [...document.querySelectorAll('textarea[id], [contenteditable="true"][id]')]
+      .filter(node => String(node.id).startsWith('block-input-') && String(node.id).endsWith(`-${CODE_HEADER_UID}`));
+    if (editors.some(node => node === document.activeElement || (node.value ?? node.textContent) !== header.string)) {
+      throw Error('The renderer header has an active or unsaved editor. Its text was preserved.');
+    }
+  }
+  if (typeof roam.updateBlock !== 'function') throw Error('Roam renderer header updates are unavailable.');
+  let error;
+  try { await roam.updateBlock({ block: { uid: CODE_HEADER_UID, string: CODE_HEADER_NAME } }); }
+  catch (failure) { error = failure; }
+  assertActive();
+  if (readFixedRendererScaffold().header?.string !== CODE_HEADER_NAME) {
+    throw error || Error('Renderer header isolation could not be confirmed. No replacement source was created.');
+  }
 }
 
 function queryBlock(uid, strict = false) {
@@ -460,7 +499,8 @@ export async function createRenderBlock(
   if (!renderPageUID) throw Error('The renderer page could not be confirmed.');
   await createVerified(renderPageUID, 'last', componentName, titleblockUID, { heading: 3 });
   if (initial.code.state === 'absent') {
-    await createVerified(titleblockUID, 'last', 'code', CODE_HEADER_UID, { open: false });
+    await isolateOwnedCodeHeader(roam, assertActive);
+    await createVerified(titleblockUID, 'last', CODE_HEADER_NAME, CODE_HEADER_UID, { open: false });
     await createVerified(CODE_HEADER_UID, 0, rendererSourceText(), codeBlockUID);
   }
   if (initial.code.state === 'older' || typeof options.ensureSource === 'function') {
@@ -475,6 +515,7 @@ export async function createRenderBlock(
   }
   assertActive();
   if (readRendererSource().state !== 'current') throw Error('The current renderer source could not be verified.');
+  await isolateOwnedCodeHeader(roam, assertActive);
   const current = inspectRendererScaffold(renderStringCore);
   if ((current.candidate?.template.uid || null) !== (initial.candidate?.template.uid || null)) throw Error('The managed template changed while installing the renderer.');
   let template = current.candidate?.template;

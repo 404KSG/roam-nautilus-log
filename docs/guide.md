@@ -519,6 +519,20 @@ when a future source revision is released. The current source is revision 2, wit
 `nautilus-log-r2` and a version-local runtime bridge. Future source changes advance the
 source marker, namespace, and bridge revision while retaining this code UID.
 
+The canonical source must be the only child of its stable code-group UID,
+`roam-render-Nautilus-Log-r2-cljs-header`, labeled **renderer**. Roam compiles sibling
+code blocks as one program and resolves the entry in its first namespace. Separate
+namespaces and matching source bytes do not prevent an older entry from being selected
+when v1 and r2 share a parent.
+
+The generic **code** label is reserved for legacy compatibility: older installers search
+for that exact label when recreating their source. A verified empty or single-source
+current header still named `code` is renamed in place to `renderer`, preserving its UID, source
+bytes and properties. Active or unsaved header editors are left alone. Mixed groups are
+blocked before readiness or further scaffold writes; existing code is not moved, deleted
+or silently adopted. Repair an existing mixed group only with the owner's authorization,
+keeping legacy sources in a separate container and preserving their UIDs and references.
+
 An absent canonical source is created once; byte-identical content is reused. A forward
 upgrade replaces that same block only when its old bytes match a bundled published-source
 SHA-256 and its title/header/source ancestry still verifies under `roam/render`. Custom,
@@ -560,7 +574,8 @@ Default template, render-reference, code-group, and canonical source UIDs are st
 identities. Graphs with legacy code can be explicitly consolidated: inspect every incoming
 reference, change only supported renderer UID spans to the canonical entry, verify the
 unchanged surrounding text and tree, then remove the old source only after its references
-reach zero. Do not choose a template merely because it is populated or uses the newer UID;
+reach zero and every client has been updated. Otherwise an older client can recreate it.
+Never place retained legacy sources beside the canonical source in the same code group. Do not choose a template merely because it is populated or uses the newer UID;
 an empty template may be intentional. Resolve that choice with the owner.
 
 If a template reports **multiple renderer blocks**, inspect the container before changing it.

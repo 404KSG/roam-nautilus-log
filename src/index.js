@@ -963,7 +963,10 @@ async function onload({ extensionAPI }) {
     notify: message => showToast(message, 'warning'),
   });
   const loadSourceUpgrade = rendererSourceUpgrade;
-  const sourceConfirmed = () => readRendererSource().state === 'current' && !loadSourceUpgrade.hasPending();
+  const sourceConfirmed = () => {
+    const source = readRendererSource();
+    return source.state === 'current' && source.programIsolated && !loadSourceUpgrade.hasPending();
+  };
   // A legacy template may provide settings, never r2 mutation authority over
   // its code UID. New creation and template repair always target r2.
   const recoveredTemplateState = readExistingTemplateState(renderStringCore);

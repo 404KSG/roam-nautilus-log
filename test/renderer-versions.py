@@ -60,6 +60,13 @@ def run(page,order):
     assert writes and any(row[1]=='roam-render-Nautilus-Log-cljs' for row in writes),writes
     assert page.evaluate('()=>__rendererVersion.currentSource()')==before
     assert not any(row[1]=='roam-render-Nautilus-Log-r2-cljs' for row in writes),writes
+    programs=page.evaluate('()=>__rendererVersion.nativePrograms()')
+    assert programs['current']['sourceUids']==['roam-render-Nautilus-Log-r2-cljs'],programs
+    assert programs['current']['entry']=='nautilus-log-r2/main',programs
+    assert programs['legacy']['sourceUids']==['roam-render-Nautilus-Log-cljs'],programs
+    assert programs['legacy']['entry']=='nautilus-log-v1/main',programs
+    assert programs['current']['parentUid']!=programs['legacy']['parentUid'],programs
+    expect(page.locator('#chart-root .nautilus-log-container')).to_have_attribute('data-nautilus-renderer','2')
     assert page.evaluate('''()=>__editorBefore===document.querySelector('.nautilus-desk__native textarea')
       && __editorBefore===document.activeElement && __editorBefore.value==='Uncommitted native editor buffer'
       && __editorBefore.selectionStart===3 && __editorBefore.selectionEnd===9''')
@@ -112,7 +119,7 @@ def run(page,order):
     page.wait_for_function('()=>__rendererVersion.state().watches===0')
     expect(page.locator('.nautilus-log-help-popover')).to_have_count(0)
     assert not errors,errors
-    return {'order':order,'sourceRefusal':source_checks,'ambiguousTemplate':ambiguous,'legacyWrites':writes,'stateBeforeFinalCleanup':state,'errors':errors}
+    return {'order':order,'nativePrograms':programs,'sourceRefusal':source_checks,'ambiguousTemplate':ambiguous,'legacyWrites':writes,'stateBeforeFinalCleanup':state,'errors':errors}
 
 
 if __name__=='__main__':

@@ -23,7 +23,7 @@ export function installVersionFixture({ core, taskCore, settings, getChildren, r
   }
   codeGraph.roam.graph = {name:'renderer-version-fixture',type:'hosted'};
   codeGraph.add({uid:'roam-render-Nautilus-Log',parentUid:'render-page',order:1,string:'Nautilus Log'});
-  codeGraph.add({uid:CODE_UID+'-header',parentUid:'roam-render-Nautilus-Log',order:0,string:'code'});
+  codeGraph.add({uid:CODE_UID+'-header',parentUid:'roam-render-Nautilus-Log',order:0,string:'renderer'});
   codeGraph.add({uid:CODE_UID,parentUid:CODE_UID+'-header',order:0,string:rendererSourceText()});
   const watches = new Set(), generations = [];
   const page = {'block/uid':'10-29-2026','node/title':pageTitle,
@@ -104,6 +104,17 @@ export function installVersionFixture({ core, taskCore, settings, getChildren, r
   };
   install();
   const destroy = generation => {generation.handle.destroy();generation.desk.destroy();generation.help.destroy();generation.watcher.destroy();};
+  // Model the host boundary that the previous qualified-var mount skipped:
+  // Roam combines sibling code under the referenced code block's parent, then
+  // resolves the entry in the first namespace of that combined program.
+  const nativeProgram = uid => {
+    const source = codeGraph.blocks.get(uid), parentUid = source?.parentUid;
+    const siblings = [...codeGraph.blocks.values()].filter(row => row.parentUid === parentUid)
+      .sort((a, b) => a.order - b.order).filter(row => /^```clojure\b/.test(row.string.trim()));
+    const program = siblings.map(row => row.string.trim().replace(/^```clojure\s*\n/, '').replace(/```$/, '')).join('\n');
+    const namespace = /\(ns\s+([^\s)]+)/.exec(program)?.[1];
+    return { parentUid, sourceUids: siblings.map(row => row.uid), entry: namespace ? `${namespace}/main` : null };
+  };
   const runScaffold = () => createRenderBlock('roam/render','roam-render-Nautilus-Log','r2',CODE_UID,'Nautilus Log',
     `[[Nautilus Log]] {{[[roam/render]]:((${CODE_UID})) 22 15 5 "" 21}}`,`{{[[roam/render]]:((${CODE_UID}))`);
   return {
@@ -112,6 +123,7 @@ export function installVersionFixture({ core, taskCore, settings, getChildren, r
     current:()=>generations.at(-1).handle.bridge,
     currentSource:()=>codeGraph.blocks.get(CODE_UID).string,
     legacySource:()=>codeGraph.blocks.get(LEGACY_UIDS[0])?.string,
+    nativePrograms:()=>({current:nativeProgram(CODE_UID),legacy:nativeProgram(LEGACY_UIDS[0])}),
     async legacyWrite(){const start=codeGraph.trace.length;await legacyScaffold('roam/render','roam-render-Nautilus-Log','v1',LEGACY_UIDS[0],
       'Nautilus Log',`[[Nautilus Log]] {{[[roam/render]]:((${LEGACY_UIDS[0]})) 22 15 5 "" 21}}`,`{{[[roam/render]]:((${LEGACY_UIDS[0]}))`);
       return codeGraph.trace.slice(start).filter(row=>['create','update'].includes(row[0]));},

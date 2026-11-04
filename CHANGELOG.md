@@ -47,6 +47,13 @@
 
 ### Fixed
 
+- Isolate the canonical renderer in a single-source `renderer` container instead of
+  the generic `code` group that older installers can adopt. Roam compiles sibling
+  code as one program, so mixed v1/r2 groups could select the old entry even when
+  the current source and reference were correct. Reject mixed groups before readiness
+  or scaffold writes; rename only verified, idle empty/single-source headers in place. Preserve
+  source bytes, UIDs, templates and historical references; no automatic legacy moves
+  or deletion. Add native-program grouping coverage to the renderer coexistence gate.
 - Reuse each visible Desk preview image on its own. Text, alt text, hidden images beyond
   the third, hidden-count changes, and reordering keep the decoded images that remain;
   replacing one displayed image reloads only that image. A failed image stays failed across

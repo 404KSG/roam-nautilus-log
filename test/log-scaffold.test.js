@@ -100,11 +100,11 @@ const blockFingerprint=f=>crypto.createHash('sha256').update(JSON.stringify([...
 function seedOwnedScaffold(f,{source=false}={}) {
   f.pages.set('roam/render','render-page');f.pages.set('Foreign notes','foreign-page');
   f.blocks.set(FIXED_TITLE,{uid:FIXED_TITLE,string:'Nautilus Log',parentUid:'render-page',order:0});
-  f.blocks.set(FIXED_HEADER,{uid:FIXED_HEADER,string:'code',parentUid:FIXED_TITLE,order:0});
+  f.blocks.set(FIXED_HEADER,{uid:FIXED_HEADER,string:'renderer',parentUid:FIXED_TITLE,order:0});
   if(source)f.blocks.set(FIXED_SOURCE,{uid:FIXED_SOURCE,string:expectedRendererSource(),parentUid:FIXED_HEADER,order:0});
 }
 async function loadWithGraph(f, settings = new Map([['language','en']])) {
-  global.window={roamAlphaAPI:f.roam,crypto:crypto.webcrypto,dispatchEvent(){}};installTestHostLocks(window);
+  global.window={roamAlphaAPI:f.roam,crypto:crypto.webcrypto,dispatchEvent(){},...f.host};installTestHostLocks(window);
   const module=await import(`data:text/javascript;base64,${fs.readFileSync(path.join(__dirname,'../extension.js')).toString('base64')}#scaffold-ownership-${Math.random()}`);
   await module.default.onload({extensionAPI:{settings:{get:key=>settings.get(key),set:async(key,value)=>settings.set(key,value),panel:{create(){}}}}});
   return module;
@@ -126,6 +126,125 @@ test('template presentation identity follows the managed root and never changes 
     assert.equal(module.readManagedTemplateView(),null);
     assert.equal(f.blocks.get('nested-row').parentUid,'fixed-row');
   } finally {module.default.onunload();delete global.window;}
+});
+
+test('new renderer programs do not use the legacy installer code label', async () => {
+  const f = createRoamMock(), module = await loadWithGraph(f);
+  try {
+    assert.equal(f.blocks.get(FIXED_HEADER).string, 'renderer');
+    assert.equal(f.blocks.get(FIXED_SOURCE).parentUid, FIXED_HEADER);
+    assert.equal(window.nautilusLogR2.ready, true);
+  } finally { module.default.onunload(); delete global.window; }
+});
+
+test('isolated old code headers upgrade in place without changing source or template identities', async () => {
+  const f = createRoamMock(); seedOwnedScaffold(f, { source: true });
+  f.blocks.set(FIXED_TEMPLATE, { uid: FIXED_TEMPLATE, string: 'Nautilus Log [[roam/templates]]', parentUid: FIXED_TITLE, order: 1 });
+  f.blocks.set(FIXED_RENDER, { uid: FIXED_RENDER, string: `{{[[roam/render]]:((${FIXED_SOURCE}))}}`, parentUid: FIXED_TEMPLATE, order: 0 });
+  Object.assign(f.blocks.get(FIXED_HEADER), { string: 'code', open: false, heading: 2 });
+  const source = f.blocks.get(FIXED_SOURCE).string, beforeUids = [...f.blocks.keys()], writes = [];
+  const update = f.roam.updateBlock;
+  f.roam.updateBlock = async payload => { writes.push(payload.block); return update(payload); };
+  let module = await loadWithGraph(f);
+  try {
+    assert.equal(f.blocks.get(FIXED_HEADER).string, 'renderer');
+    assert.equal(f.blocks.get(FIXED_HEADER).open, false); assert.equal(f.blocks.get(FIXED_HEADER).heading, 2);
+    assert.deepEqual(writes, [{ uid: FIXED_HEADER, string: 'renderer' }]);
+    assert.equal(f.blocks.get(FIXED_SOURCE).string, source); assert.deepEqual([...f.blocks.keys()], beforeUids);
+    assert.equal(module.readRendererSource().programIsolated, true); assert.equal(window.nautilusLogR2.ready, true);
+    module.default.onunload(); writes.length = 0;
+    module = await loadWithGraph(f);
+    assert.deepEqual(writes, [], 'a confirmed header must not be rewritten on reload');
+  } finally { module.default.onunload(); delete global.window; }
+});
+
+test('an owned empty legacy header resumes without another code group or source UID', async () => {
+  const f = createRoamMock(); seedOwnedScaffold(f); f.blocks.get(FIXED_HEADER).string = 'code';
+  const module = await loadWithGraph(f);
+  try {
+    assert.equal(window.nautilusLogR2.ready, true);
+    assert.equal(f.blocks.get(FIXED_HEADER).string, 'renderer');
+    assert.equal(f.blocks.get(FIXED_SOURCE).parentUid, FIXED_HEADER);
+    assert.equal([...f.blocks.values()].filter(row => row.parentUid === FIXED_HEADER).length, 1);
+    assert.equal([...f.blocks.values()].filter(row => row.string === 'renderer').length, 1);
+  } finally { module.default.onunload(); delete global.window; }
+});
+
+test('an editing code header is preserved and cannot claim isolated readiness', async () => {
+  const f = createRoamMock(); seedOwnedScaffold(f, { source: true });
+  f.blocks.get(FIXED_HEADER).string = 'code';
+  f.roam.ui = { getFocusedBlock: () => ({ 'block-uid': FIXED_HEADER }) };
+  const before = blockFingerprint(f), module = await loadWithGraph(f);
+  try {
+    assert.equal(blockFingerprint(f), before);
+    assert.equal(window.nautilusLogR2.ready, false);
+    assert.equal(f.blocks.get(FIXED_HEADER).string, 'code');
+  } finally { module.default.onunload(); delete global.window; }
+});
+
+test('header isolation preserves active or divergent native editor buffers', async t => {
+  for (const mode of ['active', 'divergent']) await t.test(mode, async () => {
+    const f = createRoamMock(); seedOwnedScaffold(f, { source: true });
+    f.blocks.get(FIXED_HEADER).string = 'code';
+    const editor = { id: `block-input-fixture-${FIXED_HEADER}`, value: mode === 'active' ? 'code' : 'my unsaved title' };
+    f.host = { document: { activeElement: mode === 'active' ? editor : null,
+      querySelectorAll: selector => selector.startsWith('textarea[id]') ? [editor] : [],
+      querySelector: () => null, getElementById: () => null, addEventListener() {}, removeEventListener() {} } };
+    const before = blockFingerprint(f), module = await loadWithGraph(f);
+    try {
+      assert.equal(blockFingerprint(f), before); assert.equal(window.nautilusLogR2.ready, false);
+      assert.match(window.nautilusLogR2.error, /active or unsaved editor/);
+      assert.equal(editor.value, mode === 'active' ? 'code' : 'my unsaved title');
+    } finally { module.default.onunload(); delete global.window; }
+  });
+});
+
+test('header isolation confirms the result and stops on post-write ownership changes', async t => {
+  for (const mode of ['no-op', 'reject-before', 'reject-after', 'foreign-parent', 'new-sibling']) await t.test(mode, async () => {
+    const f = createRoamMock(); seedOwnedScaffold(f, { source: true });
+    f.blocks.get(FIXED_HEADER).string = 'code';
+    f.blocks.set(FIXED_TEMPLATE, { uid: FIXED_TEMPLATE, string: 'Nautilus Log [[roam/templates]]', parentUid: FIXED_TITLE, order: 1 });
+    f.blocks.set(FIXED_RENDER, { uid: FIXED_RENDER, string: `{{[[roam/render]]:((${FIXED_SOURCE}))}}`, parentUid: FIXED_TEMPLATE, order: 0 });
+    const source = f.blocks.get(FIXED_SOURCE).string, writes = [], update = f.roam.updateBlock;
+    f.roam.updateBlock = async payload => {
+      writes.push(payload.block.uid);
+      if (mode === 'no-op') return;
+      if (mode === 'reject-before') throw Error('Injected header write rejection');
+      await update(payload);
+      if (mode === 'reject-after') throw Error('Injected lost acknowledgement');
+      if (mode === 'foreign-parent') f.blocks.get(FIXED_HEADER).parentUid = 'foreign-page';
+      if (mode === 'new-sibling') f.blocks.set('concurrent-code', { uid: 'concurrent-code', string: '```clojure\n(defn other [])\n```', parentUid: FIXED_HEADER, order: 1 });
+    };
+    const module = await loadWithGraph(f);
+    try {
+      assert.deepEqual(writes, [FIXED_HEADER]);
+      assert.equal(window.nautilusLogR2.ready, mode === 'reject-after');
+      assert.equal(f.blocks.get(FIXED_SOURCE).string, source);
+      if (mode === 'new-sibling') assert.equal(f.blocks.get('concurrent-code').parentUid, FIXED_HEADER);
+    } finally { module.default.onunload(); delete global.window; }
+  });
+});
+
+test('mixed native renderer programs fail closed before graph writes', async t => {
+  for (const name of ['legacy-first', 'legacy-last', 'foreign-code', 'missing-current-source']) await t.test(name, async () => {
+    const f = createRoamMock(); seedOwnedScaffold(f, { source: name !== 'missing-current-source' });
+    const siblingUid = name === 'foreign-code' ? 'foreign-source' : 'roam-render-Nautilus-Log-cljs';
+    const siblingText = name === 'foreign-code' ? '```javascript\nfunction other(){return null;}\n```'
+      : '```clojure\n(ns nautilus-log-v1)\n(defn main [_] [:div "legacy"])\n```';
+    f.blocks.set(siblingUid, { uid: siblingUid, string: siblingText, parentUid: FIXED_HEADER, order: name === 'legacy-last' ? 1 : 0 });
+    if (f.blocks.has(FIXED_SOURCE)) f.blocks.get(FIXED_SOURCE).order = name === 'legacy-last' ? 0 : 1;
+    const before = blockFingerprint(f), writes = [];
+    for (const key of ['createBlock', 'updateBlock']) {
+      const original = f.roam[key]; f.roam[key] = async payload => { writes.push([key, payload.block.uid]); return original(payload); };
+    }
+    const module = await loadWithGraph(f);
+    try {
+      assert.equal(window.nautilusLogR2.ready, false, 'a correct r2 body must not certify a mixed native program');
+      assert.deepEqual(writes, [], 'preserve all code blocks; do not silently move or remove the legacy source');
+      assert.equal(blockFingerprint(f), before);
+      assert.throws(() => module.readRendererSource(), /source group|code group|isolation/i);
+    } finally { module.default.onunload(); delete global.window; }
+  });
 });
 
 test('source upgrade receipts gate bootstrap and readiness without adding another source',async t=>{
@@ -216,10 +335,10 @@ test('unreadable renderer page identity is not treated as an absent page',async(
   finally {module.default.onunload();delete global.window;}
 });
 
-test('owned current source tolerates legacy siblings and ignores unused deterministic template UIDs',async()=>{
+test('owned current source preserves a separate legacy program and unused deterministic template UIDs',async()=>{
   const f=createRoamMock();seedOwnedScaffold(f,{source:true});
-  f.blocks.get(FIXED_SOURCE).order=1;
-  f.blocks.set('roam-render-Nautilus-Log-cljs',{uid:'roam-render-Nautilus-Log-cljs',string:'legacy source unchanged',parentUid:FIXED_HEADER,order:0});
+  f.blocks.set('legacy-header',{uid:'legacy-header',string:'code',parentUid:FIXED_TITLE,order:1});
+  f.blocks.set('roam-render-Nautilus-Log-cljs',{uid:'roam-render-Nautilus-Log-cljs',string:'legacy source unchanged',parentUid:'legacy-header',order:0});
   f.blocks.set('custom-template',{uid:'custom-template',string:'Nautilus Log [[roam/templates]]',parentUid:'render-page',order:1});
   f.blocks.set('custom-render',{uid:'custom-render',string:`[[Custom]] {{[[roam/render]]:((${FIXED_SOURCE})) 22 15 5 "" 21}}`,parentUid:'custom-template',order:0});
   for(const uid of [FIXED_TEMPLATE,FIXED_RENDER])f.blocks.set(uid,{uid,string:'Unrelated reserved-looking name',parentUid:'foreign-page',order:0});

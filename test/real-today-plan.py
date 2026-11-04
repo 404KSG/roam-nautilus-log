@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Actual source reader + session + adapter + both launchers. Only the host graph/time is fake."""
 import json
+import os
 import subprocess
 import traceback
 from pathlib import Path
@@ -8,7 +9,7 @@ from unittest import SkipTest
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = Path('/tmp/nautilus-real-today-plan')
+OUT = Path(os.environ.get('NAUTILUS_REAL_PLAN_OUT', '/tmp/nautilus-real-today-plan'))
 TRIGGER = '.nautilus-log-timing__trigger'
 TOKEN = '.nautilus-log-timing__capacity-token'
 ROOT_UID = 'nautilus-log-plan-2026-09-09'
