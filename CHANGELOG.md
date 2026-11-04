@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Distinguish the managed template as a preview without changing its fixed content or
+  nested outline. Suppress execution-capacity, unscheduled, and time-elapsing indicators
+  only on that verified template; dated plans keep their normal state. Scope the view
+  across main/sidebar/embed copies with lifecycle-owned metadata watches and no polling.
 - Keep one permanent renderer source UID across source revisions. Verified published
   predecessors upgrade in place with a separate hash-only pending receipt; custom,
   newer, editing, or unconfirmed sources are preserved without creating another code

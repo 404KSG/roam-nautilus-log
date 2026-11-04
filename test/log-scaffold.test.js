@@ -110,6 +110,24 @@ async function loadWithGraph(f, settings = new Map([['language','en']])) {
   return module;
 }
 
+test('template presentation identity follows the managed root and never changes its content',async()=>{
+  const f=createRoamMock();seedOwnedScaffold(f,{source:true});
+  f.blocks.set('view-template',{uid:'view-template',string:'Nautilus Log [[roam/templates]]',parentUid:FIXED_TITLE,order:1});
+  f.blocks.set('view-render',{uid:'view-render',string:`{{[[roam/render]]:((${FIXED_SOURCE}))}}`,parentUid:'view-template',order:0});
+  f.blocks.set('fixed-row',{uid:'fixed-row',string:'09:00-10:00 Routine',parentUid:'view-render',order:0});
+  f.blocks.set('nested-row',{uid:'nested-row',string:'Preserved detail',parentUid:'fixed-row',order:0});
+  const module=await loadWithGraph(f);const before=blockFingerprint(f);
+  try {
+    assert.deepEqual(module.readManagedTemplateView(),{templateUid:'view-template',renderUid:'view-render'});
+    assert.equal(blockFingerprint(f),before);
+    f.blocks.get('view-template').string='My routine [[roam/templates]]';
+    assert.deepEqual(module.readManagedTemplateView(),{templateUid:'view-template',renderUid:'view-render'});
+    f.blocks.get('view-template').parentUid='foreign-page';
+    assert.equal(module.readManagedTemplateView(),null);
+    assert.equal(f.blocks.get('nested-row').parentUid,'fixed-row');
+  } finally {module.default.onunload();delete global.window;}
+});
+
 test('source upgrade receipts gate bootstrap and readiness without adding another source',async t=>{
   for(const mode of ['exact-after','different-after','missing-source','foreign-graph'])await t.test(mode,async()=>{
     const f=createRoamMock();seedOwnedScaffold(f,{source:mode!=='missing-source'});

@@ -69,7 +69,7 @@ test('extension binds Desk to shared reads and destroys it before destroying the
   assert.match(source, /ownedDesk\.restoreMountedHosts\(/);
   assert.match(source, /const ownedDesk = deskView/);
   assert.match(source, /openDesk: options => ownedDesk\.open\(options\)/);
-  assert.match(source, /closeDeskHost: container => ownedDesk\.closeForHost\(container\)/);
+  assert.match(source, /closeDeskHost: container => \{[^}]*ownedDesk\.closeForHost\(container\)/);
   for (const section of [source.slice(source.indexOf('async function onload'), source.indexOf('function onunload')),
     source.slice(source.indexOf('function onunload'), source.indexOf('\nexport {'))]) {
     assert.ok(section.indexOf('deskView?.destroy()') >= 0);

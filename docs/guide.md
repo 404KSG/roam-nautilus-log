@@ -555,7 +555,16 @@ there is no registry that follows arbitrary moves outside it.
 
 An intentionally empty template is valid: it has one renderer root and no task/event
 children. Reloading preserves that empty tree, and creating a plan copies only the root.
-Ordinary notes stored elsewhere are never pulled back in or used to refill it.
+Ordinary notes stored elsewhere are never pulled back in or used to refill it. This is
+not permission to clear a populated template to change its appearance.
+
+The verified managed template uses a **Template preview** heading. Its fixed schedule,
+reference tasks, estimates, native child hierarchy, and diagram remain intact. Remaining
+capacity, no-fitting-slot/unscheduled totals, and time-elapsing indicators are hidden in
+this template view, including their accessibility text. Actual dated plans retain their
+normal time state. This presentation distinction never moves blocks, changes task text or
+settings, or stops an active timer. Main, sidebar, and embedded copies share the same
+verified template identity; unrelated renderers are not styled as templates.
 
 Default template, render-reference, code-group, and canonical source UIDs are stable
 identities. Graphs with legacy code can be explicitly consolidated: inspect every incoming

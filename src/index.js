@@ -4,6 +4,7 @@ import {
   isRightSidebarRenderContext,
   readBlockTree,
   readExistingTemplateState,
+  readManagedTemplateView,
   shouldSuppressRenderContext,
   inspectRendererScaffold,
   readRendererSource,
@@ -43,6 +44,7 @@ import { createRendererMigration, createRendererSourceUpgrade } from './renderer
 import { graphName } from './graph-context';
 import { createDeskView } from "./desk-view";
 import { createChartHelp } from "./chart-help";
+import { createTemplatePresentation } from './template-presentation';
 import { createDeskActions } from "./desk-actions";
 import { createDeskDiagnosticCommands } from "./desk-diagnostics";
 import {
@@ -134,6 +136,7 @@ let todayPlanCommands = null;
 let planWatchBridge = null;
 let deskView = null;
 let chartHelp = null;
+let templatePresentation = null;
 let deskActions = null;
 let deskDiagnosticCommands = null;
 let calendarRuntime = null;
@@ -251,6 +254,7 @@ function publishRuntimeSettings(extensionAPI) {
   if (typeof window === "undefined") return;
   const settings = runtimeSettings(extensionAPI);
   rendererBridge?.publish(settings);
+  templatePresentation?.refresh();
   if (typeof window.dispatchEvent === "function") {
     const event = typeof window.CustomEvent === "function"
       ? new window.CustomEvent(settingsEventName, { detail: { settings } })
@@ -917,6 +921,8 @@ async function onload({ extensionAPI }) {
   completionStampAdapter = null;
   completionStampWriter?.destroy();
   completionStampWriter = null;
+  templatePresentation?.destroy();
+  templatePresentation = null;
   chartHelp?.destroy();
   chartHelp = createChartHelp({
     revision: typeof __NAUTILUS_SOURCE_REVISION__ === 'string' ? __NAUTILUS_SOURCE_REVISION__ : 'unknown',
@@ -928,6 +934,7 @@ async function onload({ extensionAPI }) {
   planWatchBridge = createPlanWatchBridge({ readString: readBlockString });
   let loadBridge = null;
   let loadCalendar = null;
+  let loadTemplatePresentation = null;
   deskActions = createDeskActions();
   deskView = createDeskView({
     revision: typeof __NAUTILUS_SOURCE_REVISION__ === 'string' ? __NAUTILUS_SOURCE_REVISION__ : 'unknown',
@@ -956,8 +963,9 @@ async function onload({ extensionAPI }) {
       shouldSuppressRenderContext, isRightSidebarRenderContext, getClockRenderContext,
       resolveTaskInstance: resolveRendererTaskInstance, createRendererPlanSession,
       readPlan: ownedWatch.read, watchPlan: ownedWatch.subscribe,
-      openDesk: options => ownedDesk.open(options), registerDeskHost: options => ownedDesk.registerHost(options),
-      closeDeskHost: container => ownedDesk.closeForHost(container),
+      openDesk: options => ownedDesk.open(options),
+      registerDeskHost: options => { loadTemplatePresentation?.register(options);return ownedDesk.registerHost(options); },
+      closeDeskHost: container => { loadTemplatePresentation?.close(container);return ownedDesk.closeForHost(container); },
       toggleChartHelp: options => ownedHelp.toggle(options), closeChartHelp: anchor => ownedHelp.closeForAnchor(anchor),
       locatePlanTask: (uid, origin, sidebar = false) => sidebar ? openTaskInRightSidebar(uid) : locateTaskInCurrentSurface(uid, { origin }),
       syncCalendarPlan: options => loadCalendar ? loadCalendar.syncPlan(options) : Promise.reject(Error('Google Calendar sync is not ready.')),
@@ -965,6 +973,12 @@ async function onload({ extensionAPI }) {
   });
   rendererBridge = loadBridge;
   r2BridgeOwner = loadBridge.bridge;
+  loadTemplatePresentation = createTemplatePresentation({ host: window,
+    resolveIdentity: () => readManagedTemplateView(activeRenderStringCore),
+    getLanguage: () => loadBridge.bridge.settings.language,
+    isActive: () => currentLoad() && loadBridge.owns(),
+  });
+  templatePresentation = loadTemplatePresentation;
   rendererMigration = createRendererMigration({ extensionAPI,
     sourceReady: () => currentLoad() && loadBridge.owns() && readRendererSource().state === 'current',
     notify: message => showToast(message, 'warning'),
@@ -1106,6 +1120,8 @@ function onunload() {
   todayPlanSession?.destroy();
   todayPlanSession = null;
   stopTiming({ closeActive: false });
+  templatePresentation?.destroy();
+  templatePresentation = null;
   chartHelp?.destroy();
   chartHelp = null;
   deskDiagnosticCommands?.destroy();
@@ -1156,6 +1172,8 @@ export {
   createRendererPlanSession,
   createRendererMigration,
   createRendererSourceUpgrade,
+  createTemplatePresentation,
+  readManagedTemplateView,
   installRendererBridge,
   inspectRendererScaffold,
   readRendererSource,
