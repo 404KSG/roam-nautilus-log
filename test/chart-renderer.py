@@ -1656,7 +1656,12 @@ def reference_completion_contract(page):
     assert event()['reference-completion'].get('sourceDate') is None
     page.evaluate('()=>__chartHarness.updateReferenceSource("completion-source",{string:"{{[[DONE]]}} Completed reference d03:00"})')
     expect(record).to_have_attribute('data-chart-kind', 'outside-window')
-    assert [event()['start'], event()['end']] == [165, 180]
+    # Both endpoints are outside the window; the existing DOM kind cannot
+    # certify that the newly requested source stamp has reached the model.
+    page.wait_for_function('''()=>{const e=__chartHarness.scene().records.find(r=>r.uid==='completion-wrapper')?.event;
+      return e?.start===165&&e.end===180&&e['completion-time-origin']==='reference'}''')
+    value = event()
+    assert [value['start'], value['end']] == [165, 180], value
     assert state(page)['writes'] == 0
     report['overnightPlanClockInterpretation'] = True
     return report
