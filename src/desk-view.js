@@ -133,9 +133,10 @@ export function createDeskView({
     let previewAdapter = null;
     try { previewAdapter = createModernDeskPreviewAdapter(roam); }
     catch (_error) { /* A card reports Preview unavailable without falling back to query readers. */ }
-    const { el, icon, button, check, preview } = nativeElements(document);
+    const { el, icon, button, check, preview, clearPreview } = nativeElements(document);
     const cards = new Map();
     const previews = new Map();
+    const previewDirty = new Set();
     const previewQueue = new Set();
     const previewWatchStops = new Map();
     const scrollPositions = new Map();
@@ -677,11 +678,21 @@ export function createDeskView({
         schedulePreviews();
       });
     }
+    function renderHeading(card, text, status, hidden, label) {
+      if (card.headingText.textContent !== text) card.headingText.textContent = text;
+      if (card.heading.hidden !== hidden) card.heading.hidden = hidden;
+      const marker = card.heading.querySelector('.rm-desk-tile__check');
+      if (!status) marker?.remove();
+      else if (!marker) card.heading.prepend(check(status));
+      else marker.classList.toggle('rm-desk-tile__check--done', status === 'DONE');
+      if (card.open.getAttribute('aria-label') !== label) card.open.setAttribute('aria-label', label);
+    }
     async function loadPreview(uid) {
       const card = cards.get(uid);
-      if (!card || previews.has(uid) || previewLoading.has(uid) || status !== 'ready' || !checkScope()) return;
+      if (!card || (previews.has(uid) && !previewDirty.has(uid)) || previewLoading.has(uid) || status !== 'ready' || !checkScope()) return;
       const epoch = previewEpoch, version = previewVersions.get(uid) || 0, token = {};
-      previewLoading.set(uid, token); card.tile.dataset.previewState = 'loading';
+      previewLoading.set(uid, token);
+      card.tile.dataset.previewState = previews.has(uid) && !previews.get(uid).error ? 'updating' : 'loading';
       const current = () => inScope() && !folded && epoch === previewEpoch && version === (previewVersions.get(uid) || 0) && cards.get(uid) === card;
       const query = Boolean(search);
       let model;
@@ -707,13 +718,15 @@ export function createDeskView({
         const retained = [...previews.entries()].reduce((sum, [id, value]) => sum + (id === uid ? 0 : value.cost || 0), 0);
         if (cost + retained > 8 * 1024 * 1024) throw Object.assign(new Error('Preview memory limit reached.'), { code: 'preview-resource-limit' });
         model.cost = cost;
-        previews.set(uid, model); card.tile.dataset.previewState = 'ready';
+        previews.set(uid, model); previewDirty.delete(uid); card.tile.dataset.previewState = 'ready';
         const rootText = model.root.text, rootStatus = model.root.status;
-        card.headingText.textContent = rootText; card.heading.hidden = !rootText && !rootStatus;
-        card.heading.querySelector('.rm-desk-tile__check')?.remove();
-        if (rootStatus) card.heading.prepend(check(rootStatus));
-        card.open.setAttribute('aria-label', rootText || model.rows.find(row => row.text)?.text || 'Note');
-        preview(card.images, card.lines, model, () => { if (current() && card.tile.isConnected) masonry.layoutNow(); });
+        renderHeading(card, rootText, rootStatus, !rootText && !rootStatus, rootText || model.rows.find(row => row.text)?.text || 'Note');
+        // Image completion concerns the retained visible DOM, not the version of
+        // the text read which first created that image. The renderer rejects
+        // detached/replaced images; this guard owns the card and view lifetime.
+        preview(card.images, card.lines, model, () => {
+          if (inScope() && !folded && cards.get(uid) === card && card.tile.isConnected) masonry.layoutNow();
+        });
         if (search) renderCards(); else masonry.layoutNow();
       } catch (error) {
         if (current()) {
@@ -721,20 +734,21 @@ export function createDeskView({
             : error.watchTargets || model?.watchTargets;
           if (known?.length) syncPreviewWatches(uid, { watchTargets: known }).catch(() => {});
           previews.set(uid, { root: { text: '', status: null }, rows: [], images: [], more: false, searchText: '', searchIncomplete: true, error: true });
-          card.tile.dataset.previewState = 'error'; card.images.replaceChildren();
+          previewDirty.delete(uid);
+          card.tile.dataset.previewState = 'error'; clearPreview(card.images, card.lines);
           card.lines.textContent = 'Preview unavailable. Use Refresh to retry.';
           retryRead.hidden = false;
           if (search) renderCards(); else masonry.layoutNow();
         }
       } finally {
         if (previewLoading.get(uid) === token) previewLoading.delete(uid);
-        if (inScope() && !folded && cards.has(uid) && !previews.has(uid)) { previewQueue.add(uid); schedulePreviews(); }
+        if (inScope() && !folded && cards.has(uid) && (!previews.has(uid) || previewDirty.has(uid))) { previewQueue.add(uid); schedulePreviews(); }
       }
     }
     const visibleTasks = () => tasks.filter(task => {
       if (!search) return true;
       const model = previews.get(task.uid);
-      if (!model || model.error || model.searchIncomplete || !model.searchReady) return true;
+      if (!model || previewDirty.has(task.uid) || model.error || model.searchIncomplete || !model.searchReady) return true;
       return `${model.searchText} ${pageTitle}`.toLocaleLowerCase().includes(search);
     });
     function renderCards() {
@@ -744,8 +758,9 @@ export function createDeskView({
         if (live.has(uid)) continue;
         observer?.unobserve(card.tile);
         card.tile.remove();
+        clearPreview(card.images, card.lines);
         cards.delete(uid);
-        previews.delete(uid);
+        previews.delete(uid); previewDirty.delete(uid); previewQueue.delete(uid); previewVersions.delete(uid);
         scrollPositions.delete(uid);
         clearPreviewWatches(uid);
       }
@@ -801,17 +816,13 @@ export function createDeskView({
         const rootStatus = loaded ? cached.root?.status : null;
         const rowLabel = loaded ? cached.rows?.find((row) => row.text)?.text || '' : '';
         const label = rootText || rowLabel || 'Note';
-        card.headingText.textContent = rootText;
-        card.heading.hidden = loaded && !rootText && !rootStatus;
-        card.heading.querySelector('.rm-desk-tile__check')?.remove();
-        if (rootStatus) card.heading.prepend(check(rootStatus));
-        card.open.setAttribute('aria-label', label);
+        renderHeading(card, rootText, rootStatus, loaded && !rootText && !rootStatus, label);
         card.open.setAttribute('aria-disabled', String(busy || status !== 'ready'));
         card.open.tabIndex = status === 'ready' ? 0 : -1;
         card.tile.draggable = !busy && status === 'ready';
         card.top.disabled = busy || status !== 'ready' || !actions || task.uid === editingHoldUid;
         card.removeButton.disabled = busy || status !== 'ready' || !removeSurface || task.uid === editingHoldUid;
-        if (!previews.has(task.uid)) {
+        if (!previews.has(task.uid) || previewDirty.has(task.uid)) {
           if (search || !observer) previewQueue.add(task.uid);
           else observer.observe(card.tile);
         }
@@ -859,13 +870,15 @@ export function createDeskView({
       return Promise.all(stops.map(stop => stop.ready));
     }
     function invalidatePreview(uid) {
+      if (!checkScope()) return;
       clearPreviewWatches(uid);
-      previewVersions.set(uid, (previewVersions.get(uid) || 0) + 1);
-      previews.delete(uid);
-      previewQueue.delete(uid);
       const card = cards.get(uid);
       if (!card) return;
-      card.images.replaceChildren(); card.lines.replaceChildren();
+      previewVersions.set(uid, (previewVersions.get(uid) || 0) + 1);
+      previewDirty.add(uid);
+      previewQueue.delete(uid);
+      // Keep the last admitted model and DOM while the replacement is read
+      // and its watches are verified. Input must not briefly empty a card.
       if (search || !observer) previewQueue.add(uid); else observer.observe(card.tile);
       schedulePreviews();
     }
@@ -882,9 +895,9 @@ export function createDeskView({
       previewEpoch += 1;
       previewLoading.clear();
       clearPreviewWatches();
-      previews.clear();
+      previews.clear(); previewDirty.clear();
       previewQueue.clear();
-      for (const card of cards.values()) { card.images.replaceChildren(); card.lines.replaceChildren(); }
+      for (const card of cards.values()) clearPreview(card.images, card.lines);
     }
     function acceptSnapshot(snapshot) {
       if (!checkScope()) return;
@@ -1009,7 +1022,7 @@ export function createDeskView({
       selectedUid = null;
       dropEditor();
       stopWatch?.();
-      clearPreviewWatches();
+      resetPreviews();
       observer?.disconnect();
       foldObserver?.disconnect();
       masonry.destroy(); drag.destroy(); externalDrop?.destroy(); affordances.destroy(); outlineVisibility.destroy(); widthBinding?.destroy();

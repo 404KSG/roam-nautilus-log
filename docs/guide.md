@@ -304,8 +304,15 @@ Close button, backdrop dismissal and existing Escape behavior are unchanged.
 Read-only card previews keep updating while a task editor or new-note draft is open.
 Committed graph changes, including descendant folds, text and images, refresh the
 background card and its masonry height without closing or remounting the editor.
-The background stays inert. These reads do not save an unfinished input composition
-or copy the editor's uncommitted buffer into the graph.
+During refresh, cards retain their last verified preview instead of clearing images and
+rows before the replacement is ready. Text edits update existing rows and preserve unchanged
+image elements, so editing in the focus dialog or sidebar does not repeatedly collapse and
+rebuild the background cards. Image-source changes, folds and real content changes still
+update the preview; read failures remain explicit. Failed images are retried on a source
+change or explicit preview reset, not on every unrelated text edit.
+
+The background stays inert while the focus dialog is open. These reads do not save an
+unfinished input composition or copy the editor's uncommitted buffer into the graph.
 
 - **Unfinished tasks only.** Each direct task becomes a card, including unscheduled
   work. Events, DONE blocks, and dividers are excluded. Implicit tasks and referenced

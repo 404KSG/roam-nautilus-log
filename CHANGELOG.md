@@ -47,6 +47,11 @@
 
 ### Fixed
 
+- Keep verified Desk previews visible while committed edits are revalidated. Patch text,
+  checkbox state and row order without replacing unchanged rows or images, preventing
+  background cards from flashing and collapsing during focus-dialog or sidebar editing.
+  Preserve native editor/IME/selection/scroll ownership, live updates, explicit read errors,
+  image-settlement guards and cleanup; no graph writes or diagnostic feature is added.
 - Identify multiple renderer blocks inside one managed template explicitly, while preserving
   every root and descendant. Renderer notices now hide with the folded widget and return
   on expansion, preventing a zero-height sidebar instance from covering the following outline.

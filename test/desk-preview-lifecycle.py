@@ -228,6 +228,169 @@ def replacement(page, images):
     return {'undecoded': before_decode, 'newDecoded': decoded, 'afterRemoval': removed, 'afterFailure': failed}
 
 
+def typing_preview_stability(page, images, mode='focus-child'):
+    prepare(page)
+    page.evaluate('''host => {
+      const a=deskHarness.api;
+      a.setString('task-3','{{[[TODO]]}} Stable preview 30m');
+      a.addChild('typing-image','task-3','![]('+host+'/typing-stable.png)');
+      a.addChild('typing-text','task-3','Committed text 0');
+      a.addChild('typing-sibling','task-3','Unchanged sibling');
+      a.addChild('typing-other-image','task-0','![]('+host+'/typing-other.png)');
+    }''', HOST)
+    open_desk(page); all_loaded(page)
+    tile=card(page); tile.scroll_into_view_if_needed()
+    expect(tile.locator('.rm-desk-tile__text')).to_have_text(['Committed text 0','Unchanged sibling'])
+    page.wait_for_function('document.querySelector("[data-task-uid=task-3] img").naturalWidth>0 && document.querySelector("[data-task-uid=task-0] img").naturalWidth>0')
+    uid='task-3' if mode.endswith('root') else 'typing-text'
+    if mode.startswith('sidebar'):
+        page.evaluate('''async()=>{
+          const sidebar=document.createElement('div');sidebar.id='typing-sidebar';sidebar.className='rm-sidebar-window';
+          sidebar.style.cssText='position:fixed;right:0;top:0;width:280px;height:100vh;overflow:auto;background:white;z-index:500';
+          document.body.append(sidebar);
+          await roamAlphaAPI.ui.components.renderBlock({uid:'task-3',el:sidebar,'open?':true,'zoom-path?':true});
+        }''')
+        active=page.locator(f'#typing-sidebar textarea[data-block-uid="{uid}"]')
+    else:
+        tile.locator('.rm-desk-tile__preview').click()
+        active=page.locator(f'.nautilus-desk__native textarea[data-block-uid="{uid}"]')
+    active.focus(); active.evaluate('e=>e.setSelectionRange(2,5)')
+    page.evaluate('''()=>{
+      const scroll=document.querySelector('#typing-sidebar')||document.querySelector('.nautilus-desk__focus-body');
+      const filler=document.createElement('div');filler.style.height='1200px';scroll.append(filler);scroll.scrollTop=40;
+      const tile=document.querySelector('[data-task-uid=task-3]'),img=tile.querySelector('img');
+      const sibling=[...tile.querySelectorAll('.rm-desk-tile__row')].find(e=>e.textContent==='Unchanged sibling');
+      window.typingProof={tile,img,sibling,rootCheck:tile.querySelector('.rm-desk-tile__title .rm-desk-tile__check'),input:document.activeElement,layer:document.querySelector('.nautilus-desk__focus-layer'),
+        renders:deskHarness.api.stats.renders.length,unmounts:deskHarness.api.stats.unmounts,
+        other:document.querySelector('[data-task-uid=task-0]'),otherImage:document.querySelector('[data-task-uid=task-0] img'),
+        scroll,scrollTop:scroll.scrollTop,
+        removedImages:0,removedSiblings:0,emptyFrames:0,undecodedFrames:0,movedOtherCards:0,heights:[],sampling:true};
+      const p=typingProof;
+      p.markEditor=()=>{p.value=p.input.value;p.selectionStart=p.input.selectionStart;p.selectionEnd=p.input.selectionEnd;p.inputScroll=p.input.scrollTop;p.scrollTop=p.scroll.scrollTop;};
+      p.markEditor();
+      p.observer=new MutationObserver(changes=>{for(const c of changes)for(const n of c.removedNodes){
+        if(n===p.img||n.contains?.(p.img))p.removedImages++;
+        if(n===p.sibling||n.contains?.(p.sibling))p.removedSiblings++;
+      }});p.observer.observe(tile,{subtree:true,childList:true});
+      p.gridObserver=new MutationObserver(changes=>{for(const c of changes)for(const n of c.removedNodes)if(n===p.other)p.movedOtherCards++;});
+      p.gridObserver.observe(tile.parentElement,{childList:true});
+      const sample=()=>{if(!p.sampling)return;p.heights.push(tile.getBoundingClientRect().height);
+        if(!tile.querySelector('img')||!tile.querySelector('.rm-desk-tile__row'))p.emptyFrames++;
+        if(!tile.querySelector('img')?.naturalWidth)p.undecodedFrames++;
+        requestAnimationFrame(sample);};requestAnimationFrame(sample);
+    }''')
+    def proof():
+        return page.evaluate('''()=>{const p=typingProof;return {
+          sameImage:p.tile.querySelector('img')===p.img&&p.img.isConnected,
+          sameSibling:p.sibling.isConnected&&p.tile.contains(p.sibling),
+          sameCheck:!!p.rootCheck&&p.tile.querySelector('.rm-desk-tile__title .rm-desk-tile__check')===p.rootCheck,
+          sameEditor:document.activeElement===p.input&&p.input.isConnected,
+          sameLayer:document.querySelector('.nautilus-desk__focus-layer')===p.layer,
+          sameMounts:deskHarness.api.stats.renders.length===p.renders&&deskHarness.api.stats.unmounts===p.unmounts,
+          sameScroll:p.scroll.scrollTop===p.scrollTop,
+          sameBuffer:p.input.value===p.value,sameSelection:p.input.selectionStart===p.selectionStart&&p.input.selectionEnd===p.selectionEnd,
+          sameInputScroll:p.input.scrollTop===p.inputScroll,
+          sameOtherImage:p.other.isConnected&&p.other.querySelector('img')===p.otherImage,
+          removedImages:p.removedImages,removedSiblings:p.removedSiblings,emptyFrames:p.emptyFrames,
+          undecodedFrames:p.undecodedFrames,movedOtherCards:p.movedOtherCards,
+          height:p.tile.getBoundingClientRect().height};}''')
+    initial=proof()
+    # Simulate a real host commit while its public watch registration is delayed.
+    # The last admitted preview must remain visible throughout this interval.
+    text='{{[[TODO]]}} Stable preview v1 30m' if uid=='task-3' else 'Committed text 1'
+    active.fill(text)
+    page.evaluate('()=>typingProof.markEditor()')
+    page.evaluate('''({uid,text})=>{deskHarness.api.holdNextWatchRegistration('task-3');deskHarness.api.setString(uid,text);}''',{'uid':uid,'text':text})
+    page.wait_for_function('deskHarness.api.watchSnapshot().some(w=>w.uid==="task-3"&&w.state==="held")')
+    settle(page); held=proof()
+    assert all(held[k] for k in ['sameImage','sameSibling','sameCheck','sameEditor','sameLayer','sameMounts','sameScroll','sameInputScroll','sameBuffer','sameSelection','sameOtherImage']) and held['height']==initial['height'], {'mode':mode,'initial':initial,'held':held}
+    page.evaluate('()=>deskHarness.api.release()')
+    expected='Stable preview v1 30m' if uid=='task-3' else text
+    target=tile.locator('.rm-desk-tile__title') if uid=='task-3' else tile.locator('.rm-desk-tile__text').first
+    expect(target).to_have_text(expected); settle(page)
+    for n in range(2,8):
+        text=f'{{{{[[TODO]]}}}} Stable preview v{n} 30m' if uid=='task-3' else f'Committed text {n}'
+        active.fill(text)
+        page.evaluate('()=>typingProof.markEditor()')
+        page.evaluate('({uid,text})=>deskHarness.api.setString(uid,text)',{'uid':uid,'text':text})
+        expect(target).to_have_text(f'Stable preview v{n} 30m' if uid=='task-3' else text)
+    settle(page); final=proof()
+    assert all(final[k] for k in ['sameImage','sameSibling','sameCheck','sameEditor','sameLayer','sameMounts','sameScroll','sameInputScroll','sameBuffer','sameSelection','sameOtherImage']),final
+    assert final['removedImages']==final['removedSiblings']==final['emptyFrames']==final['undecodedFrames']==final['movedOtherCards']==0,final
+    # A different committed descendant may refresh while native IME is uncommitted.
+    buffer='未提交输入法缓冲\n'*30
+    active.dispatch_event('compositionstart');active.fill(buffer)
+    active.evaluate('e=>{e.setSelectionRange(2,5);e.scrollTop=70;typingProof.scroll.scrollTop=40;typingProof.markEditor()}')
+    page.evaluate('()=>deskHarness.api.setString("typing-sibling","Updated sibling")')
+    expect(tile.locator('.rm-desk-tile__text').last).to_have_text('Updated sibling');settle(page)
+    assert active.input_value()==buffer
+    assert active.evaluate('e=>e.selectionStart===2&&e.selectionEnd===5&&e.scrollTop===typingProof.inputScroll&&typingProof.inputScroll>0')
+    ime=proof();assert all(ime[k] for k in ['sameImage','sameSibling','sameCheck','sameEditor','sameLayer','sameMounts','sameScroll','sameInputScroll','sameBuffer','sameSelection','sameOtherImage']),ime
+    assert ime['removedImages']==ime['removedSiblings']==ime['emptyFrames']==ime['undecodedFrames']==ime['movedOtherCards']==0,ime
+    assert page.evaluate('()=>deskHarness.api.stats.writes.length')==0
+    page.evaluate('()=>{typingProof.sampling=false;typingProof.observer.disconnect();typingProof.gridObserver.disconnect()}')
+    page.screenshot(path=str(OUT/f'typing-{mode}.png'))
+    return {'held':held,'final':final,'ime':ime,'graphWrites':0}
+
+
+def retained_image_settlement(page, images):
+    # Without ResizeObserver, this specifically exercises the retained image's
+    # callback owner while a newer text admission is still pending.
+    page.evaluate('window.ResizeObserver=undefined')
+    images.held.add('/typing-held.png')
+    prepare(page)
+    page.evaluate('''host=>{
+      deskHarness.api.setString('task-3','{{[[TODO]]}} Retained image 30m');
+      deskHarness.api.addChild('retained-image','task-3','![]('+host+'/typing-held.png)');
+      deskHarness.api.addChild('retained-text','task-3','Initial text');
+    }''', HOST)
+    open_desk(page); all_loaded(page)
+    tile=card(page);tile.scroll_into_view_if_needed();images.wait('/typing-held.png')
+    page.evaluate('window.retainedImage=document.querySelector("[data-task-uid=task-3] img")')
+    page.evaluate('''()=>{deskHarness.api.holdNextWatchRegistration('task-3');deskHarness.api.setString('retained-text','Latest text');}''')
+    page.wait_for_function('deskHarness.api.watchSnapshot().some(w=>w.uid==="task-3"&&w.state==="held")')
+    assert page.evaluate('document.querySelector("[data-task-uid=task-3] img")===retainedImage')
+    before_decode=assert_geometry(page)
+    images.finish('/typing-held.png', TALL_PNG)
+    page.wait_for_function('retainedImage.naturalWidth===320')
+    pending_geometry=assert_geometry(page)
+    assert pending_geometry['height']>before_decode['height'] and pending_geometry['span']!=before_decode['span']
+    page.evaluate('()=>deskHarness.api.release()')
+    expect(tile.locator('.rm-desk-tile__text')).to_have_text(['Latest text'])
+    assert page.evaluate('document.querySelector("[data-task-uid=task-3] img")===retainedImage')
+    page.evaluate('url=>deskHarness.api.setString("retained-image","![Updated alt]("+url+")")',HOST+'/typing-held.png')
+    expect(tile.locator('img')).to_have_attribute('alt','Updated alt')
+    assert page.evaluate('document.querySelector("[data-task-uid=task-3] img")===retainedImage')
+    assert images.requests.count('/typing-held.png')==1,images.requests
+    assert page.evaluate('()=>deskHarness.api.stats.writes.length')==0
+    return {'pendingImageLayout':pending_geometry,'sameImageAfterTextAndAltChanges':True,'imageRequests':1,'graphWrites':0}
+
+
+def failed_image_text_stability(page, images):
+    images.failed.add('/typing-broken.png')
+    prepare(page)
+    page.evaluate('''host=>{
+      deskHarness.api.setString('task-3','{{[[TODO]]}} Mixed images 30m');
+      deskHarness.api.addChild('mixed-good','task-3','![]('+host+'/typing-good.png)');
+      deskHarness.api.addChild('mixed-broken','task-3','![]('+host+'/typing-broken.png)');
+      deskHarness.api.addChild('mixed-text','task-3','Initial caption');
+    }''', HOST)
+    open_desk(page);all_loaded(page);tile=card(page);tile.scroll_into_view_if_needed()
+    images.wait('/typing-broken.png');expect(tile.locator('img')).to_have_count(1)
+    page.wait_for_function('document.querySelector("[data-task-uid=task-3] img").naturalWidth===640')
+    page.evaluate('window.mixedGoodImage=document.querySelector("[data-task-uid=task-3] img")')
+    for n in range(3):
+        page.evaluate('n=>deskHarness.api.setString("mixed-text","Caption "+n)',n)
+        expect(tile.locator('.rm-desk-tile__text')).to_have_text([f'Caption {n}']);settle(page)
+        assert page.evaluate('document.querySelector("[data-task-uid=task-3] img")===mixedGoodImage')
+    assert images.requests.count('/typing-good.png')==images.requests.count('/typing-broken.png')==1,images.requests
+    stop_view(page,'fold');page.evaluate('()=>deskHarness.api.setCollapsed("plan-desk",false)');all_loaded(page)
+    page.wait_for_function('receivedImages.filter(p=>p==="/typing-broken.png").length===2')
+    expect(card(page).locator('img')).to_have_count(1)
+    assert page.evaluate('()=>deskHarness.api.stats.writes.length')==0
+    return {'textEditsDoNotRetryFailedImagesOrReplaceHealthyImages':True,'explicitResetRetries':True,'graphWrites':0}
+
+
 def live_focus_preview(page, images, mode='task'):
     if mode == 'no-observer':
         page.evaluate('window.IntersectionObserver = undefined')
@@ -600,6 +763,10 @@ def run():
     cases += [(f'late-image-{mode}', lambda p, i, mode=mode: late_image(p, i, mode)) for mode in ['fold', 'off', 'destroy']]
     cases += [(f'live-focus-{mode}', lambda p, i, mode=mode: live_focus_preview(p, i, mode))
               for mode in ['task', 'draft', 'no-observer', 'search']]
+    cases += [(f'typing-{mode}', lambda p, i, mode=mode: typing_preview_stability(p, i, mode))
+              for mode in ['focus-child', 'focus-root', 'sidebar-child', 'sidebar-root']]
+    cases += [('retained-image-settlement', retained_image_settlement),
+              ('failed-image-text-stability', failed_image_text_stability)]
     cases += [('replacement-removal-failure', replacement), ('descendant-fields', descendants),
               ('fallback-no-observer', lambda p, i: invalidation_fallback(p, i, 'no-observer')),
               ('fallback-search', lambda p, i: invalidation_fallback(p, i, 'search')),

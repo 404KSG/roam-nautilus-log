@@ -358,6 +358,36 @@ and [2024 redesign](https://linear.app/now/how-we-redesigned-the-linear-ui). The
 noise-reduction principles remain useful, but the user's current color and content decisions
 are authoritative. These dimensions are Nautilus choices, not official Linear tokens.
 
+## Preview refresh while editing
+
+A graph notification marks a card's preview dirty rather than deleting its last admitted
+model or clearing its DOM. Loading and refreshing are distinct: first admission may use a
+placeholder, but a refresh retains the verified content until the latest read and watch set
+are admitted. Existing epoch/version/card-identity checks still reject obsolete completions;
+a superseded read must requeue even when an older model remains cached. Search must not
+exclude a dirty card based on an obsolete search projection. Unreadable data still produces
+the existing explicit preview error. Scope loss closes immediately; removal, folding,
+explicit reset and teardown retire cached image callbacks and preview state.
+
+The read-only DOM renderer reuses unchanged image groups and row nodes keyed by source-row
+UID. Text, checkbox state, depth and order update only where needed. Unrelated cards stay
+in place. Text or alt-text edits do not reload the same image URLs, including failed slots;
+source changes or an explicit reset allow retry. Image completion belongs to the currently
+retained DOM and card/view lifetime, not the text-read generation which created it. Detached
+or replaced images cannot mutate a newer preview or its masonry.
+
+This does not freeze previews while editing or add a debounce delay. Committed content
+continues to refresh behind task/draft editors and alongside sidebar editing. Native editor
+identity, focus, caret/selection, scroll and uncommitted IME buffers remain untouched. No
+new diagnostic commands, graph writes or production instrumentation are introduced.
+
+Regression coverage includes four root/descendant × focus/sidebar typing cases with real
+raster responses, delayed watch admission, intermediate-frame sampling, image/row/checkbox
+identity checks, and external IME buffers. Additional cases cover image completion during a
+pending refresh without ResizeObserver, alt-text changes, failed-image retry isolation and
+explicit-reset recovery. Existing late-image, fold, removal, unreadable-source, search,
+watch-lifecycle and editor cases remain required.
+
 ## Verification and boundaries
 
 Use exact production CLJS/JS in the isolated renderer. The density fixture has six fixed events
