@@ -47,9 +47,9 @@ def run():
                 expect(owner.get_by_role('button', name='Hide Desk', exact=True)).to_have_count(0)
                 settle(page)
                 on = toggle.locator('.nautilus-log-desk-switch-thumb').bounding_box()
-                assert abs(on['x'] - off['x'] - 10) < .5
-                assert toggle.locator('.nautilus-log-desk-switch-track').evaluate('e=>e.offsetWidth===24 && e.offsetHeight===14')
-                assert toggle.locator('.nautilus-log-desk-switch-thumb').evaluate('e=>e.offsetWidth===10 && e.offsetHeight===10')
+                assert abs(on['x'] - off['x'] - 12) < .5
+                assert toggle.locator('.nautilus-log-desk-switch-track').evaluate('e=>e.offsetWidth===28 && e.offsetHeight===16')
+                assert toggle.locator('.nautilus-log-desk-switch-thumb').evaluate('e=>e.offsetWidth===12 && e.offsetHeight===12')
                 box = toggle.bounding_box(); assert box['height'] == 32 and box['width'] == 40
                 assert toggle.inner_text().strip() == ''
                 assert toggle.get_attribute('data-nautilus-tooltip') == 'Desk'
