@@ -372,6 +372,63 @@ def actual_warning_metric_contract(page):
     return {'samples': visible_samples, 'hiddenSampleCount': len(samples) - len(visible_samples), 'ratios': scores}
 
 
+def actual_warning_message_contract(page):
+    samples = page.evaluate('''() => {
+      const rgba = (paint) => {
+        const values = (paint.match(/[\\d.]+/g) || []).map(Number);
+        return values.length >= 3 ? [...values.slice(0, 3), values[3] ?? 1] : [0, 0, 0, 0];
+      };
+      const blend = (foreground, background) => foreground.slice(0, 3).map(
+        (channel, index) => channel * foreground[3] + background[index] * (1 - foreground[3]),
+      );
+      const ancestors = (element) => {
+        const nodes = [];
+        for (let node = element; node; node = node.parentElement) nodes.unshift(node);
+        return nodes;
+      };
+      const background = (element) => ancestors(element).reduce(
+        (value, node) => blend(rgba(getComputedStyle(node).backgroundColor), value), [255, 255, 255],
+      );
+      const opacity = (element) => ancestors(element).reduce(
+        (value, node) => value * Number(getComputedStyle(node).opacity), 1,
+      );
+      return [...document.querySelectorAll('.nautilus-log-warning-panel[open] .nautilus-log-warning-message')].map((element) => {
+        const style = getComputedStyle(element), rect = element.getBoundingClientRect();
+        const probe = document.createElement('span');
+        probe.style.color = 'var(--nautilus-log-warning)'; element.append(probe);
+        const warningToken = rgba(getComputedStyle(probe).color); probe.remove();
+        return {text: element.textContent, color: rgba(style.color), background: background(element), opacity: opacity(element),
+          visible: style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0, warningToken};
+      });
+    }''')
+    assert samples and all(sample['visible'] for sample in samples), samples
+    assert all(sample['color'][:3] == sample['warningToken'][:3] for sample in samples), samples
+    scores = [ratio(sample['color'][:3] + [sample['color'][3] * sample['opacity']], sample['background']) for sample in samples]
+    assert all(score >= 4.5 for score in scores), (samples, scores)
+    assert all(sample['opacity'] == 1 for sample in samples), samples
+    return {'samples': samples, 'ratios': scores}
+
+
+def open_actual_warning_message(page, context, width, dark):
+    load(page, 'mixed', context, width)
+    page.locator('body').evaluate('''(element, dark) => {
+      element.classList.toggle('bp3-dark', dark);
+      element.style.background = dark ? '#1d1e21' : '#fff';
+      element.style.color = dark ? '#ecedef' : '#25262a';
+    }''', dark)
+    page.evaluate('()=>__chartHarness.updateChild("event-standup", "09:00-09:00 Stand-up")')
+    panel = page.locator('.nautilus-log-warning-panel')
+    expect(panel).to_have_count(1)
+    closed = panel.bounding_box()
+    assert closed and abs(closed['height'] - 20) < .5, closed
+    panel.locator('summary').click()
+    expect(panel).to_have_attribute('open', '')
+    message = panel.locator('.nautilus-log-warning-message')
+    expect(message).to_be_visible()
+    settle_renderer(page)
+    return {'closedPanel': closed, 'openedPanel': panel.bounding_box(), 'message': actual_warning_message_contract(page)}
+
+
 def select(page, uid):
     page.mouse.move(1180, 980)
     page.locator(f'svg.nautilus-log-svg [data-task-uid="{uid}"]').focus()
@@ -2013,6 +2070,12 @@ def main():
             report['contrast']['nativeDark'] = contrast(page)
             coverage(page); page.screenshot(path=str(OUT / 'screenshots/dark.png'), full_page=True)
             page.emulate_media(reduced_motion='no-preference')
+            report['warningMessages'] = {}
+            for label, context, width, dark in [('light-main-720', 'main', 720, False), ('dark-main-720', 'main', 720, True), ('light-sidebar-280', 'sidebar', 280, False)]:
+                warning_message = open_actual_warning_message(page, context, width, dark)
+                assert warning_message['openedPanel'] and warning_message['openedPanel']['height'] > warning_message['closedPanel']['height'], warning_message
+                page.screenshot(path=str(OUT / 'screenshots' / f'warning-message-{label}.png'), full_page=True)
+                report['warningMessages'][label] = warning_message
             report['matrix'] = {}
             for context in ['main', 'sidebar', 'embed']:
                 for width in [280, 320, 520, 640, 960]:
