@@ -337,17 +337,6 @@ function managedTemplateCandidates(renderStringCore, strict = false) {
     .filter(Boolean);
 }
 
-// Presentation identity only: do not copy, filter, or rewrite its descendants.
-// Use the same strict candidate discovery as template creation and reuse.
-export function readManagedTemplateView(renderStringCore) {
-  const candidates = managedTemplateCandidates(renderStringCore, true);
-  if (candidates.length !== 1) return null;
-  const candidate = candidates[0];
-  return { templateUid: candidate.template.uid,
-    renderUid: candidate.renderBlock && inspectRenderer(candidate.renderBlock.string).kind === 'current'
-      ? candidate.renderBlock.uid : null };
-}
-
 export function readExistingTemplateState(renderStringCore) {
   const candidates = managedTemplateCandidates(renderStringCore);
   if (candidates.length !== 1) return null;

@@ -130,38 +130,6 @@
   text-align: left;
 }
 
-/* A verified template keeps its diagram and native descendants, but does not
-   report remaining capacity, execution time, or an unscheduled-task state. */
-.nautilus-log-container[data-nautilus-template-view] > .nautilus-log-shell > .nautilus-log-header > .nautilus-log-header-copy > .nautilus-log-metrics,
-.nautilus-log-container[data-nautilus-template-view] > .nautilus-log-shell > .nautilus-log-compact-overview,
-.nautilus-log-container[data-nautilus-template-view] > .nautilus-log-shell > .nautilus-log-content > .nautilus-log-workspace > .nautilus-log-pending-queue {
-  display: none;
-}
-
-.nautilus-log-container[data-nautilus-template-view] > .nautilus-log-shell > .nautilus-log-header > .nautilus-log-header-copy {
-  display: block;
-  flex: 1 1 auto;
-}
-
-.nautilus-log-container[data-nautilus-template-view] > .nautilus-log-shell > .nautilus-log-header--compact {
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.nautilus-log-template-caption {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 3px;
-  min-height: 50px;
-  color: var(--nautilus-log-text-main);
-  font-size: 12px;
-  line-height: 16px;
-}
-
-.nautilus-log-template-caption > strong { font-weight: 600; }
-.nautilus-log-template-caption > span { color: var(--nautilus-log-text-sub); font-size: 11px; }
-
 .nautilus-log-metrics {
   display: grid;
   grid-template-rows: 32px 16px;
