@@ -16,6 +16,8 @@ fixture.OUT = OUT
 
 
 def contrast_ratio(foreground, background):
+    alpha = foreground[3] if len(foreground) > 3 else 1
+    foreground = [alpha * channel + (1 - alpha) * background[index] for index, channel in enumerate(foreground[:3])]
     def luminance(color):
         channels = [channel / 255 for channel in color[:3]]
         linear = [channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4 for channel in channels]
@@ -49,14 +51,21 @@ def assert_text_contrast(page, selectors, label, *, warning=False):
       const blend = (foreground, background) => foreground.slice(0, 3).map(
         (channel, index) => channel * foreground[3] + background[index] * (1 - foreground[3]),
       );
-      const effectiveBackground = (element) => {
-        const ancestors = [];
-        for (let node = element; node; node = node.parentElement) ancestors.unshift(node);
-        return ancestors.reduce((background, node) => blend(rgba(getComputedStyle(node).backgroundColor), background), [255, 255, 255]);
+      const ancestors = (element) => {
+        const nodes = [];
+        for (let node = element; node; node = node.parentElement) nodes.unshift(node);
+        return nodes;
       };
-      return selectors.flatMap((selector) => [...document.querySelectorAll(selector)].map((element) => {
+      const effectiveBackground = (element) => ancestors(element).reduce(
+        (background, node) => blend(rgba(getComputedStyle(node).backgroundColor), background), [255, 255, 255],
+      );
+      const effectiveOpacity = (element) => ancestors(element).reduce(
+        (opacity, node) => opacity * Number(getComputedStyle(node).opacity), 1,
+      );
+      const samplesBySelector = Object.fromEntries(selectors.map((selector) => [selector, [...document.querySelectorAll(selector)].map((element) => {
         const style = getComputedStyle(element);
-        const sample = {selector, color: rgba(style.color), background: effectiveBackground(element)};
+        const rect = element.getBoundingClientRect();
+        const sample = {selector, color: rgba(style.color), background: effectiveBackground(element), opacity: effectiveOpacity(element), visible: style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0};
         if (warning) {
           const probe = document.createElement('span');
           probe.style.color = 'var(--nl-exec-warning)';
@@ -65,13 +74,19 @@ def assert_text_contrast(page, selectors, label, *, warning=False):
           probe.remove();
         }
         return sample;
-      }));
+      })]));
+      return samplesBySelector;
     }''', {'selectors': selectors, 'warning': warning})
-    assert samples, (label, 'no matching text')
-    ratios = [contrast_ratio(sample['color'], sample['background']) for sample in samples]
-    assert all(score >= 4.5 for score in ratios), (label, [{'selector': sample['selector'], 'ratio': score, 'color': sample['color'], 'background': sample['background']} for sample, score in zip(samples, ratios)])
+    missing = [selector for selector, samples in samples.items() if not samples]
+    hidden = [selector for selector, samples in samples.items() if not all(sample['visible'] for sample in samples)]
+    assert not missing, (label, 'missing selectors', missing)
+    assert not hidden, (label, 'hidden selectors', hidden)
+    flat_samples = [sample for samples in samples.values() for sample in samples]
+    assert all(sample['opacity'] == 1 for sample in flat_samples), (label, 'non-opaque ancestry', flat_samples)
+    ratios = [contrast_ratio(sample['color'], sample['background']) for sample in flat_samples]
+    assert all(score >= 4.5 for score in ratios), (label, [{'selector': sample['selector'], 'ratio': score, 'color': sample['color'], 'background': sample['background'], 'opacity': sample['opacity']} for sample, score in zip(flat_samples, ratios)])
     if warning:
-        assert all(sample['color'] == sample['warningToken'] for sample in samples), (label, samples)
+        assert all(sample['color'] == sample['warningToken'] for sample in flat_samples), (label, flat_samples)
 
 
 def run():
@@ -197,6 +212,9 @@ def run():
                     '.nautilus-log-timing__review-row-metrics',
                     '.nautilus-log-timing__review-state',
                 ], f'{theme} review metadata')
+                page.evaluate('''theme => { document.body.className = theme; energyBarHarness.mount({ tasks: energyBarHarness.tasks.WARNING_TASKS }); }''', theme)
+                fixture.open_plan(page)
+                assert_text_contrast(page, ['.nautilus-log-timing__capacity-part.is-warning strong'], f'{theme} execution warning', warning=True)
             page.evaluate('''() => { document.body.className = ''; energyBarHarness.mount({ tasks: [] }); }''')
             page.locator('.nautilus-log-timing__capacity-token').click()
             page.wait_for_selector('.nautilus-log-timing__popover')

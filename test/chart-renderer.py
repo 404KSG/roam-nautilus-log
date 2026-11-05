@@ -334,6 +334,44 @@ def contrast(page):
     return {'paint': paints, 'ratios': scores}
 
 
+def actual_warning_metric_contract(page):
+    samples = page.evaluate('''() => {
+      const rgba = (paint) => {
+        const values = (paint.match(/[\\d.]+/g) || []).map(Number);
+        return values.length >= 3 ? [...values.slice(0, 3), values[3] ?? 1] : [0, 0, 0, 0];
+      };
+      const blend = (foreground, background) => foreground.slice(0, 3).map(
+        (channel, index) => channel * foreground[3] + background[index] * (1 - foreground[3]),
+      );
+      const ancestors = (element) => {
+        const nodes = [];
+        for (let node = element; node; node = node.parentElement) nodes.unshift(node);
+        return nodes;
+      };
+      const background = (element) => ancestors(element).reduce(
+        (value, node) => blend(rgba(getComputedStyle(node).backgroundColor), value), [255, 255, 255],
+      );
+      const opacity = (element) => ancestors(element).reduce(
+        (value, node) => value * Number(getComputedStyle(node).opacity), 1,
+      );
+      return [...document.querySelectorAll('.nautilus-log-metric--warning .nautilus-log-metric-value')].map((element) => {
+        const style = getComputedStyle(element), rect = element.getBoundingClientRect();
+        const probe = document.createElement('span');
+        probe.style.color = 'var(--nautilus-log-warning)'; element.append(probe);
+        const warningToken = rgba(getComputedStyle(probe).color); probe.remove();
+        return {text: element.textContent, color: rgba(style.color), background: background(element), opacity: opacity(element),
+          visible: style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0, warningToken};
+      });
+    }''')
+    visible_samples = [sample for sample in samples if sample['visible']]
+    assert visible_samples, samples
+    assert all(sample['opacity'] == 1 for sample in visible_samples), visible_samples
+    assert all(sample['color'][:3] == sample['warningToken'][:3] for sample in visible_samples), visible_samples
+    scores = [ratio(sample['color'][:3] + [sample['color'][3] * sample['opacity']], sample['background']) for sample in visible_samples]
+    assert all(score >= 4.5 for score in scores), (visible_samples, scores)
+    return {'samples': visible_samples, 'hiddenSampleCount': len(samples) - len(visible_samples), 'ratios': scores}
+
+
 def select(page, uid):
     page.mouse.move(1180, 980)
     page.locator(f'svg.nautilus-log-svg [data-task-uid="{uid}"]').focus()
@@ -2001,6 +2039,7 @@ def main():
             report['stress'] = {}
             for context, width in [('main', 960), ('main', 520), ('sidebar', 320), ('sidebar', 280), ('embed', 640)]:
                 before = load(page, 'stress', context, width); coverage(page); geometry = geometry_audit(page)
+                warning_metric = actual_warning_metric_contract(page) if (context, width) == ('main', 520) else None
                 cjk = next(r for r in before['queueItems'] if r['uid'] == 'overflow-0')
                 assert cjk['title'] == next(r['description'] for r in before['pendingQueue']['items'] if r['uid'] == 'overflow-0')
                 assert before['queueKind'] == 'unscheduled' and not before['queueOpen']
@@ -2014,7 +2053,8 @@ def main():
                 assert all(abs(opened['svg'][key] - late['svg'][key]) < .5 for key in ['width', 'height'])
                 assert 'END_LONG' in page.locator('[data-queued-task-uid="overflow-3"]').inner_text()
                 page.screenshot(path=str(OUT / 'screenshots' / f'stress-{context}-{width}.png'), full_page=True)
-                report['stress'][f'{context}-{width}'] = {'before': compact_record(before), 'after': compact_record(late), 'geometry': geometry}
+                report['stress'][f'{context}-{width}'] = {'before': compact_record(before), 'after': compact_record(late), 'geometry': geometry,
+                    **({'warningMetricContrast': warning_metric} if warning_metric else {})}
             report['scenarios'] = {}
             for scenario in ['untimed-many', 'outside', 'sparse', 'dense', 'cjk', 'empty', 'completed', 'routine']:
                 load(page, scenario); s = coverage(page); geometry_audit(page)
