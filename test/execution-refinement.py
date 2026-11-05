@@ -15,6 +15,65 @@ spec.loader.exec_module(fixture)
 fixture.OUT = OUT
 
 
+def contrast_ratio(foreground, background):
+    def luminance(color):
+        channels = [channel / 255 for channel in color[:3]]
+        linear = [channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4 for channel in channels]
+        return sum(channel * weight for channel, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
+    low, high = sorted((luminance(foreground), luminance(background)))
+    return (high + 0.05) / (low + 0.05)
+
+
+def add_review_contrast_fixture(page):
+    page.evaluate('''() => {
+      const fixture = document.createElement('div');
+      fixture.dataset.executionContrastFixture = 'true';
+      fixture.innerHTML = `<section class="nautilus-log-timing__review-summary">
+        <div class="nautilus-log-timing__review-counts">Completed <strong>1/2</strong></div>
+        <div class="nautilus-log-timing__review-totals">Planned <strong>2h</strong></div>
+      </section>
+      <div class="nautilus-log-timing__review-row">
+        <span class="nautilus-log-timing__review-state">Compared</span>
+        <div class="nautilus-log-timing__review-row-metrics">Planned 1h</div>
+      </div>`;
+      document.querySelector('.nautilus-log-timing__popover').append(fixture);
+    }''')
+
+
+def assert_text_contrast(page, selectors, label, *, warning=False):
+    samples = page.evaluate('''({selectors, warning}) => {
+      const rgba = (paint) => {
+        const values = (paint.match(/[\\d.]+/g) || []).map(Number);
+        return values.length >= 3 ? [...values.slice(0, 3), values[3] ?? 1] : [0, 0, 0, 0];
+      };
+      const blend = (foreground, background) => foreground.slice(0, 3).map(
+        (channel, index) => channel * foreground[3] + background[index] * (1 - foreground[3]),
+      );
+      const effectiveBackground = (element) => {
+        const ancestors = [];
+        for (let node = element; node; node = node.parentElement) ancestors.unshift(node);
+        return ancestors.reduce((background, node) => blend(rgba(getComputedStyle(node).backgroundColor), background), [255, 255, 255]);
+      };
+      return selectors.flatMap((selector) => [...document.querySelectorAll(selector)].map((element) => {
+        const style = getComputedStyle(element);
+        const sample = {selector, color: rgba(style.color), background: effectiveBackground(element)};
+        if (warning) {
+          const probe = document.createElement('span');
+          probe.style.color = 'var(--nl-exec-warning)';
+          element.append(probe);
+          sample.warningToken = rgba(getComputedStyle(probe).color);
+          probe.remove();
+        }
+        return sample;
+      }));
+    }''', {'selectors': selectors, 'warning': warning})
+    assert samples, (label, 'no matching text')
+    ratios = [contrast_ratio(sample['color'], sample['background']) for sample in samples]
+    assert all(score >= 4.5 for score in ratios), (label, [{'selector': sample['selector'], 'ratio': score, 'color': sample['color'], 'background': sample['background']} for sample, score in zip(samples, ratios)])
+    if warning:
+        assert all(sample['color'] == sample['warningToken'] for sample in samples), (label, samples)
+
+
 def run():
     fixture.bundle()
     with sync_playwright() as p:
@@ -58,6 +117,19 @@ def run():
             expect(page.locator('.nautilus-log-timing__row-meta').first).to_contain_text('10:10–11:10')
             assert page.evaluate('() => originalComplete.isConnected && document.activeElement === originalComplete')
             page.screenshot(path=str(OUT / 'capacity.png'))
+            assert_text_contrast(page, [
+                '.nautilus-log-timing__capacity',
+                '.nautilus-log-timing__plan-heading',
+                '.nautilus-log-timing__row-meta',
+            ], 'light execution metadata')
+            page.get_by_role('tab', name='Review', exact=True).click()
+            add_review_contrast_fixture(page)
+            assert_text_contrast(page, [
+                '.nautilus-log-timing__review-counts',
+                '.nautilus-log-timing__review-totals',
+                '.nautilus-log-timing__review-row-metrics',
+                '.nautilus-log-timing__review-state',
+            ], 'light review metadata')
 
             timing = page.get_by_role('tab', name='Timing', exact=True)
             timing.focus()
@@ -102,6 +174,34 @@ def run():
             expect(page.locator('[data-task-uid="task-11"] .is-complete')).to_be_focused()
             after = page.locator('.nautilus-log-timing__list').evaluate('(el) => el.scrollTop')
             assert abs(before - after) <= 1, (before, after)
+
+            page.evaluate('''() => energyBarHarness.mount({
+                tasks: energyBarHarness.tasks.WARNING_TASKS,
+            })''')
+            fixture.open_plan(page)
+            assert_text_contrast(page, ['.nautilus-log-timing__capacity-part.is-warning strong'], 'light execution warning', warning=True)
+
+            for theme in ('bp3-dark', 'dark'):
+                page.evaluate('''theme => { document.body.className = theme; energyBarHarness.mount(); }''', theme)
+                fixture.open_plan(page)
+                assert_text_contrast(page, [
+                    '.nautilus-log-timing__capacity',
+                    '.nautilus-log-timing__plan-heading',
+                    '.nautilus-log-timing__row-meta',
+                ], f'{theme} execution metadata')
+                page.get_by_role('tab', name='Review', exact=True).click()
+                add_review_contrast_fixture(page)
+                assert_text_contrast(page, [
+                    '.nautilus-log-timing__review-counts',
+                    '.nautilus-log-timing__review-totals',
+                    '.nautilus-log-timing__review-row-metrics',
+                    '.nautilus-log-timing__review-state',
+                ], f'{theme} review metadata')
+            page.evaluate('''() => { document.body.className = ''; energyBarHarness.mount({ tasks: [] }); }''')
+            page.locator('.nautilus-log-timing__capacity-token').click()
+            page.wait_for_selector('.nautilus-log-timing__popover')
+            page.get_by_role('tab', name='Plan', exact=True).click()
+            assert_text_contrast(page, ['.nautilus-log-timing__empty'], 'light execution empty state')
             page.evaluate('() => energyBarHarness.destroy()')
             assert not errors, errors
             (OUT / 'results.json').write_text(json.dumps({'status': 'passed', 'pageerrors': errors}, indent=2))

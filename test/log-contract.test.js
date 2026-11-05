@@ -751,7 +751,8 @@ test('capacity summaries lead with the remaining quota and color values only', (
   assert.ok(strip.indexOf('part(summary.left') < strip.indexOf('part(summary.status'));
   assert.ok(strip.indexOf('part(summary.status') < strip.indexOf('part(summary.planned'));
   assert.doesNotMatch(css, /\.nautilus-log-timing__capacity-part\.is-warning\s*,/);
-  assert.match(css, /\.nautilus-log-timing__capacity-part\.is-warning strong\s*\{[^}]*color:\s*#ad690f;/s);
+  assert.match(css, /\.nautilus-log-timing__popover\s*\{[^}]*--nl-exec-warning:\s*#a6600a;/s);
+  assert.match(css, /\.nautilus-log-timing__capacity-part\.is-warning strong\s*\{[^}]*color:\s*var\(--nl-exec-warning,\s*#a6600a\);/s);
 });
 
 test('responsive observers rebind when Roam replaces the topbar or search surface', () => {

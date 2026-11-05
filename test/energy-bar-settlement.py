@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -26,6 +27,23 @@ def readings_js() -> str:
       const reserve = document.querySelector('.nautilus-log-timing__energy-reserve');
       const committed = document.querySelector('.nautilus-log-timing__energy-committed');
       const cs = (el) => el ? getComputedStyle(el) : null;
+      const rgba = (paint) => {
+        const values = (paint.match(/[\\d.]+/g) || []).map(Number);
+        return values.length >= 3 ? [...values.slice(0, 3), values[3] ?? 1] : [0, 0, 0, 0];
+      };
+      const blend = (foreground, background) => foreground.slice(0, 3).map(
+        (channel, index) => channel * foreground[3] + background[index] * (1 - foreground[3]),
+      );
+      const effectiveBackground = (element) => {
+        const ancestors = [];
+        for (let node = element; node; node = node.parentElement) ancestors.unshift(node);
+        return ancestors.reduce((background, node) => blend(rgba(getComputedStyle(node).backgroundColor), background), [255, 255, 255]);
+      };
+      const tokenProbe = document.createElement('span');
+      tokenProbe.style.color = 'var(--nautilus-log-warning)';
+      document.body.append(tokenProbe);
+      const warningTokenColor = getComputedStyle(tokenProbe).color;
+      tokenProbe.remove();
       const valueCs = cs(value);
       const labelCs = cs(label);
       const capacityRect = capacity?.getBoundingClientRect();
@@ -39,6 +57,10 @@ def readings_js() -> str:
         valueFontWeight: valueCs ? valueCs.fontWeight : null,
         valueVisibility: valueCs ? valueCs.visibility : null,
         labelVisibility: labelCs ? labelCs.visibility : null,
+        labelColor: labelCs ? labelCs.color : null,
+        labelBackground: label ? effectiveBackground(label) : null,
+        valueBackground: value ? effectiveBackground(value) : null,
+        warningTokenColor,
         confirming: Boolean(value && value.classList.contains('is-confirming')),
         warning: Boolean(planned && planned.classList.contains('is-warning')),
         statusCue: Boolean(capacity && capacity.classList.contains('is-status-cue')),
@@ -72,6 +94,24 @@ def read(page):
 def assert_true(condition, message, failures):
     if not condition:
         failures.append(message)
+
+
+def contrast_ratio(foreground, background):
+    def luminance(color):
+        channels = [channel / 255 for channel in color[:3]]
+        linear = [channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4 for channel in channels]
+        return sum(channel * weight for channel, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
+    low, high = sorted((luminance(foreground), luminance(background)))
+    return (high + 0.05) / (low + 0.05)
+
+
+def rgb(paint):
+    return [float(channel) for channel in re.findall(r"[\d.]+", paint)[:3]]
+
+
+def assert_contrast(foreground, background, prefix, failures):
+    score = contrast_ratio(rgb(foreground), background)
+    assert_true(score >= 4.5, f"{prefix}: contrast {score:.3f}:1", failures)
 
 
 def assert_geometry(info, failures, prefix):
@@ -186,6 +226,7 @@ def run() -> int:
         assert_true(before["reserveDuration"] == "0.36s", f"before: reserve duration {before['reserveDuration']}", failures)
         assert_true(before["committedDuration"] == "0.36s", f"before: committed duration {before['committedDuration']}", failures)
         assert_true(before["valueColor"] == "rgb(95, 111, 127)", f"before: value color {before['valueColor']}", failures)
+        assert_contrast(before["labelColor"], before["labelBackground"], "before: energy label", failures)
 
         open_plan(page)
         planned_before = before["valueText"]
@@ -272,7 +313,8 @@ def run() -> int:
             failures,
         )
         assert_true(warning["labelText"] == "", f"warning: label should be empty, got {warning['labelText']!r}", failures)
-        assert_true(warning["valueColor"] == "rgb(201, 108, 0)", f"warning: color {warning['valueColor']}", failures)
+        assert_true(warning["valueColor"] == warning["warningTokenColor"], f"warning: color no longer uses warning token {warning['valueColor']}", failures)
+        assert_contrast(warning["valueColor"], warning["valueBackground"], "warning: energy value", failures)
         assert_true(warning["confirming"] is False, "warning: confirming before complete", failures)
         open_plan(page)
         page.locator(".nautilus-log-timing__icon-button.is-complete").last.click()
@@ -287,7 +329,8 @@ def run() -> int:
             failures,
         )
         assert_true(warning_after["confirming"] is False, "warning-after: success confirm covered warning", failures)
-        assert_true(warning_after["valueColor"] == "rgb(201, 108, 0)", f"warning-after: color {warning_after['valueColor']}", failures)
+        assert_true(warning_after["valueColor"] == warning_after["warningTokenColor"], f"warning-after: color no longer uses warning token {warning_after['valueColor']}", failures)
+        assert_contrast(warning_after["valueColor"], warning_after["valueBackground"], "warning-after: energy value", failures)
         assert_true(warning_after["animationName"] in ("none", ""), f"warning-after: animation {warning_after['animationName']}", failures)
 
         page.evaluate("() => energyBarHarness.destroy()")
@@ -337,7 +380,8 @@ def run() -> int:
         assert_true(no_slot_after["valueText"] == "NO SLOT 5h30m", f"no-slot-after: cue {no_slot_after['valueText']!r}", failures)
         assert_true(no_slot_after["confirming"] is False, "no-slot-after: success cue covered warning", failures)
         assert_true(no_slot_after["animationName"] == "none", "no-slot-after: warning animated", failures)
-        assert_true(no_slot_after["valueColor"] == "rgb(201, 108, 0)", "no-slot-after: warning color changed", failures)
+        assert_true(no_slot_after["valueColor"] == no_slot_after["warningTokenColor"], "no-slot-after: warning no longer uses warning token", failures)
+        assert_contrast(no_slot_after["valueColor"], no_slot_after["valueBackground"], "no-slot-after: energy value", failures)
         screenshot(page, "09-no-slot-after-complete.png")
 
         def count_language_gets(task_count):
@@ -399,6 +443,7 @@ def run() -> int:
             assert_true(dark_after["confirming"] is True, f"{theme}: missing confirmation", failures)
             assert_true(dark_after["valueText"] == "1h", f"{theme}: planned value did not update", failures)
             assert_true(dark_after["valueColor"] == dark_before["valueColor"], f"{theme}: text color changed", failures)
+            assert_contrast(dark_after["labelColor"], dark_after["labelBackground"], f"{theme}: energy label", failures)
             assert_true(dark_after["reserveBg"] == "rgb(191, 204, 214)", f"{theme}: reserve color changed", failures)
             assert_true(dark_after["committedBg"] == "rgb(143, 191, 166)", f"{theme}: planned color changed", failures)
             screenshot(page, f"{index}-dark-confirm.png")

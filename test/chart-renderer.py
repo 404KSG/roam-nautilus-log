@@ -295,14 +295,27 @@ def contrast(page):
     page.locator('.nautilus-log-available-slot').first.focus()
     page.wait_for_function('''()=>[...document.querySelectorAll('.nautilus-log-toggle-btn,.nautilus-log-available-slot-hit')].every(e=>e.getAnimations().every(a=>a.playState==='finished'))''')
     paints = page.evaluate('''()=>{
-      const rgb=s=>s.match(/[\\d.]+/g).map(Number),blend=(f,b)=>f.slice(0,3).map((c,i)=>c*(f[3]??1)+b[i]*(1-(f[3]??1)));
+      const rgb=s=>(s.match(/[\\d.]+/g)||[]).map(Number),blend=(f,b)=>f.slice(0,3).map((c,i)=>c*(f[3]??1)+b[i]*(1-(f[3]??1)));
+      const effectiveBackground=element=>{let ancestry=[];for(let node=element;node;node=node.parentElement)ancestry.unshift(node);return ancestry.reduce((background,node)=>blend(rgb(getComputedStyle(node).backgroundColor),background),[255,255,255]);};
       let ancestry=[];for(let n=document.querySelector('.nautilus-log-chart-stage');n;n=n.parentElement)ancestry.unshift(n);
       const background=ancestry.reduce((b,n)=>blend(rgb(getComputedStyle(n).backgroundColor),b),[255,255,255]);
       const paint=(selector,prop)=>{const e=document.querySelector(selector);if(!e)throw Error('Missing paint '+selector);
         const s=getComputedStyle(e),channel=prop==='visible'?(s.fill==='none'?'stroke':'fill'):prop;
         const c=rgb(s[channel]);let a=Number(s[channel==='stroke'?'strokeOpacity':'fillOpacity']);
         for(let n=e;n;n=n.parentElement)a*=Number(getComputedStyle(n).opacity);c[3]=(c[3]??1)*a;return c};
+      const warning=document.createElement('details');
+      warning.className='nautilus-log-warning-panel';
+      warning.innerHTML='<summary>Schedule warnings</summary>';
+      document.querySelector('.nautilus-log-container').append(warning);
+      const warningPaint=paint('.nautilus-log-warning-panel','color');
+      const warningBackground=effectiveBackground(warning);
+      const tokenProbe=document.createElement('span');
+      tokenProbe.style.color='var(--nautilus-log-warning)';
+      warning.append(tokenProbe);
+      const warningToken=rgb(getComputedStyle(tokenProbe).color);
+      tokenProbe.remove(); warning.remove();
       return {background,
+        warning:warningPaint, warningBackground, warningToken,
         task:paint('[data-task-uid="task-reference"] .nautilus-log-record-title','fill'),
         event:paint('[data-task-uid="event-standup"] .nautilus-log-record-title','fill'),
         completed:paint('[data-task-uid="task-completed"] .nautilus-log-record-title','fill'),
@@ -313,8 +326,10 @@ def contrast(page):
         control:paint('.nautilus-log-collapse-btn svg path','visible'),
         helpControl:paint('.nautilus-log-help-btn svg path','visible')};
     }''')
-    scores = {k: ratio(v, paints['background']) for k, v in paints.items() if k != 'background'}
-    assert min(scores[k] for k in ('task', 'event', 'completed', 'clock')) >= 4.5, scores
+    scores = {k: ratio(v, paints['background']) for k, v in paints.items() if k not in ('background', 'warningBackground', 'warningToken')}
+    scores['warning'] = ratio(paints['warning'], paints['warningBackground'])
+    assert paints['warning'][:3] == paints['warningToken'][:3], paints
+    assert min(scores[k] for k in ('task', 'event', 'completed', 'clock', 'warning')) >= 4.5, scores
     assert min(scores[k] for k in ('estimateOutline', 'focus', 'now', 'control', 'helpControl')) >= 3, scores
     return {'paint': paints, 'ratios': scores}
 

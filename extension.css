@@ -8,7 +8,7 @@
   --nautilus-log-line: rgba(25, 25, 25, 0.09);
   --nautilus-log-hover: rgba(25, 25, 25, 0.05);
   --nautilus-log-positive: #4f9f7b;
-  --nautilus-log-warning: #c96c00;
+  --nautilus-log-warning: #b05e00;
   --nautilus-log-event: #ad8b24;
   --nautilus-log-event-text: #7b651a;
   --nautilus-log-event-fill: #f0e8cd;
@@ -1893,7 +1893,7 @@
 
 .nautilus-log-timing__capacity-token.is-energy .nautilus-log-timing__capacity-label,
 .nautilus-log-timing__energy-planned-label {
-  color: #87929e;
+  color: #6b7280;
   font-size: 10px;
   font-weight: 500;
 }
@@ -1968,6 +1968,8 @@
 }
 
 .nautilus-log-timing__popover {
+  --nl-exec-muted: #626a78;
+  --nl-exec-warning: #a6600a;
   background: var(--nl-exec-surface, #fff);
   border: 1px solid rgba(117, 126, 140, 0.22);
   border-radius: 8px;
@@ -2161,7 +2163,7 @@
   align-items: center;
   background: rgba(111, 120, 132, 0.025);
   border-bottom: 1px solid rgba(117, 126, 140, 0.12);
-  color: #858e9b;
+  color: var(--nl-exec-muted, #626a78);
   display: flex;
   font-family: inherit;
   font-size: 11px;
@@ -2187,7 +2189,7 @@
 }
 
 .nautilus-log-timing__capacity-part.is-warning strong {
-  color: #ad690f;
+  color: var(--nl-exec-warning, #a6600a);
 }
 
 .nautilus-log-timing__capacity-part.is-positive strong {
@@ -2195,7 +2197,7 @@
 }
 
 .nautilus-log-timing__capacity-part.is-warning.is-left strong {
-  color: #ad690f;
+  color: var(--nl-exec-warning, #a6600a);
 }
 
 .nautilus-log-timing__review-summary {
@@ -2211,7 +2213,7 @@
 }
 
 .nautilus-log-timing__review-counts {
-  color: #7f8895;
+  color: var(--nl-exec-muted, #626a78);
   font-size: 11px;
   gap: 16px;
 }
@@ -2223,7 +2225,7 @@
 }
 
 .nautilus-log-timing__review-totals {
-  color: #8a929f;
+  color: var(--nl-exec-muted, #626a78);
   font-size: 11px;
   gap: 6px 15px;
   margin-top: 5px;
@@ -2231,7 +2233,7 @@
 
 .nautilus-log-timing__review-total.is-over strong,
 .nautilus-log-timing__review-variance.is-over {
-  color: #ad690f;
+  color: var(--nl-exec-warning, #a6600a);
 }
 
 .nautilus-log-timing__review-row {
@@ -2282,7 +2284,7 @@
 .nautilus-log-timing__review-state {
   background: rgba(111, 120, 132, 0.08);
   border-radius: 999px;
-  color: #858e9b;
+  color: var(--nl-exec-muted, #626a78);
   flex: 0 0 auto;
   font-size: 10px;
   line-height: 18px;
@@ -2295,7 +2297,7 @@
 }
 
 .nautilus-log-timing__review-row-metrics {
-  color: #8a929f;
+  color: var(--nl-exec-muted, #626a78);
   display: flex;
   flex-wrap: wrap;
   font-size: 11px;
@@ -2338,7 +2340,7 @@
 
 .nautilus-log-timing__plan-heading {
   align-items: center;
-  color: #8a929f;
+  color: var(--nl-exec-muted, #626a78);
   display: flex;
   font-size: 10px;
   font-weight: 650;
@@ -2379,7 +2381,7 @@ button.nautilus-log-timing__plan-heading:focus-visible {
 }
 
 .nautilus-log-timing__plan-section.is-unscheduled .nautilus-log-timing__plan-heading {
-  color: #ad690f;
+  color: var(--nl-exec-warning, #a6600a);
 }
 
 .nautilus-log-timing__row {
@@ -2440,7 +2442,7 @@ button.nautilus-log-timing__plan-heading:focus-visible {
 }
 
 .nautilus-log-timing__row-meta {
-  color: #8a929f;
+  color: var(--nl-exec-muted, #626a78);
   font-size: 11px;
   margin-top: 2px;
   overflow: hidden;
@@ -2449,7 +2451,7 @@ button.nautilus-log-timing__plan-heading:focus-visible {
 }
 
 .nautilus-log-timing__row-meta.is-warning {
-  color: #ad690f;
+  color: var(--nl-exec-warning, #a6600a);
   font-weight: 600;
 }
 
@@ -2461,7 +2463,7 @@ button.nautilus-log-timing__plan-heading:focus-visible {
 }
 
 .nautilus-log-timing__empty {
-  color: #858e9b;
+  color: var(--nl-exec-muted, #626a78);
   font-size: 12px;
   line-height: 1.5;
   padding: 24px 18px;
@@ -2526,6 +2528,7 @@ button.nautilus-log-timing__plan-heading:focus-visible {
   --nl-exec-surface: #242a31;
   --nl-exec-text: #e4e8ee;
   --nl-exec-muted: #a0a8b4;
+  --nl-exec-warning: #d89a46;
   border-color: rgba(223, 228, 235, 0.13);
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.38);
 }
@@ -2559,7 +2562,7 @@ button.nautilus-log-timing__plan-heading:focus-visible {
 .roam-app.rm-dark-theme .nautilus-log-timing__energy-planned-label,
 .dark .nautilus-log-timing__capacity-token.is-energy .nautilus-log-timing__capacity-label,
 .dark .nautilus-log-timing__energy-planned-label {
-  color: #8f9aa6;
+  color: #94a1ac;
 }
 
 .bp3-dark .nautilus-log-timing__energy-summary-separator,
