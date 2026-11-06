@@ -15,7 +15,8 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
   document.querySelector('#launchers').replaceChildren();
   document.querySelector('#fixture-external-outline')?.remove();
   const nodes = new Map(), watches = new Set(), watchRecords = new Map(), nativeEditors = new Set(), hosts = new Map();
-  const stats = { renders: [], unmounts: 0, forbiddenWrites: 0, nativeWrites: [], writes: [], reads: [], watches: 0, opened: [], watchEvents: [], notifications: [], nativeEscapes: [], fakeCopies: [], referenceRequests: [], appActivations: 0, pastes: 0, sends: 0, outboundCallbacks: 0 };
+  const stats = { renders: [], unmounts: 0, forbiddenWrites: 0, nativeWrites: [], writes: [], reads: [], watches: 0, opened: [], watchEvents: [], notifications: [], nativeEscapes: [], fakeCopies: [], referenceRequests: [], nativeToasts: [], appActivations: 0, pastes: 0, sends: 0, outboundCallbacks: 0 };
+  let toastMode = 'missing';
   let watchSequence = 0;
   let failPlan = false, failRender = false, holdRender = false, holdMove = false, holdCreate = false, holdWatchRegistration = false, failMove = false;
   let releaseRender = null, releaseMove = null, releaseCreate = null, releaseWatchRegistration = null;
@@ -128,8 +129,12 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
       if (failMove) { failMove = false; throw new Error('Move failed'); }
       const siblings = children(location['parent-uid']);
       const node = nodes.get(block.uid); const oldParent = node.parentUid;
+      const oldOrder = siblings.findIndex(row => row.uid === node.uid);
+      // Public data.block.move receives a pre-removal sibling slot. The native
+      // dispatcher subtracts the moved row when it was before that slot.
+      const finalOrder = oldParent === location['parent-uid'] && oldOrder < location.order ? location.order - 1 : location.order;
       const ordered = siblings.filter(row => row.uid !== node.uid);
-      ordered.splice(location.order, 0, node);
+      ordered.splice(finalOrder, 0, node);
       node.parentUid = location['parent-uid']; ordered.forEach((row, i) => row.order = i);
       if (oldParent !== node.parentUid) children(oldParent).forEach((row, i) => row.order = i);
       notify({ uid: node.uid, fields: ['order'] }, { uid: oldParent, fields: ['children'] }, { uid: node.parentUid, fields: ['children'] });
@@ -252,6 +257,30 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     async unmountNode({ el }) { stats.unmounts++; nativeEditors.delete(el); el.replaceChildren(); },
   };
   window.roamAlphaAPI = roam;
+  // This public host component fake is deliberately capability-shaped: it
+  // renders visible Blueprint-style nodes and records the passed props instead
+  // of pretending a non-existent renderToast adapter delivered a notice.
+  const toasterCore = { Position: { TOP: 'top' } };
+  Object.defineProperty(toasterCore, 'Toaster', { get() {
+    if (toastMode === 'missing') return undefined;
+    return { create(props, container) {
+      if (toastMode === 'create-throws') throw new Error('Toaster unavailable');
+      const owned = new Map();
+      return {
+        show(toast) {
+          if (toastMode === 'show-throws') throw new Error('Toast render failed');
+          const node = document.createElement('div');
+          node.className = `bp3-toast bp3-intent-${toast.intent}`;
+          node.dataset.toastKey = toast.key; node.dataset.intent = toast.intent;
+          node.textContent = toast.message; container.append(node); owned.set(toast.key, node);
+          stats.nativeToasts.push({ props: { ...props }, toast: { ...toast } });
+        },
+        clear() { for (const node of owned.values()) node.remove(); owned.clear(); },
+        destroy() {},
+      };
+    } };
+  } });
+  window.Blueprint = { Core: toasterCore };
   const bridge = createPlanWatchBridge({ readString: readBlockString });
   const deskActionOptions = {
     referenceApi: () => roam,
@@ -375,6 +404,7 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     addPage: (uid, title) => { nodes.set(uid, { uid, title, parentUid: null }); },
     release: () => { releaseRender?.(); releaseMove?.(); releaseCreate?.(); releaseDelete?.(); releaseWatchRegistration?.(); releaseRender = releaseMove = releaseCreate = releaseDelete = releaseWatchRegistration = null; },
     pending: () => Boolean(releaseRender || releaseMove || releaseCreate || releaseDelete || releaseWatchRegistration),
+    setToastMode: mode => { toastMode = mode; },
     setCollapsed: (key, value) => hosts.get(key).setCollapsed(value),
     replaceControl: (key = planUid) => hosts.get(key).replaceControl(),
     openCopy: () => { const h = addHost(planUid, 'Open copy Desk', 'copy', true, false); h.owner.style.width = '280px'; },

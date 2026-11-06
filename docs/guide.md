@@ -330,8 +330,11 @@ unfinished input composition or copy the editor's uncommitted buffer into the gr
   before/after (mirrored in RTL), changing actual outline order and planning priority. The footer's hover action,
   **Move to top**, moves that same UID to index zero, ahead of any hidden events or
   completed blocks. Dropping before the first active card also means actual index
-  zero. Text, descendants, and referenced source blocks are not moved or rewritten.
-  The previous view-only ordering cache and reset-layout control are gone.
+  zero. Downward moves translate that requested final index to Roam's public
+  pre-removal sibling slot before writing, then still verify the complete final
+  outline once. Text, descendants, and referenced source blocks are not moved
+  or rewritten. The previous view-only ordering cache and reset-layout control
+  are gone.
   Drag feedback matches current native Desk: gray top-right position pills, a blue
   vertical insertion rail, and its resulting-position label. Gray positions refer
   to the full unfinished-task collection even during search; blue Alt counters
@@ -457,9 +460,13 @@ different wrapper does not resolve the reservation. Reload checks the same
 reserved UID and never allocates a second UID for that source and plan. Imports require the public
 `data.pull` and `data.block.create` APIs and a verifiable graph/type/user context.
 Progress temporarily uses the existing title area, leaving Search and New task
-unobstructed. Hover over a truncated message to read it in full. The
-full message is also announced to assistive technology; terminal feedback clears
-after five seconds and restores the title without moving the cards.
+unobstructed. After a confirmed add or removal, Desk uses its own public
+Blueprint top toaster for one 3-second outcome: green success for a real add or
+removal, primary for a duplicate/already-absent result, and warning for a
+failure. The toaster has no Undo action, does not take focus or Escape, and is
+removed with its Desk view. If that host component is unavailable or throws,
+the same truthful message stays in the existing polite title status instead;
+confirmed graph writes are never retried or reclassified as failures.
 
 The import and Escape-prelude checks use synthetic graphs and a fake in-memory
 Copy callback. The editor-first fix is implemented, but the live macro workflow

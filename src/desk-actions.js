@@ -94,8 +94,12 @@ export function createDeskActions({
     const order = toTop ? 0 : expected.indexOf(targetUid) + (position === 'after' ? 1 : 0);
     expected.splice(order, 0, uid);
     if (sameOrder(rows, expected)) return { changed: false, uid };
+    // data.block.move's public host contract uses a pre-removal sibling slot.
+    // `order` remains the requested final index used by our strict readback;
+    // only a downward same-parent move needs the host slot after its source.
+    const hostOrder = order > source.order ? order + 1 : order;
     assertActive();
-    await move({ uid, parentUid: planUid, order });
+    await move({ uid, parentUid: planUid, order: hostOrder });
     assertActive();
     const confirmed = outline(planUid);
     if (!sameOrder(confirmed, expected)) throw new Error('Roam could not confirm the new block order. Check the original outline before retrying.');

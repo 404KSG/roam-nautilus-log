@@ -54,6 +54,13 @@
 
 ### Fixed
 
+- Translate only Desk's downward same-parent card moves from their verified final
+  outline index to Roam's public pre-removal sibling slot. Strict full-outline
+  readback, source/child preservation, no-op guards, and unrelated move callers
+  remain unchanged. Confirmed Desk imports and removals now use an owned public
+  Blueprint top toaster (success/primary/warning, 3 seconds, no Undo); missing
+  or throwing host UI falls back to the existing accessible status without
+  retrying a confirmed graph write.
 - Correct native-style renderer tests after moving a mounted chart between hosts:
   compare with that host's frozen pre-mount control and report its actual DOM context.
   Add narrow-window, resize and genuine-overflow negative checks without changing

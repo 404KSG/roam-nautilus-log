@@ -8,6 +8,7 @@ import { createDeskNavigation } from './desk-navigation';
 import { createDeskDrag } from './desk-drag';
 import { createDeskDropFeedback } from './desk-drop-feedback';
 import { createDeskExternalDrop } from './desk-external-drop';
+import { createDeskNotifications } from './desk-notification';
 import { createDeskPreferences, createDeskOutlineVisibility } from './desk-host';
 
 /** A scoped data adapter around Roam's native Desk styles, not its starred-note store. */
@@ -141,6 +142,7 @@ export function createDeskView({
     const previewWatchStops = new Map();
     const scrollPositions = new Map();
     const outlineVisibility = createDeskOutlineVisibility(container, host);
+    const notifications = createDeskNotifications({ host, document });
     let tasks = [];
     let status = 'loading';
     let selectedUid = null;
@@ -332,7 +334,7 @@ export function createDeskView({
     const checkScope = () => { if (inScope()) return true; close(false); return false; };
     const notice = (text) => { message.textContent = String(text); message.hidden = !text; };
     externalDrop = createDeskExternalDrop({
-      root, grid, empty, statusRegion: title, host, actions, planUid, feedback: dropFeedback,
+      root, grid, empty, statusRegion: title, host, actions, planUid, feedback: dropFeedback, notify: notifications.notify,
       canAccept: () => inScope() && !folded && status === 'ready' && mode === 'overview' && !busy && typeof actions?.importReferenceDrop === 'function',
     });
     function noticeError(error) {
@@ -713,10 +715,11 @@ export function createDeskView({
         const result = await removeSurface.remove({ uid, expectedString: item.localString });
         if (inScope()) {
           removeError = false; refresh();
-          externalDrop.announce(result.status === 'removed-reference' ? 'Local reference removed. Source unchanged.'
-            : result.status === 'moved-to-daily-note' ? 'Moved to the owning Daily Note. Content kept.' : 'Already outside this plan.');
+          if (result.status === 'removed-reference') externalDrop.announce('Local reference removed. Source unchanged.', { intent: 'success', key: `remove:${uid}:reference` });
+          else if (result.status === 'moved-to-daily-note') externalDrop.announce('Moved to the owning Daily Note. Content kept.', { intent: 'success', key: `remove:${uid}:daily-note` });
+          else externalDrop.announce('Already outside this plan.', { intent: 'primary', key: `remove:${uid}:absent` });
         }
-      } catch (error) { removeError = true; if (inScope()) externalDrop.announce(error?.message || 'Removal could not be confirmed. Check the original outline.'); }
+      } catch (error) { removeError = true; if (inScope()) externalDrop.announce(error?.message || 'Removal could not be confirmed. Check the original outline.', { intent: 'warning', key: `remove:${uid}:error` }); }
       finally {
         busy = false; removeBusy = false;
         if (inScope()) {
@@ -1101,7 +1104,7 @@ export function createDeskView({
       resetPreviews();
       observer?.disconnect();
       foldObserver?.disconnect();
-      masonry.destroy(); drag.destroy(); externalDrop?.destroy(); affordances.destroy(); outlineVisibility.destroy(); widthBinding?.destroy();
+      masonry.destroy(); drag.destroy(); externalDrop?.destroy(); notifications.destroy(); affordances.destroy(); outlineVisibility.destroy(); widthBinding?.destroy();
       if (previewFrame !== null) host.cancelAnimationFrame(previewFrame);
       if (compositionFrame !== null) host.cancelAnimationFrame(compositionFrame);
       if (selectionFrame !== null) host.cancelAnimationFrame(selectionFrame);

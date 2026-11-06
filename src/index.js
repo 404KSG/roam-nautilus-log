@@ -42,6 +42,7 @@ import { installRendererBridge } from './renderer-bridge';
 import { createRendererMigration, createRendererSourceUpgrade } from './renderer-migration';
 import { graphName } from './graph-context';
 import { createDeskView } from "./desk-view";
+import { createDeskNotifications } from "./desk-notification";
 import { createChartHelp } from "./chart-help";
 import { createDeskActions } from "./desk-actions";
 import {
@@ -1123,6 +1124,7 @@ function onunload() {
 
 export {
   createDeskView,
+  createDeskNotifications,
   createDeskActions,
   createTimingRuntime,
   createCompletionStampWriter,

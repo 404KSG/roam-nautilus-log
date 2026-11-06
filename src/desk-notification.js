@@ -1,0 +1,69 @@
+/** Host Blueprint notifications owned by one Nautilus Desk view. */
+const TIMEOUT_MS = 3000;
+const MAX_TOASTS = 3;
+
+export function createDeskNotifications({ host = globalThis.window, document = host?.document } = {}) {
+  let destroyed = false;
+  let toaster = null;
+  let container = null;
+  const recent = new Map();
+
+  const forget = (key) => {
+    const record = recent.get(key);
+    if (!record) return;
+    if (record.timer !== null) host?.clearTimeout?.(record.timer);
+    recent.delete(key);
+  };
+  const fail = () => {
+    try { toaster?.clear?.(); } catch (_error) { /* Only this owned toaster may be cleared. */ }
+    try { toaster?.destroy?.(); } catch (_error) { /* Blueprint versions need not expose destroy. */ }
+    toaster = null;
+    container?.remove?.();
+    container = null;
+  };
+  const ensure = () => {
+    if (destroyed) return null;
+    if (toaster?.show && container?.isConnected) return toaster;
+    const core = host?.Blueprint?.Core;
+    if (!core?.Toaster || typeof core.Toaster.create !== 'function' || !document?.body?.append) return null;
+    const owned = document.createElement?.('div');
+    if (!owned) return null;
+    owned.className = 'nautilus-desk__toaster';
+    owned.dataset.nautilusDeskToaster = 'true';
+    try {
+      document.body.append(owned);
+      container = owned;
+      // This is a dedicated host Toaster, not the host's shared queue. Blueprint
+      // creates its own non-portal surface in the supplied owned container.
+      toaster = core.Toaster.create({
+        position: core.Position?.TOP || 'TOP', timeout: TIMEOUT_MS,
+        autoFocus: false, canEscapeKeyClear: false, maxToasts: MAX_TOASTS,
+      }, owned);
+      if (!toaster || typeof toaster.show !== 'function') { fail(); return null; }
+      return toaster;
+    } catch (_error) { fail(); return null; }
+  };
+  const notify = ({ key, message, intent }) => {
+    if (destroyed || typeof message !== 'string' || !message) return { native: false };
+    const stableKey = typeof key === 'string' && key ? key : `nautilus-desk:${intent}:${message}`;
+    if (recent.has(stableKey)) return { native: Boolean(toaster?.show), deduped: true };
+    const instance = ensure();
+    if (!instance) return { native: false };
+    try {
+      instance.show({ key: stableKey, message, intent, timeout: TIMEOUT_MS });
+      const record = { timer: null };
+      record.timer = host?.setTimeout?.(() => {
+        if (recent.get(stableKey) === record) recent.delete(stableKey);
+      }, TIMEOUT_MS) ?? null;
+      recent.set(stableKey, record);
+      while (recent.size > MAX_TOASTS) forget(recent.keys().next().value);
+      return { native: true };
+    } catch (_error) {
+      fail();
+      return { native: false };
+    }
+  };
+  return { notify, destroy() { if (destroyed) return; destroyed = true; for (const key of [...recent.keys()]) forget(key); fail(); } };
+}
+
+export { MAX_TOASTS, TIMEOUT_MS };

@@ -276,6 +276,35 @@ def run():
             assert page.evaluate('() => deskHarness.api.stats.forbiddenWrites') == 0
             checks.append('Move to top and real drag move original UIDs to outline index zero, without changing text/open state or native Desk')
 
+            # Use actual pointer coordinates against the unequal, image-bearing
+            # masonry card. Both card halves and a real grid gap must resolve to
+            # the full-outline order, rather than merely moving a visual rail.
+            reorder_before = page.evaluate('() => deskHarness.api.children("plan-desk").map(row => [row.uid, row.string])')
+            writes_before = page.evaluate('() => deskHarness.api.stats.writes.length')
+            tall = card('task-0').bounding_box()
+            short = card('task-1').bounding_box()
+            assert tall['height'] > short['height'], (tall, short)
+            card('task-3').drag_to(card('task-0'), target_position={'x': tall['width'] * .25, 'y': tall['height'] * .5})
+            page.wait_for_function('''() => { const rows=deskHarness.api.children("plan-desk").map(row=>row.uid); return rows.indexOf("task-3") + 1 === rows.indexOf("task-0"); }''')
+            page.wait_for_function('''() => { const cards=[...document.querySelectorAll('.nautilus-desk__grid > .nautilus-desk__card')]; return cards.findIndex(card=>card.dataset.taskUid==='task-3') + 1 === cards.findIndex(card=>card.dataset.taskUid==='task-0'); }''')
+            tall = card('task-0').bounding_box()
+            card('task-3').drag_to(card('task-0'), target_position={'x': tall['width'] * .75, 'y': tall['height'] * .5})
+            page.wait_for_function('''() => { const rows=deskHarness.api.children("plan-desk").map(row=>row.uid); return rows.indexOf("task-0") + 1 === rows.indexOf("task-3"); }''')
+            page.wait_for_function('''() => { const cards=[...document.querySelectorAll('.nautilus-desk__grid > .nautilus-desk__card')]; return cards.findIndex(card=>card.dataset.taskUid==='task-0') + 1 === cards.findIndex(card=>card.dataset.taskUid==='task-3'); }''')
+            gap = page.locator('.nautilus-desk__grid').evaluate('''grid => {
+              const box=grid.getBoundingClientRect(), cards=[...grid.children].map(card=>card.getBoundingClientRect());
+              for(let y=Math.ceil(box.top)+2;y<Math.floor(box.bottom)-2;y+=4) for(let x=Math.ceil(box.left)+2;x<Math.floor(box.right)-2;x+=4) {
+                if(document.elementFromPoint(x,y) === grid && !cards.some(card => x >= card.left && x <= card.right && y >= card.top && y <= card.bottom)) return {x,y};
+              }
+              throw new Error('no real masonry grid gap');
+            }''')
+            grid_box = page.locator('.nautilus-desk__grid').bounding_box()
+            card('task-3').drag_to(page.locator('.nautilus-desk__grid'), target_position={'x': gap['x'] - grid_box['x'], 'y': gap['y'] - grid_box['y']})
+            page.wait_for_function('''() => [...document.querySelectorAll('.nautilus-desk__grid > .nautilus-desk__card')].at(-1)?.dataset.taskUid === 'task-3' ''')
+            assert page.evaluate('() => deskHarness.api.children("plan-desk").map(row => [row.uid, row.string]).sort()') == sorted(reorder_before)
+            assert page.evaluate('() => deskHarness.api.stats.writes.length') == writes_before + 3
+            checks.append('tall image-card left/right halves and a real masonry gap preserve text and produce the exact full-outline final order')
+
             order = page.evaluate('() => deskHarness.api.children("plan-desk").map(r=>r.uid)')
             page.evaluate('() => deskHarness.api.failNextMove()')
             top('task-3')
@@ -936,6 +965,34 @@ def run():
             expect(mapping_source).to_be_visible()
             drag_end(mapping_source)
 
+            # Public Blueprint.Core.Toaster is the native-notification seam. Its
+            # fake renders actual host-style toast nodes; it is not a renderToast
+            # spy. Confirmed add, duplicate and remove receipts each choose their
+            # semantic intent without a fake Undo action or title duplicate.
+            mount(count=3)
+            page.evaluate('() => deskHarness.api.setToastMode("available")')
+            external_drag('[data-task-uid="task-1"]')
+            page.wait_for_function('deskHarness.api.stats.referenceRequests.at(-1)?.status === "added"')
+            native_toast = page.locator('.nautilus-desk__toaster .bp3-toast').last
+            expect(native_toast).to_have_text('Added embed. Original kept.')
+            expect(native_toast).to_have_attribute('data-intent', 'success')
+            expect(page.locator('.nautilus-desk__drop-toast')).to_be_hidden()
+            external_drag('[data-task-uid="task-1"]')
+            page.wait_for_function('deskHarness.api.stats.referenceRequests.at(-1)?.status === "existing-reference"')
+            expect(page.locator('.nautilus-desk__toaster .bp3-toast').last).to_have_text('Already in this plan.')
+            expect(page.locator('.nautilus-desk__toaster .bp3-toast').last).to_have_attribute('data-intent', 'primary')
+            card('ref-outside-source').hover()
+            card('ref-outside-source').get_by_role('button', name='Remove from Desk', exact=True).click()
+            expect(card('ref-outside-source')).to_have_count(0)
+            expect(page.locator('.nautilus-desk__toaster .bp3-toast').last).to_have_text('Local reference removed. Source unchanged.')
+            expect(page.locator('.nautilus-desk__toaster .bp3-toast').last).to_have_attribute('data-intent', 'success')
+            native_props = page.evaluate('() => deskHarness.api.stats.nativeToasts.map(record => record.props)')
+            assert all(props == {'position':'top','timeout':3000,'autoFocus':False,'canEscapeKeyClear':False,'maxToasts':3} for props in native_props), native_props
+            page.evaluate('() => deskHarness.api.reloadView()')
+            expect(page.locator('.nautilus-desk__toaster')).to_have_count(0)
+            checks.append('confirmed add/remove and duplicates use one owned top Blueprint toast with success/primary intent, no action, no duplicate title, and unload cleanup')
+            mount()
+
             # These are synthetic native-shaped events, not physical OS drops.
             # Hold the real adapter promise BEFORE repeated/modified/internal
             # gestures; a retry after settlement cannot cover this race.
@@ -1210,7 +1267,7 @@ def run():
             completed_before = page.evaluate('deskHarness.api.sourceSnapshot("outside-source")')
             external_drag('[data-task-uid="task-1"]')
             page.wait_for_function('deskHarness.api.stats.referenceRequests.at(-1)?.state === "rejected"')
-            expect(page.locator('.nautilus-desk__drop-toast')).to_have_text('Completed source. Desk only shows unfinished items.')
+            expect(page.locator('.nautilus-desk__drop-toast')).to_have_text('This block is completed. Desk will not add a task marker or reopen it.')
             assert page.evaluate('deskHarness.api.stats.writes.length') == 0
             assert page.evaluate('deskHarness.api.sourceSnapshot("outside-source")') == completed_before
             expect(card('ref-outside-source')).to_have_count(0)

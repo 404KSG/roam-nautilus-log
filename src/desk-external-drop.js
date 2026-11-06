@@ -14,7 +14,7 @@ const cursorFor = transfer => ['all', 'uninitialized', 'copy', 'copyLink', 'copy
 /** DOM ownership only: graph validation and synchronous payload freezing live in importReferenceDrop. */
 export function createDeskExternalDrop({
   root, grid, empty, statusRegion, feedback, host = globalThis.window, actions, planUid, canAccept = () => false,
-  getContext = () => readDeskDropContext(host),
+  getContext = () => readDeskDropContext(host), notify,
 } = {}) {
   const document = root?.ownerDocument || host?.document;
   let candidate = null;
@@ -52,6 +52,12 @@ export function createDeskExternalDrop({
       messageTimer = null;
       if (!operations.size) say('');
     }, TERMINAL_MESSAGE_MS);
+  };
+  const outcome = (text, intent, key) => {
+    let receipt = null;
+    try { receipt = notify?.({ message: text, intent, key: `nautilus-desk:${planUid}:${key}` }); } catch (_error) { /* Accessible status fallback below. */ }
+    if (receipt?.native) say('');
+    else say(text, true);
   };
   const clearFeedback = () => feedback.clear();
   const clearCandidate = () => { candidate = null; clearFeedback(); };
@@ -130,16 +136,11 @@ export function createDeskExternalDrop({
       operations.set(key, operation);
       request.then(result => {
         if (operations.get(key) !== operation || operation.epoch !== epoch || suspended || !canAccept()) return;
-        say(result?.status === 'added' ? 'Added embed. Original kept.' : 'Already in this plan.', true);
+        if (result?.status === 'added') outcome('Added embed. Original kept.', 'success', `import:${captured.uid}:added`);
+        else outcome('Already in this plan.', 'primary', `import:${captured.uid}:duplicate`);
       }, error => {
         if (operations.get(key) !== operation || operation.epoch !== epoch || suspended) return;
-        const cycleMessages = {
-          'embed-cycle': 'That block cannot be embedded into this plan without a cycle. Nothing was added.',
-          'embed-ancestry-unbounded': 'The block ancestry is too deep to embed safely. Nothing was added.',
-          'embed-ancestry-unavailable': 'The block ancestry could not be verified. Nothing was added.',
-        };
-        say(error?.code === 'source-completed' ? 'Completed source. Desk only shows unfinished items.'
-          : cycleMessages[error?.code] || 'Could not confirm the reference. Check this plan before retrying.', true);
+        outcome(error?.message || 'Could not confirm the reference. Check this plan before retrying.', 'warning', `import:${captured.uid}:error`);
       }).finally(() => { if (operations.get(key) === operation) operations.delete(key); });
     }
     clearCandidate();
@@ -152,7 +153,7 @@ export function createDeskExternalDrop({
   for (const [type, listener, capture] of events) document?.addEventListener?.(type, listener, capture);
   host?.addEventListener?.('blur', lifecycle); host?.addEventListener?.('hashchange', lifecycle);
   return {
-    announce(text) { say(text, true); },
+    announce(text, { intent = 'warning', key = 'notice' } = {}) { outcome(text, intent, key); },
     reconcile() { if (!root?.isConnected || suspended || !canAccept()) lifecycle(); else feedback.reconcile(); },
     suspend() { suspended = true; cancelAll(); },
     resume() { suspended = false; },

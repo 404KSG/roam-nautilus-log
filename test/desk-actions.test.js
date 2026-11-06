@@ -26,7 +26,11 @@ async function fixture(overrides = {}) {
     move: async ({uid,parentUid,order}) => {
       writes.push(['move',uid,parentUid,order]);
       if(state.noMove) return;
-      rows.splice(order,0,rows.splice(rows.findIndex(row=>row.uid===uid),1)[0]);
+      const from = rows.findIndex(row => row.uid === uid);
+      // Public Roam data.block.move takes a pre-removal sibling slot. Its
+      // dispatch subtracts this moved sibling when it was before that slot.
+      const finalOrder = order - (from < order ? 1 : 0);
+      rows.splice(finalOrder, 0, rows.splice(from, 1)[0]);
       rows.forEach((row,i)=>row.order=i);
     },
     create: async ({uid,parentUid,order,string}) => {
@@ -58,6 +62,21 @@ test('dropping before the first active card also means first in the real outline
   assert.equal(f.rows[0].uid,'c');
   await f.actions.moveTask({planUid:'plan',uid:'c',targetUid:'b',position:'after'});
   assert.deepEqual(f.rows.map(r=>r.uid),['event','done','a','b','c']);
+  assert.deepEqual(f.writes.map(write => write[3]),[0,5], 'downward moves use a pre-removal host slot');
+});
+
+test('native pre-removal move slots retain the requested final order in both directions', async () => {
+  const up = await fixture();
+  await up.actions.moveTask({planUid:'plan',uid:'c',targetUid:'b',position:'before'});
+  assert.deepEqual(up.rows.map(row => row.uid),['event','done','a','c','b']);
+  assert.deepEqual(up.writes,[['move','c','plan',3]]);
+
+  const down = await fixture();
+  const strings = new Map(down.rows.map(row => [row.uid,row.string]));
+  await down.actions.moveTask({planUid:'plan',uid:'a',targetUid:'b',position:'after'});
+  assert.deepEqual(down.rows.map(row => row.uid),['event','done','b','a','c']);
+  assert.deepEqual(down.writes,[['move','a','plan',4]]);
+  for (const row of down.rows) assert.equal(row.string, strings.get(row.uid));
 });
 
 test('completed, foreign, or changed targets and replaced renderer roots fail before writing', async () => {
