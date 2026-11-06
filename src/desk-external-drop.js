@@ -20,6 +20,7 @@ export function createDeskExternalDrop({
   let candidate = null;
   let suspended = false;
   let epoch = 0;
+  let receipt = 0;
   const operations = new Map();
   const live = document?.createElement?.('div');
   const toast = document?.createElement?.('span');
@@ -54,9 +55,12 @@ export function createDeskExternalDrop({
     }, TERMINAL_MESSAGE_MS);
   };
   const outcome = (text, intent, key) => {
-    let receipt = null;
-    try { receipt = notify?.({ message: text, intent, key: `nautilus-desk:${planUid}:${key}` }); } catch (_error) { /* Accessible status fallback below. */ }
-    if (receipt?.native) say('');
+    let delivery = null;
+    // Each confirmed mutation gets a new receipt. The semantic UID describes
+    // the outcome but cannot identify a rapid remove/re-add cycle.
+    const receiptKey = `nautilus-desk:${planUid}:${key}:${++receipt}`;
+    try { delivery = notify?.({ message: text, intent, key: receiptKey }); } catch (_error) { /* Accessible status fallback below. */ }
+    if (delivery?.native) say('');
     else say(text, true);
   };
   const clearFeedback = () => feedback.clear();

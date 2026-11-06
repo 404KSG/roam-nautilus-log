@@ -986,7 +986,27 @@ def run():
             expect(card('ref-outside-source')).to_have_count(0)
             expect(page.locator('.nautilus-desk__toaster .bp3-toast').last).to_have_text('Local reference removed. Source unchanged.')
             expect(page.locator('.nautilus-desk__toaster .bp3-toast').last).to_have_attribute('data-intent', 'success')
-            native_props = page.evaluate('() => deskHarness.api.stats.nativeToasts.map(record => record.props)')
+            # A rapid confirmed remove/re-add/remove/re-add must issue distinct
+            # delivery receipts for every action, not suppress the final add by
+            # reusing its source UID as a semantic key.
+            for cycle in range(2):
+                external_drag('[data-task-uid="task-1"]')
+                page.wait_for_function('deskHarness.api.stats.referenceRequests.at(-1)?.status === "added"')
+                expect(card('ref-outside-source')).to_be_visible()
+                expect(page.locator('.nautilus-desk__toaster .bp3-toast').last).to_have_text('Added embed. Original kept.')
+                if cycle == 0:
+                    card('ref-outside-source').hover()
+                    card('ref-outside-source').get_by_role('button', name='Remove from Desk', exact=True).click()
+                    expect(card('ref-outside-source')).to_have_count(0)
+                    expect(page.locator('.nautilus-desk__toaster .bp3-toast').last).to_have_text('Local reference removed. Source unchanged.')
+            native_records = page.evaluate('() => deskHarness.api.stats.nativeToasts')
+            native_keys = [record['toast']['key'] for record in native_records]
+            assert len(native_keys) == len(set(native_keys)), native_records
+            assert [record['toast']['message'] for record in native_records[-4:]] == [
+                'Local reference removed. Source unchanged.', 'Added embed. Original kept.',
+                'Local reference removed. Source unchanged.', 'Added embed. Original kept.'
+            ], native_records
+            native_props = [record['props'] for record in native_records]
             assert all(props == {'position':'top','timeout':3000,'autoFocus':False,'canEscapeKeyClear':False,'maxToasts':3} for props in native_props), native_props
             page.evaluate('() => deskHarness.api.reloadView()')
             expect(page.locator('.nautilus-desk__toaster')).to_have_count(0)

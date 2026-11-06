@@ -14,16 +14,24 @@ export function createDeskNotifications({ host = globalThis.window, document = h
     if (record.timer !== null) host?.clearTimeout?.(record.timer);
     recent.delete(key);
   };
+  const clearRecent = () => { for (const key of [...recent.keys()]) forget(key); };
   const fail = () => {
-    try { toaster?.clear?.(); } catch (_error) { /* Only this owned toaster may be cleared. */ }
-    try { toaster?.destroy?.(); } catch (_error) { /* Blueprint versions need not expose destroy. */ }
+    const currentToaster = toaster;
+    const currentContainer = container;
     toaster = null;
-    container?.remove?.();
     container = null;
+    clearRecent();
+    try { currentToaster?.clear?.(); } catch (_error) { /* Only this owned toaster may be cleared. */ }
+    // Blueprint's public create API mounts a React root inside our container.
+    // Detaching that container alone leaves the owned root mounted.
+    const mount = currentContainer?.firstElementChild || currentContainer?.children?.[0];
+    try { host?.ReactDOM?.unmountComponentAtNode?.(mount); } catch (_error) { /* The host may not expose ReactDOM. */ }
+    currentContainer?.remove?.();
   };
   const ensure = () => {
     if (destroyed) return null;
     if (toaster?.show && container?.isConnected) return toaster;
+    if (toaster || container) fail();
     const core = host?.Blueprint?.Core;
     if (!core?.Toaster || typeof core.Toaster.create !== 'function' || !document?.body?.append) return null;
     const owned = document.createElement?.('div');
@@ -36,7 +44,7 @@ export function createDeskNotifications({ host = globalThis.window, document = h
       // This is a dedicated host Toaster, not the host's shared queue. Blueprint
       // creates its own non-portal surface in the supplied owned container.
       toaster = core.Toaster.create({
-        position: core.Position?.TOP || 'TOP', timeout: TIMEOUT_MS,
+        position: core.Position?.TOP || 'top', timeout: TIMEOUT_MS,
         autoFocus: false, canEscapeKeyClear: false, maxToasts: MAX_TOASTS,
       }, owned);
       if (!toaster || typeof toaster.show !== 'function') { fail(); return null; }
@@ -46,11 +54,13 @@ export function createDeskNotifications({ host = globalThis.window, document = h
   const notify = ({ key, message, intent }) => {
     if (destroyed || typeof message !== 'string' || !message) return { native: false };
     const stableKey = typeof key === 'string' && key ? key : `nautilus-desk:${intent}:${message}`;
-    if (recent.has(stableKey)) return { native: Boolean(toaster?.show), deduped: true };
     const instance = ensure();
     if (!instance) return { native: false };
+    if (recent.has(stableKey)) return { native: true, deduped: true };
     try {
-      instance.show({ key: stableKey, message, intent, timeout: TIMEOUT_MS });
+      // Blueprint's public show(options, key) deliberately overwrites
+      // options.key, so the receipt identity belongs in its second argument.
+      instance.show({ message, intent, timeout: TIMEOUT_MS }, stableKey);
       const record = { timer: null };
       record.timer = host?.setTimeout?.(() => {
         if (recent.get(stableKey) === record) recent.delete(stableKey);

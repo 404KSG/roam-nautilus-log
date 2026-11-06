@@ -257,30 +257,36 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     async unmountNode({ el }) { stats.unmounts++; nativeEditors.delete(el); el.replaceChildren(); },
   };
   window.roamAlphaAPI = roam;
-  // This public host component fake is deliberately capability-shaped: it
-  // renders visible Blueprint-style nodes and records the passed props instead
-  // of pretending a non-existent renderToast adapter delivered a notice.
+  // This public host component fake follows Blueprint's actual
+  // Toaster.create/show(options, key) shape, including its inner React mount.
+  // It never certifies a made-up renderToast or destroy lifecycle.
   const toasterCore = { Position: { TOP: 'top' } };
   Object.defineProperty(toasterCore, 'Toaster', { get() {
     if (toastMode === 'missing') return undefined;
     return { create(props, container) {
       if (toastMode === 'create-throws') throw new Error('Toaster unavailable');
-      const owned = new Map();
+      const mount = document.createElement('div'); container.append(mount);
+      const owned = new Map(); let sequence = 0;
       return {
-        show(toast) {
+        show(options, key) {
           if (toastMode === 'show-throws') throw new Error('Toast render failed');
+          const toast = { ...options, key: key === undefined ? `toast-${sequence++}` : key };
+          if (owned.size === props.maxToasts && !owned.has(toast.key)) {
+            const [oldKey, oldNode] = owned.entries().next().value; oldNode.remove(); owned.delete(oldKey);
+          }
+          owned.get(toast.key)?.remove();
           const node = document.createElement('div');
           node.className = `bp3-toast bp3-intent-${toast.intent}`;
           node.dataset.toastKey = toast.key; node.dataset.intent = toast.intent;
-          node.textContent = toast.message; container.append(node); owned.set(toast.key, node);
+          node.textContent = toast.message; mount.append(node); owned.set(toast.key, node);
           stats.nativeToasts.push({ props: { ...props }, toast: { ...toast } });
         },
         clear() { for (const node of owned.values()) node.remove(); owned.clear(); },
-        destroy() {},
       };
     } };
   } });
   window.Blueprint = { Core: toasterCore };
+  window.ReactDOM = { unmountComponentAtNode(node) { if (!node) return false; node.replaceChildren(); node.remove(); return true; } };
   const bridge = createPlanWatchBridge({ readString: readBlockString });
   const deskActionOptions = {
     referenceApi: () => roam,
