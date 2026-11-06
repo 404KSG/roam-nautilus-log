@@ -1,5 +1,9 @@
 # Desk re-entry and native image overlays
 
+> **Historical design (superseded for imports):** this record preserves the original
+> bare-reference decision and its evidence. Current supported external imports use
+> `embed-path`; see [the safe native-parity stage](2026-11-07-native-parity-safe-stage1.md).
+
 ## Decision
 
 Desk remains a projection of the graph, not a separate collection. A confirmed local reference is represented only by its graph wrapper. New external imports use a bare `((source-uid))` reference, never an automatically prepended TODO. Plain notes keep their syntax and existing source checkboxes are not duplicated. If that childless wrapper is removed, dropping the same unfinished source again may recreate the same deterministic wrapper ID. An unresolved create remains verification-only and never receives a retry or fallback ID.

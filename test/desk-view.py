@@ -140,6 +140,28 @@ def run():
             for count in [0, 1]:
                 mount(count=count)  # Exercise zero and the screenshot's four-task heading.
             checks.append('Desk title uses a middle dot for zero, four, and multi-digit counts')
+            # Public capability hints are evaluated before opening, refreshed on
+            # demand, and never replace the guarded write/readback adapters.
+            mount(count=3, capabilities={'modern': {'create': False, 'move': False, 'delete': False},
+                                         'legacy': {'create': False, 'move': False, 'delete': False}})
+            expect(page.get_by_role('button', name='New task', exact=True).first).to_be_disabled()
+            expect(card('task-0')).not_to_have_attribute('draggable', 'true')
+            expect(card('task-0').get_by_role('button', name='Move to top', exact=True)).to_be_disabled()
+            expect(card('task-0').get_by_role('button', name='Remove from Desk', exact=True)).to_be_disabled()
+            expect(page.get_by_role('button', name='Refresh', exact=True)).to_be_visible()
+            page.get_by_role('button', name='Refresh', exact=True).click()
+            assert page.evaluate('() => deskHarness.api.stats.writes.length') == 0
+            activate('task-0'); close_focus()
+            # Missing modern create/move still permits their documented legacy
+            # fallback; removal stays modern-only and is not misadvertised.
+            mount(count=3, capabilities={'modern': {'create': False, 'move': False, 'delete': False},
+                                         'legacy': {'delete': False}})
+            expect(page.get_by_role('button', name='New task', exact=True).first).to_be_enabled()
+            expect(card('task-0')).to_have_attribute('draggable', 'true')
+            expect(card('task-0').get_by_role('button', name='Move to top', exact=True)).to_be_enabled()
+            expect(card('task-0').get_by_role('button', name='Remove from Desk', exact=True)).to_be_disabled()
+            assert page.evaluate('() => deskHarness.api.stats.writes.length') == 0
+            checks.append('read-only capability hints disable draft, move, remove, and import affordances before opening while legacy create/move remain available and reads still open cards')
             mount()
             # Simulate a late legacy extension rule. The native span formula
             # assumes zero row-gap; a one-class legacy override otherwise turns
@@ -977,10 +999,15 @@ def run():
             expect(native_toast).to_have_text('Added embed. Original kept.')
             expect(native_toast).to_have_attribute('data-intent', 'success')
             expect(page.locator('.nautilus-desk__drop-toast')).to_be_hidden()
-            external_drag('[data-task-uid="task-1"]')
+            duplicate_source_before = page.evaluate('() => deskHarness.api.sourceSnapshot("outside-source")')
+            duplicate_writes_before = page.evaluate('() => deskHarness.api.stats.writes.length')
+            external_drag('[data-task-uid="task-2"]')
             page.wait_for_function('deskHarness.api.stats.referenceRequests.at(-1)?.status === "existing-reference"')
-            expect(page.locator('.nautilus-desk__toaster .bp3-toast').last).to_have_text('Already in this plan.')
+            page.wait_for_function('deskHarness.api.children("plan-desk").findIndex(row=>row.uid==="ref-outside-source") + 1 === deskHarness.api.children("plan-desk").findIndex(row=>row.uid==="task-2")')
+            expect(page.locator('.nautilus-desk__toaster .bp3-toast').last).to_have_text('Already in this plan. Moved existing note.')
             expect(page.locator('.nautilus-desk__toaster .bp3-toast').last).to_have_attribute('data-intent', 'primary')
+            assert page.evaluate('() => deskHarness.api.stats.writes.length') == duplicate_writes_before + 1
+            assert page.evaluate('() => deskHarness.api.sourceSnapshot("outside-source")') == duplicate_source_before
             card('ref-outside-source').hover()
             card('ref-outside-source').get_by_role('button', name='Remove from Desk', exact=True).click()
             expect(card('ref-outside-source')).to_have_count(0)
@@ -1047,6 +1074,12 @@ def run():
             imported_row = page.evaluate('() => deskHarness.api.children("plan-desk").find(row => row.uid === "ref-outside-source")')
             assert imported_row['string'] == '{{embed-path: ((outside-source)) closed}}', imported_row
             assert page.evaluate('() => deskHarness.api.sourceSnapshot("outside-source")') == source_before
+            expect(card('ref-outside-source').locator('.rm-desk-tile__source')).to_have_text('External source page')
+            expect(card('task-1').locator('.rm-desk-tile__source')).to_have_count(0)
+            editor_before_footer = page.evaluate('() => deskHarness.api.stats.renders.length')
+            page.evaluate('() => deskHarness.api.setTitle("external-page", "Renamed external source page")')
+            expect(card('ref-outside-source').locator('.rm-desk-tile__source')).to_have_text('Renamed external source page')
+            assert page.evaluate('() => deskHarness.api.stats.renders.length') == editor_before_footer
             # Exercise the real Remove action and import owner together without
             # a reload: deleting only fixture rows cannot catch lifecycle locks.
             for cycle in range(3):

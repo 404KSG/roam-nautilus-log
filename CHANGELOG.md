@@ -14,6 +14,13 @@
 
 ### Changed
 
+- Add safe native-parity Desk capability hints and truthful external-source footers. New task,
+  drag/reorder, removal, and import no longer advertise unsupported public mutations; create/move
+  retain legacy fallback while removal/import remain modern-only. Verified `embed-path` cards show
+  their source page title and update bounded provenance watches without changing editor or image
+  ownership. Positioned duplicate embeds can move only their existing plan wrapper through the
+  guarded readback path. Desk remains unfinished-task-only; this does not add pages, DONE/events,
+  Undo, sidecar ownership, or source deletion.
 - New Desk outside-block drops now create the native `embed-path` wrapper. Existing bare and
   legacy references are not migrated; wrapper-local estimates and CLOCK ownership remain local,
   source editing stays native, and only childless exact embeds are deleted by Desk removal.

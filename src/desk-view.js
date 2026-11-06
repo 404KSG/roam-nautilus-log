@@ -2,6 +2,8 @@ import { graphName } from './graph-context';
 import { projectDeskTasks, reconcileDeskSelection, stepDeskSelection, deskShortcut, nativeEditorOwnsEscape, createModernDeskPreviewAdapter } from './desk-core';
 import { nativeElements, nativePreviewText, readNativePreview } from './desk-native';
 import { deskEmbedPreviewUid, readDeskPlan } from './desk-preview';
+import { readDeskCapabilities, sameDeskCapabilities } from './desk-capabilities';
+import { createModernDeskRemoveAdapter, readStrictDeskRemoveSnapshot } from './desk-remove';
 import { createDeskMasonry } from './desk-masonry';
 import { createDeskWidth } from './desk-width';
 import { createDeskNavigation } from './desk-navigation';
@@ -140,6 +142,9 @@ export function createDeskView({
     const previewDirty = new Set();
     const previewQueue = new Set();
     const previewWatchStops = new Map();
+    const footerWatchStops = new Map();
+    const footerProvenance = new Map();
+    const removeIntentCache = new Map();
     const scrollPositions = new Map();
     const outlineVisibility = createDeskOutlineVisibility(container, host);
     const notifications = createDeskNotifications({ host, document });
@@ -172,6 +177,7 @@ export function createDeskView({
     let externalDrop = null;
     let folded = false;
     let search = '';
+    let capabilities = readDeskCapabilities(roam);
 
     // rm-desk-page owns the native route, including ancestor :has() padding.
     // An embedded component must never claim that page-level ownership.
@@ -204,7 +210,7 @@ export function createDeskView({
       busy = true;
       try { await actions?.verifyPendingRemovals?.(planUid); removeError = false; }
       catch (error) { removeError = true; if (inScope()) externalDrop.announce(error?.message || 'Removal is still unconfirmed.'); }
-      finally { busy = false; if (inScope()) refresh(true); }
+      finally { busy = false; if (inScope()) { refreshCapabilities(true); refresh(true); } }
     });
     retryRead.hidden = true;
     const grid = el('div', 'rm-desk-overview rm-desk-overview--masonry nautilus-desk__grid');
@@ -215,7 +221,7 @@ export function createDeskView({
     const dropFeedback = createDeskDropFeedback({ root, grid, empty, host, getTasks: () => tasks });
     const drag = createDeskDrag({
       grid, host, feedback: dropFeedback,
-      canDrag: () => inScope() && !folded && status === 'ready' && !busy && mode === 'overview' && Boolean(actions),
+      canDrag: () => inScope() && !folded && status === 'ready' && !busy && mode === 'overview' && Boolean(actions) && currentCapabilities().move,
       move,
       nudge: (uid, direction) => {
         const index = tasks.findIndex((task) => task.uid === uid);
@@ -333,9 +339,29 @@ export function createDeskView({
     });
     const checkScope = () => { if (inScope()) return true; close(false); return false; };
     const notice = (text) => { message.textContent = String(text); message.hidden = !text; };
+    const currentCapabilities = () => {
+      const next = readDeskCapabilities(roam);
+      if (!sameDeskCapabilities(capabilities, next)) capabilities = next;
+      return capabilities;
+    };
+    function refreshCapabilities(explicit = false) {
+      const previous = capabilities;
+      const next = currentCapabilities();
+      if (!sameDeskCapabilities(previous, next)) {
+        removeIntentCache.clear();
+        if (!next.move) drag.cancel();
+        if (mode === 'draft' && draft && !next.create) notice("Notes can't be added in this graph.");
+        if (mode === 'draft' && draft && next.create && draft.uncommitted) {
+          draft.uncommitted = false; void saveDraft();
+        }
+      }
+      if (explicit && !next.create) notice("Notes can't be added in this graph.");
+      return next;
+    }
     externalDrop = createDeskExternalDrop({
       root, grid, empty, statusRegion: title, host, actions, planUid, feedback: dropFeedback, notify: notifications.notify,
-      canAccept: () => inScope() && !folded && status === 'ready' && mode === 'overview' && !busy && typeof actions?.importReferenceDrop === 'function',
+      canAccept: () => inScope() && !folded && status === 'ready' && mode === 'overview' && !busy
+        && currentCapabilities().import && typeof actions?.importReferenceDrop === 'function',
     });
     function noticeError(error) {
       const text = error?.message || 'Desk could not complete this action.';
@@ -447,8 +473,9 @@ export function createDeskView({
       const previousLabel = index === 0 && mode === 'task' ? draftCopy.label : 'Previous';
       previous.title = previousLabel;
       previous.setAttribute('aria-label', previousLabel);
-      add.disabled = newNote.disabled = busy || status !== 'ready' || !actions;
-      focusTop.disabled = busy || !selectedUid || status !== 'ready' || Boolean(editingHoldUid);
+      const capability = currentCapabilities();
+      add.disabled = newNote.disabled = busy || status !== 'ready' || !actions || !capability.create;
+      focusTop.disabled = busy || !selectedUid || status !== 'ready' || Boolean(editingHoldUid) || !capability.move;
       openMain.disabled = !selectedUid;
       const target = selectedUid ? editorTarget(selectedUid) : null;
       const alternate = Boolean(target && target.editorUid !== selectedUid);
@@ -521,6 +548,7 @@ export function createDeskView({
         if (focusOwner === session) focusOwner = null;
         if (previewFrame !== null) { host.cancelAnimationFrame(previewFrame); previewFrame = null; }
         clearPreviewWatches();
+        clearFooterWatches();
         resetPreviews();
         root.inert = true;
         root.hidden = true;
@@ -614,6 +642,7 @@ export function createDeskView({
     }
     function showDraft(slide = 0) {
       if (!checkScope() || busy || status !== 'ready' || !actions) return;
+      if (!currentCapabilities().create) { notice("Notes can't be added in this graph."); updateControls(); return; }
       if (actions?.isRemovalLocked?.(planUid)) { noticeError(new Error('A removal is pending or unconfirmed. Use Refresh before editing.')); return; }
       if (mode === 'draft') { draftInput.focus(); return; }
       let reserved = draft && !draft.handedOff ? draft : null;
@@ -646,6 +675,11 @@ export function createDeskView({
     function saveDraft() {
       const current = draft;
       if (!current || composing || current.uncommitted || current.handedOff || current.saving || (!current.text.trim() && current.saved === null)) return current?.saving;
+      if (!currentCapabilities().create) {
+        current.uncommitted = true;
+        if (inScope()) notice("Notes can't be added in this graph.");
+        return current?.saving;
+      }
       current.saving = (async () => {
         try {
           while (current.text !== current.saved) {
@@ -694,6 +728,7 @@ export function createDeskView({
     }
     async function move(uid, targetUid, position = 'before') {
       if (!checkScope() || busy || status !== 'ready' || !actions) return;
+      if (!currentCapabilities().move) { notice('Roam block moving is unavailable.'); renderCards(); return; }
       busy = true;
       notice('');
       renderCards();
@@ -708,7 +743,7 @@ export function createDeskView({
     }
     async function removeCard(uid) {
       if (!checkScope() || mode !== 'overview' || folded || busy || composing || !removeSurface) return;
-      const item = tasks.find(task => task.uid === uid); if (!item) return;
+      const item = tasks.find(task => task.uid === uid); if (!item || !removeAvailable(item, true)) return;
       const before = visibleTasks().map(task => task.uid), index = before.indexOf(uid);
       busy = true; removeBusy = true; renderCards();
       try {
@@ -816,6 +851,62 @@ export function createDeskView({
       if (!model || previewDirty.has(task.uid) || model.error || model.searchIncomplete || !model.searchReady) return true;
       return `${model.searchText} ${pageTitle}`.toLocaleLowerCase().includes(search);
     });
+    function clearFooterWatches(uid = null) {
+      const entries = uid ? [[uid, footerWatchStops.get(uid) || []]] : [...footerWatchStops.entries()];
+      for (const [key, stops] of entries) {
+        for (const stop of stops) stop();
+        footerWatchStops.delete(key); footerProvenance.delete(key);
+      }
+    }
+    function renderFooterProvenance(card, title) {
+      if (typeof title === 'string' && title) {
+        if (!card.source) {
+          card.source = el('span', 'rm-desk-tile__source');
+          card.footer.insertBefore(card.source, card.tools);
+        }
+        card.source.textContent = title;
+      } else card.source?.remove(), card.source = null;
+    }
+    function syncFooterProvenance(task) {
+      const card = cards.get(task.uid);
+      const sourceUid = deskEmbedPreviewUid(task.localString);
+      if (!card || !sourceUid) { clearFooterWatches(task.uid); if (card) renderFooterProvenance(card, ''); return; }
+      const cached = footerProvenance.get(task.uid);
+      if (cached?.sourceUid === sourceUid) { renderFooterProvenance(card, cached.title); return; }
+      clearFooterWatches(task.uid);
+      let title = '', targets = [];
+      try {
+        const source = createModernDeskPreviewAdapter(roam).read(sourceUid);
+        if (source?.kind === 'block' && typeof source.page?.uid === 'string' && typeof source.page?.title === 'string' && source.page.title) {
+          title = source.page.title;
+          targets = [{ uid: sourceUid, fields: ['block/page'] }, { uid: source.page.uid, fields: ['node/title'] }];
+        }
+      } catch (_error) { /* Provenance is optional; the preview remains available. */ }
+      footerProvenance.set(task.uid, { sourceUid, title });
+      renderFooterProvenance(card, title);
+      const stops = targets.map(target => subscribePreviewWatch(target, () => {
+        const live = tasks.find(row => row.uid === task.uid);
+        footerProvenance.delete(task.uid);
+        if (live) syncFooterProvenance(live);
+      }));
+      if (stops.length) footerWatchStops.set(task.uid, stops);
+    }
+    function removeAvailable(task, fresh = false) {
+      // desk-remove invokes only data.block[kind]; legacy methods must not make
+      // a destructive or Daily Note promotion look available.
+      const capability = { delete: typeof roam?.data?.block?.delete === 'function', move: typeof roam?.data?.block?.move === 'function' };
+      if (!removeSurface || (!capability.delete && !capability.move)) return false;
+      const key = `${task.localString}\u0000${capability.delete}\u0000${capability.move}`;
+      const cached = removeIntentCache.get(task.uid);
+      if (!fresh && cached?.key === key) return cached.available;
+      let available = false;
+      try {
+        const snapshot = readStrictDeskRemoveSnapshot({ adapter: createModernDeskRemoveAdapter(roam), api: roam, planUid, targetUid: task.uid });
+        available = snapshot.status === 'present' && (snapshot.intent?.kind === 'delete-wrapper' ? capability.delete : snapshot.intent?.kind === 'promote' && capability.move);
+      } catch (_error) { /* Unknown removal shape is deliberately unavailable. */ }
+      removeIntentCache.set(task.uid, { key, available });
+      return available;
+    }
     function renderCards() {
       const focusedCard = root.contains(document.activeElement) ? document.activeElement?.closest?.('[data-task-uid]')?.dataset.taskUid : null;
       const live = new Set(tasks.map((task) => task.uid));
@@ -825,9 +916,9 @@ export function createDeskView({
         card.tile.remove();
         clearPreview(card.images, card.lines);
         cards.delete(uid);
-        previews.delete(uid); previewDirty.delete(uid); previewQueue.delete(uid); previewVersions.delete(uid);
+        previews.delete(uid); previewDirty.delete(uid); previewQueue.delete(uid); previewVersions.delete(uid); removeIntentCache.delete(uid);
         for (const key of scrollPositions.keys()) if (key.startsWith(`${uid}\u0000`)) scrollPositions.delete(key);
-        clearPreviewWatches(uid);
+        clearPreviewWatches(uid); clearFooterWatches(uid);
       }
       for (const [taskIndex, task] of tasks.entries()) {
         let card = cards.get(task.uid);
@@ -844,14 +935,13 @@ export function createDeskView({
           heading.append(headingText);
           open.append(images, heading, lines);
           const footer = el('div', 'rm-desk-tile__footer');
-          const source = el('span', 'rm-desk-tile__source', pageTitle);
           const tools = el('div', 'rm-desk-tile__actions');
           const top = button('Move to top', 'double-chevron-up', () => move(task.uid, null, 'top'), 'rm-desk-tile__move-to-top');
           const removeButton = button('Remove from Desk', 'log-out', () => removeCard(task.uid), 'rm-desk-tile__remove');
           removeButton.addEventListener('pointerdown', event => event.stopPropagation());
           removeButton.addEventListener('dragstart', event => { event.preventDefault(); event.stopPropagation(); });
           tools.append(top, removeButton);
-          footer.append(source, tools);
+          footer.append(tools);
           tile.append(open, footer);
           const activate = (event) => {
             if (!checkScope() || busy || status !== 'ready') return;
@@ -863,7 +953,7 @@ export function createDeskView({
           open.addEventListener('keydown', (event) => {
             if (!event.defaultPrevented && !event.isComposing && ['Enter', ' '].includes(event.key)) { event.preventDefault(); activate(event); }
           });
-          card = { tile, open, images, heading, headingText, lines, top, removeButton };
+          card = { tile, open, images, heading, headingText, lines, footer, tools, source: null, top, removeButton };
           cards.set(task.uid, card);
         }
         // Native drag pills use full collection order; Alt counters use the
@@ -884,9 +974,11 @@ export function createDeskView({
         renderHeading(card, rootText, rootStatus, loaded && !rootText && !rootStatus, label);
         card.open.setAttribute('aria-disabled', String(busy || status !== 'ready'));
         card.open.tabIndex = status === 'ready' ? 0 : -1;
-        card.tile.draggable = !busy && status === 'ready';
-        card.top.disabled = busy || status !== 'ready' || !actions || task.uid === editingHoldUid;
-        card.removeButton.disabled = busy || status !== 'ready' || !removeSurface || task.uid === editingHoldUid;
+        const capability = currentCapabilities();
+        card.tile.draggable = !busy && status === 'ready' && capability.move;
+        card.top.disabled = busy || status !== 'ready' || !actions || !capability.move || task.uid === editingHoldUid;
+        card.removeButton.disabled = busy || status !== 'ready' || !removeAvailable(task) || task.uid === editingHoldUid;
+        syncFooterProvenance(task);
         if (!previews.has(task.uid) || previewDirty.has(task.uid)) {
           if (search || !observer) previewQueue.add(task.uid);
           else observer.observe(card.tile);
@@ -914,7 +1006,8 @@ export function createDeskView({
         : !tasks.length ? 'Nothing unfinished in this plan. Start a new task.'
           : search && previews.size < tasks.length ? 'Searching...'
             : search && [...previews.values()].some((model) => model.error) ? 'Some notes could not be searched. Refresh to try again.' : 'No notes match.';
-      retryRead.hidden = status === 'ready' && !removeError && !actions?.hasUnconfirmedRemoval?.(planUid) && ![...previews.values()].some(model => model.error);
+      retryRead.hidden = status === 'ready' && capabilities.create && capabilities.move && capabilities.import
+        && !removeError && !actions?.hasUnconfirmedRemoval?.(planUid) && ![...previews.values()].some(model => model.error);
       root.dataset.status = status;
       updateControls();
       schedulePreviews();
@@ -970,6 +1063,7 @@ export function createDeskView({
       deferredSnapshot = null;
       const previousTasks = tasks;
       const previousStatus = status;
+      removeIntentCache.clear();
       if (snapshot?.missing) { tasks = []; status = 'missing'; }
       else {
         try {
@@ -1020,6 +1114,7 @@ export function createDeskView({
     function refresh(clear = false) {
       if (!checkScope()) return;
       if (clear) { resetPreviews(); notice(''); }
+      refreshCapabilities();
       try { acceptSnapshot(readPlan(planUid)); }
       catch (_error) { acceptSnapshot({ unavailable: true }); }
     }
@@ -1102,6 +1197,7 @@ export function createDeskView({
       dropEditor();
       stopWatch?.();
       resetPreviews();
+      clearFooterWatches();
       observer?.disconnect();
       foldObserver?.disconnect();
       masonry.destroy(); drag.destroy(); externalDrop?.destroy(); notifications.destroy(); affordances.destroy(); outlineVisibility.destroy(); widthBinding?.destroy();

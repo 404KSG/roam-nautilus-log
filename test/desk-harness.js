@@ -8,7 +8,7 @@ import { nativeElements } from '../src/desk-native';
 import { projectPull } from './pull-projection.cjs';
 
 let cleanup = () => {};
-function mount({ count = 8, dark = false, editor = true, empty = false, preservePreferences = false, collapsed = false, watchResult = 'undefined', switchControl = false } = {}) {
+function mount({ count = 8, dark = false, editor = true, empty = false, preservePreferences = false, collapsed = false, watchResult = 'undefined', switchControl = false, capabilities = null } = {}) {
   cleanup();
   if (!preservePreferences) for (const key of Object.keys(localStorage)) if (key.startsWith('nautilus-log:desk-view:v1:desk-fixture:')) localStorage.removeItem(key);
   document.body.classList.toggle('bp3-dark', dark);
@@ -56,8 +56,9 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     add('source-note', 'Source content.', 'source-task');
   }
   add('already-done', '{{[[DONE]]}} Reusable source'); add('done-reference', '((already-done))', planUid, count + 5);
-  add('outside-parent', 'Outside outline parent', 'daily-page', 0);
-  add('outside-source', '{{[[TODO]]}} Outside source task 20m', 'outside-parent', 0);
+  nodes.set('external-page', { uid: 'external-page', title: 'External source page', parentUid: null });
+  add('outside-parent', 'Outside outline parent', 'external-page', 0, true, 'external-page');
+  add('outside-source', '{{[[TODO]]}} Outside source task 20m', 'outside-parent', 0, true, 'external-page');
   add('divider', '---', planUid, count + 6);
   nodes.set('daily-page', { uid: 'daily-page', title: 'October 26th, 2026', parentUid: null });
   for (const parent of new Set([...nodes.values()].map(node => node.parentUid))) {
@@ -104,7 +105,7 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     'block/uid': node.uid,
     ...(node.title !== undefined ? { 'node/title': node.title } : { 'block/string': node.string, 'block/order': node.order, ...(node.open === undefined ? {} : { 'block/open': node.open }) }),
     'block/_children': node.parentUid ? [{ 'block/uid': node.parentUid }] : [],
-    ...(node.pageUid ? { 'block/page': { 'block/uid': node.pageUid } } : {}),
+    ...(node.pageUid ? { 'block/page': { 'block/uid': node.pageUid, ...(nodes.get(node.pageUid)?.title ? { 'node/title': nodes.get(node.pageUid).title } : {}) } } : {}),
     'block/children': children(node.uid).map(child => ({ 'block/uid': child.uid })),
     'block/refs': [...String(node.string || '').matchAll(/\(\(([\w-]+)\)\)/g)].map((m) => ({ 'block/uid': m[1] })),
   });
@@ -288,6 +289,16 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
   window.Blueprint = { Core: toasterCore };
   window.ReactDOM = { unmountComponentAtNode(node) { if (!node) return false; node.replaceChildren(); node.remove(); return true; } };
   const bridge = createPlanWatchBridge({ readString: readBlockString });
+  const modernCapabilities = { create: roam.data.block.create, move: roam.data.block.move, delete: roam.data.block.delete };
+  const legacyCapabilities = { create: roam.createBlock, move: roam.moveBlock, delete: roam.deleteBlock };
+  const applyCapabilities = ({ modern = {}, legacy = {} } = {}) => {
+    for (const name of ['create', 'move', 'delete']) {
+      roam.data.block[name] = modern[name] === false ? undefined : modernCapabilities[name];
+      const legacyName = name === 'create' ? 'createBlock' : name === 'move' ? 'moveBlock' : 'deleteBlock';
+      roam[legacyName] = legacy[name] === false ? undefined : legacyCapabilities[name];
+    }
+  };
+  if (capabilities) applyCapabilities(capabilities);
   const deskActionOptions = {
     referenceApi: () => roam,
     getContext: () => ({ provider: roam, graphName: roam.graph.name, graphType: roam.graph.type, userUid: roam.user.uid() }),
@@ -407,6 +418,7 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     holdNextRender: () => { holdRender = true; }, holdNextMove: () => { holdMove = true; }, holdNextCreate: () => { holdCreate = true; }, holdNextWatchRegistration: (uid = true) => { holdWatchRegistration = uid; },
     holdNextDelete: () => { holdDelete = true; }, setExternalFocus: uid => { externalFocusedUid = uid; },
     setTitle: (uid, title) => { nodes.get(uid).title = title; notify({ uid, fields: ['node/title'] }); },
+    setCapabilities: applyCapabilities,
     addPage: (uid, title) => { nodes.set(uid, { uid, title, parentUid: null }); },
     release: () => { releaseRender?.(); releaseMove?.(); releaseCreate?.(); releaseDelete?.(); releaseWatchRegistration?.(); releaseRender = releaseMove = releaseCreate = releaseDelete = releaseWatchRegistration = null; },
     pending: () => Boolean(releaseRender || releaseMove || releaseCreate || releaseDelete || releaseWatchRegistration),

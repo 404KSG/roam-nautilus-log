@@ -777,6 +777,29 @@ density the gauge itself is the clickable trigger, so the leading Nautilus icon
 and divider disappear. Missing capacity data or constrained space restores only
 the icon, leaving no detached bar or status text beside Roam search.
 
+### Desk capability and provenance boundaries
+
+Desk is an unfinished-task view: completed roots, events, dividers, empty rows, and
+native page cards are not added to its collection. Notes and CLOCK history inside an
+unfinished card remain available.
+
+Desk reads public mutation capability hints before advertising writes. Without create,
+**New task** is unavailable; without move, cards are not draggable and **Move to top**
+is unavailable. Removal and external import retain their stricter modern public-API
+requirements. **Refresh** rechecks these hints without polling, but every write still
+uses its guarded public adapter and readback confirmation. A pending draft keeps its
+buffer if write capability disappears.
+
+A native `embed-path` card shows its verified external source-page title in the footer.
+Local plan cards deliberately omit that label; the plan page is neither a source title
+nor a date. Missing provenance is omitted. A renamed or relocated source page refreshes
+that label without remounting the editor or changing image ownership.
+
+Dropping an already-present native embed at a supported position can move its existing
+plan wrapper after full guard revalidation. The reusable source is never moved. A source
+already owned as a local Desk note only reports that state; there is no synthetic move,
+Undo, or source-deletion action.
+
 ### Referenced task ownership
 
 - A bare `((source TODO))` keeps its TODO/DONE state in the real source block.

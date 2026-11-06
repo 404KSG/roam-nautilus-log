@@ -138,14 +138,34 @@ export function createDeskExternalDrop({
       if (!request || typeof request.then !== 'function') { clearCandidate(); say('Could not add this drop.', true); return; }
       operation = { controller, context: captured.context, request, epoch };
       operations.set(key, operation);
-      request.then(result => {
+      const completion = request.then(async result => {
         if (operations.get(key) !== operation || operation.epoch !== epoch || suspended || !canAccept()) return;
-        if (result?.status === 'added') outcome('Added embed. Original kept.', 'success', `import:${captured.uid}:added`);
-        else outcome('Already in this plan.', 'primary', `import:${captured.uid}:duplicate`);
+        if (result?.status === 'added') {
+          outcome('Added embed. Original kept.', 'success', `import:${captured.uid}:added`);
+          return;
+        }
+        if (result?.status === 'existing-reference' && result.movable && typeof actions?.moveDuplicateReference === 'function') {
+          try {
+            // The import lock is settled before this callback runs. This is a
+            // separate guarded move, never a nested exclusive operation.
+            const moved = await actions.moveDuplicateReference({ planUid, sourceUid: result.sourceUid,
+              wrapperUid: result.wrapperUid, sourceFingerprint: result.sourceFingerprint,
+              originContext: captured.context, insertion, signal: operation.controller.signal });
+            if (operations.get(key) !== operation || operation.epoch !== epoch || suspended || !canAccept()) return;
+            outcome(moved?.changed ? 'Already in this plan. Moved existing note.' : 'Already in this plan.', 'primary', `import:${captured.uid}:duplicate`);
+          } catch (error) {
+            if (operations.get(key) === operation && operation.epoch === epoch && !suspended) {
+              outcome(error?.message || 'Already in this plan. Existing note could not be moved.', 'warning', `import:${captured.uid}:duplicate-move-error`);
+            }
+          }
+          return;
+        }
+        outcome(result?.status === 'existing-source' ? 'That block is already a note on your Desk.' : 'Already in this plan.', 'primary', `import:${captured.uid}:duplicate`);
       }, error => {
         if (operations.get(key) !== operation || operation.epoch !== epoch || suspended) return;
         outcome(error?.message || 'Could not confirm the reference. Check this plan before retrying.', 'warning', `import:${captured.uid}:error`);
-      }).finally(() => { if (operations.get(key) === operation) operations.delete(key); });
+      });
+      completion.finally(() => { if (operations.get(key) === operation) operations.delete(key); });
     }
     clearCandidate();
     say('Adding embed. Original kept.');

@@ -75,14 +75,16 @@ export function createDeskActions({
     throw new DeskReferenceImportError('The block ancestry is too deep to embed safely. Nothing was added.', 'embed-ancestry-unbounded');
   };
 
-  const moveTask = ({ planUid, uid, targetUid = null, position = 'before' }) => exclusive(async () => {
+  const moveTaskLocked = async ({ planUid, uid, targetUid = null, position = 'before', expectedSourceUid = null }) => {
     const rows = outline(planUid);
     const isActiveTask = (row) => {
       const item = task(row);
       return item.kind === 'task' && item.status === 'TODO' && item.title && item.title !== '(untitled)';
     };
     const source = rows.find((row) => row.uid === uid);
-    if (!source || !isActiveTask(source)) throw new Error('The task is no longer unfinished in this plan.');
+    if (!source || !isActiveTask(source) || expectedSourceUid && deskCarrierUid(source.string) !== expectedSourceUid) {
+      throw new Error('The task is no longer unfinished in this plan.');
+    }
     const active = rows.filter(isActiveTask);
     const target = rows.find((row) => row.uid === targetUid);
     if (position !== 'top' && (!target || !active.some((row) => row.uid === targetUid))) throw new Error('The target card changed. Refresh and try again.');
@@ -107,7 +109,46 @@ export function createDeskActions({
       throw new Error('The outline changed while moving the task. Check the original outline.');
     }
     return { changed: true, uid, order };
-  });
+  };
+  const moveTask = (request) => exclusive(() => moveTaskLocked(request));
+  const moveDuplicateReference = ({ planUid, sourceUid, wrapperUid, sourceFingerprint, originContext, insertion, signal } = {}) => exclusive(async () => {
+    assertActive(signal);
+    const api = typeof referenceApi === 'function' ? referenceApi() : referenceApi;
+    const current = getContext();
+    if (!sameDeskDropContext(originContext, current) || current?.provider !== api) {
+      throw new DeskReferenceImportError('The graph or user changed. Start a new drag.', 'context-changed');
+    }
+    if (!sourceUid || !wrapperUid || !sourceFingerprint || !api?.data?.pull) {
+      throw new DeskReferenceImportError('The duplicate could not be verified. Refresh and try again.', 'duplicate-unavailable');
+    }
+    const adapter = createModernReferenceAdapter(api);
+    const source = readStrictReferenceEntity(adapter, sourceUid);
+    if (fingerprintDeskReferenceSource(source) !== sourceFingerprint) {
+      throw new DeskReferenceImportError('The source changed. Refresh and try again.', 'source-changed');
+    }
+    const rows = outline(planUid);
+    if (rows.some(row => row.uid === sourceUid)) {
+      throw new DeskReferenceImportError('That block is already a note on your Desk.', 'existing-source');
+    }
+    const wrapper = rows.find(row => row.uid === wrapperUid);
+    if (!wrapper || deskCarrierUid(wrapper.string) !== sourceUid) {
+      throw new DeskReferenceImportError('The existing Desk note changed. Refresh and try again.', 'stale-target');
+    }
+    const active = rows.filter(row => {
+      const item = task(row);
+      return item.kind === 'task' && item.status === 'TODO' && item.title && item.title !== '(untitled)';
+    });
+    let targetUid = insertion?.targetUid, position = insertion?.kind;
+    if (insertion?.kind === 'background') {
+      const last = active.at(-1);
+      if (!last || last.uid === wrapperUid) return { changed: false, uid: wrapperUid };
+      targetUid = last.uid; position = 'after';
+    }
+    if (!['before', 'after'].includes(position) || !active.some(row => row.uid === targetUid)) {
+      throw new DeskReferenceImportError('The drop target is no longer available.', 'stale-target');
+    }
+    return moveTaskLocked({ planUid, uid: wrapperUid, targetUid, position, expectedSourceUid: sourceUid });
+  }, signal);
 
   const importReferenceDrop = ({ planUid, transfer, expectedSourceUid, originContext, insertion, signal } = {}) => {
     let claim, adapter;
@@ -192,7 +233,7 @@ export function createDeskActions({
         // Once this exact graph wrapper is observed, it is no longer an
         // unresolved private write. A later confirmed removal may re-add it.
         imports.delete(reservationKey);
-        return { status: 'existing-reference', sourceUid, wrapperUid, order: row.order };
+        return { status: 'existing-reference', sourceUid, wrapperUid, order: row.order, sourceFingerprint, movable: deskCarrierUid(row.string) === sourceUid };
       };
       const observeReservedReference = async (candidateRows) => {
         const candidate = await entity(await reserveWrapperUid());
@@ -209,7 +250,7 @@ export function createDeskActions({
       const duplicate = rows.find(row => simpleReference(row) && activeTask(row));
       // A different visible reference is a safe no-op, but cannot resolve
       // an earlier ambiguous create for this deterministic ID.
-      if (duplicate) return { status: 'existing-reference', sourceUid, wrapperUid: duplicate.uid, order: duplicate.order };
+      if (duplicate) return { status: 'existing-reference', sourceUid, wrapperUid: duplicate.uid, order: duplicate.order, sourceFingerprint, movable: deskCarrierUid(duplicate.string) === sourceUid };
       // Resolve known prior writes/no-ops first, even if the source has since
       // completed. A fresh create must never reopen that source as a TODO.
       requireUnfinished(sourceInstance);
@@ -238,7 +279,7 @@ export function createDeskActions({
       }
       if (rows.some(row => row.uid === sourceUid)) return { status: 'existing-source', sourceUid };
       const refreshedDuplicate = rows.find(row => simpleReference(row) && activeTask(row));
-      if (refreshedDuplicate) return { status: 'existing-reference', sourceUid, wrapperUid: refreshedDuplicate.uid, order: refreshedDuplicate.order };
+      if (refreshedDuplicate) return { status: 'existing-reference', sourceUid, wrapperUid: refreshedDuplicate.uid, order: refreshedDuplicate.order, sourceFingerprint, movable: deskCarrierUid(refreshedDuplicate.string) === sourceUid };
       if (reservation.attempted) {
         throw new DeskReferenceImportError('Could not confirm the reference. Check this plan before retrying.', 'unconfirmed');
       }
@@ -354,7 +395,7 @@ export function createDeskActions({
     return { uid, string: draft.last };
   });
   return {
-    moveTask, importReferenceDrop, beginDraft, saveDraft,
+    moveTask, moveDuplicateReference, importReferenceDrop, beginDraft, saveDraft,
     registerRemoveSurface: options => removal.registerSurface(options),
     hasUnconfirmedRemoval: planUid => removal.hasUnconfirmed(planUid),
     isRemovalLocked: planUid => removal.isBlocked(planUid),
