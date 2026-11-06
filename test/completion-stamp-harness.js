@@ -50,7 +50,7 @@ function checkbox(uid) {
 const displayText = string => String(string || '').replace(/\{\{\[\[(?:TODO|DONE)\]\]\}\}|\{\{(?:TODO|DONE)\}\}/gi, '').trim();
 function render(view) {
   if (view.editor) {
-    const current = blocks.get(view.uid);
+    const current = blocks.get(view.editorUid || view.uid);
     if (!view.uncommitted) {
       const { selectionStart: start, selectionEnd: end } = view.editor;
       view.editor.value = current;
@@ -64,6 +64,17 @@ function render(view) {
     const ref = document.createElement('span'); ref.className = 'rm-block-ref'; ref.dataset.uid = view.reference;
     // Actual inline reference: a source data-uid, no fake nested source editor.
     ref.append(checkbox(view.reference), document.createTextNode(displayText(blocks.get(view.reference)))); text.append(ref);
+  } else if (view.embed) {
+    if (view.outerMarker) text.append(checkbox(view.uid));
+    // Native embeds render a real nested source block, whose controls and
+    // textarea have the source UID rather than the wrapper UID.
+    const embed = document.createElement('div'); embed.className = 'rm-block-embed';
+    const sourceRoot = document.createElement('div'); sourceRoot.className = 'roam-block-container'; sourceRoot.dataset.blockUid = view.embed;
+    const sourceMain = document.createElement('div'); sourceMain.className = 'rm-block-main';
+    const source = document.createElement('div'); source.className = 'roam-block'; source.id = `block-input-${view.windowId}-${view.embed}`;
+    if (core.status(blocks.get(view.embed))) source.append(checkbox(view.embed));
+    source.append(document.createTextNode(displayText(blocks.get(view.embed))));
+    sourceMain.append(source); sourceRoot.append(sourceMain); embed.append(sourceRoot); text.append(embed); view.sourceMain = sourceMain;
   } else {
     if (core.status(blocks.get(view.uid))) text.append(checkbox(view.uid));
     text.append(document.createTextNode(displayText(blocks.get(view.uid))));
@@ -88,11 +99,13 @@ function reference(surface, wrapperUid, sourceUid, outerMarker = false) {
   if (!blocks.has(sourceUid)) blocks.set(sourceUid, '{{[[TODO]]}} Reusable source 30m');
   return block(surface, wrapperUid, `${outerMarker ? '{{[[TODO]]}} ' : ''}((${sourceUid}))`, { reference: sourceUid, outerMarker });
 }
-function edit(uid, value) {
-  const view = [...views.values()].find(v => v.uid === uid);
-  if (!view) throw Error('Unknown fixture view');
+function embed(surface, wrapperUid, sourceUid, outerMarker = false) {
+  if (!blocks.has(sourceUid)) blocks.set(sourceUid, '{{[[TODO]]}} Reusable embedded source 30m');
+  return block(surface, wrapperUid, `${outerMarker ? '{{[[TODO]]}} ' : ''}{{embed-path: ((${sourceUid})) closed}}`, { embed: sourceUid, outerMarker });
+}
+function nativeEditor(view, uid, main, value) {
   const field = document.createElement('textarea'); field.className = 'rm-block-input'; field.id = `block-input-${view.windowId}-${uid}`;
-  field.value = value ?? blocks.get(uid); view.editor = field; view.uncommitted = value !== undefined && value !== blocks.get(uid);
+  field.value = value ?? blocks.get(uid); view.editor = field; view.editorUid = uid; view.uncommitted = value !== undefined && value !== blocks.get(uid);
   field.addEventListener('compositionstart', () => { view.composing = true; }); field.addEventListener('compositionend', () => { view.composing = false; });
   field.addEventListener('input', () => {
     // Roam updates its raw editing buffer immediately and debounces the graph
@@ -116,7 +129,17 @@ function edit(uid, value) {
       field.dispatchEvent(new Event('input', { bubbles: true }));
     }
   });
-  view.main.replaceChildren(field); return field.id;
+  main.replaceChildren(field); return field.id;
+}
+function edit(uid, value) {
+  const view = [...views.values()].find(v => v.uid === uid);
+  if (!view) throw Error('Unknown fixture view');
+  return nativeEditor(view, uid, view.main, value);
+}
+function editEmbedSource(wrapperUid, value) {
+  const view = [...views.values()].find(v => v.uid === wrapperUid && v.embed);
+  if (!view?.sourceMain) throw Error('Unknown embedded source');
+  return nativeEditor(view, view.embed, view.sourceMain, value);
 }
 function setEnabled(value) { values.set('completion-stamps-enabled', value); window.dispatchEvent(new Event('nautilus-log:settings-changed')); }
 function select(uids) {
@@ -131,7 +154,7 @@ document.addEventListener('keydown', event => {
   const selected = new Set([...views.values()].filter(v => v.root.classList.contains('block-highlight-blue')).map(v => v.uid));
   for (const uid of selected) setTimeout(() => nativeToggle(uid), nativeDelay);
 });
-window.completionStampHarness = { block, nested, reference, edit, select, setEnabled, blocks, stampUpdates, nativeUpdates, notices, keys,
+window.completionStampHarness = { block, nested, reference, embed, edit, editEmbedSource, select, setEnabled, blocks, stampUpdates, nativeUpdates, notices, keys,
   setMinute: value => { minute = value; }, setNativeDelay: value => { nativeDelay = value; }, setBufferDelay: value => { bufferDelay = value; },
   setStampDelay: value => { stampDelay = value; },
   hasReceipt: uid => Boolean(values.get('completion-stamp-receipts')?.items?.some(item => item.uid === uid)),

@@ -118,6 +118,27 @@ test('only pure chains inherit the timestamp of the nearest explicit DONE owner'
   assert.equal(resolve('((middle-source))', { readString }).completionEvidence, undefined);
 });
 
+test('native embed chains admit durations but reject intermediate completion stamps', () => {
+  const source = '{{[[DONE]]}} Completed source 20m d16:19';
+  const strings = new Map([
+    ['middle-ref', '((done-source)) d15:00'],
+    ['middle-embed', '{{embed-path: ((done-source)) closed}} d15:00'],
+    ['done-source', source],
+  ]);
+  const readString = uid => strings.get(uid) || '';
+  for (const localString of ['((middle-ref))', '{{embed-path: ((middle-embed)) closed}}']) {
+    const task = resolve(localString, { readString });
+    assert.equal(task.status, 'DONE');
+    assert.equal(task.statusOwnerUid, 'done-source');
+    assert.equal(task.completionEvidence.reference.reason, 'reference-context-unsupported');
+  }
+  const direct = resolve('{{embed-path: ((done-source)) closed}} 45m', { readString });
+  assert.equal(direct.completionEvidence.reference.sourceUid, 'done-source');
+  assert.equal(direct.completionEvidence.reference.minutes, 979);
+  const local = resolve('{{embed-path: ((done-source)) closed}} d15:00', { readString });
+  assert.deepEqual(local.completionEvidence, { localMinutes: 900, reference: null });
+});
+
 test('repeated source DONE/TODO toggles use only the current visible source stamp', () => {
   const strings = new Map([['toggle-source', '{{[[DONE]]}} Work 15m d10:32']]);
   const instance = () => taskCore.resolveTaskInstance({ uid: 'toggle-wrapper', localString: '((toggle-source))',

@@ -78,17 +78,19 @@ test('preview uses source descendants only for a childless TODO-or-plain referen
   assert.deepEqual(local.rows.map((row) => row.text), ['Local descendant']);
 });
 
-test('native embeds keep source descendants before local CLOCK/notes in their preview', () => {
+test('native embed metadata keeps source descendants before local CLOCK/notes', () => {
   const tree = {
     root: [{ uid: 'local-note', string: 'Local CLOCK note', order: 0 }],
     source: [{ uid: 'source-note', string: 'Source descendant', order: 0 }],
   };
-  const preview = readDeskPreview('root', uid => tree[uid] || [], 11,
-    uid => uid === 'source' ? '{{[[TODO]]}} Source task 20m' : null,
-    '{{embed-path: ((source)) closed}}');
-  assert.equal(preview.root.text, 'Source task 20m');
-  assert.deepEqual(preview.rows.map(row => row.text), ['Source descendant', 'Local CLOCK note']);
-  assert.equal(preview.sourceUid, 'source');
+  for (const metadata of ['45m', '0m', 'd15:00', '10:00-10:45']) {
+    const wrapper = `{{embed-path: ((source)) closed}} ${metadata}`;
+    const preview = readDeskPreview('root', uid => tree[uid] || [], 11,
+      uid => uid === 'source' ? '{{[[TODO]]}} Source task 20m' : null, wrapper);
+    assert.equal(preview.root.text, `Source task 20m ${metadata}`);
+    assert.deepEqual(preview.rows.map(row => row.text), ['Source descendant', 'Local CLOCK note']);
+    assert.equal(preview.sourceUid, 'source');
+  }
 });
 
 test('native embed previews source text and keeps carrier syntax inside code literal', () => {

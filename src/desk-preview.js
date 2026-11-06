@@ -101,9 +101,9 @@ function deskEmbedPreviewUid(string) {
   if (typeof string !== 'string' || string.includes('`')) return null;
   const token = '\\{\\{(?:(?:TODO|DONE)|\\[\\[(?:TODO|DONE)\\]\\])\\}\\}';
   const withoutState = string.replace(new RegExp(token, 'gi'), ' ')
-    .replace(/(?:^|\\s)(?:\\d+h(?:\\d+(?:min|m))?|\\d+(?:min|m))(?=\\s|$)/gi, ' ')
-    .replace(/(?:^|\\s)\\d{1,2}:\\d{2}-\\d{1,2}:\\d{2}(?=\\s|$)/g, ' ')
-    .replace(/(?:^|\\s)d\\d{1,2}(?::\\d{1,2})?(?=\\s|$)/gi, ' ').replace(/\\s+/g, ' ').trim();
+    .replace(/(?:^|\s)(?:\d+h(?:\d+(?:min|m))?|\d+(?:min|m))(?=\s|$)/gi, ' ')
+    .replace(/(?:^|\s)\d{1,2}:\d{2}-\d{1,2}:\d{2}(?=\s|$)/g, ' ')
+    .replace(/(?:^|\s)d\d{1,2}(?::\d{1,2})?(?=\s|$)/gi, ' ').replace(/\s+/g, ' ').trim();
   return deskCarrierUid(withoutState);
 }
 function imageOnlyDeskRow(string) {

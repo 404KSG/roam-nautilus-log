@@ -59,6 +59,38 @@ def main():
             assert page.locator('[id$="wrap-0001"] .rm-block-ref [id^="block-input-"]').count()==0
             result['checks'].append('inline data-uid source without an invented source editor; explicit outer marker and child ownership')
 
+            page.evaluate('''()=>{const h=completionStampHarness;
+                h.embed('#desk','embwrap01','embsrc001');
+                h.embed('#desk','embwrap02','embsrc002',true);
+            }''')
+            assert page.locator('#desk .rm-block-embed .rm-block-main [id$="embsrc001"]').count()==1
+            complete('embsrc001','#desk');stamped('embsrc001')
+            assert text('embwrap01')=='{{embed-path: ((embsrc001)) closed}}'
+            complete('embwrap02','#desk');stamped('embwrap02')
+            assert text('embsrc002')=='{{[[TODO]]}} Reusable embedded source 30m'
+            page.evaluate('''()=>{const h=completionStampHarness;
+                h.embed('#desk','embkeywr1','embkeysrc');h.editEmbedSource('embkeywr1');
+            }''')
+            source_field=page.locator('#desk .rm-block-embed textarea[id$="embkeysrc"]')
+            source_field.press('Control+Enter');stamped('embkeysrc')
+            assert text('embkeywr1')=='{{embed-path: ((embkeysrc)) closed}}'
+            page.evaluate('()=>completionStampHarness.edit("embkeywr1")')
+            wrapper_field=page.locator('#desk textarea[id$="embkeywr1"]')
+            wrapper_field.press('Meta+Enter');wrapper_field.press('Meta+Enter');stamped('embkeywr1')
+            assert text('embkeysrc').endswith('d10:31')
+            page.evaluate('''()=>{const h=completionStampHarness;h.setEnabled(false);
+                h.embed('#desk','emboffwr1','emboffsrc');
+            }''')
+            complete('emboffsrc','#desk');page.wait_for_function('completionStampHarness.blocks.get("emboffsrc").includes("DONE")')
+            assert not text('emboffsrc').endswith('d10:37')
+            page.evaluate('''()=>{const h=completionStampHarness;h.setEnabled(true);
+                h.embed('#desk','embpaswr1','embpassrc');
+                h.passive('embpassrc','{{[[DONE]]}} Imported native source');
+            }''')
+            drained();assert text('embpassrc')=='{{[[DONE]]}} Imported native source'
+            assert not text('embpassrc').endswith('d10:37')
+            result['checks'].append('nested native embed source and explicit outer checkboxes, source/wrapper Cmd/Ctrl+Enter textareas, disabled setting, and passive import stamp only the resolved target')
+
             page.evaluate("()=>completionStampHarness.block('#right-sidebar','main-0001','must not replace graph text')")
             complete('main-0001','#right-sidebar')
             page.wait_for_function('completionStampHarness.blocks.get("main-0001")==="{{[[TODO]]}} Main task 30m"')

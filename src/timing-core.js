@@ -435,7 +435,7 @@ function resolveTaskInstance({
   const completionReferenceUid = (text) => {
     const source = String(text || '');
     if (taskStatus(source) || parseTimeRangeMinutes(source)) return null;
-    const carrier = carrierUidInTaskContext(source);
+    const carrier = deskCarrierUid(removeDurationTokens(source));
     if (carrier) return carrier;
     const refs = referenceUids(source);
     if (refs.length !== 1) return null;

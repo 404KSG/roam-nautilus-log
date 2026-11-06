@@ -226,9 +226,11 @@ An overnight window remains today's active plan until its logical END, even afte
 
 CLOCK and completion stamps are optional. A local stamp such as `d14:30` anchors an estimate;
 without it, the estimate still receives a slice through the allocation described above.
-Inherited completion is identified as coming from its reference. For a sole reference (or
-safe sole-reference chain), the chart may use the nearest explicit DONE owner's visible valid
-`dHH:MM`, including after duration metadata. The source storage page is not a completion date:
+Inherited completion is identified as coming from its reference. For a sole exact carrier—a
+bare reference or native embed—or a safe sole-carrier chain, the chart may use the nearest
+explicit DONE owner's visible valid `dHH:MM`, including after duration metadata. Only recognized duration
+metadata may accompany an inherited source endpoint; a local completion stamp, range, prose, code, or
+additional reference keeps that endpoint unverified. The source storage page is not a completion date:
 the Tip says **Reference time interpreted for this plan** and never invents a date from page,
 edit, create, drag, or load time. Explicit local TODO/DONE owns status; a local stamp or local
 CLOCK wins, while an invalid local/source stamp or unreadable source remains unpositioned.
@@ -335,11 +337,12 @@ unfinished input composition or copy the editor's uncommitted buffer into the gr
   to the full unfinished-task collection even during search; blue Alt counters
   refer to the first nine visible cards. No footer number slot or custom drag ghost
   is used. Background insertion uses the full collection's end, not a filtered order.
-- **Remove from Desk** sits beside Move to top. A verified, childless, plain
-  `((uid))` wrapper, optionally preceded by one `{{TODO}}` or `{{[[TODO]]}}` marker,
-  is deleted locally; its referenced source is not deleted. Ordinary tasks,
-  contextual references, and wrappers with local children move intact, with the
-  same UID and subtree, to the end of the plan's owning Daily Note page. That can
+- **Remove from Desk** sits beside Move to top. A verified, childless exact
+  `{{embed-path: ((uid)) closed}}` wrapper is deleted locally, as are the existing
+  plain `((uid))` wrappers optionally preceded by one `{{TODO}}` or `{{[[TODO]]}}`
+  marker; the referenced source is not deleted. Ordinary tasks, contextual references,
+  decorated embeds, and wrappers with local children move intact, with the same UID
+  and subtree, to the end of the plan's owning Daily Note page. That can
   be a historical or future note: the destination is never guessed from today
   or the current route, and no page is created. Unverifiable ownership blocks
   the action. Finish editing or IME composition first. There is no destructive
