@@ -357,12 +357,14 @@ unfinished input composition or copy the editor's uncommitted buffer into the gr
 - **Native focus editing.** Ordinary tasks and bare references edit their plan-entry UID.
   A supported native `embed-path` card instead opens its verified immediate source UID with
   `renderBlock`, including that source's normal outline and children; it does not open a
-  second wrapper frame. Shift-click and **Open in main window** follow the same content
-  target. The card, order, removal, local estimate, notes, CLOCK, and Actual remain on the
-  plan-entry UID. Its **More** menu offers **Open plan entry** when that local metadata needs
-  editing (and **Open source** to return); Move to top and Remove from Desk still affect only
-  the plan entry. If the source is unreadable or gone, Desk safely opens the local entry rather
-  than guessing another source. The focus dialog is centered
+  second wrapper frame. Shift-click follows that default content target. **Open in main window**
+  follows the source or plan-entry view currently selected in the dialog. The card, order,
+  removal, local estimate, notes, CLOCK, and Actual remain on the plan-entry UID. Its **More**
+  menu offers **Open plan entry** when that local metadata needs editing (and **Open source** to
+  return); that explicit view survives ordinary refreshes and keeps its own reading position.
+  Move to top and Remove from Desk still affect only the plan entry. If the source is unreadable
+  or gone, Desk safely opens the local entry with a recovery message rather than guessing another
+  source. The focus dialog is centered
   in the viewport, up to 880 CSS pixels wide, with 16px side gutters on smaller windows.
   The editor uses that wider space; background sidebars are not closed or allowed to
   squeeze it back into a narrow column. Native height and typography are unchanged.

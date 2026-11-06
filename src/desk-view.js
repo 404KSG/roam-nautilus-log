@@ -267,7 +267,9 @@ export function createDeskView({
     };
     const openMain = menuAction('Open in main window', 'share', () => {
       if (selectedUid) {
-        const uid = editorTarget(selectedUid).editorUid;
+        // Content navigation follows the currently requested view. An explicit
+        // local-entry edit must not jump away to the source on its way to main.
+        const uid = mount?.entryView ? selectedUid : editorTarget(selectedUid).editorUid;
         showOverview(false); Promise.resolve().then(() => openTask(uid, false)).catch(noticeError);
       }
     });
@@ -416,6 +418,9 @@ export function createDeskView({
       record.cleaned = true;
       await record.components.unmountNode({ el: record.el });
     };
+    // The requested view and resolved editor can differ during source recovery.
+    // Preserve each reading position even when both currently render the entry.
+    const scrollKey = (record) => `${record.entryUid}\u0000${record.entryView ? 'entry' : 'source'}\u0000${record.editorUid}`;
     function dropEditor() {
       affordances?.resetForSelection();
       clearSwipeMotion();
@@ -423,7 +428,7 @@ export function createDeskView({
       mount = null;
       if (!record) return;
       nativeGeneration += 1;
-      scrollPositions.set(record.entryUid, body.scrollTop);
+      scrollPositions.set(scrollKey(record), body.scrollTop);
       if (graph === graphName(host) && roam === host.roamAlphaAPI && record.el.contains(document.activeElement)) document.activeElement.blur();
       record.el.remove();
       enqueueNative(() => cleanupNative(record));
@@ -555,7 +560,8 @@ export function createDeskView({
     function showTask(uid, force = false, caret = null, slide = 0, requestedEditorUid = null) {
       if (!uid || !checkScope() || status !== 'ready' || !tasks.some((task) => task.uid === uid)) return;
       if (actions?.isRemovalLocked?.(planUid)) { noticeError(new Error('A removal is pending or unconfirmed. Use Refresh before editing.')); return; }
-      const target = requestedEditorUid === uid ? { entryUid: uid, editorUid: uid } : editorTarget(uid);
+      const entryView = requestedEditorUid === uid;
+      const target = entryView ? { entryUid: uid, editorUid: uid, unavailable: false } : editorTarget(uid);
       if (uid === selectedUid && mode === 'task' && mount?.editorUid === target.editorUid && !force) return;
       const entryOffset = swipeOffset;
       if (mode === 'draft') { captureDraft(); void saveDraft(); }
@@ -574,8 +580,8 @@ export function createDeskView({
         editorMessage.textContent = 'The native Roam block editor is unavailable. Return to the outline to edit.';
         return;
       }
-      const record = { entryUid: uid, editorUid: target.editorUid, generation: ++nativeGeneration,
-        el: el('div', 'nautilus-desk__native'), components, attempted: false, cleaned: false, dirty: false };
+      const record = { entryUid: uid, editorUid: target.editorUid, entryView, sourceUnavailable: target.unavailable,
+        generation: ++nativeGeneration, el: el('div', 'nautilus-desk__native'), components, attempted: false, cleaned: false, dirty: false };
       record.el.dataset.taskUid = uid;
       record.el.dataset.editorUid = target.editorUid;
       record.el.addEventListener('input', () => { if (nativeCurrent(record)) record.dirty = true; });
@@ -593,8 +599,11 @@ export function createDeskView({
           return;
         }
         if (!nativeCurrent(record)) { await cleanupNative(record); return; }
-        editorStatus.hidden = true;
-        body.scrollTop = scrollPositions.get(record.entryUid) || 0;
+        if (record.sourceUnavailable) {
+          editorStatus.hidden = false; retryEditor.hidden = false;
+          editorMessage.textContent = 'Source unavailable. Editing this plan entry instead.';
+        } else editorStatus.hidden = true;
+        body.scrollTop = scrollPositions.get(scrollKey(record)) || 0;
         if (entryGeneration === swipeGeneration) animateEntry(record.el, slide, entryOffset);
         // A draft caret is meaningful only in its local entry text. Never map a
         // wrapper-macro offset into unrelated source content.
@@ -814,7 +823,7 @@ export function createDeskView({
         clearPreview(card.images, card.lines);
         cards.delete(uid);
         previews.delete(uid); previewDirty.delete(uid); previewQueue.delete(uid); previewVersions.delete(uid);
-        scrollPositions.delete(uid);
+        for (const key of scrollPositions.keys()) if (key.startsWith(`${uid}\u0000`)) scrollPositions.delete(key);
         clearPreviewWatches(uid);
       }
       for (const [taskIndex, task] of tasks.entries()) {
@@ -990,7 +999,7 @@ export function createDeskView({
         if (index >= 0) { tasks.splice(Math.min(index, tasks.length), 0, previousTasks[index]); if (editing) editingHoldUid = selectedUid; }
       }
       const activeRecord = mount;
-      if (mode === 'task' && activeRecord && status === 'ready' && selectedUid === activeRecord.entryUid) {
+      if (mode === 'task' && activeRecord && status === 'ready' && selectedUid === activeRecord.entryUid && !activeRecord.entryView) {
         const target = editorTarget(selectedUid);
         if (target.editorUid !== activeRecord.editorUid) {
           if (composing || activeRecord.dirty || nativeInputActive(activeRecord)) {
@@ -999,7 +1008,7 @@ export function createDeskView({
             editorMessage.textContent = 'This plan entry now points to a different source. Finish editing, then reopen it.';
           } else showTask(selectedUid, true);
         } else pendingRetarget = null;
-      }
+      } else if (activeRecord?.entryView) pendingRetarget = null;
       const nextUid = reconcileDeskSelection(previousTasks, tasks, selectedUid);
       if (mode === 'task' && nextUid !== selectedUid) { if (nextUid && status === 'ready') showTask(nextUid); else showOverview(false); }
       if (status === 'ready') reconcilePreviews(previousTasks, tasks);
