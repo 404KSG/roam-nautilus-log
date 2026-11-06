@@ -27,6 +27,21 @@ content inside an unfinished task remain visible in its preview and editor.
   priority, and zero writes. An isolated synthetic composing key remains an observation,
   not a changed native behavior.
 
+## Validation contracts
+
+The removal-hint read budget is measured after the changed title and its preview
+are visible and public reads have settled. A matched no-modern-removal control
+retains legacy movement, separating the extra shared Plan/Daily Note ownership
+reads from ordinary projection and preview reads. The overhead must stay constant
+for 3 and 100 cards and at most three reads; an immediate pre-refresh zero is not
+budget evidence.
+
+The native geometry test retains native smooth scrolling, real launcher clicks,
+and exact viewport x/y/width assertions. Programmatic focus used to prepare Alt-key
+cases uses `preventScroll` so an earlier keyboard-test scroll cannot contaminate a
+later import measurement. Isolated controls reproduced the viewport drift even
+without performing an import; no product scrolling or CSS workaround is needed.
+
 ## Evidence boundary
 
 These are public-adapter and synthetic-host checks, not live Roam/Desktop proof. No real

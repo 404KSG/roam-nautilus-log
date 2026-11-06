@@ -71,7 +71,7 @@ def run():
                 page.evaluate('(o) => deskHarness.mount(o)', options)
                 # Invoke the fixture control without Playwright's viewport
                 # auto-scroll; native CSS may intentionally smooth-scroll it.
-                page.get_by_role('button', name='Open Desk', exact=True).evaluate('el => el.click()')
+                page.get_by_role('button', name='Open Desk', exact=True).click()
                 expect(page.locator('.nautilus-desk').first).to_have_attribute('data-status', 'ready')
                 count = 0 if options.get('empty') else options.get('count', 8)
                 total = count + (3 if count > 0 else 0)  # Three unfinished reference/code fixtures.
@@ -164,19 +164,47 @@ def run():
             expect(card('task-0').get_by_role('button', name='Remove from Desk', exact=True)).to_be_disabled()
             assert page.evaluate('() => deskHarness.api.stats.writes.length') == 0
             checks.append('read-only capability hints disable draft, move, remove, and import affordances before opening while legacy create/move remain available and reads still open cards')
-            # A fully capable host does not need one full removal admission scan
-            # per rendered card. Strict classification remains at click time.
-            def refresh_read_count(count):
-                mount(count=count)
-                return page.evaluate('''() => {
-                  deskHarness.api.stats.reads.length=0;
-                  deskHarness.api.setString('task-0', '{{[[TODO]]}} Refresh measurement');
-                  return deskHarness.api.stats.reads.length;
-                }''')
-            small_refresh_reads = refresh_read_count(3)
-            medium_refresh_reads = refresh_read_count(100)
-            assert small_refresh_reads <= 3 and medium_refresh_reads <= 3, (small_refresh_reads, medium_refresh_reads)
-            checks.append(f'fully capable removal affordances use {small_refresh_reads}/{medium_refresh_reads} public pulls for three/one hundred direct cards on an unrelated refresh')
+            # Measure after the observable Plan refresh, not synchronously inside
+            # setString before its queued watch has run. The matched control keeps
+            # legacy move but disables modern removal, separating normal projection
+            # reads from the extra Plan/Daily-Note ownership proof.
+            def settled_read_count():
+                samples = []
+                for _ in range(20):
+                    page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+                    samples.append(page.evaluate('() => deskHarness.api.stats.reads.length'))
+                    if len(samples) >= 3 and samples[-1] == samples[-2] == samples[-3]:
+                        return samples
+                raise AssertionError({'readsDidNotSettle': samples})
+
+            def refresh_read_count(count, modern_remove):
+                capabilities = None if modern_remove else {'modern': {'move': False, 'delete': False}}
+                mount(count=count, capabilities=capabilities)
+                page.wait_for_function('document.querySelector("[data-task-uid=task-0]")?.dataset.previewState === "ready"')
+                settled_read_count()
+                title = f'Observed budget refresh {count}'
+                page.evaluate('() => { deskHarness.api.stats.reads.length = 0; }')
+                page.evaluate('text => deskHarness.api.setString("task-0", text)', f'{{{{[[TODO]]}}}} {title} 45m')
+                expect(card('task-0').locator('.rm-desk-tile__title')).to_contain_text(title)
+                page.wait_for_function('document.querySelector("[data-task-uid=task-0]")?.dataset.previewState === "ready"')
+                samples = settled_read_count()
+                reads = page.evaluate('() => [...deskHarness.api.stats.reads]')
+                assert len(reads) > 0, 'the actual asynchronous refresh must have been observed'
+                assert page.evaluate('() => deskHarness.api.stats.writes.length') == 0
+                assert card('task-0').get_by_role('button', name='Remove from Desk', exact=True).is_disabled() == (not modern_remove)
+                return {'total': len(reads), 'plan': reads.count('plan-desk'), 'daily': reads.count('daily-page'), 'settled': samples}
+
+            removal_read_measurements = []
+            for count in [3, 100]:
+                enabled = refresh_read_count(count, True)
+                control = refresh_read_count(count, False)
+                extra = enabled['plan'] + enabled['daily'] - control['plan'] - control['daily']
+                assert 0 <= extra <= 3, {'count': count, 'enabled': enabled, 'control': control, 'extra': extra}
+                removal_read_measurements.append({'cards': count, 'enabled': enabled, 'control': control, 'extraOwnerHintReads': extra})
+            assert removal_read_measurements[0]['extraOwnerHintReads'] == removal_read_measurements[1]['extraOwnerHintReads'], removal_read_measurements
+            (OUT / 'removal-read-budget.json').write_text(json.dumps(removal_read_measurements, indent=2))
+            extra_reads = [row['extraOwnerHintReads'] for row in removal_read_measurements]
+            checks.append(f'settled removal owner-hint overhead is {extra_reads[0]}/{extra_reads[1]} shared Plan/Daily reads for three/one hundred cards, excluding normal projection reads')
             # One shared owner hint controls every Remove affordance. It must
             # reject non-Daily ownership and unavailable/inconsistent date APIs
             # before a click can reach the strict removal controller.
@@ -1138,11 +1166,17 @@ def run():
             assert page.evaluate('() => deskHarness.api.stats.writes.length') == footer_writes
             checks.append('footer provenance recovers from an initially absent title and read-after-watch closes held page/title and source/page races without writes')
 
+            # Programmatic keyboard-test focus must not start a native smooth
+            # viewport scroll that outlives this case and contaminates the next
+            # import's geometry measurement. Real key and pointer actions remain.
+            def focus_without_scroll(locator):
+                locator.evaluate('el => el.focus({preventScroll: true})')
+
             # Formal view-level Alt+Digit ownership uses a filter that hides
             # collection-first task-0 but retains several later literal targets.
             mount(count=8)
             alt_writes = page.evaluate('() => deskHarness.api.stats.writes.length')
-            card('task-0').locator('[role="button"]').focus()
+            focus_without_scroll(card('task-0').locator('[role="button"]'))
             for digit in ['0']:
                 page.keyboard.press(f'Alt+{digit}')
                 expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
@@ -1151,11 +1185,11 @@ def run():
                 page.keyboard.up(modifier); page.keyboard.up('Alt')
                 expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
             search_control = page.get_by_role('textbox', name='Search Desk', exact=True)
-            search_control.focus(); page.keyboard.press('Alt+1')
+            focus_without_scroll(search_control); page.keyboard.press('Alt+1')
             expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
             page.evaluate('''() => {
               const editable=document.createElement('div'); editable.contentEditable='true';
-              editable.dataset.altFixture=''; document.querySelector('.nautilus-desk').append(editable); editable.focus();
+              editable.dataset.altFixture=''; document.querySelector('.nautilus-desk').append(editable); editable.focus({preventScroll:true});
             }''')
             page.keyboard.press('Alt+1')
             expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
@@ -1164,15 +1198,15 @@ def run():
             page.wait_for_function('document.querySelectorAll(".nautilus-desk__card").length === 3')
             assert page.locator('.nautilus-desk__card').evaluate_all('(cards) => cards.map(card => card.dataset.taskUid)') == ['task-1', 'task-4', 'task-6']
             expect(card('task-0')).to_have_count(0)
-            card('task-1').locator('[role="button"]').focus(); page.keyboard.press('Alt+9')
+            focus_without_scroll(card('task-1').locator('[role="button"]')); page.keyboard.press('Alt+9')
             expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
             page.keyboard.press('Alt+1')
             focused('task-1'); close_focus()
-            card('task-1').locator('[role="button"]').focus(); page.keyboard.press('Alt+2')
+            focus_without_scroll(card('task-1').locator('[role="button"]')); page.keyboard.press('Alt+2')
             focused('task-4'); close_focus()
             search_control.fill('')
             activate('task-1')
-            page.locator('textarea[data-block-uid="task-1"]').evaluate('el => { el.focus(); el.setSelectionRange(2, 5); }')
+            page.locator('textarea[data-block-uid="task-1"]').evaluate('el => { el.focus({preventScroll:true}); el.setSelectionRange(2, 5); }')
             modal_before = page.evaluate('''() => {
               const modal=document.createElement('div'); modal.className='rm-enhanced-image-modal-container';
               document.querySelector('#rm-modal-portal').append(modal);
@@ -1193,15 +1227,15 @@ def run():
             search_control.fill('Outside source task')
             expect(card('task-0')).to_have_count(0)
             expect(card('ref-outside-source')).to_be_visible()
-            card('ref-outside-source').locator('[role="button"]').focus(); page.keyboard.press('Alt+1')
+            focus_without_scroll(card('ref-outside-source').locator('[role="button"]')); page.keyboard.press('Alt+1')
             expect(page.locator('.nautilus-desk__native')).to_have_attribute('data-task-uid', 'ref-outside-source')
             expect(page.locator('.nautilus-desk__native')).to_have_attribute('data-editor-uid', 'outside-source')
             close_focus()
             action_writes = page.evaluate('() => deskHarness.api.stats.writes.length')
             search_control.fill('')
-            card('task-0').locator('[role="button"]').focus(); page.keyboard.press('Alt+1')
+            focus_without_scroll(card('task-0').locator('[role="button"]')); page.keyboard.press('Alt+1')
             focused('task-0')
-            page.locator('textarea[data-block-uid="task-0"]').focus(); page.keyboard.press('Alt+1')
+            focus_without_scroll(page.locator('textarea[data-block-uid="task-0"]')); page.keyboard.press('Alt+1')
             expect(page.locator('.nautilus-desk__native')).to_have_attribute('data-task-uid', 'task-0')
             close_focus()
             assert page.evaluate('() => deskHarness.api.stats.writes.length') == action_writes == alt_writes + 1
