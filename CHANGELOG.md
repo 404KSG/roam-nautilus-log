@@ -54,6 +54,9 @@
 
 ### Fixed
 
+- Keep preview-image drags owned by the whole Desk card. Disable only the preview
+  image's browser-native image/file drag, preserving its click target and the
+  card's native drag feedback, private reorder payload, and verified ordering.
 - Translate only Desk's downward same-parent card moves from their verified final
   outline index to Roam's public pre-removal sibling slot. Strict full-outline
   readback, source/child preservation, no-op guards, and unrelated move callers

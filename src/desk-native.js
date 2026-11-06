@@ -90,6 +90,9 @@ export function nativeElements(document) {
       const node = document.createElement('img');
       const record = { src: image.src, node, failed: false, retired: false, generation: owned().generation };
       node.alt = image.alt; node.loading = 'lazy';
+      // The tile owns native drag feedback and its private reorder payload.
+      // Keep images clickable without starting a separate browser image drag.
+      node.draggable = false;
       const current = () => !record.retired && record.generation === owned().generation && owned().active;
       node.addEventListener('load', () => { if (current()) owned().notify?.(); }, { once: true });
       node.addEventListener('error', () => {

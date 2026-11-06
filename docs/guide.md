@@ -339,7 +339,10 @@ unfinished input composition or copy the editor's uncommitted buffer into the gr
   vertical insertion rail, and its resulting-position label. Gray positions refer
   to the full unfinished-task collection even during search; blue Alt counters
   refer to the first nine visible cards. No footer number slot or custom drag ghost
-  is used. Background insertion uses the full collection's end, not a filtered order.
+  is used. Starting a drag on a preview image uses the whole card as the native
+  drag source, not a separate image/file drag. Images remain clickable; this
+  setting does not affect images in the source editor or elsewhere in Roam.
+  Background insertion uses the full collection's end, not a filtered order.
 - **Remove from Desk** sits beside Move to top. A verified, childless exact
   `{{embed-path: ((uid)) closed}}` wrapper is deleted locally, as are the existing
   plain `((uid))` wrappers optionally preceded by one `{{TODO}}` or `{{[[TODO]]}}`
