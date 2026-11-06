@@ -427,6 +427,12 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     holdNextDelete: () => { holdDelete = true; }, holdNextFooterWatchRegistration: uid => { holdFooterWatchRegistration = uid; }, holdNextWatchRejection: uid => { rejectWatchRegistration = uid; }, setExternalFocus: uid => { externalFocusedUid = uid; },
     setTitle: (uid, title) => { nodes.get(uid).title = title; notify({ uid, fields: ['node/title'] }); },
     setPage: (uid, pageUid) => { nodes.get(uid).pageUid = pageUid; notify({ uid, fields: ['block/page'] }); },
+    setDailyNoteHelpers: mode => {
+      if (mode === 'missing') delete roam.util.dateToPageUid;
+      else if (mode === 'inconsistent') roam.util.dateToPageUid = () => 'wrong-daily-page';
+      else roam.util.dateToPageUid = date => date?.getFullYear() === 2026 && date?.getMonth() === 9 && date?.getDate() === 26 ? 'daily-page' : '';
+      notify({ uid: planUid, fields: ['string'] });
+    },
     setCapabilities: applyCapabilities,
     addPage: (uid, title) => { nodes.set(uid, { uid, title, parentUid: null }); },
     release: () => { releaseRender?.(); releaseMove?.(); releaseCreate?.(); releaseDelete?.(); releaseWatchRegistration?.(); releaseRender = releaseMove = releaseCreate = releaseDelete = releaseWatchRegistration = null; },

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { projectPull } = require('./pull-projection.cjs');
-const { createDeskRemoveController, createModernDeskRemoveAdapter, readStrictDeskRemoveSnapshot } = require('../src/desk-remove');
+const { createDeskRemoveController, createModernDeskRemoveAdapter, readDeskRemoveOwnerHint, readStrictDeskRemoveSnapshot } = require('../src/desk-remove');
 const ROOT='[[Nautilus Log]] {{[[roam/render]]:((roam-render-Nautilus-Log-cljs))}}';
 const copy = value => JSON.parse(JSON.stringify(value));
 function fixture({ text='{{TODO}} ((source-1))', children=false, date='2001-03-04', mode='normal', hostTimeoutMs=5000 }={}) {
@@ -67,6 +67,15 @@ test('only plain childless local wrappers delete; every content-bearing form pro
 
 test('owning historical/future Daily Note is used, never today',async()=>{
   for(const date of ['1999-12-31','2099-01-01']) {const f=fixture({date,text:'Task'});await f.remove();assert.equal(f.calls[0].args.location['parent-uid'],f.day);}
+});
+
+test('shared owner hint verifies Daily Note ownership without classifying a card',()=>{
+  const f=fixture();
+  assert.deepEqual(readDeskRemoveOwnerHint({adapter:createModernDeskRemoveAdapter(f.api),api:f.api,planUid:'plan'}),{planUid:'plan',pageUid:f.day});
+  f.nodes.get(f.day).title='Project';
+  assert.throws(()=>readDeskRemoveOwnerHint({adapter:createModernDeskRemoveAdapter(f.api),api:f.api,planUid:'plan'}));
+  f.nodes.get(f.day).title='2001-03-04'; delete f.api.util.dateToPageUid;
+  assert.throws(()=>readDeskRemoveOwnerHint({adapter:createModernDeskRemoveAdapter(f.api),api:f.api,planUid:'plan'}));
 });
 
 test('nested plans validate the entire ownership chain and append to the page root',async()=>{

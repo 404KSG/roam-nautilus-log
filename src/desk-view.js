@@ -3,7 +3,7 @@ import { projectDeskTasks, reconcileDeskSelection, stepDeskSelection, deskShortc
 import { nativeElements, nativePreviewText, readNativePreview } from './desk-native';
 import { deskEmbedPreviewUid, readDeskPlan } from './desk-preview';
 import { readDeskCapabilities, sameDeskCapabilities } from './desk-capabilities';
-import { createModernDeskRemoveAdapter, readStrictDeskRemoveSnapshot } from './desk-remove';
+import { createModernDeskRemoveAdapter, readDeskRemoveOwnerHint, readStrictDeskRemoveSnapshot } from './desk-remove';
 import { createDeskMasonry } from './desk-masonry';
 import { createDeskWidth } from './desk-width';
 import { createDeskNavigation } from './desk-navigation';
@@ -145,6 +145,7 @@ export function createDeskView({
     const footerWatchStops = new Map();
     const footerProvenance = new Map();
     const removeIntentCache = new Map();
+    let removeOwnerHint = null;
     const scrollPositions = new Map();
     const outlineVisibility = createDeskOutlineVisibility(container, host);
     const notifications = createDeskNotifications({ host, document });
@@ -348,7 +349,7 @@ export function createDeskView({
       const previous = capabilities;
       const next = currentCapabilities();
       if (!sameDeskCapabilities(previous, next)) {
-        removeIntentCache.clear();
+        removeIntentCache.clear(); removeOwnerHint = null;
         if (!next.move) drag.cancel();
         if (mode === 'draft' && draft && !next.create) notice("Notes can't be added in this graph.");
         if (mode === 'draft' && draft && next.create && draft.uncommitted) {
@@ -923,11 +924,19 @@ export function createDeskView({
       // a destructive or Daily Note promotion look available.
       const capability = { delete: typeof roam?.data?.block?.delete === 'function', move: typeof roam?.data?.block?.move === 'function' };
       if (!removeSurface || (!capability.delete && !capability.move)) return false;
-      // With both modern mutations present the hint need not reconstruct the
-      // complete ownership/subtree snapshot for every card on every render.
-      // The click-time controller still performs that strict admission before
-      // choosing delete versus promotion. A partial host needs the snapshot to
-      // establish which single mutation its displayed shape requires.
+      // One bounded, verified Plan-owner read gates every card in this render.
+      // It never classifies a target or authorizes a write; click-time removal
+      // still takes two strict snapshots and verifies host readback.
+      const ownerKey = `${capability.delete}\u0000${capability.move}`;
+      if (fresh || removeOwnerHint?.key !== ownerKey) {
+        let hint = null;
+        try { hint = readDeskRemoveOwnerHint({ adapter: createModernDeskRemoveAdapter(roam), api: roam, planUid }); }
+        catch (_error) { /* Unknown/non-Daily Note ownership is unavailable. */ }
+        removeOwnerHint = { key: ownerKey, hint };
+      }
+      if (!removeOwnerHint.hint) return false;
+      // A partial host needs the target snapshot to establish which single
+      // mutation its displayed shape requires.
       if (capability.delete && capability.move) return true;
       const key = `${task.localString}\u0000${capability.delete}\u0000${capability.move}`;
       const cached = removeIntentCache.get(task.uid);
@@ -1097,7 +1106,7 @@ export function createDeskView({
       deferredSnapshot = null;
       const previousTasks = tasks;
       const previousStatus = status;
-      removeIntentCache.clear();
+      removeIntentCache.clear(); removeOwnerHint = null;
       if (snapshot?.missing) { tasks = []; status = 'missing'; }
       else {
         try {

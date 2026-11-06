@@ -30,6 +30,14 @@ function validateOwningDailyNote({ adapter, api = adapter.api, planUid }) {
   assertChild(child, page.uid, page.children.find(row => row.uid === child.uid), page.uid);
   return { plan, page, date, ancestors };
 }
+// This bounded ownership proof is deliberately weaker than a removal
+// snapshot: it only decides whether a surface may offer Remove. The controller
+// still reads, classifies, and verifies the complete target snapshot at click
+// time, so this cache cannot authorize a mutation.
+function readDeskRemoveOwnerHint({ adapter, api = adapter.api, planUid }) {
+  const { plan, page } = validateOwningDailyNote({ adapter, api, planUid });
+  return { planUid: plan.uid, pageUid: page.uid };
+}
 function classifyDeskRemoveIntent({ target, planUid, ownerPageUid, structural = new Set() }) {
   if (!target || target.kind !== 'block' || [planUid, ownerPageUid].includes(target.uid)) fail('Invalid removal target.');
   const ref = pureDeskReferenceUid(target.string) || pureDeskEmbedUid(target.string);
@@ -241,5 +249,5 @@ function createDeskRemoveController({ getApi, getContext, runExclusive, host = g
     document?.removeEventListener?.('compositionstart', begin, true); document?.removeEventListener?.('compositionend', end, true);
   } };
 }
-module.exports = { LIMITS, DeskRemoveError, createModernDeskRemoveAdapter, validateOwningDailyNote, classifyDeskRemoveIntent,
+module.exports = { LIMITS, DeskRemoveError, createModernDeskRemoveAdapter, validateOwningDailyNote, readDeskRemoveOwnerHint, classifyDeskRemoveIntent,
   fingerprintDeskRemove, sameDeskRemoveFingerprint, readStrictDeskRemoveSnapshot, snapshotFingerprint, verifyDeskRemoveResult, createDeskRemoveController };

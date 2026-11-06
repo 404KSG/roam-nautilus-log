@@ -69,7 +69,9 @@ def run():
 
             def mount(**options):
                 page.evaluate('(o) => deskHarness.mount(o)', options)
-                page.get_by_role('button', name='Open Desk', exact=True).click()
+                # Invoke the fixture control without Playwright's viewport
+                # auto-scroll; native CSS may intentionally smooth-scroll it.
+                page.get_by_role('button', name='Open Desk', exact=True).evaluate('el => el.click()')
                 expect(page.locator('.nautilus-desk').first).to_have_attribute('data-status', 'ready')
                 count = 0 if options.get('empty') else options.get('count', 8)
                 total = count + (3 if count > 0 else 0)  # Three unfinished reference/code fixtures.
@@ -175,6 +177,22 @@ def run():
             medium_refresh_reads = refresh_read_count(100)
             assert small_refresh_reads <= 3 and medium_refresh_reads <= 3, (small_refresh_reads, medium_refresh_reads)
             checks.append(f'fully capable removal affordances use {small_refresh_reads}/{medium_refresh_reads} public pulls for three/one hundred direct cards on an unrelated refresh')
+            # One shared owner hint controls every Remove affordance. It must
+            # reject non-Daily ownership and unavailable/inconsistent date APIs
+            # before a click can reach the strict removal controller.
+            for mutation in [
+                "deskHarness.api.setPage('plan-desk','external-page')",
+                "deskHarness.api.setDailyNoteHelpers('missing')",
+                "deskHarness.api.setDailyNoteHelpers('inconsistent')",
+            ]:
+                mount(count=3)
+                before = page.evaluate('() => ({writes:deskHarness.api.stats.writes.length, children:deskHarness.api.children("plan-desk").map(row=>row.uid)})')
+                page.evaluate(f'''() => {{ {mutation}; deskHarness.api.setString('plan-desk', deskHarness.api.text('plan-desk')); }}''')
+                expect(card('task-0').get_by_role('button', name='Remove from Desk', exact=True)).to_be_disabled()
+                assert page.evaluate('() => ({writes:deskHarness.api.stats.writes.length, children:deskHarness.api.children("plan-desk").map(row=>row.uid)})') == before
+            mount(count=3)
+            expect(card('task-0').get_by_role('button', name='Remove from Desk', exact=True)).to_be_enabled()
+            checks.append('shared verified Daily Note ownership hint enables Remove only for a writable valid owner and rejects non-Daily, missing, or inconsistent date helpers without writes')
             mount()
             # Simulate a late legacy extension rule. The native span formula
             # assumes zero row-gap; a one-class legacy override otherwise turns
@@ -1120,12 +1138,12 @@ def run():
             assert page.evaluate('() => deskHarness.api.stats.writes.length') == footer_writes
             checks.append('footer provenance recovers from an initially absent title and read-after-watch closes held page/title and source/page races without writes')
 
-            # Formal view-level Alt+Digit ownership remains in the maintained
-            # browser suite, rather than relying on the historical probe.
-            mount(count=3)
+            # Formal view-level Alt+Digit ownership uses a filter that hides
+            # collection-first task-0 but retains several later literal targets.
+            mount(count=8)
             alt_writes = page.evaluate('() => deskHarness.api.stats.writes.length')
             card('task-0').locator('[role="button"]').focus()
-            for digit in ['0', '9']:
+            for digit in ['0']:
                 page.keyboard.press(f'Alt+{digit}')
                 expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
             for modifier in ['Control', 'Meta', 'Shift']:
@@ -1142,20 +1160,52 @@ def run():
             page.keyboard.press('Alt+1')
             expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
             page.evaluate('() => document.querySelector("[data-alt-fixture]")?.remove()')
-            search_control.fill('优化')
-            page.wait_for_function('document.querySelectorAll(".nautilus-desk__card").length > 0')
-            filtered_uid = page.locator('.nautilus-desk__card').first.get_attribute('data-task-uid')
-            page.locator('.nautilus-desk__card').first.locator('[role="button"]').focus()
+            search_control.fill('整理')
+            page.wait_for_function('document.querySelectorAll(".nautilus-desk__card").length === 3')
+            assert page.locator('.nautilus-desk__card').evaluate_all('(cards) => cards.map(card => card.dataset.taskUid)') == ['task-1', 'task-4', 'task-6']
+            expect(card('task-0')).to_have_count(0)
+            card('task-1').locator('[role="button"]').focus(); page.keyboard.press('Alt+9')
+            expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
             page.keyboard.press('Alt+1')
-            focused(filtered_uid); close_focus()
+            focused('task-1'); close_focus()
+            card('task-1').locator('[role="button"]').focus(); page.keyboard.press('Alt+2')
+            focused('task-4'); close_focus()
+            search_control.fill('')
+            activate('task-1')
+            page.locator('textarea[data-block-uid="task-1"]').evaluate('el => { el.focus(); el.setSelectionRange(2, 5); }')
+            modal_before = page.evaluate('''() => {
+              const modal=document.createElement('div'); modal.className='rm-enhanced-image-modal-container';
+              document.querySelector('#rm-modal-portal').append(modal);
+              const native=document.querySelector('.nautilus-desk__native'), input=native.querySelector('textarea');
+              return {entry:native.dataset.taskUid,editor:native.dataset.editorUid,selection:[input.selectionStart,input.selectionEnd],renders:deskHarness.api.stats.renders.length};
+            }''')
+            page.keyboard.press('Alt+2')
+            assert page.evaluate('''() => {
+              const native=document.querySelector('.nautilus-desk__native'), input=native.querySelector('textarea');
+              return {entry:native.dataset.taskUid,editor:native.dataset.editorUid,selection:[input.selectionStart,input.selectionEnd],renders:deskHarness.api.stats.renders.length};
+            }''') == modal_before
+            page.evaluate('() => document.querySelector("#rm-modal-portal .rm-enhanced-image-modal-container")?.remove()')
+            close_focus()
+            # Add one exact embed through the public adapter, then prove Alt
+            # opens its source editor rather than its local wrapper.
+            external_drag('[data-task-uid="task-1"]')
+            page.wait_for_function('deskHarness.api.stats.referenceRequests.at(-1)?.status === "added"')
+            search_control.fill('Outside source task')
+            expect(card('task-0')).to_have_count(0)
+            expect(card('ref-outside-source')).to_be_visible()
+            card('ref-outside-source').locator('[role="button"]').focus(); page.keyboard.press('Alt+1')
+            expect(page.locator('.nautilus-desk__native')).to_have_attribute('data-task-uid', 'ref-outside-source')
+            expect(page.locator('.nautilus-desk__native')).to_have_attribute('data-editor-uid', 'outside-source')
+            close_focus()
+            action_writes = page.evaluate('() => deskHarness.api.stats.writes.length')
             search_control.fill('')
             card('task-0').locator('[role="button"]').focus(); page.keyboard.press('Alt+1')
             focused('task-0')
             page.locator('textarea[data-block-uid="task-0"]').focus(); page.keyboard.press('Alt+1')
             expect(page.locator('.nautilus-desk__native')).to_have_attribute('data-task-uid', 'task-0')
             close_focus()
-            assert page.evaluate('() => deskHarness.api.stats.writes.length') == alt_writes
-            checks.append('formal Alt+Digit matrix covers visible/filtered order, bounds, modifiers, input/contenteditable and mounted-editor priority with zero writes')
+            assert page.evaluate('() => deskHarness.api.stats.writes.length') == action_writes == alt_writes + 1
+            checks.append('formal Alt+Digit matrix proves filtered literal Alt+1/2 order, embed source targeting, modal ownership, controls, and zero keyboard writes')
             mount()
 
             # These are synthetic native-shaped events, not physical OS drops.
