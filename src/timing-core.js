@@ -8,6 +8,7 @@
 
 const logCore = require('./log-core');
 const { inspectRenderer } = require('./renderer-contract');
+const { deskCarrierUid, replaceDeskCarriers } = require('./desk-carrier');
 
 const TODO_RE = /\{\{\[\[(TODO|DONE)\]\]\}\}|\{\{(TODO|DONE)\}\}/i;
 const CLOCK_RE = /^\s*:?CLOCK:{1,2}\s*\[([^\]]+)\](?:\s*--\s*\[([^\]]+)\])?(?:\s*=>\s*(\d+:[0-5]\d))?\s*$/i;
@@ -393,6 +394,22 @@ function referenceUids(string) {
     .map((match) => match[1]);
 }
 
+function carrierUidInTaskContext(string) {
+  if (typeof string !== 'string' || string.includes('`')) return null;
+  const residue = removeTimeRange(removeDurationTokens(removeTaskState(string)))
+    .replace(new RegExp(DONE_TIME_RE.source, 'gi'), ' ').replace(/\s+/g, ' ').trim();
+  return deskCarrierUid(residue);
+}
+
+function sourceUidForTask(string) {
+  const carrier = carrierUidInTaskContext(string);
+  if (carrier) return carrier;
+  // A malformed/native-looking carrier is not a bare reference. Do not guess
+  // identity from its internal token or from a page/unknown carrier parameter.
+  if (/\{\{\s*(?:embed-path|embed|\[\[\s*(?:embed-path|embed)\s*\]\])\s*:/i.test(String(string || ''))) return null;
+  return referenceUids(string)[0] || null;
+}
+
 /**
  * Build one daily task instance with explicit wrapper precedence. A bare
  * reference inherits only its source TODO/DONE state; an explicit wrapper
@@ -418,6 +435,8 @@ function resolveTaskInstance({
   const completionReferenceUid = (text) => {
     const source = String(text || '');
     if (taskStatus(source) || parseTimeRangeMinutes(source)) return null;
+    const carrier = carrierUidInTaskContext(source);
+    if (carrier) return carrier;
     const refs = referenceUids(source);
     if (refs.length !== 1) return null;
     const residue = source
@@ -441,9 +460,8 @@ function resolveTaskInstance({
     if (!referenceUid || stack.includes(referenceUid) || stack.length >= maxDepth) return '';
     const source = read(referenceUid);
     if (!source) return '';
-    const nested = source.replace(new RegExp(BLOCK_REF_RE.source, BLOCK_REF_RE.flags), (_match, nestedUid) => (
-      resolveSource(nestedUid, [...stack, referenceUid])
-    ));
+    const nested = replaceDeskCarriers(source, (_match, nestedUid) => resolveSource(nestedUid, [...stack, referenceUid]))
+      .replace(new RegExp(BLOCK_REF_RE.source, BLOCK_REF_RE.flags), (_match, nestedUid) => resolveSource(nestedUid, [...stack, referenceUid]));
     return removeTaskState(nested);
   };
   const resolveSourceStatus = (referenceUid, stack = []) => {
@@ -453,14 +471,13 @@ function resolveTaskInstance({
     const status = taskStatus(source);
     if (status) return { status, ownerUid: referenceUid, sourceString: source, pureChain: true,
       sourceChain: [{ uid: referenceUid, string: source }] };
-    const nestedUid = referenceUids(source)[0] || null;
+    const nestedUid = sourceUidForTask(source);
     const nested = nestedUid ? resolveSourceStatus(nestedUid, [...stack, referenceUid]) : null;
     return nested ? { ...nested, pureChain: nested.pureChain && completionReferenceUid(source) === nestedUid,
       sourceChain: [{ uid: referenceUid, string: source }, ...(nested.sourceChain || [])] } : null;
   };
 
-  const refs = referenceUids(local);
-  const sourceUid = refs[0] || null;
+  const sourceUid = sourceUidForTask(local);
   const source = sourceUid ? resolveSource(sourceUid) : '';
   const explicitStatus = taskStatus(local);
   const sourceState = sourceUid ? resolveSourceStatus(sourceUid) : null;
@@ -478,10 +495,11 @@ function resolveTaskInstance({
   const sourceRange = parseTimeRangeMinutes(source);
   const range = localRange || sourceRange;
 
-  const resolvedContent = local.replace(
-    new RegExp(BLOCK_REF_RE.source, BLOCK_REF_RE.flags),
-    (_match, referenceUid) => resolveSource(referenceUid),
-  );
+  const localCarrier = carrierUidInTaskContext(local);
+  const hasCarrierSyntax = /\{\{\s*(?:embed-path|embed|\[\[\s*(?:embed-path|embed)\s*\]\])\s*:/i.test(local);
+  const carrierResolved = replaceDeskCarriers(local, (_match, referenceUid) => resolveSource(referenceUid));
+  const resolvedContent = hasCarrierSyntax && !localCarrier ? carrierResolved
+    : carrierResolved.replace(new RegExp(BLOCK_REF_RE.source, BLOCK_REF_RE.flags), (_match, referenceUid) => resolveSource(referenceUid));
   const body = removeTimeRange(removeDurationTokens(removeTaskState(resolvedContent)))
     .replace(/\s+/g, ' ')
     .trim();

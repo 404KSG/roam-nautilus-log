@@ -1,4 +1,5 @@
 const { createDeskGraphReader, validUid, bytes, membership } = require('./desk-graph-read');
+const { CARRIER_SOURCE, deskCarrierUid, deskCodeSegments } = require('./desk-carrier');
 const DESK_PREVIEW_ROWS = 11;
 const LIMITS = Object.freeze({ nodes: 1024, children: 1024, membership: 4096, watches: 4096,
   referenceDepth: 64, references: 128, expansions: 1024, bytes: 2 * 1024 * 1024, images: 256 });
@@ -14,21 +15,6 @@ function safeDeskImageUrl(value, origin = globalThis.window?.location?.origin) {
   } catch (_error) { /* not an image URL */ }
   return null;
 }
-function deskCodeSegments(value, prose, code = value => value) {
-  const source = String(value || ''); let output = '', cursor = 0;
-  while (cursor < source.length) {
-    const start = source.indexOf('`', cursor);
-    if (start < 0) return output + prose(source.slice(cursor));
-    output += prose(source.slice(cursor, start));
-    let tickEnd = start; while (source[tickEnd] === '`') tickEnd++;
-    const ticks = source.slice(start, tickEnd); let close = source.indexOf(ticks, tickEnd);
-    // A longer backtick run is not the matching delimiter.
-    while (close >= 0 && (source[close - 1] === '`' || source[close + ticks.length] === '`')) close = source.indexOf(ticks, close + ticks.length);
-    if (close < 0) return output + code(source.slice(start));
-    output += code(source.slice(start, close + ticks.length)); cursor = close + ticks.length;
-  }
-  return output;
-}
 function ledger(limits = {}) { return { limits: { ...LIMITS, ...limits }, references: new Set(), cache: new Map(), expansions: 0, sourceBytes: 0, outputBytes: 0, images: 0 }; }
 function charge(state, key, amount, maximum) { state[key] += amount; if (state[key] > maximum) fail(`Preview ${key} limit exceeded.`); }
 function parseDeskPreviewText(string, options = {}) {
@@ -41,11 +27,27 @@ function parseDeskPreviewText(string, options = {}) {
   const append = (parts, text) => { charge(state, 'outputBytes', bytes(text), state.limits.bytes); parts.push(text); };
   const parse = (prose) => {
     const parts = [];
-    const token = /\{\{(?:(?:TODO|DONE)|\[\[(?:TODO|DONE)\]\])\}\}|!\[[^\]]*\]\([^)]*\)|\[[^\]]*\]\(\(\([\w-]{6,}\)\)\)|\[[^\]]*\]\(\[\[[^\]]+\]\]\)|\(\([\w-]{6,}\)\)|\[[^\]]*\]\([^)]+\)|#?\[\[[^\]]+\]\]/g;
+    const token = new RegExp(`${CARRIER_SOURCE}|\\{\\{\\s*(?:embed-path|embed|\\[\\[\\s*(?:embed-path|embed)\\s*\\]\\])\\s*:[^{}]*\\}\\}|\\{\\{(?:(?:TODO|DONE)|\\[\\[(?:TODO|DONE)\\]\\])\\}\\}|!\\[[^\\]]*\\]\\([^)]*\\)|\\[[^\\]]*\\]\\(\\(\\([\\w-]{6,}\\)\\)\\)|\\[[^\\]]*\\]\\(\\[\\[[^\\]]+\\]\\]\\)|\\(\\([\\w-]{6,}\\)\\)|\\[[^\\]]*\\]\\([^)]+\\)|#?\\[\\[[^\\]]+\\]\\]`, 'g');
     let cursor = 0, match;
     while ((match = token.exec(prose))) {
       append(parts, prose.slice(cursor, match.index).replace(/\s+/g, ' ')); cursor = token.lastIndex;
       const source = match[0];
+      const carrier = deskCarrierUid(source);
+      if (carrier) {
+        state.references.add(carrier); options.references?.add(carrier);
+        if (state.references.size > state.limits.references) fail('Preview reference count exceeded.');
+        if (resolving.includes(carrier) || typeof options.readString !== 'function') { append(parts, source); continue; }
+        if (!state.cache.has(carrier)) {
+          let value; try { value = options.readString(carrier); } catch (error) { throw previewError(error.message); }
+          if (value != null && typeof value !== 'string') fail('Malformed referenced text.');
+          state.cache.set(carrier, value ?? null);
+        }
+        const value = state.cache.get(carrier); if (value === null) continue;
+        const parsed = parseDeskPreviewText(value, { ...options, ledger: state, resolving: [...resolving, carrier] });
+        if (!status) status = parsed.status;
+        append(parts, parsed.text); images.push(...parsed.images); continue;
+      }
+      if (/^\{\{\s*(?:embed-path|embed|\[\[\s*(?:embed-path|embed)\s*\]\])\s*:/i.test(source)) { append(parts, source); continue; }
       const task = /^\{\{(?:(TODO|DONE)|\[\[(TODO|DONE)\]\])\}\}$/.exec(source);
       if (task) { if (!status) status = task[1] || task[2]; continue; }
       const image = /^!\[([^\]]*)\]\(([^\s)]+)(?:\s+['"][^)]*['"])?\)$/.exec(source);
@@ -94,6 +96,16 @@ function pureDeskReferenceUid(string) {
   const match = new RegExp(`^\\s*(?:(${token})\\s*)?\\(\\(([A-Za-z0-9_-]{6,255})\\)\\)\\s*(?:(${token}))?\\s*$`).exec(string);
   return match && !(match[1] && match[3]) ? match[2] : null;
 }
+function pureDeskEmbedUid(string) { return deskCarrierUid(string); }
+function deskEmbedPreviewUid(string) {
+  if (typeof string !== 'string' || string.includes('`')) return null;
+  const token = '\\{\\{(?:(?:TODO|DONE)|\\[\\[(?:TODO|DONE)\\]\\])\\}\\}';
+  const withoutState = string.replace(new RegExp(token, 'gi'), ' ')
+    .replace(/(?:^|\\s)(?:\\d+h(?:\\d+(?:min|m))?|\\d+(?:min|m))(?=\\s|$)/gi, ' ')
+    .replace(/(?:^|\\s)\\d{1,2}:\\d{2}-\\d{1,2}:\\d{2}(?=\\s|$)/g, ' ')
+    .replace(/(?:^|\\s)d\\d{1,2}(?::\\d{1,2})?(?=\\s|$)/gi, ' ').replace(/\\s+/g, ' ').trim();
+  return deskCarrierUid(withoutState);
+}
 function imageOnlyDeskRow(string) {
   // Native ANb classifies the raw row, independently of URL/token acceptance.
   return /^\s*(?:!\[[^\]]*\]\([^)]*\)\s*)+$/.test(string);
@@ -125,16 +137,20 @@ function buildDeskFullPreview({ uid, adapter, rootString, search = false, limit 
       const node = adapter.read(id); return node ? node.string ?? node.title : null;
     } });
     const root = parse(rootNode.string);
-    const sourceUid = !rootNode.children.length ? pureDeskReferenceUid(rootNode.string) : null;
-    const owner = sourceUid ? adapter.read(sourceUid) : rootNode;
-    if (sourceUid && !owner) root.text = '(missing)';
-    const direct = owner?.children || [];
+    const referenceUid = !rootNode.children.length ? pureDeskReferenceUid(rootNode.string) : null;
+    const sourceUid = deskEmbedPreviewUid(rootNode.string) || referenceUid;
+    const source = sourceUid ? adapter.read(sourceUid) : null;
+    if (sourceUid && !source) root.text = '(missing)';
     const queue = [];
     const admitMembers = (node, depth) => {
       for (const child of node.children) adapter.watch(child.uid, ['block/order']);
       return node.children.map(child => ({ ...child, parent: node.uid, depth }));
     };
-    if (owner) queue.push(...admitMembers(owner, 1));
+    // Legacy references retain local-child precedence. Native embeds keep both
+    // trees visible because local CLOCK/notes must not hide the embedded source.
+    const direct = sourceUid && !referenceUid ? [...(source?.children || []), ...rootNode.children] : (sourceUid ? (source?.children || []) : rootNode.children);
+    if (sourceUid && source) queue.push(...admitMembers(source, 1));
+    if (!sourceUid || !referenceUid) queue.push(...admitMembers(rootNode, 1));
     const visited = new Set([uid, ...(sourceUid ? [sourceUid] : [])]);
     const rendered = [], images = [...root.images]; let counted = 0, exemptions = 0, more = false;
     while (queue.length) {
@@ -218,5 +234,5 @@ function readDeskPlan(api, uid) {
   }) };
 }
 module.exports = { DESK_PREVIEW_ROWS, LIMITS, safeDeskImageUrl, deskCodeSegments, deskImages, plainDeskText, nativeDeskText,
-  nativeDeskPreviewText, parseDeskPreviewText, pureDeskReferenceUid, pruneDeskPreviewRows, readDeskPreview,
+  nativeDeskPreviewText, parseDeskPreviewText, pureDeskReferenceUid, pureDeskEmbedUid, deskEmbedPreviewUid, pruneDeskPreviewRows, readDeskPreview,
   createModernDeskPreviewAdapter, buildDeskFullPreview, readDeskPlan };

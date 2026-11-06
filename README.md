@@ -49,7 +49,7 @@ launcher instead opens that existing workday's plan. See [overnight workdays](./
 - **Work in Desk.** Its native-style cards edit the original blocks. **New task**
   inserts an implicit task at the front of the plan without adding a TODO marker.
   Dragging changes task order; nested logs stay attached. Removal and outside-block
-  drops follow the [native ownership rules](./docs/guide.md#safe-outside-block-references).
+  drops follow the [native ownership rules](./docs/guide.md#safe-outside-block-references). New outside-block drops use a native embed; older references stay unchanged.
 
 The controls are **Desk → Help → Eye off**, followed by optional Calendar. Help explains
 the current settings and budget. The eye hides or expands the widget; completed records

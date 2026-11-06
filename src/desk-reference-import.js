@@ -146,6 +146,7 @@ export async function stableDeskReferenceUid({ graphName: name, graphType = '', 
 
 // A collection reference must not add a checkbox or override source state.
 export const canonicalDeskReference = sourceUid => `((${sourceUid}))`;
+export const canonicalDeskEmbed = sourceUid => `{{embed-path: ((${sourceUid})) closed}}`;
 
 const referencePullPattern = '[:block/uid :block/string :node/title :edit/time {:block/page [:block/uid :node/title]} {:block/_children [:block/uid]} {:block/children [:block/uid :block/string :block/order {:block/_children [:block/uid]}]}]';
 const raw = (entity, ...names) => {

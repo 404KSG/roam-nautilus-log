@@ -10,6 +10,7 @@ const SOURCE = 'source-1';
 const WRAPPER = 'refwrap-1';
 const canonical = `((${SOURCE}))`;
 const legacyCanonical = `{{[[TODO]]}} ${canonical}`;
+const embedCanonical = `{{embed-path: ((${SOURCE})) closed}}`;
 const clone = value => JSON.parse(JSON.stringify(value));
 const transfer = ({ uid = SOURCE, uri = `https://roamresearch.com/#/app/desk-fixture/page/${SOURCE}`, onlyParents = uid, list = uid, files = 0, html = '', types } = {}) => ({
   types: types || ['roam/block-uid-list-only-parents', 'roam/block-uid-list', 'roam/roam-uri-list'],
@@ -68,22 +69,30 @@ async function fixture({ createMode = 'normal', onCreate, source = {}, sourceRaw
     uid: SOURCE, string: '{{[[TODO]]}} Source task 20m', parentUid: 'outside-parent', pageUid: 'outside-page',
     children: [{ uid: 'source-child', order: 0 }], ...source,
   };
-  const entities = new Map([[SOURCE, sourceNode]]);
+  const entities = new Map([
+    [SOURCE, sourceNode],
+    ['outside-parent', { uid: 'outside-parent', string: 'Outside parent', parentUid: 'outside-page', pageUid: 'outside-page', children: [] }],
+    ['outside-page', { uid: 'outside-page', title: 'Outside page', children: [] }],
+    ['plan-page', { uid: 'plan-page', title: 'Plan page', children: [] }],
+  ]);
   const writes = [];
   let activeCreateMode = createMode;
   let currentUser = 'user-1';
   let currentProvider;
   const planEntity = () => suppliedPlan ? clone(suppliedPlan) : {
     'block/uid': 'plan', 'block/string': ROOT,
+    'block/_children': [{ 'block/uid': 'plan-page' }], 'block/page': { 'block/uid': 'plan-page' },
     'block/children': rows.map(row => child(row.uid, row.string, row.order)),
   };
-  const sourceEntity = node => ({
+  const sourceEntity = node => node.title !== undefined ? {
+    'block/uid': node.uid, 'node/title': node.title, 'block/children': [],
+  } : {
     'block/uid': node.uid, 'block/string': node.string,
     'block/_children': node.parentUid === undefined ? undefined : [{ 'block/uid': node.parentUid }],
     'block/page': node.pageUid === undefined ? undefined : { 'block/uid': node.pageUid },
     'block/children': node.children === undefined ? undefined : Array.isArray(node.children)
       ? node.children.map(row => ({ 'block/uid': row.uid, 'block/order': row.order, 'block/_children': [{ 'block/uid': node.uid }] })) : node.children,
-  });
+  };
   const pull = (pattern, lookup) => {
     const uid = lookup?.[1];
     const node = entities.get(uid);
@@ -142,14 +151,14 @@ const removeStrictWrapper = (f) => {
   f.entities.delete(WRAPPER);
 };
 
-test('external reference import preserves dragged plain/TODO content without adding a local task marker', async t => {
+test('external import preserves its source and creates the native embed-path wrapper', async t => {
   for (const string of ['Ordinary note with **formatting** and a child', '{{[[TODO]]}} Existing task 20m', '{{TODO}} Compact task marker']) {
     await t.test(string, async () => {
       const f = await fixture({ source: { string }, project: true });
       const sourceBefore = clone(f.sourceNode);
       assert.equal((await f.call()).status, 'added');
-      assert.deepEqual(f.writes, [{ uid: WRAPPER, parentUid: 'plan', order: 0, string: `((${SOURCE}))` }]);
-      assert.equal(f.rows.find(row => row.uid === WRAPPER).string, `((${SOURCE}))`);
+      assert.deepEqual(f.writes, [{ uid: WRAPPER, parentUid: 'plan', order: 0, string: embedCanonical }]);
+      assert.equal(f.rows.find(row => row.uid === WRAPPER).string, embedCanonical);
       assert.deepEqual(f.sourceNode, sourceBefore, 'source text, state, parent and children must remain untouched');
     });
   }
@@ -191,11 +200,11 @@ test('late bare/legacy receipts resolve before completed-source eligibility, the
     f.setCreateMode('normal');
     assert.equal((await f.call()).status, 'added');
     assert.equal(f.writes.length, 2);
-    assert.equal(f.rows.find(row => row.uid === WRAPPER).string, canonical);
+    assert.equal(f.rows.find(row => row.uid === WRAPPER).string, embedCanonical);
   });
 });
 
-test('a legacy result cannot confirm a requested bare create, even when its known identity resolves', async () => {
+test('a legacy result cannot confirm a requested native embed create, even when its known identity resolves', async () => {
   const f = await fixture({ createMode: 'legacy-result', project: true });
   await assert.rejects(f.call(), /confirm/i);
   assert.equal(f.rows.find(row => row.uid === WRAPPER).string, legacyCanonical);
@@ -203,7 +212,7 @@ test('a legacy result cannot confirm a requested bare create, even when its know
   f.setCreateMode('normal');
   assert.equal((await f.call()).status, 'added');
   assert.equal(f.writes.length, 2);
-  assert.equal(f.rows.find(row => row.uid === WRAPPER).string, canonical);
+  assert.equal(f.rows.find(row => row.uid === WRAPPER).string, embedCanonical);
 });
 
 test('strict modern seam: import requires data.pull and data.block.create before a write', async () => {
@@ -248,11 +257,24 @@ test('strict source classifier rejects renderer/query/embed spellings and malfor
   }
 });
 
+test('source ancestry blocks recursive plan embeds while allowing same-page siblings', async () => {
+  const cyclic = await fixture();
+  cyclic.sourceNode.parentUid = 'inside-parent';
+  cyclic.sourceNode.pageUid = 'plan-page';
+  cyclic.entities.set('inside-parent', { uid: 'inside-parent', string: 'Inside', parentUid: 'plan', pageUid: 'plan-page', children: [] });
+  await assert.rejects(cyclic.call(), error => error.code === 'embed-cycle');
+  assert.equal(cyclic.writes.length, 0);
+
+  const sibling = await fixture();
+  assert.equal((await sibling.call()).status, 'added');
+  assert.equal(sibling.writes.length, 1);
+});
+
 test('modern adapter creates and readbacks an exact wrapper for before, after, and background positions with hidden rows', async () => {
   const before = await fixture();
   const sourceBefore = clone(before.sourceNode);
   assert.equal((await before.call()).order, 0);
-  assert.deepEqual(before.writes, [{ uid: WRAPPER, parentUid: 'plan', order: 0, string: canonical }]);
+  assert.deepEqual(before.writes, [{ uid: WRAPPER, parentUid: 'plan', order: 0, string: embedCanonical }]);
   assert.deepEqual(before.sourceNode, sourceBefore);
 
   const after = await fixture();
@@ -488,6 +510,10 @@ test('strict post-create adoption resolves identity but still reports source or 
     await assert.rejects(f.call(), /confirm/i);
     assert.equal(f.writes.length, 1);
     removeStrictWrapper(f);
+    if (createMode === 'source-moved') {
+      f.sourceNode.parentUid = 'outside-parent';
+      f.sourceNode.pageUid = 'outside-page';
+    }
     f.setCreateMode('normal');
     assert.equal((await f.call()).status, 'added');
     assert.equal(f.writes.length, 2);

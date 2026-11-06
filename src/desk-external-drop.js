@@ -130,15 +130,20 @@ export function createDeskExternalDrop({
       operations.set(key, operation);
       request.then(result => {
         if (operations.get(key) !== operation || operation.epoch !== epoch || suspended || !canAccept()) return;
-        say(result?.status === 'added' ? 'Added reference. Original kept.' : 'Already in this plan.', true);
+        say(result?.status === 'added' ? 'Added embed. Original kept.' : 'Already in this plan.', true);
       }, error => {
         if (operations.get(key) !== operation || operation.epoch !== epoch || suspended) return;
+        const cycleMessages = {
+          'embed-cycle': 'That block cannot be embedded into this plan without a cycle. Nothing was added.',
+          'embed-ancestry-unbounded': 'The block ancestry is too deep to embed safely. Nothing was added.',
+          'embed-ancestry-unavailable': 'The block ancestry could not be verified. Nothing was added.',
+        };
         say(error?.code === 'source-completed' ? 'Completed source. Desk only shows unfinished items.'
-          : 'Could not confirm the reference. Check this plan before retrying.', true);
+          : cycleMessages[error?.code] || 'Could not confirm the reference. Check this plan before retrying.', true);
       }).finally(() => { if (operations.get(key) === operation) operations.delete(key); });
     }
     clearCandidate();
-    say('Adding reference. Original kept.');
+    say('Adding embed. Original kept.');
   };
   const keydown = event => { if (event.key === 'Escape' && (candidate || operations.size || messageTimer !== null)) cancelAll(); };
   // A settled operation can still own terminal feedback and a timer.

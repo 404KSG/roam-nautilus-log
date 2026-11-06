@@ -14,6 +14,9 @@
 
 ### Changed
 
+- New Desk outside-block drops now create the native `embed-path` wrapper. Existing bare and
+  legacy references are not migrated; wrapper-local estimates and CLOCK ownership remain local,
+  source editing stays native, and only childless exact embeds are deleted by Desk removal.
 - Restore normal non-date rendering for managed templates: show the usual capacity
   summary and diagram without an extra template heading or template-only hiding.
   Remove the presentation controller and its metadata watches; preserve fixed content,

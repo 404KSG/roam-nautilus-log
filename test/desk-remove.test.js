@@ -49,7 +49,7 @@ function fixture({ text='{{TODO}} ((source-1))', children=false, date='2001-03-0
 
 test('only plain childless local wrappers delete; every content-bearing form promotes the same UID',async t=>{
   for(const [text,children,kind] of [
-    ['((source-1))',false,'delete'],['{{TODO}} ((source-1))',false,'delete'],['((source-1)) {{[[TODO]]}}',false,'move'],
+    ['((source-1))',false,'delete'],['{{TODO}} ((source-1))',false,'delete'],['{{embed-path: ((source-1)) closed}}',false,'delete'],['{{embed-path: ((source-1)) closed}} 45m',false,'move'],['((source-1)) {{[[TODO]]}}',false,'move'],
     ['((source-1))',true,'move'],['Review ((source-1))',false,'move'],['{{DONE}} ((source-1))',false,'move'],
     ['{{TODO}} {{TODO}} ((source-1))',false,'move'],['{{todo}} ((source-1))',false,'move'],['{{[[TODO}} ((source-1))',false,'move'],['{{TODO]]}} ((source-1))',false,'move'],['((target))',false,'move'],['((source-page))',false,'delete'],
     ['`((source-1))`',false,'move'],['[[Page]]',false,'move'],['[Alias](((source-1)))',false,'move'],['',false,'move'],

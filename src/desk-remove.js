@@ -1,5 +1,5 @@
 const { createDeskGraphReader, validUid } = require('./desk-graph-read');
-const { pureDeskReferenceUid, deskCodeSegments } = require('./desk-preview');
+const { pureDeskReferenceUid, pureDeskEmbedUid, deskCodeSegments } = require('./desk-preview');
 const { inspectRenderer } = require('./renderer-contract');
 const LIMITS = Object.freeze({ nodes: 4096, depth: 128, children: 2048, membership: 16384, bytes: 8 * 1024 * 1024, references: 128, watches: 8192 });
 class DeskRemoveError extends Error { constructor(message, code = 'remove-unavailable') { super(message || 'Could not safely remove this card.'); this.code = code; } }
@@ -32,8 +32,8 @@ function validateOwningDailyNote({ adapter, api = adapter.api, planUid }) {
 }
 function classifyDeskRemoveIntent({ target, planUid, ownerPageUid, structural = new Set() }) {
   if (!target || target.kind !== 'block' || [planUid, ownerPageUid].includes(target.uid)) fail('Invalid removal target.');
-  const ref = pureDeskReferenceUid(target.string);
-  const plainWrapper = /^(?:\{\{(?:TODO|\[\[TODO\]\])\}\}\s*)?\(\([A-Za-z0-9_-]{6,255}\)\)$/.test(target.string.trim());
+  const ref = pureDeskReferenceUid(target.string) || pureDeskEmbedUid(target.string);
+  const plainWrapper = /^(?:\{\{(?:TODO|\[\[TODO\]\])\}\}\s*)?\(\([A-Za-z0-9_-]{6,255}\)\)$/.test(target.string.trim()) || Boolean(pureDeskEmbedUid(target.string));
   const pure = plainWrapper && !target.children.length && ref && ![target.uid, planUid, ownerPageUid].includes(ref) && !structural.has(ref);
   return pure ? { kind: 'delete-wrapper', uid: target.uid, sourceUid: ref } : { kind: 'promote', uid: target.uid };
 }

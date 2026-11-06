@@ -965,10 +965,10 @@ def run():
             drop_geometry_after = page.locator('.nautilus-desk__grid').evaluate('el => { const r=el.getBoundingClientRect(); return [r.x,r.y,r.width]; }')
             assert drop_geometry_after == drop_geometry_before, (drop_geometry_before, drop_geometry_after)
             toast = page.locator('.nautilus-desk__drop-toast')
-            expect(toast).to_have_text('Added reference. Original kept.')
+            expect(toast).to_have_text('Added embed. Original kept.')
             assert toast.evaluate('el => ({position:getComputedStyle(el).position,pointerEvents:getComputedStyle(el).pointerEvents})') == {'position': 'absolute', 'pointerEvents': 'none'}
             imported_row = page.evaluate('() => deskHarness.api.children("plan-desk").find(row => row.uid === "ref-outside-source")')
-            assert imported_row['string'] == '((outside-source))', imported_row
+            assert imported_row['string'] == '{{embed-path: ((outside-source)) closed}}', imported_row
             assert page.evaluate('() => deskHarness.api.sourceSnapshot("outside-source")') == source_before
             # Exercise the real Remove action and import owner together without
             # a reload: deleting only fixture rows cannot catch lifecycle locks.
@@ -1048,22 +1048,22 @@ def run():
                 expect(card('ref-outside-source')).to_be_visible()
                 expect(card('ref-outside-source').locator('.rm-desk-tile__title .rm-desk-tile__check')).to_have_count(expected_checks)
                 expect(card('ref-outside-source').locator('.rm-desk-tile__preview')).to_contain_text('Source child stays')
-                assert page.evaluate('deskHarness.api.text("ref-outside-source")') == '((outside-source))'
+                assert page.evaluate('deskHarness.api.text("ref-outside-source")') == '{{embed-path: ((outside-source)) closed}}'
                 assert page.evaluate('deskHarness.api.sourceSnapshot("outside-source")') == source_before
                 assert page.evaluate('deskHarness.api.stats.writes.length') == 1
                 activate('ref-outside-source')
-                expect(page.locator('.nautilus-desk__native textarea[data-block-uid="ref-outside-source"]')).to_have_value('((outside-source))')
+                expect(page.locator('.nautilus-desk__native textarea[data-block-uid="ref-outside-source"]')).to_have_value('{{embed-path: ((outside-source)) closed}}')
                 close_focus()
                 page.evaluate('()=>deskHarness.api.setString("outside-source","{{[[DONE]]}} Completed by the user")')
                 expect(card('ref-outside-source')).to_have_count(0)
-                assert page.evaluate('deskHarness.api.text("ref-outside-source")') == '((outside-source))'
+                assert page.evaluate('deskHarness.api.text("ref-outside-source")') == '{{embed-path: ((outside-source)) closed}}'
                 assert page.evaluate('deskHarness.api.stats.writes.length') == 1
                 assert page.evaluate('deskHarness.api.stats.nativeWrites.length') == 0
                 page.evaluate('()=>deskHarness.api.setString("outside-source","Reopened as a plain note")')
                 expect(card('ref-outside-source')).to_be_visible()
                 expect(card('ref-outside-source').locator('.rm-desk-tile__title .rm-desk-tile__check')).to_have_count(0)
                 assert page.evaluate('deskHarness.api.stats.writes.length') == 1
-            checks.append('plain/TODO imports stay bare references, preserve source children, and follow source state without a local override')
+            checks.append('plain/TODO imports create native embeds, preserve source children, and follow source state without a local override')
 
             mount(count=3)
             page.evaluate('()=>deskHarness.api.setString("outside-source","{{[[DONE]]}} Already completed")')

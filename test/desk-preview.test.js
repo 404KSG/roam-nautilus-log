@@ -78,6 +78,34 @@ test('preview uses source descendants only for a childless TODO-or-plain referen
   assert.deepEqual(local.rows.map((row) => row.text), ['Local descendant']);
 });
 
+test('native embeds keep source descendants before local CLOCK/notes in their preview', () => {
+  const tree = {
+    root: [{ uid: 'local-note', string: 'Local CLOCK note', order: 0 }],
+    source: [{ uid: 'source-note', string: 'Source descendant', order: 0 }],
+  };
+  const preview = readDeskPreview('root', uid => tree[uid] || [], 11,
+    uid => uid === 'source' ? '{{[[TODO]]}} Source task 20m' : null,
+    '{{embed-path: ((source)) closed}}');
+  assert.equal(preview.root.text, 'Source task 20m');
+  assert.deepEqual(preview.rows.map(row => row.text), ['Source descendant', 'Local CLOCK note']);
+  assert.equal(preview.sourceUid, 'source');
+});
+
+test('native embed previews source text and keeps carrier syntax inside code literal', () => {
+  const source = '{{[[TODO]]}} Source title 20m';
+  const preview = parseDeskPreviewText('{{embed-path: ((source-1)) closed}}', {
+    readString: uid => uid === 'source-1' ? source : null,
+  });
+  assert.equal(preview.text, 'Source title 20m');
+  assert.deepEqual(preview.referenceUids, ['source-1']);
+  assert.equal(parseDeskPreviewText('`{{embed-path: ((source-1)) closed}}`', {
+    readString: () => source,
+  }).text, '`{{embed-path: ((source-1)) closed}}`');
+  assert.equal(parseDeskPreviewText('{{embed: ((source-1)) open}}', {
+    readString: () => source,
+  }).text, '{{embed: ((source-1)) open}}');
+});
+
 test('parser keeps code/prose segment-local, aliases exact, and rejects multiple TODO wrappers', () => {
   assert.equal(parseDeskPreviewText('[[Alpha]] `literal` tail').text, 'Alpha `literal` tail');
   assert.equal(parseDeskPreviewText('[Jump](((source-1)))').text, 'Jump');

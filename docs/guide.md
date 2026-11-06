@@ -387,7 +387,9 @@ order. Only explicit `open: false` folds a row. Hidden descendants and budget
 truncation produce `...`. These are original-content projections, not summaries.
 A childless plain reference can show its source block or page and children;
 local children take precedence, and contextual references do not adopt another
-subtree. Missing external roots show `(missing)`. Code remains literal. Unsupported
+subtree. A native block embed also shows its source tree before local children, so
+local CLOCK/LOGBOOK notes do not hide it. Missing external roots show `(missing)`.
+Code remains literal. Unsupported
 rich forms are not executed; this is not a replacement for Roam's full renderer.
 Opening a card edits the complete original block, without changing source folds.
 Markdown images outside inline/fenced code in
@@ -410,10 +412,12 @@ built-in starred/Desk collection.
 ### Safe outside-block references
 
 Drag one ordinary native Roam block from the same window and graph onto a Desk card
-(or the background). Desk preserves the original block and creates one bare native
-reference, `((source-uid))`, under the current plan. It adds no TODO marker: plain text
-stays plain, and an existing task checkbox is not duplicated. The source text, parent
-and children stay untouched; the reference follows the source's state. New drops of
+(or the background). Desk preserves the original block and creates one native block
+embed, `{{embed-path: ((source-uid)) closed}}`, under the current plan. It adds no
+TODO marker: plain text stays plain, and an existing task checkbox is not duplicated.
+The source text, parent and children stay untouched; the wrapper follows the source's
+state while CLOCK and local timing remain on the wrapper. Existing bare and legacy
+references are neither migrated nor rewritten. New drops of
 already-completed sources are declined with a clear message instead of reopening them
 or silently adding an invisible card to this unfinished-items view.
 Left/right card halves choose
@@ -425,11 +429,13 @@ cross-graph payloads are rejected. Nautilus ignores modifier gestures and leaves
 those events entirely to Roam; it does not suppress Roam's own modifier behavior.
 Repeated drops reuse the same deterministic wrapper. Existing legacy TODO wrappers
 are recognized read-only for deduplication; this update does not rewrite or remove their
-saved markers. Strict receipt adoption recognizes the exact bare or legacy wrapper at
-its reserved ID, but a new create is confirmed only against the requested bare string.
+saved markers. Exact native embeds are also read-only duplicates. Strict receipt adoption
+recognizes the exact bare, legacy, or embed wrapper at its reserved ID, but a new create
+is confirmed only against the requested embed string.
 After a confirmed add,
-Remove from Desk of its childless local wrapper permits the source to be dropped
-again with that same ID. A promoted wrapper still occupies the ID, so Desk does
+Remove from Desk deletes only a childless, exact local embed wrapper; decorations,
+local timing, or children move intact to the owning Daily Note. This permits the source
+to be dropped again with that same ID. A promoted wrapper still occupies the ID, so Desk does
 not create another. An unconfirmed attempt in that running view is
 verification-only; if its exact childless wrapper is later observed, that graph
 state resolves the reservation and a later confirmed removal may re-add it. A

@@ -3,7 +3,8 @@ import { createDeskRemoveController } from './desk-remove';
 import { resolveTaskInstance } from './timing-core';
 import { inspectRenderer } from './renderer-contract';
 import { readChildren, readBlockString, blockUidExists, moveGraphBlock, createGraphBlock, updateGraphBlock } from './timing-roam';
-import { canonicalDeskReference, createModernReferenceAdapter, DeskReferenceImportError, fingerprintDeskReferenceSource, freezeReferenceDrop, isSafeDeskReferenceUid, isUnsupportedReferenceSource, readDeskDropContext, readStrictReferenceEntity, readStrictReferenceOutline, sameDeskDropContext, stableDeskReferenceUid } from './desk-reference-import';
+import { canonicalDeskEmbed, canonicalDeskReference, createModernReferenceAdapter, DeskReferenceImportError, fingerprintDeskReferenceSource, freezeReferenceDrop, isSafeDeskReferenceUid, isUnsupportedReferenceSource, readDeskDropContext, readStrictReferenceEntity, readStrictReferenceOutline, sameDeskDropContext, stableDeskReferenceUid } from './desk-reference-import';
+import { deskCarrierUid } from './desk-carrier';
 
 /** All Desk writes share the graph-scoped outline lock. A successful host call is not confirmation. */
 export function createDeskActions({
@@ -47,6 +48,32 @@ export function createDeskActions({
   });
   const sameOrder = (rows, expected) => rows.map((r) => r.uid).join('\0') === expected.join('\0');
   const task = (row) => resolveTaskInstance({ uid: row.uid, localString: row.string, readString });
+  const ancestryNode = (adapter, uid) => {
+    const value = adapter.pull(uid);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const nodeUid = value.uid || value['block/uid'] || value[':block/uid'];
+    const string = value.string ?? value['block/string'] ?? value[':block/string'];
+    const title = value.title ?? value['node/title'] ?? value[':node/title'];
+    const parents = value.parentUids ?? value.parentUid ?? value['block/_children'] ?? value[':block/_children'];
+    const parentUids = (Array.isArray(parents) ? parents : []).map(parent => typeof parent === 'string' ? parent : parent?.uid || parent?.['block/uid'] || parent?.[':block/uid']);
+    if (nodeUid !== uid || (string !== undefined && typeof string !== 'string') || (title !== undefined && typeof title !== 'string')) return null;
+    if (typeof title === 'string' && string === undefined && parentUids.length === 0) return { uid, page: true };
+    if (typeof string !== 'string' || typeof title === 'string' || parentUids.length !== 1 || !parentUids[0]) return null;
+    return { uid, parentUid: parentUids[0], page: false };
+  };
+  const assertEmbedAncestry = (adapter, startUid, forbiddenUid) => {
+    let current = startUid; const seen = new Set();
+    for (let depth = 0; depth < 32; depth++) {
+      if (current === forbiddenUid) throw new DeskReferenceImportError('That block cannot be embedded into this plan without a cycle. Nothing was added.', 'embed-cycle');
+      if (seen.has(current)) throw new DeskReferenceImportError('The block ancestry could not be verified. Nothing was added.', 'embed-ancestry-unavailable');
+      seen.add(current);
+      const node = ancestryNode(adapter, current);
+      if (!node) throw new DeskReferenceImportError('The block ancestry could not be verified. Nothing was added.', 'embed-ancestry-unavailable');
+      if (node.page) return;
+      current = node.parentUid;
+    }
+    throw new DeskReferenceImportError('The block ancestry is too deep to embed safely. Nothing was added.', 'embed-ancestry-unbounded');
+  };
 
   const moveTask = ({ planUid, uid, targetUid = null, position = 'before' }) => exclusive(async () => {
     const rows = outline(planUid);
@@ -111,11 +138,12 @@ export function createDeskActions({
         return item.kind === 'task' && item.status === 'TODO' && item.title && item.title !== '(untitled)';
       };
       const sourceUid = claim.sourceUid;
-      const canonical = canonicalDeskReference(sourceUid);
-      // Older releases emitted a local TODO before this reference. Recognize
-      // that exact legacy shape for read-only deduplication/receipt adoption,
-      // but never rewrite it or use it for new creates.
-      const knownReference = string => string === canonical || string === `{{[[TODO]]}} ${canonical}`;
+      const canonical = canonicalDeskEmbed(sourceUid);
+      const bareReference = canonicalDeskReference(sourceUid);
+      // Older releases emitted a local TODO before a bare reference. Both old
+      // shapes and an exact native carrier remain read-only deduplication forms.
+      const knownReference = string => string === bareReference || string === `{{[[TODO]]}} ${bareReference}`
+        || deskCarrierUid(string) === sourceUid;
       const simpleReference = row => knownReference(String(row?.string || '').trim());
       const validSource = (source) => {
         if (!source || source.uid !== sourceUid || sourceUid === planUid || typeof source.string !== 'string' || !source.string.trim()
@@ -210,6 +238,12 @@ export function createDeskActions({
       if (reservation.attempted) {
         throw new DeskReferenceImportError('Could not confirm the reference. Check this plan before retrying.', 'unconfirmed');
       }
+      assertEmbedAncestry(adapter, sourceUid, planUid);
+      assertEmbedAncestry(adapter, planUid, sourceUid);
+      assertContext();
+      // A concurrent move into the plan is a no-op, never a cycle write.
+      rows = readStrictReferenceOutline(adapter, planUid);
+      if (rows.some(row => row.uid === sourceUid)) return { status: 'existing-source', sourceUid };
 
       const active = rows.filter(activeTask);
       let order;

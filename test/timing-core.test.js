@@ -112,6 +112,36 @@ test('a bare reference inherits source status but not source completion time', (
   assert.match(inherited.effectiveString, /DONE.*25m/);
 });
 
+test('a native embed inherits title, source status, and source duration without changing CLOCK ownership', () => {
+  const task = timing.resolveTaskInstance({
+    uid: 'embed-wrapper',
+    localString: '{{embed-path: ((source-task)) closed}} 45m',
+    readString: uid => uid === 'source-task' ? '{{[[TODO]]}} Source task 20m' : '',
+  });
+  assert.deepEqual({
+    sourceUid: task.sourceUid, title: task.title, status: task.status,
+    statusOwnerUid: task.statusOwnerUid, plannedMinutes: task.plannedMinutes,
+  }, {
+    sourceUid: 'source-task', title: 'Source task', status: 'TODO',
+    statusOwnerUid: 'source-task', plannedMinutes: 45,
+  });
+  assert.match(task.effectiveString, /Source task 45m/);
+  assert.doesNotMatch(task.effectiveString, /embed-path|closed/);
+  assert.equal(timing.actualMinutesToday('embed-wrapper', [{
+    taskUid: 'source-task', start: new Date(2026, 7, 22, 9, 0), end: new Date(2026, 7, 22, 9, 20), running: false,
+  }], new Date(2026, 7, 22, 12, 0)), 0);
+});
+
+test('malformed embed carriers never claim the internal reference as task identity', () => {
+  const task = timing.resolveTaskInstance({
+    uid: 'local-wrapper', localString: '{{embed: ((source-task)) open}}',
+    readString: () => '{{[[TODO]]}} Source task 20m',
+  });
+  assert.equal(task.sourceUid, null);
+  assert.equal(task.statusOwnerUid, 'local-wrapper');
+  assert.doesNotMatch(task.title, /Source task/);
+});
+
 test('a bare reference chain inherits the nearest explicit source status', () => {
   const strings = new Map([
     ['middle-source', '((completed-source))'],
