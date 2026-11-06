@@ -465,8 +465,9 @@ reserved UID and never allocates a second UID for that source and plan. Imports 
 Progress temporarily uses the existing title area, leaving Search and New task
 unobstructed. After a confirmed add or removal, Desk uses its own public
 Blueprint top toaster for one 3-second outcome: green success for a real add or
-removal, primary for a duplicate/already-absent result, and warning for a
-failure. The toaster has no Undo action, does not take focus or Escape, and is
+removal, primary for an accepted duplicate embed or already-absent result, and
+warning for a source already owned as a Desk note or for a failure. A source-owned
+warning has no move action. The toaster has no Undo action, does not take focus or Escape, and is
 removed with its Desk view. If that host component is unavailable or throws,
 the same truthful message stays in the existing polite title status instead;
 confirmed graph writes are never retried or reclassified as failures.

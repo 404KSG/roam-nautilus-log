@@ -852,9 +852,9 @@ export function createDeskView({
       return `${model.searchText} ${pageTitle}`.toLocaleLowerCase().includes(search);
     });
     function clearFooterWatches(uid = null) {
-      const entries = uid ? [[uid, footerWatchStops.get(uid) || []]] : [...footerWatchStops.entries()];
-      for (const [key, stops] of entries) {
-        for (const stop of stops) stop();
+      const keys = uid ? [uid] : [...new Set([...footerWatchStops.keys(), ...footerProvenance.keys()])];
+      for (const key of keys) {
+        for (const stop of footerWatchStops.get(key) || []) stop();
         footerWatchStops.delete(key); footerProvenance.delete(key);
       }
     }
@@ -867,6 +867,17 @@ export function createDeskView({
         card.source.textContent = title;
       } else card.source?.remove(), card.source = null;
     }
+    function readFooterProvenance(sourceUid) {
+      let pageUid = null, title = '';
+      try {
+        const source = createModernDeskPreviewAdapter(roam).read(sourceUid);
+        if (source?.kind === 'block' && typeof source.page?.uid === 'string') {
+          pageUid = source.page.uid;
+          if (typeof source.page.title === 'string' && source.page.title) title = source.page.title;
+        }
+      } catch (_error) { /* Provenance is optional; the preview remains available. */ }
+      return { pageUid, title };
+    }
     function syncFooterProvenance(task) {
       const card = cards.get(task.uid);
       const sourceUid = deskEmbedPreviewUid(task.localString);
@@ -874,28 +885,50 @@ export function createDeskView({
       const cached = footerProvenance.get(task.uid);
       if (cached?.sourceUid === sourceUid) { renderFooterProvenance(card, cached.title); return; }
       clearFooterWatches(task.uid);
-      let title = '', targets = [];
-      try {
-        const source = createModernDeskPreviewAdapter(roam).read(sourceUid);
-        if (source?.kind === 'block' && typeof source.page?.uid === 'string' && typeof source.page?.title === 'string' && source.page.title) {
-          title = source.page.title;
-          targets = [{ uid: sourceUid, fields: ['block/page'] }, { uid: source.page.uid, fields: ['node/title'] }];
-        }
-      } catch (_error) { /* Provenance is optional; the preview remains available. */ }
-      footerProvenance.set(task.uid, { sourceUid, title });
-      renderFooterProvenance(card, title);
-      const stops = targets.map(target => subscribePreviewWatch(target, () => {
+      const provenance = readFooterProvenance(sourceUid);
+      const record = { sourceUid, ...provenance };
+      footerProvenance.set(task.uid, record);
+      renderFooterProvenance(card, record.title);
+      // Watch the source even when page metadata is temporarily absent: a later
+      // relocation can make provenance readable. A page title watch is bounded
+      // to the verified page UID and is never inferred from the current Plan.
+      const targets = [{ uid: sourceUid, fields: ['block/page'] }];
+      if (record.pageUid) targets.push({ uid: record.pageUid, fields: ['node/title'] });
+      const refresh = () => {
+        if (footerProvenance.get(task.uid) !== record) return;
         const live = tasks.find(row => row.uid === task.uid);
-        footerProvenance.delete(task.uid);
+        clearFooterWatches(task.uid);
         if (live) syncFooterProvenance(live);
-      }));
-      if (stops.length) footerWatchStops.set(task.uid, stops);
+      };
+      const stops = targets.map(target => subscribePreviewWatch(target, refresh));
+      footerWatchStops.set(task.uid, stops);
+      // A change can land between the initial pull and an asynchronous watch
+      // registration. Re-read only after every bounded subscription settles.
+      Promise.all(stops.map(stop => stop.ready)).then(() => {
+        if (footerProvenance.get(task.uid) !== record) return;
+        const live = tasks.find(row => row.uid === task.uid);
+        if (!live) return;
+        const current = readFooterProvenance(sourceUid);
+        if (current.pageUid !== record.pageUid) { refresh(); return; }
+        record.title = current.title;
+        renderFooterProvenance(cards.get(task.uid), record.title);
+      }).catch(() => {
+        // The label itself is optional, but expose the existing explicit
+        // Refresh path so a transient watch admission can be retried safely.
+        if (footerProvenance.get(task.uid) === record) { record.watchFailed = true; renderCards(); }
+      });
     }
     function removeAvailable(task, fresh = false) {
       // desk-remove invokes only data.block[kind]; legacy methods must not make
       // a destructive or Daily Note promotion look available.
       const capability = { delete: typeof roam?.data?.block?.delete === 'function', move: typeof roam?.data?.block?.move === 'function' };
       if (!removeSurface || (!capability.delete && !capability.move)) return false;
+      // With both modern mutations present the hint need not reconstruct the
+      // complete ownership/subtree snapshot for every card on every render.
+      // The click-time controller still performs that strict admission before
+      // choosing delete versus promotion. A partial host needs the snapshot to
+      // establish which single mutation its displayed shape requires.
+      if (capability.delete && capability.move) return true;
       const key = `${task.localString}\u0000${capability.delete}\u0000${capability.move}`;
       const cached = removeIntentCache.get(task.uid);
       if (!fresh && cached?.key === key) return cached.available;
@@ -1007,7 +1040,8 @@ export function createDeskView({
           : search && previews.size < tasks.length ? 'Searching...'
             : search && [...previews.values()].some((model) => model.error) ? 'Some notes could not be searched. Refresh to try again.' : 'No notes match.';
       retryRead.hidden = status === 'ready' && capabilities.create && capabilities.move && capabilities.import
-        && !removeError && !actions?.hasUnconfirmedRemoval?.(planUid) && ![...previews.values()].some(model => model.error);
+        && !removeError && !actions?.hasUnconfirmedRemoval?.(planUid) && ![...previews.values()].some(model => model.error)
+        && ![...footerProvenance.values()].some(record => record.watchFailed);
       root.dataset.status = status;
       updateControls();
       schedulePreviews();
@@ -1113,7 +1147,7 @@ export function createDeskView({
     }
     function refresh(clear = false) {
       if (!checkScope()) return;
-      if (clear) { resetPreviews(); notice(''); }
+      if (clear) { resetPreviews(); clearFooterWatches(); notice(''); }
       refreshCapabilities();
       try { acceptSnapshot(readPlan(planUid)); }
       catch (_error) { acceptSnapshot({ unavailable: true }); }

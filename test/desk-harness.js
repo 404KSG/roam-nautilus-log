@@ -18,7 +18,7 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
   const stats = { renders: [], unmounts: 0, forbiddenWrites: 0, nativeWrites: [], writes: [], reads: [], watches: 0, opened: [], watchEvents: [], notifications: [], nativeEscapes: [], fakeCopies: [], referenceRequests: [], nativeToasts: [], appActivations: 0, pastes: 0, sends: 0, outboundCallbacks: 0 };
   let toastMode = 'missing';
   let watchSequence = 0;
-  let failPlan = false, failRender = false, holdRender = false, holdMove = false, holdCreate = false, holdWatchRegistration = false, failMove = false;
+  let failPlan = false, failRender = false, holdRender = false, holdMove = false, holdCreate = false, holdWatchRegistration = false, holdFooterWatchRegistration = false, rejectWatchRegistration = false, failMove = false;
   let releaseRender = null, releaseMove = null, releaseCreate = null, releaseWatchRegistration = null;
   let holdDelete = false, releaseDelete = null, externalFocusedUid = null;
   let sequence = 0;
@@ -171,13 +171,21 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
         // Plan watches do not include :block/open. Only a specifically targeted
         // preview registration can be held, so cleanup tests cannot pass by
         // accidentally exercising the already-safe Plan bridge instead.
-        const held = holdWatchRegistration && pattern.includes(':block/open')
+        const previewHeld = holdWatchRegistration && pattern.includes(':block/open')
           && (holdWatchRegistration === true || holdWatchRegistration === uid);
+        const footerHeld = holdFooterWatchRegistration === uid
+          && (pattern.includes(':block/page') || pattern.includes(':node/title'));
+        const held = previewHeld || footerHeld;
+        if (rejectWatchRegistration === uid) {
+          rejectWatchRegistration = false;
+          return Promise.reject(new Error('Ambiguous fixture watch registration'));
+        }
         if (!held) {
           add();
           return watchResult === 'reject' ? Promise.reject(new Error('Ambiguous fixture watch registration')) : result;
         }
-        holdWatchRegistration = false;
+        if (previewHeld) holdWatchRegistration = false;
+        if (footerHeld) holdFooterWatchRegistration = false;
         record.state = 'held'; event('held');
         return new Promise((resolve, reject) => {
           releaseWatchRegistration = () => {
@@ -416,8 +424,9 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     fireWatch: id => { const record = watchRecords.get(id); if (!record) throw new Error('Unknown fixture watch'); record.invoke(); },
     failRead: value => { failPlan = value; notify({ uid: planUid, fields: ['string'] }); }, failNextRender: () => { failRender = true; }, failNextMove: () => { failMove = true; },
     holdNextRender: () => { holdRender = true; }, holdNextMove: () => { holdMove = true; }, holdNextCreate: () => { holdCreate = true; }, holdNextWatchRegistration: (uid = true) => { holdWatchRegistration = uid; },
-    holdNextDelete: () => { holdDelete = true; }, setExternalFocus: uid => { externalFocusedUid = uid; },
+    holdNextDelete: () => { holdDelete = true; }, holdNextFooterWatchRegistration: uid => { holdFooterWatchRegistration = uid; }, holdNextWatchRejection: uid => { rejectWatchRegistration = uid; }, setExternalFocus: uid => { externalFocusedUid = uid; },
     setTitle: (uid, title) => { nodes.get(uid).title = title; notify({ uid, fields: ['node/title'] }); },
+    setPage: (uid, pageUid) => { nodes.get(uid).pageUid = pageUid; notify({ uid, fields: ['block/page'] }); },
     setCapabilities: applyCapabilities,
     addPage: (uid, title) => { nodes.set(uid, { uid, title, parentUid: null }); },
     release: () => { releaseRender?.(); releaseMove?.(); releaseCreate?.(); releaseDelete?.(); releaseWatchRegistration?.(); releaseRender = releaseMove = releaseCreate = releaseDelete = releaseWatchRegistration = null; },

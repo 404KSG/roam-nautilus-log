@@ -162,6 +162,19 @@ def run():
             expect(card('task-0').get_by_role('button', name='Remove from Desk', exact=True)).to_be_disabled()
             assert page.evaluate('() => deskHarness.api.stats.writes.length') == 0
             checks.append('read-only capability hints disable draft, move, remove, and import affordances before opening while legacy create/move remain available and reads still open cards')
+            # A fully capable host does not need one full removal admission scan
+            # per rendered card. Strict classification remains at click time.
+            def refresh_read_count(count):
+                mount(count=count)
+                return page.evaluate('''() => {
+                  deskHarness.api.stats.reads.length=0;
+                  deskHarness.api.setString('task-0', '{{[[TODO]]}} Refresh measurement');
+                  return deskHarness.api.stats.reads.length;
+                }''')
+            small_refresh_reads = refresh_read_count(3)
+            medium_refresh_reads = refresh_read_count(100)
+            assert small_refresh_reads <= 3 and medium_refresh_reads <= 3, (small_refresh_reads, medium_refresh_reads)
+            checks.append(f'fully capable removal affordances use {small_refresh_reads}/{medium_refresh_reads} public pulls for three/one hundred direct cards on an unrelated refresh')
             mount()
             # Simulate a late legacy extension rule. The native span formula
             # assumes zero row-gap; a one-class legacy override otherwise turns
@@ -1035,9 +1048,114 @@ def run():
             ], native_records
             native_props = [record['props'] for record in native_records]
             assert all(props == {'position':'top','timeout':3000,'autoFocus':False,'canEscapeKeyClear':False,'maxToasts':3} for props in native_props), native_props
+            # A directly owned source is a warning, not an accepted duplicate:
+            # it must neither move the source nor expose a move action.
+            page.evaluate('''async () => window.roamAlphaAPI.data.block.move({
+              block:{uid:"outside-source"}, location:{"parent-uid":"plan-desk",order:0}
+            })''')
+            expect(card('outside-source')).to_be_visible()
+            owned_source_before = page.evaluate('() => deskHarness.api.sourceSnapshot("outside-source")')
+            owned_source_writes = page.evaluate('() => deskHarness.api.stats.writes.length')
+            external_drag('[data-task-uid="task-1"]')
+            page.wait_for_function('deskHarness.api.stats.referenceRequests.at(-1)?.status === "existing-source"')
+            owned_source_toast = page.locator('.nautilus-desk__toaster .bp3-toast').last
+            expect(owned_source_toast).to_have_text('That block is already a note on your Desk.')
+            expect(owned_source_toast).to_have_attribute('data-intent', 'warning')
+            assert page.evaluate('''() => {
+              const toast=deskHarness.api.stats.nativeToasts.at(-1)?.toast || {};
+              return !Object.hasOwn(toast, 'action') && !Object.hasOwn(toast, 'onClick');
+            }''')
+            assert page.evaluate('() => deskHarness.api.stats.writes.length') == owned_source_writes
+            assert page.evaluate('() => deskHarness.api.sourceSnapshot("outside-source")') == owned_source_before
             page.evaluate('() => deskHarness.api.reloadView()')
             expect(page.locator('.nautilus-desk__toaster')).to_have_count(0)
-            checks.append('confirmed add/remove and duplicates use one owned top Blueprint toast with success/primary intent, no action, no duplicate title, and unload cleanup')
+            checks.append('confirmed add/remove and duplicates use one owned top Blueprint toast with success/primary intent, an owned-source warning without an action, no duplicate title, and unload cleanup')
+
+            # Footer provenance has its own bounded read/watch lifecycle. A page
+            # title can be absent during the initial pull and recover later.
+            mount(count=3)
+            page.evaluate('() => deskHarness.api.setTitle("external-page", "")')
+            external_drag('[data-task-uid="task-1"]')
+            expect(card('ref-outside-source')).to_be_visible()
+            expect(card('ref-outside-source').locator('.rm-desk-tile__source')).to_have_count(0)
+            footer_writes = page.evaluate('() => deskHarness.api.stats.writes.length')
+            page.evaluate('() => deskHarness.api.setTitle("external-page", "Recovered external source page")')
+            expect(card('ref-outside-source').locator('.rm-desk-tile__source')).to_have_text('Recovered external source page')
+            assert page.evaluate('() => deskHarness.api.stats.writes.length') == footer_writes
+
+            # A title change before its held watch finishes registration is not
+            # replayed by the fixture. The Desk must read after admission.
+            mount(count=3)
+            page.evaluate('() => deskHarness.api.holdNextFooterWatchRegistration("external-page")')
+            external_drag('[data-task-uid="task-1"]')
+            expect(card('ref-outside-source')).to_be_visible()
+            page.evaluate('() => deskHarness.api.setTitle("external-page", "Changed during page watch registration")')
+            page.evaluate('() => deskHarness.api.release()')
+            expect(card('ref-outside-source').locator('.rm-desk-tile__source')).to_have_text('Changed during page watch registration')
+
+            # A rejected optional footer watch leaves the current label safe and
+            # makes the existing explicit Refresh retry admission once.
+            mount(count=3)
+            page.evaluate('() => deskHarness.api.holdNextWatchRejection("external-page")')
+            external_drag('[data-task-uid="task-1"]')
+            expect(card('ref-outside-source').locator('.rm-desk-tile__source')).to_have_text('External source page')
+            page.evaluate('() => deskHarness.api.setTitle("external-page", "Changed after rejected page watch")')
+            expect(page.get_by_role('button', name='Refresh', exact=True)).to_be_visible()
+            page.get_by_role('button', name='Refresh', exact=True).click()
+            expect(card('ref-outside-source').locator('.rm-desk-tile__source')).to_have_text('Changed after rejected page watch')
+
+            # The equivalent race for the source block's page identity must
+            # rebind to the verified new page, without a plugin graph write.
+            mount(count=3)
+            page.evaluate('''() => {
+              deskHarness.api.addPage("relocated-external-page", "Relocated external source page");
+              deskHarness.api.holdNextFooterWatchRegistration("outside-source");
+            }''')
+            external_drag('[data-task-uid="task-1"]')
+            expect(card('ref-outside-source')).to_be_visible()
+            footer_writes = page.evaluate('() => deskHarness.api.stats.writes.length')
+            page.evaluate('() => deskHarness.api.setPage("outside-source", "relocated-external-page")')
+            page.evaluate('() => deskHarness.api.release()')
+            expect(card('ref-outside-source').locator('.rm-desk-tile__source')).to_have_text('Relocated external source page')
+            assert page.evaluate('() => deskHarness.api.stats.writes.length') == footer_writes
+            checks.append('footer provenance recovers from an initially absent title and read-after-watch closes held page/title and source/page races without writes')
+
+            # Formal view-level Alt+Digit ownership remains in the maintained
+            # browser suite, rather than relying on the historical probe.
+            mount(count=3)
+            alt_writes = page.evaluate('() => deskHarness.api.stats.writes.length')
+            card('task-0').locator('[role="button"]').focus()
+            for digit in ['0', '9']:
+                page.keyboard.press(f'Alt+{digit}')
+                expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
+            for modifier in ['Control', 'Meta', 'Shift']:
+                page.keyboard.down('Alt'); page.keyboard.down(modifier); page.keyboard.press('1')
+                page.keyboard.up(modifier); page.keyboard.up('Alt')
+                expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
+            search_control = page.get_by_role('textbox', name='Search Desk', exact=True)
+            search_control.focus(); page.keyboard.press('Alt+1')
+            expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
+            page.evaluate('''() => {
+              const editable=document.createElement('div'); editable.contentEditable='true';
+              editable.dataset.altFixture=''; document.querySelector('.nautilus-desk').append(editable); editable.focus();
+            }''')
+            page.keyboard.press('Alt+1')
+            expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
+            page.evaluate('() => document.querySelector("[data-alt-fixture]")?.remove()')
+            search_control.fill('优化')
+            page.wait_for_function('document.querySelectorAll(".nautilus-desk__card").length > 0')
+            filtered_uid = page.locator('.nautilus-desk__card').first.get_attribute('data-task-uid')
+            page.locator('.nautilus-desk__card').first.locator('[role="button"]').focus()
+            page.keyboard.press('Alt+1')
+            focused(filtered_uid); close_focus()
+            search_control.fill('')
+            card('task-0').locator('[role="button"]').focus(); page.keyboard.press('Alt+1')
+            focused('task-0')
+            page.locator('textarea[data-block-uid="task-0"]').focus(); page.keyboard.press('Alt+1')
+            expect(page.locator('.nautilus-desk__native')).to_have_attribute('data-task-uid', 'task-0')
+            close_focus()
+            assert page.evaluate('() => deskHarness.api.stats.writes.length') == alt_writes
+            checks.append('formal Alt+Digit matrix covers visible/filtered order, bounds, modifiers, input/contenteditable and mounted-editor priority with zero writes')
             mount()
 
             # These are synthetic native-shaped events, not physical OS drops.
@@ -1180,6 +1298,16 @@ def run():
                 assert page.evaluate('() => deskHarness.api.stats.renders.at(-1).uid') == 'outside-source'
                 assert page.evaluate('() => deskHarness.api.text("ref-outside-source")') == '{{embed-path: ((outside-source)) closed}}'
                 close_focus()
+                embed_position = page.locator('.nautilus-desk__card').evaluate_all('''cards =>
+                  cards.findIndex(card => card.dataset.taskUid === 'ref-outside-source') + 1''')
+                assert 1 <= embed_position <= 9
+                before_alt_embed = page.evaluate('() => deskHarness.api.stats.writes.length')
+                card('ref-outside-source').locator('[role="button"]').focus()
+                page.keyboard.press(f'Alt+{embed_position}')
+                focused('ref-outside-source')
+                expect(page.locator('.nautilus-desk__native')).to_have_attribute('data-editor-uid', 'outside-source')
+                close_focus()
+                assert page.evaluate('() => deskHarness.api.stats.writes.length') == before_alt_embed
                 page.evaluate('()=>deskHarness.api.setString("outside-source","{{[[DONE]]}} Completed by the user")')
                 expect(card('ref-outside-source')).to_have_count(0)
                 assert page.evaluate('deskHarness.api.text("ref-outside-source")') == '{{embed-path: ((outside-source)) closed}}'

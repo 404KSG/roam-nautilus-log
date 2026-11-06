@@ -16,11 +16,12 @@ content inside an unfinished task remain visible in its preview and editor.
   readback remain authoritative, and **Refresh** rechecks capabilities without polling.
 - A native `embed-path` card displays only its verified external source-page title.
   Local cards have no fabricated plan-page/date footer. The bounded page/source watches
-  update a rename or relocation without remounting the editor or reloading images.
+  read after admission and update a rename or relocation without remounting the editor or
+  reloading images; an unavailable watch exposes the existing explicit Refresh retry.
 - A positioned duplicate native embed reuses guarded `moveTask` semantics only after
   the import lock settles. It revalidates graph/user/provider, wrapper/source identity,
-  membership, target, capability, and exact full-order readback; existing-source and
-  unpositioned branches do not invent a move action.
+  membership, target, capability, and exact full-order readback; an existing source is a
+  warning without a move action, and unpositioned branches do not invent one.
 - The maintained browser suite records view-level Alt+Digit behavior for visible and
   filtered order, entry/source identity, bounds, inputs, modifier rejection, modal/editor
   priority, and zero writes. An isolated synthetic composing key remains an observation,

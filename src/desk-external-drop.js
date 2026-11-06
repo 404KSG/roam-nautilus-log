@@ -160,7 +160,13 @@ export function createDeskExternalDrop({
           }
           return;
         }
-        outcome(result?.status === 'existing-source' ? 'That block is already a note on your Desk.' : 'Already in this plan.', 'primary', `import:${captured.uid}:duplicate`);
+        if (result?.status === 'existing-source') {
+          // A direct Plan member is not an acceptable reusable embed. It gets
+          // no repositioning path and must remain visibly distinct from one.
+          outcome('That block is already a note on your Desk.', 'warning', `import:${captured.uid}:existing-source`);
+          return;
+        }
+        outcome('Already in this plan.', 'primary', `import:${captured.uid}:duplicate`);
       }, error => {
         if (operations.get(key) !== operation || operation.epoch !== epoch || suspended) return;
         outcome(error?.message || 'Could not confirm the reference. Check this plan before retrying.', 'warning', `import:${captured.uid}:error`);
