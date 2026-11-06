@@ -121,7 +121,7 @@ def run():
 <link rel="stylesheet" href="{(ROOT/'extension.css').as_uri()}"><style>
 main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;font:14px system-ui;background:#f4f6f8}} .rm-topbar {{height:45px;display:flex;gap:6px;align-items:center;padding:0 12px;background:white}} .rm-find-or-create-wrapper {{margin-left:auto;width:180px}} input {{max-width:100%}} .bp3-dark {{background:#182026;color:#eee}} .bp3-dark .rm-topbar {{background:#293742}} @media(max-width:500px){{.rm-find-or-create-wrapper{{display:none}}}}
 </style></head><body><div class="rm-topbar"><button aria-label="back">←</button><button aria-label="forward">→</button><div class="rm-find-or-create-wrapper"><input placeholder="Find or create"></div></div><main><h1>Unrelated page</h1></main><script src="{(OUT/'harness.js').as_uri()}"></script></body></html>''')
-    failures, passed, skipped, console = [], [], [], []
+    failures, passed, not_applicable, console = [], [], [], []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         try:
@@ -136,12 +136,15 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                 page.evaluate('(opts)=>realPlan.mount(opts)', {'surface':surface, **options})
             def state(status):
                 page.wait_for_function('(s)=>realPlan.state().status===s', arg=status, timeout=5000)
-            def check(name, fn):
+            def check(name, fn, *, execution_only=False):
+                if execution_only and surface == 'launcher':
+                    not_applicable.append({'case': name,
+                        'reason': 'The launcher has no execution popover; this behavior is tested on the execution surface.',
+                        'coveredBy': name.replace('launcher-', 'execution-', 1)})
+                    return
                 try:
                     fn()
                     passed.append(name)
-                except SkipTest:
-                    skipped.append(name)
                 except Exception:
                     failures.append(name+': '+traceback.format_exc())
                     page.screenshot(path=str(OUT/(name+'-FAILED.png')))
@@ -277,7 +280,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                         assert len(nav)==len(nav_before)+1, (modifier, nav)
                         assert nav[-1][0]==expected, (modifier, nav[-1])
                         assert page.evaluate('realPlan.popoverOpen()') is False
-                check(surface+'-silent-shift-alt',silent_shift_alt)
+                check(surface+'-silent-shift-alt',silent_shift_alt,execution_only=True)
                 def present_panel_once():
                     if surface!='execution':
                         raise SkipTest('launcher has no execution popover seam')
@@ -298,7 +301,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     page.locator(TRIGGER).click(modifiers=['Alt'])
                     page.wait_for_function('(n)=>realPlan.navs().filter(r=>r[0]==="open").length===n', arg=len([r for r in nav_before if r[0]=='open'])+1)
                     assert page.evaluate('realPlan.navs()')[-1][0]=='open'
-                check(surface+'-present-panel-once',present_panel_once)
+                check(surface+'-present-panel-once',present_panel_once,execution_only=True)
                 def responsive_popup():
                     if surface!='execution':
                         raise SkipTest('launcher has no execution popover seam')
@@ -364,7 +367,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                         return {closed:!realPlan.popoverOpen(),reads:reads()-before};
                     }''')
                     assert close=={'closed':True,'reads':0}, close
-                check(surface+'-responsive-popup',responsive_popup)
+                check(surface+'-responsive-popup',responsive_popup,execution_only=True)
                 def held_raf_bounded_ready():
                     if surface!='execution':
                         raise SkipTest('launcher has no execution popover seam')
@@ -416,7 +419,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                         assert page.evaluate('realPlan.popoverCount()')==1
                     finally:
                         page.evaluate(RESTORE_RAF_JS)
-                check(surface+'-held-raf-bounded-ready',held_raf_bounded_ready)
+                check(surface+'-held-raf-bounded-ready',held_raf_bounded_ready,execution_only=True)
                 def held_raf_stale_callbacks():
                     if surface!='execution':
                         raise SkipTest('launcher has no execution popover seam')
@@ -472,7 +475,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                         assert page.evaluate('[...document.querySelectorAll("[data-task-uid]")].map(row=>row.dataset.taskUid)')==rows
                     finally:
                         page.evaluate(RESTORE_RAF_JS)
-                check(surface+'-held-raf-stale-callbacks',held_raf_stale_callbacks)
+                check(surface+'-held-raf-stale-callbacks',held_raf_stale_callbacks,execution_only=True)
                 def held_raf_close_reopen_stale():
                     if surface!='execution':
                         raise SkipTest('launcher has no execution popover seam')
@@ -553,7 +556,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                         assert closed=={'closed':True,'count':0,'reads':0,'pulls':0}, closed
                     finally:
                         page.evaluate(RESTORE_RAF_JS)
-                check(surface+'-held-raf-close-reopen-stale',held_raf_close_reopen_stale)
+                check(surface+'-held-raf-close-reopen-stale',held_raf_close_reopen_stale,execution_only=True)
                 def held_raf_cancel():
                     if surface!='execution':
                         raise SkipTest('launcher has no execution popover seam')
@@ -626,7 +629,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                             assert page.evaluate(DAILY_PULL)==pulls, action
                         finally:
                             page.evaluate(RESTORE_RAF_JS)
-                check(surface+'-held-raf-cancel',held_raf_cancel)
+                check(surface+'-held-raf-cancel',held_raf_cancel,execution_only=True)
                 def no_raf_compat():
                     if surface!='execution':
                         raise SkipTest('launcher has no execution popover seam')
@@ -648,7 +651,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                             if (window.__nlOrigRaf) window.requestAnimationFrame=window.__nlOrigRaf;
                             if (window.__nlOrigCaf) window.cancelAnimationFrame=window.__nlOrigCaf;
                         }''')
-                check(surface+'-no-raf-compat',no_raf_compat)
+                check(surface+'-no-raf-compat',no_raf_compat,execution_only=True)
                 def paint_yield_before_read():
                     if surface!='execution':
                         raise SkipTest('launcher has no execution popover seam')
@@ -681,7 +684,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     assert snap['pulls']==0, 'click must not reverse-pull the Daily Note before a paint yield'
                     page.wait_for_selector('.nautilus-log-timing__popover[aria-busy="false"]')
                     assert page.locator('.nautilus-log-timing__popover [data-task-uid]').count()>=1
-                check(surface+'-paint-yield-before-read',paint_yield_before_read)
+                check(surface+'-paint-yield-before-read',paint_yield_before_read,execution_only=True)
                 def delayed_keep_cancelled():
                     if surface!='execution':
                         raise SkipTest('launcher has no execution popover seam')
@@ -697,7 +700,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     page.wait_for_timeout(80)
                     assert page.evaluate('realPlan.popoverCount()')==0
                     assert page.evaluate('realPlan.navs()')==nav_before
-                check(surface+'-delayed-keep-cancelled',delayed_keep_cancelled)
+                check(surface+'-delayed-keep-cancelled',delayed_keep_cancelled,execution_only=True)
                 def dismiss_pending():
                     if surface!='execution':
                         raise SkipTest('launcher has no execution popover seam')
@@ -725,7 +728,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                         assert page.evaluate('realPlan.popoverOpen()') is False
                         assert page.evaluate('realPlan.writes()')==writes
                         assert page.evaluate('realPlan.navs()')==nav
-                check(surface+'-dismiss-pending',dismiss_pending)
+                check(surface+'-dismiss-pending',dismiss_pending,execution_only=True)
                 def pending_graph_changed():
                     if surface!='execution':
                         raise SkipTest('launcher has no execution popover seam')
@@ -739,7 +742,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     page.wait_for_timeout(60)
                     assert page.evaluate('realPlan.popoverCount()')==0, 'old checking shell must not survive a graph switch'
                     assert page.evaluate('realPlan.writes()')==writes
-                check(surface+'-pending-graph-changed',pending_graph_changed)
+                check(surface+'-pending-graph-changed',pending_graph_changed,execution_only=True)
                 def confirmed_rows_are_fresh():
                     if surface!='execution':
                         raise SkipTest('launcher has no execution popover seam')
@@ -762,7 +765,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     page.locator('.nautilus-log-timing__capacity-token').click()
                     page.wait_for_function('window.readyTaskUids !== null')
                     assert uid not in page.evaluate('window.readyTaskUids'), 'confirmed panel must not briefly offer actions on a stale task'
-                check(surface+'-confirmed-rows-are-fresh',confirmed_rows_are_fresh)
+                check(surface+'-confirmed-rows-are-fresh',confirmed_rows_are_fresh,execution_only=True)
                 def unchanged_refresh():
                     if surface!='execution':
                         raise SkipTest('launcher has no execution popover seam')
@@ -776,7 +779,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     }''')
                     page.evaluate('realPlan.refresh()')
                     assert page.evaluate('retainedAction.isConnected && document.activeElement === retainedAction'), 'unchanged refresh must retain action nodes and focus'
-                check(surface+'-unchanged-refresh',unchanged_refresh)
+                check(surface+'-unchanged-refresh',unchanged_refresh,execution_only=True)
                 def children_only_locate():
                     mount(surface)
                     page.locator(TRIGGER).click();state('ready-present');full_tree()
@@ -830,7 +833,7 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     assert page.evaluate('realPlan.state().planUid')=='manual-other-plan'
                     assert page.evaluate('realPlan.runtimePlanUid()')=='manual-other-plan'
                     assert page.evaluate('realPlan.writes()')==writes
-                check(surface+'-replacement-keep',replacement_keep)
+                check(surface+'-replacement-keep',replacement_keep,execution_only=True)
                 def narrow():
                     page.set_viewport_size({'width':360,'height':700})
                     mount(surface,language='zh',dark=True)
@@ -870,6 +873,31 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
                     page.get_by_role('button',name='Check again',exact=True).click();state('ready-absent')
                     assert not [r for r in page.evaluate('realPlan.trace()') if r[0]=='request']
                 check(surface+'-read-failure',read_failure)
+            def launcher_has_no_execution_popover():
+                mount('launcher')
+                page.locator(TRIGGER).click();state('ready-present');full_tree()
+                writes=page.evaluate('realPlan.writes()')
+                blocks=page.evaluate('realPlan.blocks()')
+                try:
+                    for width in [360,720,1100]:
+                        page.set_viewport_size({'width':width,'height':740})
+                        for modifiers in [[],['Shift'],['Alt']]:
+                            page.locator(TRIGGER).click(modifiers=modifiers)
+                            assert page.evaluate('realPlan.popoverCount()')==0
+                            assert page.evaluate('realPlan.runtimeSnapshot()') is None
+                            assert page.evaluate('realPlan.writes()')==writes
+                            assert page.evaluate('realPlan.blocks()')==blocks
+                        page.locator(TRIGGER).focus();page.keyboard.press('Enter')
+                        assert page.evaluate('realPlan.popoverCount()')==0
+                        assert page.evaluate('realPlan.writes()')==writes
+                finally:
+                    page.set_viewport_size({'width':1100,'height':740})
+            check('launcher-has-no-execution-popover',launcher_has_no_execution_popover)
+            def surface_capability_coverage():
+                assert len(not_applicable)==15, not_applicable
+                assert all(item['case'].startswith('launcher-') and item['coveredBy'] in passed for item in not_applicable), not_applicable
+                assert 'launcher-has-no-execution-popover' in passed
+            check('surface-capability-coverage',surface_capability_coverage)
             def read_error():
                 mount('launcher',scenario='read-failed');state('read-failed');page.locator(TRIGGER).click()
                 assert 'unavailable' in page.get_by_role('dialog').inner_text()
@@ -900,9 +928,9 @@ main {{padding:12px;overflow-wrap:anywhere;line-height:1.6}} body {{margin:0;fon
             page.evaluate('realPlan.cleanup()')
         finally:
             browser.close()
-    (OUT/'results.json').write_text(json.dumps({'passed':passed,'skipped':skipped,'failures':failures},indent=2))
+    (OUT/'results.json').write_text(json.dumps({'passed':passed,'skipped':[], 'notApplicable':not_applicable,'failures':failures},indent=2))
     (OUT/'console.log').write_text('\n'.join(console))
-    print(f'Real-session browser acceptance: {len(passed)} passed, {len(skipped)} skipped, {len(failures)} failed. Artifacts: {OUT}')
+    print(f'Isolated real-plan acceptance: {len(passed)} passed, 0 skipped, {len(not_applicable)} inapplicable launcher combinations (execution counterparts checked), {len(failures)} failed. Artifacts: {OUT}')
     for failure in failures: print(failure)
     return bool(failures)
 

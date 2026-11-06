@@ -50,6 +50,12 @@
 
 ### Fixed
 
+- Correct native-style renderer tests after moving a mounted chart between hosts:
+  compare with that host's frozen pre-mount control and report its actual DOM context.
+  Add narrow-window, resize and genuine-overflow negative checks without changing
+  production layout. Audit the 15 inapplicable launcher/popover combinations against
+  their executed counterparts instead of reporting them as unexplained skips.
+  See [the verification contract](docs/plans/2026-11-06-native-host-width-verification.md).
 - Isolate the canonical renderer in a single-source `renderer` container instead of
   the generic `code` group that older installers can adopt. Roam compiles sibling
   code as one program, so mixed v1/r2 groups could select the old entry even when

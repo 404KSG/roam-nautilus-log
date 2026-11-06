@@ -51,8 +51,8 @@ def write_page(source):
 (rdom/render [nautilus-log-r2/main {:block-uid "baseline-plan"}] (.getElementById js/document "chart-root"))'''
     html = f'''<!doctype html><html><head><meta charset="utf-8">
 {''.join(f'<link rel="stylesheet" href="{p.resolve().as_uri()}">' for p in NATIVE_CSS)}
-<link rel="stylesheet" href="{(ROOT / 'extension.css').as_uri()}">
-<style>body{{margin:0;color:#25262a;font:14px system-ui,sans-serif}}#renderer-shell{{width:960px;margin:24px}}#following-sentinel{{height:40px;background:#eee;margin-top:12px}}</style>
+<link id="nautilus-production-css" rel="stylesheet" href="{(ROOT / 'extension.css').as_uri()}">
+<style>body{{margin:0;color:#25262a;font:14px system-ui,sans-serif}}#renderer-shell{{width:min(960px,calc(100vw - 48px));margin:24px}}#following-sentinel{{height:40px;background:#eee;margin-top:12px}}</style>
 <script>window.__chartRealDate=Date;window.__chartFakeNowMs=Date.parse('2026-10-29T08:01:00');
 window.Date=class extends window.__chartRealDate{{constructor(...args){{super(...(args.length?args:[window.__chartFakeNowMs]))}}static now(){{return window.__chartFakeNowMs}}}};</script>
 <script src="{(NODE_MODULES / 'react/umd/react.development.js').as_uri()}"></script>
@@ -65,10 +65,22 @@ window.Date=class extends window.__chartRealDate{{constructor(...args){{super(..
 <div id="roam-right-sidebar-content"><div class="roam-right-sidebar-content" id="sidebar-render-context"></div></div>
 <div class="rm-embed-container" id="embed-render-context"></div>
 <script>const c=new URLSearchParams(location.search).get('context')||'main',s=document.querySelector('#renderer-shell');
-(document.querySelector(c==='sidebar'?'#sidebar-render-context':c==='embed'?'#embed-render-context':'#main-render-context')).append(s);s.dataset.chartContext=c;
-// Native embed CSS can outdent its host even before Nautilus mounts. Record
-// that untouched host baseline; never compensate with production global CSS.
-window.__chartHostBaseline={{documentOverflow:document.documentElement.scrollWidth-document.documentElement.clientWidth}};</script>
+const hosts={{main:document.querySelector('#main-render-context'),sidebar:document.querySelector('#sidebar-render-context'),embed:document.querySelector('#embed-render-context')}};
+// Capture each native host BEFORE mounting Nautilus, with its stylesheet disabled.
+// A later host move selects its own frozen control; it never recalibrates from
+// the rendered candidate and must not hide a genuine plugin-induced overflow.
+const productionCss=document.querySelector('#nautilus-production-css'),baselines={{}};
+productionCss.disabled=true;
+for(const [context,host] of Object.entries(hosts)){{
+  host.append(s);s.dataset.chartContext=context;
+  baselines[context]=Object.freeze({{context,hostId:host.id,documentOverflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,
+    viewportWidth:document.documentElement.clientWidth,pluginCount:document.querySelectorAll('.nautilus-log-container').length,productionCssDisabled:productionCss.disabled}});
+}}
+productionCss.disabled=false;
+const initial=hosts[c]?c:'main';hosts[initial].append(s);s.dataset.chartContext=initial;
+window.__chartHostContext=()=>Object.entries(hosts).find(([,host])=>s.parentElement===host)?.[0]||null;
+window.__chartHostBaselines=Object.freeze(baselines);
+Object.defineProperty(window,'__chartHostBaseline',{{get:()=>window.__chartHostBaselines[window.__chartHostContext()]||null}});</script>
 {script_tag(shim, 'roam-datascript-shim')}{script_tag(source, 'component-cljs-exact')}{script_tag(mount, 'reagent-mount')}</body></html>'''
     (OUT / 'index.html').write_text(html)
 
@@ -213,7 +225,9 @@ def coverage(page):
        ||(['auto','scroll'].includes(s.overflowY)&&e.scrollHeight>e.clientHeight+1);
     }).map(e=>e.getAttribute('class'))''')
     assert not scrollers, scrollers
-    host_baseline = page.evaluate('() => __chartHostBaseline.documentOverflow')
+    host_control = page.evaluate('() => __chartHostBaseline')
+    assert host_control and host_control['context'] == s['context'], ('active host/control mismatch', host_control, s['context'])
+    host_baseline = host_control['documentOverflow']
     local_overflow = page.locator('.nautilus-log-container').evaluate('e=>e.scrollWidth-e.clientWidth')
     assert s['writes'] == 0 and not s['bodyTooltipCount'] and s['documentOverflow'] <= host_baseline + 1 and local_overflow <= 1, {
         'writes': s['writes'], 'tooltips': s['bodyTooltipCount'], 'overflow': s['documentOverflow'],
@@ -532,6 +546,84 @@ def adaptive_density_measure(page):
       return {svgHeight:s.height,stageHeight:g.height,topVoid:top-g.top,bottomVoid:g.bottom-bottom,svgTopVoid:top-s.top,svgBottomVoid:s.bottom-bottom,
         tipHeight:document.querySelector('.nautilus-log-detail-region').getBoundingClientRect().height,columns,gaps,frame:__chartHarness.scene().frame};
     }''')
+
+
+def host_width_contract(page):
+    """Compare each active host with its pre-mount control, never another host."""
+    report = {'transitions': [], 'resizes': [], 'viewports': [], 'negativeControls': []}
+    viewport = page.viewport_size.copy()
+    for dark in [False, True]:
+        load(page, 'planned-density', 'sidebar', 280, window='flow', lang='zh')
+        if dark:
+            page.locator('body').evaluate("e=>{e.classList.add('bp3-dark');e.style.background='#1d1e21';e.style.color='#ecedef'}")
+        set_clock(page, '2026-10-29T09:24:00')
+        original = page.evaluate('()=>__chartHarness.sourceRows()')
+        page.evaluate('()=>window.__hostWidthSvg=document.querySelector("svg.nautilus-log-svg")')
+        for context, width in [('sidebar', 280), ('embed', 520), ('main', 720), ('sidebar', 520),
+                               ('embed', 280), ('main', 960), ('sidebar', 280)]:
+            page.evaluate('''({context,width})=>{const shell=document.querySelector('#renderer-shell');
+              document.querySelector(context==='sidebar'?'#sidebar-render-context':context==='embed'?'#embed-render-context':'#main-render-context').append(shell);
+              shell.dataset.chartContext=context;__chartHarness.setWidth(width);}''', {'context': context, 'width': width})
+            page.wait_for_function('w=>Math.abs(__chartHarness.state().lastPresentationObservation.width-w)<.5', arg=width)
+            current = coverage(page); geometry_audit(page)
+            assert current['context'] == context, (context, current['context'])
+            assert page.evaluate('()=>window.__hostWidthSvg===document.querySelector("svg.nautilus-log-svg")')
+            assert page.evaluate('()=>__chartHarness.sourceRows()') == original
+            assert current['activeClockIntervals'] == 1
+            baseline = page.evaluate('()=>__chartHostBaseline')
+            report['transitions'].append({'dark': dark, 'context': context, 'width': width,
+                'baseline': baseline, 'documentOverflow': current['documentOverflow'], 'writes': current['writes']})
+    controls = page.evaluate('()=>__chartHostBaselines')
+    assert set(controls) == {'main', 'sidebar', 'embed'}, controls
+    assert all(control['pluginCount'] == 0 and control['productionCssDisabled'] for control in controls.values()), controls
+    for item in report['transitions']:
+        assert item['baseline']['context'] == item['context'], item
+    report['nativeControls'] = controls
+
+    for context in ['main', 'sidebar', 'embed']:
+        load(page, 'realistic', context, 520)
+        original = page.evaluate('()=>__chartHarness.sourceRows()')
+        page.evaluate('()=>window.__hostWidthSvg=document.querySelector("svg.nautilus-log-svg")')
+        for width in [280, 320, 360, 400, 480, 520, 600, 632, 640, 720, 960, 280]:
+            page.evaluate('w=>__chartHarness.setWidth(w)', width)
+            page.wait_for_function('w=>Math.abs(__chartHarness.state().lastPresentationObservation.width-w)<.5', arg=width)
+            current = coverage(page); geometry_audit(page)
+            assert page.evaluate('()=>window.__hostWidthSvg===document.querySelector("svg.nautilus-log-svg")')
+            assert page.evaluate('()=>__chartHarness.sourceRows()') == original
+            report['resizes'].append({'context': context, 'width': width, 'documentOverflow': current['documentOverflow'],
+                'hostBaseline': page.evaluate('()=>__chartHostBaseline.documentOverflow'), 'writes': current['writes']})
+
+    try:
+        for width in [360, 400, 480, 520, 640, 800, 1200]:
+            page.set_viewport_size({'width': width, 'height': 1000})
+            for context in ['main', 'sidebar', 'embed']:
+                current = load(page, 'realistic', context, min(960, width - 80))
+                coverage(page); geometry_audit(page)
+                bounds = page.locator('.nautilus-log-container').bounding_box()
+                assert bounds['x'] >= -1 and bounds['x'] + bounds['width'] <= width + 1, (width, context, bounds)
+                report['viewports'].append({'viewport': width, 'context': context, 'localWidth': current['observedShell']['width'],
+                    'documentOverflow': current['documentOverflow'], 'hostBaseline': page.evaluate('()=>__chartHostBaseline.documentOverflow')})
+    finally:
+        page.set_viewport_size(viewport)
+
+    for context in ['main', 'sidebar', 'embed']:
+        load(page, 'realistic', context, 520)
+        frozen = page.evaluate('()=>JSON.stringify(__chartHostBaselines)')
+        page.evaluate('''()=>{const e=document.createElement('div');e.id='width-regression-negative-control';
+          e.style.cssText=`width:${innerWidth+800}px;min-width:${innerWidth+800}px;height:2px;flex:none;pointer-events:none`;
+          document.querySelector('.nautilus-log-container').append(e);}''')
+        caught = None
+        try:
+            coverage(page)
+        except AssertionError as error:
+            caught = str(error)
+        finally:
+            page.locator('#width-regression-negative-control').evaluate('e=>e.remove()')
+        assert caught and 'localOverflow' in caught, (context, 'width gate failed to reject an injected real overflow', caught)
+        assert page.evaluate('()=>JSON.stringify(__chartHostBaselines)') == frozen
+        coverage(page); geometry_audit(page)
+        report['negativeControls'].append({'context': context, 'rejected': True, 'baselineUnchanged': True})
+    return report
 
 
 def adaptive_density_contract(page):
@@ -2076,6 +2168,7 @@ def main():
                 assert warning_message['openedPanel'] and warning_message['openedPanel']['height'] > warning_message['closedPanel']['height'], warning_message
                 page.screenshot(path=str(OUT / 'screenshots' / f'warning-message-{label}.png'), full_page=True)
                 report['warningMessages'][label] = warning_message
+            report['hostWidths'] = host_width_contract(page)
             report['matrix'] = {}
             for context in ['main', 'sidebar', 'embed']:
                 for width in [280, 320, 520, 640, 960]:
