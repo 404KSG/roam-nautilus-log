@@ -1051,8 +1051,24 @@ def run():
                 assert page.evaluate('deskHarness.api.text("ref-outside-source")') == '{{embed-path: ((outside-source)) closed}}'
                 assert page.evaluate('deskHarness.api.sourceSnapshot("outside-source")') == source_before
                 assert page.evaluate('deskHarness.api.stats.writes.length') == 1
+                # A canonical embed card must open the source outline. The fake
+                # native editor deliberately keeps a wrapper as a visible nested
+                # frame, so this is an independent negative control rather than
+                # a mock that quietly unwraps the carrier.
+                negative = page.evaluate('async () => deskHarness.api.renderNegativeControl("ref-outside-source")')
+                assert negative == {'uid': 'ref-outside-source', 'frame': True,
+                  'text': '{{embed-path: ((outside-source)) closed}}', 'children': []}, negative
+                page.locator('[data-fixture-negative-editor]').screenshot(path=str(OUT/'embed-wrapper-negative.png'))
+                page.evaluate('async () => deskHarness.api.clearNegativeControl()')
                 activate('ref-outside-source')
-                expect(page.locator('.nautilus-desk__native textarea[data-block-uid="ref-outside-source"]')).to_have_value('{{embed-path: ((outside-source)) closed}}')
+                focused('ref-outside-source')
+                expect(page.locator('.nautilus-desk__native')).to_have_attribute('data-editor-uid', 'outside-source')
+                expect(page.locator('.nautilus-desk__native textarea[data-block-uid="outside-source"]')).to_have_value(source_text)
+                expect(page.locator('.nautilus-desk__native textarea[data-block-uid="outside-note"]')).to_have_value('Source child stays in its original outline.')
+                expect(page.locator('.nautilus-desk__native .rm-embed-frame')).to_have_count(0)
+                page.locator('.nautilus-desk__native').screenshot(path=str(OUT/'embed-source-editor.png'))
+                assert page.evaluate('() => deskHarness.api.stats.renders.at(-1).uid') == 'outside-source'
+                assert page.evaluate('() => deskHarness.api.text("ref-outside-source")') == '{{embed-path: ((outside-source)) closed}}'
                 close_focus()
                 page.evaluate('()=>deskHarness.api.setString("outside-source","{{[[DONE]]}} Completed by the user")')
                 expect(card('ref-outside-source')).to_have_count(0)
@@ -1063,7 +1079,75 @@ def run():
                 expect(card('ref-outside-source')).to_be_visible()
                 expect(card('ref-outside-source').locator('.rm-desk-tile__title .rm-desk-tile__check')).to_have_count(0)
                 assert page.evaluate('deskHarness.api.stats.writes.length') == 1
-            checks.append('plain/TODO imports create native embeds, preserve source children, and follow source state without a local override')
+            checks.append('canonical embed cards request the verified source outline and source children; an independent wrapper negative control remains a nested frame')
+
+            # Keep the plan entry identity separate while editing its source:
+            # local estimate/notes remain on the wrapper, while content routes
+            # target the direct source and management never moves that source.
+            mount(count=3)
+            page.evaluate('''() => {
+              deskHarness.api.setString('outside-source', '{{[[TODO]]}} Outside source task 20m');
+            }''')
+            external_drag('[data-task-uid="task-1"]')
+            page.wait_for_function('deskHarness.api.text("ref-outside-source") === "{{embed-path: ((outside-source)) closed}}"')
+            page.evaluate('''() => {
+              deskHarness.api.setString('ref-outside-source', '{{embed-path: ((outside-source)) closed}} 45m');
+              deskHarness.api.addChild('wrapper-local-note', 'ref-outside-source', 'Local CLOCK and notes remain on the plan entry.');
+            }''')
+            source_before = page.evaluate('deskHarness.api.sourceSnapshot("outside-source")')
+            activate('ref-outside-source')
+            expect(page.locator('.nautilus-desk__native')).to_have_attribute('data-task-uid', 'ref-outside-source')
+            expect(page.locator('.nautilus-desk__native')).to_have_attribute('data-editor-uid', 'outside-source')
+            source_input = page.locator('textarea[data-block-uid="outside-source"]')
+            source_input.fill('{{[[TODO]]}} Edited source task 20m')
+            page.locator('.rm-desk--dialog').focus()
+            page.wait_for_function('deskHarness.api.text("outside-source") === "{{[[TODO]]}} Edited source task 20m"')
+            assert page.evaluate('deskHarness.api.text("ref-outside-source")') == '{{embed-path: ((outside-source)) closed}} 45m'
+            assert page.evaluate('deskHarness.api.text("wrapper-local-note")') == 'Local CLOCK and notes remain on the plan entry.'
+            page.get_by_role('button', name='More', exact=True).click()
+            expect(page.get_by_role('menuitem', name='Open plan entry', exact=True)).to_be_visible()
+            page.get_by_role('menuitem', name='Open plan entry', exact=True).click()
+            expect(page.locator('.nautilus-desk__native')).to_have_attribute('data-editor-uid', 'ref-outside-source')
+            expect(page.locator('.nautilus-desk__native .rm-embed-frame')).to_have_count(1)
+            page.get_by_role('button', name='More', exact=True).click()
+            page.get_by_role('menuitem', name='Open source', exact=True).click()
+            expect(page.locator('.nautilus-desk__native')).to_have_attribute('data-editor-uid', 'outside-source')
+            page.get_by_role('button', name='More', exact=True).click()
+            page.get_by_role('menuitem', name='Open in main window', exact=True).click()
+            expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
+            assert page.evaluate('() => deskHarness.api.stats.opened.at(-1)') == {'uid': 'outside-source', 'sidebar': False}
+            card('ref-outside-source').locator('.rm-desk-tile__preview').click(modifiers=['Shift'])
+            assert page.evaluate('() => deskHarness.api.stats.opened.at(-1)') == {'uid': 'outside-source', 'sidebar': True}
+            top('ref-outside-source')
+            page.wait_for_function('deskHarness.api.children("plan-desk")[0].uid === "ref-outside-source"')
+            assert page.evaluate('deskHarness.api.sourceSnapshot("outside-source")') == source_before.replace('{{[[TODO]]}} Outside source task 20m', '{{[[TODO]]}} Edited source task 20m')
+            checks.append('embed content routes use the verified source while local estimate/notes and Move to top remain attached to the plan entry')
+
+            # Delayed native mounts cannot resurrect an old source after the
+            # wrapper retargets; a deleted source falls back to the local entry.
+            mount(count=3)
+            page.evaluate('''() => {
+              deskHarness.api.addBlock('alternate-source', '{{[[TODO]]}} Alternate source');
+              deskHarness.api.addChild('alternate-child', 'alternate-source', 'Alternate source child');
+            }''')
+            external_drag('[data-task-uid="task-1"]')
+            page.evaluate('() => deskHarness.api.holdNextRender()')
+            card('ref-outside-source').locator('.rm-desk-tile__preview').click()
+            page.wait_for_function('deskHarness.api.stats.renders.at(-1)?.uid === "outside-source" && deskHarness.api.pending()')
+            page.evaluate('() => deskHarness.api.setString("ref-outside-source", "{{embed-path: ((alternate-source)) closed}}")')
+            page.evaluate('() => deskHarness.api.release()')
+            page.wait_for_function('document.querySelector(".nautilus-desk__native")?.dataset.editorUid === "alternate-source"')
+            expect(page.locator('textarea[data-block-uid="alternate-child"]')).to_have_value('Alternate source child')
+            assert page.evaluate('() => deskHarness.api.activeEditors()') == 1
+            page.evaluate('''() => {
+              deskHarness.api.remove('alternate-source');
+              deskHarness.api.setString('ref-outside-source', '{{embed-path: ((alternate-source)) closed}}');
+            }''')
+            page.wait_for_function('document.querySelector(".nautilus-desk__native")?.dataset.editorUid === "ref-outside-source"')
+            expect(page.locator('.nautilus-desk__native .rm-embed-frame')).to_have_count(1)
+            assert page.evaluate('() => deskHarness.api.activeEditors()') == 1
+            close_focus()
+            checks.append('retargeted delayed mounts retain one editor and source disappearance safely reopens the local plan entry')
 
             mount(count=3)
             page.evaluate('()=>deskHarness.api.setString("outside-source","{{[[DONE]]}} Already completed")')

@@ -1,7 +1,7 @@
 import { graphName } from './graph-context';
 import { projectDeskTasks, reconcileDeskSelection, stepDeskSelection, deskShortcut, nativeEditorOwnsEscape, createModernDeskPreviewAdapter } from './desk-core';
 import { nativeElements, nativePreviewText, readNativePreview } from './desk-native';
-import { readDeskPlan } from './desk-preview';
+import { deskEmbedPreviewUid, readDeskPlan } from './desk-preview';
 import { createDeskMasonry } from './desk-masonry';
 import { createDeskWidth } from './desk-width';
 import { createDeskNavigation } from './desk-navigation';
@@ -148,6 +148,8 @@ export function createDeskView({
     let mode = 'overview';
     let draft = null;
     let mount = null;
+    let nativeGeneration = 0;
+    let pendingRetarget = null;
     let closed = false;
     let busy = false;
     let removeBusy = false, removeSurface = null, removeError = false;
@@ -264,7 +266,17 @@ export function createDeskView({
       return link;
     };
     const openMain = menuAction('Open in main window', 'share', () => {
-      if (selectedUid) { const uid = selectedUid; showOverview(false); Promise.resolve().then(() => openTask(uid, false)).catch(noticeError); }
+      if (selectedUid) {
+        const uid = editorTarget(selectedUid).editorUid;
+        showOverview(false); Promise.resolve().then(() => openTask(uid, false)).catch(noticeError);
+      }
+    });
+    const openEntry = menuAction('Open plan entry', 'document-open', () => {
+      menu.hidden = true;
+      if (!selectedUid) return;
+      const current = mount?.editorUid;
+      if (current === selectedUid) showTask(selectedUid, true);
+      else showTask(selectedUid, true, null, 0, selectedUid);
     });
     const focusTop = menuAction('Move to top', 'double-chevron-up', () => { menu.hidden = true; if (selectedUid) move(selectedUid, null, 'top'); });
     menuContent.append(menuList); menu.append(menuContent);
@@ -326,7 +338,34 @@ export function createDeskView({
       if (!closed) notice(text);
       else notify(`Desk could not confirm a pending action. Check the original plan. ${text}`);
     }
-    const nativeCurrent = (record) => inScope() && mount === record && mode === 'task';
+    const nativeCurrent = (record) => inScope() && mount === record && mode === 'task'
+      && selectedUid === record.entryUid && record.generation === nativeGeneration;
+    // Card membership and management always retain the local entry identity.
+    // Only an exact, metadata-tolerant native embed may nominate its immediate
+    // readable block as the content editor; references and malformed carriers
+    // deliberately stay on the entry.
+    const editorTarget = (entryUid, task = tasks.find(row => row.uid === entryUid)) => {
+      const sourceUid = deskEmbedPreviewUid(task?.localString);
+      if (!sourceUid) return { entryUid, editorUid: entryUid, sourceUid: null, unavailable: false };
+      try {
+        const source = createModernDeskPreviewAdapter(roam).read(sourceUid);
+        if (source?.kind === 'block' && typeof source.string === 'string') return { entryUid, editorUid: sourceUid, sourceUid, unavailable: false };
+      } catch (_error) { /* A local entry is the recoverable unreadable-source route. */ }
+      return { entryUid, editorUid: entryUid, sourceUid, unavailable: true };
+    };
+    const nativeInputActive = (record) => {
+      const active = document.activeElement;
+      return Boolean(record?.el?.contains(active) && active?.matches?.('textarea,input:not([type="checkbox"]),[contenteditable="true"]'));
+    };
+    const retargetAfterBlur = (record) => {
+      host.requestAnimationFrame(() => {
+        if (!nativeCurrent(record) || nativeInputActive(record)) return;
+        record.dirty = false;
+        if (pendingRetarget?.entryUid === record.entryUid && !composing) {
+          pendingRetarget = null; showTask(record.entryUid, true);
+        }
+      });
+    };
     const reduceMotion = () => Boolean(host.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
     function clearSwipeMotion() {
       swipeGeneration += 1;
@@ -383,12 +422,13 @@ export function createDeskView({
       const record = mount;
       mount = null;
       if (!record) return;
-      scrollPositions.set(record.uid, body.scrollTop);
+      nativeGeneration += 1;
+      scrollPositions.set(record.entryUid, body.scrollTop);
       if (graph === graphName(host) && roam === host.roamAlphaAPI && record.el.contains(document.activeElement)) document.activeElement.blur();
       record.el.remove();
       enqueueNative(() => cleanupNative(record));
-      previews.delete(record.uid);
-      const card = cards.get(record.uid);
+      previews.delete(record.entryUid);
+      const card = cards.get(record.entryUid);
       if (card) observer?.observe(card.tile);
     }
     function updateControls() {
@@ -403,7 +443,12 @@ export function createDeskView({
       add.disabled = newNote.disabled = busy || status !== 'ready' || !actions;
       focusTop.disabled = busy || !selectedUid || status !== 'ready' || Boolean(editingHoldUid);
       openMain.disabled = !selectedUid;
-      for (const item of [openMain, focusTop]) {
+      const target = selectedUid ? editorTarget(selectedUid) : null;
+      const alternate = Boolean(target && target.editorUid !== selectedUid);
+      openEntry.hidden = !alternate;
+      if (alternate) openEntry.querySelector('.bp3-text-overflow-ellipsis').textContent = mount?.editorUid === selectedUid ? 'Open source' : 'Open plan entry';
+      openEntry.disabled = !alternate || busy || status !== 'ready';
+      for (const item of [openMain, openEntry, focusTop]) {
         item.setAttribute('aria-disabled', String(item.disabled));
         item.tabIndex = item.disabled ? -1 : 0;
         item.classList.toggle('bp3-disabled', item.disabled);
@@ -484,19 +529,19 @@ export function createDeskView({
     }
     async function focusNativeInput(record, caret) {
       const candidates = [...record.el.querySelectorAll('.roam-block[id],textarea')];
-      const target = candidates.find((node) => node.dataset.blockUid === record.uid || node.id?.endsWith(`-${record.uid}`));
+      const target = candidates.find((node) => node.dataset.blockUid === record.editorUid || node.id?.endsWith(`-${record.editorUid}`));
       if (!target || !nativeCurrent(record)) return;
       if (target.tagName === 'TEXTAREA') {
         target.focus({ preventScroll: true }); target.setSelectionRange(caret, caret); return;
       }
       // Native IDs are block-input-<window-id>-<uid>. Never focus a hidden copy
       // in the main outline or click a generic data-UID element/checkbox.
-      const prefix = 'block-input-', suffix = `-${record.uid}`;
+      const prefix = 'block-input-', suffix = `-${record.editorUid}`;
       const windowId = target.id.startsWith(prefix) ? target.id.slice(prefix.length, -suffix.length) : '';
       if (windowId && typeof roam.ui?.setBlockFocusAndSelection === 'function') {
         try {
           await roam.ui.setBlockFocusAndSelection({
-            location: { 'block-uid': record.uid, 'window-id': windowId },
+            location: { 'block-uid': record.editorUid, 'window-id': windowId },
             selection: { start: caret, end: caret },
           });
         } catch (_error) {
@@ -507,10 +552,11 @@ export function createDeskView({
         }
       }
     }
-    function showTask(uid, force = false, caret = null, slide = 0) {
+    function showTask(uid, force = false, caret = null, slide = 0, requestedEditorUid = null) {
       if (!uid || !checkScope() || status !== 'ready' || !tasks.some((task) => task.uid === uid)) return;
       if (actions?.isRemovalLocked?.(planUid)) { noticeError(new Error('A removal is pending or unconfirmed. Use Refresh before editing.')); return; }
-      if (uid === selectedUid && mode === 'task' && !force) return;
+      const target = requestedEditorUid === uid ? { entryUid: uid, editorUid: uid } : editorTarget(uid);
+      if (uid === selectedUid && mode === 'task' && mount?.editorUid === target.editorUid && !force) return;
       const entryOffset = swipeOffset;
       if (mode === 'draft') { captureDraft(); void saveDraft(); }
       dropEditor();
@@ -528,14 +574,19 @@ export function createDeskView({
         editorMessage.textContent = 'The native Roam block editor is unavailable. Return to the outline to edit.';
         return;
       }
-      const record = { uid, el: el('div', 'nautilus-desk__native'), components, attempted: false, cleaned: false };
+      const record = { entryUid: uid, editorUid: target.editorUid, generation: ++nativeGeneration,
+        el: el('div', 'nautilus-desk__native'), components, attempted: false, cleaned: false, dirty: false };
       record.el.dataset.taskUid = uid;
+      record.el.dataset.editorUid = target.editorUid;
+      record.el.addEventListener('input', () => { if (nativeCurrent(record)) record.dirty = true; });
+      record.el.addEventListener('focusout', () => retargetAfterBlur(record));
       mount = record;
       editor.append(record.el);
+      updateControls();
       enqueueNative(async () => {
         if (!nativeCurrent(record)) return;
         record.attempted = true;
-        try { await components.renderBlock({ uid, el: record.el, 'open?': true, 'zoom-path?': true }); }
+        try { await components.renderBlock({ uid: record.editorUid, el: record.el, 'open?': true, 'zoom-path?': true }); }
         catch (_error) {
           if (nativeCurrent(record)) { clearSwipeMotion(); editorMessage.textContent = 'The native Roam editor could not open this note.'; retryEditor.hidden = false; record.el.remove(); }
           await cleanupNative(record);
@@ -543,9 +594,11 @@ export function createDeskView({
         }
         if (!nativeCurrent(record)) { await cleanupNative(record); return; }
         editorStatus.hidden = true;
-        body.scrollTop = scrollPositions.get(uid) || 0;
+        body.scrollTop = scrollPositions.get(record.entryUid) || 0;
         if (entryGeneration === swipeGeneration) animateEntry(record.el, slide, entryOffset);
-        if (caret !== null) await focusNativeInput(record, caret);
+        // A draft caret is meaningful only in its local entry text. Never map a
+        // wrapper-macro offset into unrelated source content.
+        if (caret !== null && record.editorUid === record.entryUid) await focusNativeInput(record, caret);
       });
     }
     function showDraft(slide = 0) {
@@ -791,7 +844,7 @@ export function createDeskView({
           const activate = (event) => {
             if (!checkScope() || busy || status !== 'ready') return;
             if (actions?.isRemovalLocked?.(planUid)) { noticeError(new Error('A removal is pending or unconfirmed. Use Refresh before editing.')); return; }
-            if (event.shiftKey) Promise.resolve().then(() => inScope() && !actions?.isRemovalLocked?.(planUid) && openTask(task.uid, true)).catch(noticeError);
+            if (event.shiftKey) Promise.resolve().then(() => inScope() && !actions?.isRemovalLocked?.(planUid) && openTask(editorTarget(task.uid).editorUid, true)).catch(noticeError);
             else showTask(task.uid);
           };
           tile.addEventListener('click', activate);
@@ -927,11 +980,25 @@ export function createDeskView({
       const editing = mode === 'task' && mount?.el.contains(activeInput)
         && activeInput?.matches?.('textarea,input:not([type="checkbox"]),[contenteditable="true"]');
       const stillInPlan = snapshot?.['block/children']?.some((row) => row['block/uid'] === selectedUid);
-      if (status === 'ready' && editing && stillInPlan && !tasks.some((task) => task.uid === selectedUid)) {
-        // A temporarily empty title or a state edit must not unmount the native
-        // textarea mid-keystroke. Reconcile once editing loses focus instead.
+      const previousSelected = previousTasks.find((task) => task.uid === selectedUid);
+      const missingEmbedSource = previousSelected && editorTarget(selectedUid, previousSelected).unavailable;
+      if (status === 'ready' && stillInPlan && !tasks.some((task) => task.uid === selectedUid) && (editing || missingEmbedSource)) {
+        // A temporarily empty title/state edit must not unmount native input;
+        // likewise a deleted embed source keeps its local entry available as a
+        // recoverable fallback rather than silently selecting a different card.
         const index = previousTasks.findIndex((task) => task.uid === selectedUid);
-        if (index >= 0) { tasks.splice(Math.min(index, tasks.length), 0, previousTasks[index]); editingHoldUid = selectedUid; }
+        if (index >= 0) { tasks.splice(Math.min(index, tasks.length), 0, previousTasks[index]); if (editing) editingHoldUid = selectedUid; }
+      }
+      const activeRecord = mount;
+      if (mode === 'task' && activeRecord && status === 'ready' && selectedUid === activeRecord.entryUid) {
+        const target = editorTarget(selectedUid);
+        if (target.editorUid !== activeRecord.editorUid) {
+          if (composing || activeRecord.dirty || nativeInputActive(activeRecord)) {
+            pendingRetarget = target;
+            editorStatus.hidden = false; retryEditor.hidden = false;
+            editorMessage.textContent = 'This plan entry now points to a different source. Finish editing, then reopen it.';
+          } else showTask(selectedUid, true);
+        } else pendingRetarget = null;
       }
       const nextUid = reconcileDeskSelection(previousTasks, tasks, selectedUid);
       if (mode === 'task' && nextUid !== selectedUid) { if (nextUid && status === 'ready') showTask(nextUid); else showOverview(false); }

@@ -354,8 +354,15 @@ unfinished input composition or copy the editor's uncommitted buffer into the gr
   not written before composition ends. No TODO marker is forced. Ordinary text is an implicit
   budget task, using the default estimate when no duration is given; its child notes/logs add
   no independent demand. Content classified as an event or DONE is saved but excluded from active cards.
-- **Native focus editing.** Click a card to edit its original UID, path, and children
-  with `renderBlock`; Shift-click opens it in the sidebar. The focus dialog is centered
+- **Native focus editing.** Ordinary tasks and bare references edit their plan-entry UID.
+  A supported native `embed-path` card instead opens its verified immediate source UID with
+  `renderBlock`, including that source's normal outline and children; it does not open a
+  second wrapper frame. Shift-click and **Open in main window** follow the same content
+  target. The card, order, removal, local estimate, notes, CLOCK, and Actual remain on the
+  plan-entry UID. Its **More** menu offers **Open plan entry** when that local metadata needs
+  editing (and **Open source** to return); Move to top and Remove from Desk still affect only
+  the plan entry. If the source is unreadable or gone, Desk safely opens the local entry rather
+  than guessing another source. The focus dialog is centered
   in the viewport, up to 880 CSS pixels wide, with 16px side gutters on smaller windows.
   The editor uses that wider space; background sidebars are not closed or allowed to
   squeeze it back into a narrow column. Native height and typography are unchanged.
@@ -394,7 +401,8 @@ subtree. A native block embed also shows its source tree before local children, 
 local CLOCK/LOGBOOK notes do not hide it. Missing external roots show `(missing)`.
 Code remains literal. Unsupported
 rich forms are not executed; this is not a replacement for Roam's full renderer.
-Opening a card edits the complete original block, without changing source folds.
+Opening an ordinary card edits its complete original block; a supported embed opens its
+verified immediate source outline without changing source folds.
 Markdown images outside inline/fenced code in
 the card root, preview subtree, and resolved references use Roam's native `rm-desk-tile__image` /
 `__images` layouts (one bounded image or up to three cells). Only `http`, `https`,
@@ -419,8 +427,9 @@ Drag one ordinary native Roam block from the same window and graph onto a Desk c
 embed, `{{embed-path: ((source-uid)) closed}}`, under the current plan. It adds no
 TODO marker: plain text stays plain, and an existing task checkbox is not duplicated.
 The source text, parent and children stay untouched; the wrapper follows the source's
-state while CLOCK and local timing remain on the wrapper. Existing bare and legacy
-references are neither migrated nor rewritten. New drops of
+state while CLOCK and local timing remain on the wrapper. Opening a supported stored embed
+edits its verified immediate source outline; it does not rewrite, copy, or unwrap the stored
+wrapper. Existing bare and legacy references are neither migrated nor rewritten. New drops of
 already-completed sources are declined with a clear message instead of reopening them
 or silently adding an invisible card to this unfinished-items view.
 Left/right card halves choose

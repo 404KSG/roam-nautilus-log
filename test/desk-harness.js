@@ -23,6 +23,7 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
   let sequence = 0;
   let nextNativeEscapePreventsDefault = false;
   let nativeSelection = null;
+  let negativeEditor = null;
   const planUid = 'plan-desk';
   const rendererString = '[[Nautilus Log]] {{[[roam/render]]:((roam-render-Nautilus-Log-cljs))}}';
   // Synthetic fixture assets only: never load a user graph attachment.
@@ -211,6 +212,14 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
       if (failRender) { failRender = false; throw new Error('Native mount failed'); }
       nativeEditors.add(el);
       const owner = document.createElement('div'); owner.className = 'roam-block-container';
+      // A real carrier is structurally distinct from the direct source outline.
+      // This fixture never unwraps it, so a wrapper-target regression stays visible.
+      const wrapper = /^\s*\{\{embed-path: \(\([A-Za-z0-9_-]+\)\) closed\}\}(?:\s+(?:\d+h(?:\d+(?:min|m))?|\d+(?:min|m)))?\s*$/.test(nodes.get(uid).string);
+      if (wrapper) {
+        owner.classList.add('rm-embed-frame');
+        const label = document.createElement('div'); label.className = 'rm-embed-frame__label'; label.textContent = 'Embedded plan entry';
+        owner.append(label);
+      }
       const main = document.createElement('div'); main.className = 'rm-block-main';
       const childArea = document.createElement('div'); childArea.className = 'rm-block-children';
       owner.append(main, childArea); el.append(owner);
@@ -325,8 +334,25 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
   };
   addHost(planUid, 'Open Desk'); addHost('other-plan', 'Open other Desk');
   cleanup = () => { desk.destroy(); actions.destroy(); bridge.destroy(); };
+  const renderNegativeControl = async uid => {
+    await window.deskHarness?.api?.clearNegativeControl?.();
+    negativeEditor = document.createElement('aside'); negativeEditor.dataset.fixtureNegativeEditor = '';
+    document.body.append(negativeEditor);
+    await roam.ui.components.renderBlock({ uid, el: negativeEditor, 'open?': true, 'zoom-path?': true });
+    return { uid, frame: Boolean(negativeEditor.querySelector('.rm-embed-frame')),
+      text: negativeEditor.querySelector(`textarea[data-block-uid="${uid}"]`)?.value || '',
+      children: [...negativeEditor.querySelectorAll('.rm-block-children textarea')].map(input => input.dataset.blockUid) };
+  };
+  const clearNegativeControl = async () => {
+    if (!negativeEditor) return;
+    await roam.ui.components.unmountNode({ el: negativeEditor }); negativeEditor.remove(); negativeEditor = null;
+  };
   window.deskHarness.api = {
-    stats, setString, setOpen, setOrder, addChild, children, text: uid => nodes.get(uid)?.string, sourceSnapshot: uid => JSON.stringify(referenceEntity(uid)), activeEditors: () => nativeEditors.size,
+    stats, setString, setOpen, setOrder, addChild, addBlock: (uid, string, parentUid = 'daily-page') => {
+      if (nodes.has(uid)) throw new Error('Duplicate fixture block');
+      add(uid, string, parentUid, children(parentUid).length); notify({ uid, fields: ['string'] }, { uid: parentUid, fields: ['children'] });
+    }, children, text: uid => nodes.get(uid)?.string, sourceSnapshot: uid => JSON.stringify(referenceEntity(uid)), activeEditors: () => nativeEditors.size,
+    renderNegativeControl, clearNegativeControl,
     replayEscapeBeforeCopy: (uid, { preventDefault = false } = {}) => {
       const input = document.querySelector(`.nautilus-desk__native textarea[data-block-uid="${uid}"]`);
       if (!input) throw new Error('Native editor is not mounted');
