@@ -127,6 +127,68 @@ export function fingerprintDeskReferenceSource(entity) {
   return JSON.stringify([value.uid, value.string, value.parentUids.slice().sort(), value.pageUid, children, value.edited ?? null]);
 }
 
+// Match task-instance resolution's eight lookup levels without allowing a
+// small shared graph to expand into unbounded text. This is per-read evidence,
+// not a cache shared across awaits, graph contexts or import attempts.
+export const DESK_REFERENCE_EVIDENCE_LIMITS = Object.freeze({
+  depth: 8, nodes: 128, children: 2048, expansions: 1024, bytes: 2 * 1024 * 1024,
+});
+
+export function readDeskReferenceSourceEvidence(adapter, sourceUid, { root, assertContext = () => {}, forbiddenUids = [] } = {}) {
+  const limits = DESK_REFERENCE_EVIDENCE_LIMITS;
+  const entities = new Map(), fingerprints = new Map(), computed = new Map(), visiting = new Set();
+  const forbidden = new Set(forbiddenUids), encoder = new TextEncoder();
+  let totalBytes = 0;
+  const reject = (message, code) => { throw new DeskReferenceImportError(message, code); };
+  const limit = () => reject('The reference chain exceeds safe reading limits. Nothing was added.', 'reference-limit');
+  const visit = (uid, depth) => {
+    assertContext();
+    if (!isSafeDeskReferenceUid(uid)) reject('A referenced block could not be verified. Nothing was added.', 'reference-unavailable');
+    if (forbidden.has(uid) || visiting.has(uid)) reject('The reference chain contains a cycle or the target plan. Nothing was added.', 'reference-cycle');
+    if (depth >= limits.depth) limit();
+    const prior = computed.get(uid);
+    if (prior) { if (depth + prior.height > limits.depth) limit(); return prior; }
+    if (entities.size >= limits.nodes) limit();
+    const node = uid === sourceUid && root !== undefined ? root : readStrictReferenceEntity(adapter, uid);
+    assertContext();
+    if (!node) reject('A referenced block is missing or unavailable. Nothing was added.', depth ? 'reference-unavailable' : 'invalid-source');
+    if (node.uid !== uid || typeof node.string !== 'string' || typeof node.title === 'string'
+      || !Array.isArray(node.parentUids) || node.parentUids.length !== 1 || !node.pageUid
+      || !Array.isArray(node.children) || isUnsupportedReferenceSource(node.string)) {
+      reject('The reference chain contains an unsupported source block. Nothing was added.', 'invalid-source');
+    }
+    if (node.children.length > limits.children || node.string.length > limits.bytes) limit();
+    const fingerprint = fingerprintDeskReferenceSource(node);
+    if (!fingerprint) reject('A referenced block could not be verified. Nothing was added.', 'reference-unavailable');
+    totalBytes += encoder.encode(fingerprint).length;
+    if (totalBytes > limits.bytes) limit();
+    entities.set(uid, node); fingerprints.set(uid, fingerprint); visiting.add(uid);
+    let height = 1, expansions = 1, expandedBytes = encoder.encode(node.string).length;
+    // Task-instance resolution recognizes these tokens, including repeated
+    // occurrences. Count their expansion cost, not only distinct graph reads.
+    for (const match of node.string.matchAll(/\(\(([A-Za-z0-9_-]{6,})\)\)/g)) {
+      const child = visit(match[1], depth + 1);
+      height = Math.max(height, child.height + 1);
+      expansions += child.expansions; expandedBytes += child.expandedBytes;
+      if (expansions > limits.expansions || expandedBytes > limits.bytes) limit();
+    }
+    visiting.delete(uid);
+    const cost = { height, expansions, expandedBytes }; computed.set(uid, cost); return cost;
+  };
+  const cost = visit(sourceUid, 0);
+  assertContext();
+  const fingerprint = entities.size === 1 ? fingerprints.get(sourceUid)
+    : JSON.stringify(['desk-reference-evidence-v1', [...fingerprints].sort(([left], [right]) => left.localeCompare(right))]);
+  return { root: entities.get(sourceUid), fingerprint,
+    readString(uid) {
+      const node = entities.get(uid);
+      if (!node) reject('The reference dependency could not be verified. Nothing was added.', 'reference-unavailable');
+      return node.string;
+    },
+    counts: { nodes: entities.size, bytes: totalBytes, ...cost },
+  };
+}
+
 export async function stableDeskReferenceUid({ graphName: name, graphType = '', planUid, sourceUid, crypto = globalThis.crypto, TextEncoderCtor = globalThis.TextEncoder, btoaImpl = globalThis.btoa } = {}) {
   if (!name || !planUid || !sourceUid || !crypto?.subtle?.digest || typeof TextEncoderCtor !== 'function') {
     throw new DeskReferenceImportError('This browser cannot safely reserve a reference ID.', 'uid-unavailable');
@@ -149,6 +211,9 @@ export const canonicalDeskReference = sourceUid => `((${sourceUid}))`;
 export const canonicalDeskEmbed = sourceUid => `{{embed-path: ((${sourceUid})) closed}}`;
 
 const referencePullPattern = '[:block/uid :block/string :node/title :edit/time {:block/page [:block/uid :node/title]} {:block/_children [:block/uid]} {:block/children [:block/uid :block/string :block/order {:block/_children [:block/uid]}]}]';
+// Source evidence needs child membership/order, not every descendant's body.
+// Plan-outline reads retain the wider projection above.
+const referenceEntityPullPattern = '[:block/uid :block/string :node/title :edit/time {:block/page [:block/uid :node/title]} {:block/_children [:block/uid]} {:block/children [:block/uid :block/order {:block/_children [:block/uid]}]}]';
 const raw = (entity, ...names) => {
   for (const name of names) if (Object.prototype.hasOwnProperty.call(entity || {}, name)) return entity[name];
   return undefined;
@@ -190,6 +255,7 @@ export function createModernReferenceAdapter(api) {
   return {
     api,
     pull(uidValue) { return pull.call(api.data, referencePullPattern, [':block/uid', uidValue]); },
+    pullEntity(uidValue) { return pull.call(api.data, referenceEntityPullPattern, [':block/uid', uidValue]); },
     create({ uid: blockUid, parentUid, order, string, open }) {
       return create.call(api.data.block, {
         location: { 'parent-uid': parentUid, order },
@@ -227,7 +293,7 @@ export function readStrictReferenceOutline(adapter, planUid) {
 }
 
 export function readStrictReferenceEntity(adapter, uidValue) {
-  const entity = adapter.pull(uidValue);
+  const entity = typeof adapter.pullEntity === 'function' ? adapter.pullEntity(uidValue) : adapter.pull(uidValue);
   if (entity === null || entity === undefined) return null;
   const invalid = () => { throw new DeskReferenceImportError('The block metadata is incomplete or malformed. Nothing else was changed.', 'invalid-entity'); };
   // Only a null pull means absent. Malformed occupancy must not permit a create
@@ -240,7 +306,11 @@ export function readStrictReferenceEntity(adapter, uidValue) {
   const parentUids = parents?.map(strictUid);
   const page = raw(entity, 'pageUid', 'block/page', ':block/page', 'page');
   const pageUid = strictUid(page);
-  const children = strictChildren(raw(entity, 'children', 'block/children', ':block/children'), entityUid);
+  const rawChildren = raw(entity, 'children', 'block/children', ':block/children');
+  if (Array.isArray(rawChildren) && rawChildren.length > DESK_REFERENCE_EVIDENCE_LIMITS.children) {
+    throw new DeskReferenceImportError('Source child membership exceeds safe reading limits.', 'reference-limit');
+  }
+  const children = strictChildren(rawChildren, entityUid);
   if (entityUid !== uidValue || typeof string !== 'string' || (title !== undefined && typeof title !== 'string')
     || !parentUids || parentUids.length !== 1 || !parentUids[0] || !pageUid || !children) return invalid();
   return { uid: entityUid, string, title, parentUids, pageUid, children, edited: raw(entity, 'edited', 'edit/time', ':edit/time') };

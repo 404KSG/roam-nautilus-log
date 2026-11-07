@@ -3,7 +3,7 @@ import { createDeskRemoveController } from './desk-remove';
 import { resolveTaskInstance } from './timing-core';
 import { inspectRenderer } from './renderer-contract';
 import { readChildren, readBlockString, blockUidExists, moveGraphBlock, createGraphBlock, updateGraphBlock } from './timing-roam';
-import { canonicalDeskEmbed, canonicalDeskReference, createModernReferenceAdapter, DeskReferenceImportError, fingerprintDeskReferenceSource, freezeReferenceDrop, isSafeDeskReferenceUid, isUnsupportedReferenceSource, readDeskDropContext, readStrictReferenceEntity, readStrictReferenceOutline, sameDeskDropContext, stableDeskReferenceUid } from './desk-reference-import';
+import { canonicalDeskEmbed, canonicalDeskReference, createModernReferenceAdapter, DeskReferenceImportError, DESK_REFERENCE_EVIDENCE_LIMITS, readDeskReferenceSourceEvidence, freezeReferenceDrop, isSafeDeskReferenceUid, isUnsupportedReferenceSource, readDeskDropContext, readStrictReferenceEntity, readStrictReferenceOutline, sameDeskDropContext, stableDeskReferenceUid } from './desk-reference-import';
 import { deskCarrierUid } from './desk-carrier';
 
 /** All Desk writes share the graph-scoped outline lock. A successful host call is not confirmation. */
@@ -49,7 +49,7 @@ export function createDeskActions({
   const sameOrder = (rows, expected) => rows.map((r) => r.uid).join('\0') === expected.join('\0');
   const task = (row) => resolveTaskInstance({ uid: row.uid, localString: row.string, readString });
   const ancestryNode = (adapter, uid) => {
-    const value = adapter.pull(uid);
+    const value = typeof adapter.pullEntity === 'function' ? adapter.pullEntity(uid) : adapter.pull(uid);
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     const nodeUid = value.uid || value['block/uid'] || value[':block/uid'];
     const string = value.string ?? value['block/string'] ?? value[':block/string'];
@@ -114,16 +114,21 @@ export function createDeskActions({
   const moveDuplicateReference = ({ planUid, sourceUid, wrapperUid, sourceFingerprint, originContext, insertion, signal } = {}) => exclusive(async () => {
     assertActive(signal);
     const api = typeof referenceApi === 'function' ? referenceApi() : referenceApi;
-    const current = getContext();
-    if (!sameDeskDropContext(originContext, current) || current?.provider !== api) {
-      throw new DeskReferenceImportError('The graph or user changed. Start a new drag.', 'context-changed');
-    }
+    const assertContext = () => {
+      assertActive(signal);
+      const current = getContext();
+      if (!sameDeskDropContext(originContext, current) || current?.provider !== api) {
+        throw new DeskReferenceImportError('The graph or user changed. Start a new drag.', 'context-changed');
+      }
+      removal.assertPlanClear(planUid);
+    };
+    assertContext();
     if (!sourceUid || !wrapperUid || !sourceFingerprint || !api?.data?.pull) {
       throw new DeskReferenceImportError('The duplicate could not be verified. Refresh and try again.', 'duplicate-unavailable');
     }
     const adapter = createModernReferenceAdapter(api);
-    const source = readStrictReferenceEntity(adapter, sourceUid);
-    if (fingerprintDeskReferenceSource(source) !== sourceFingerprint) {
+    const readEvidence = () => readDeskReferenceSourceEvidence(adapter, sourceUid, { assertContext, forbiddenUids: [planUid] });
+    if (readEvidence().fingerprint !== sourceFingerprint) {
       throw new DeskReferenceImportError('The source changed. Refresh and try again.', 'source-changed');
     }
     const rows = outline(planUid);
@@ -147,7 +152,15 @@ export function createDeskActions({
     if (!['before', 'after'].includes(position) || !active.some(row => row.uid === targetUid)) {
       throw new DeskReferenceImportError('The drop target is no longer available.', 'stale-target');
     }
-    return moveTaskLocked({ planUid, uid: wrapperUid, targetUid, position, expectedSourceUid: sourceUid });
+    const result = await moveTaskLocked({ planUid, uid: wrapperUid, targetUid, position, expectedSourceUid: sourceUid });
+    assertContext();
+    let confirmedSource = null;
+    try { confirmedSource = readEvidence().fingerprint; } catch (_error) { /* A post-write read failure is uncertainty, not permission to retry. */ }
+    assertContext();
+    if (confirmedSource !== sourceFingerprint) {
+      throw new DeskReferenceImportError('Could not confirm the existing note after moving it. Check the original outline before retrying.', 'unconfirmed');
+    }
+    return result;
   }, signal);
 
   const importReferenceDrop = ({ planUid, transfer, expectedSourceUid, originContext, insertion, signal } = {}) => {
@@ -196,14 +209,16 @@ export function createDeskActions({
       const knownReference = string => string === bareReference || string === `{{[[TODO]]}} ${bareReference}`
         || deskCarrierUid(string) === sourceUid;
       const simpleReference = row => knownReference(String(row?.string || '').trim());
-      const validSource = (source) => {
+      const readSourceEvidence = root => readDeskReferenceSourceEvidence(adapter, sourceUid, { root, assertContext, forbiddenUids: [planUid] });
+      const validSource = (source, evidence) => {
         if (!source || source.uid !== sourceUid || sourceUid === planUid || typeof source.string !== 'string' || !source.string.trim()
           || typeof source.title === 'string' || source.parentUids.length !== 1 || !source.parentUids[0] || !source.pageUid
           || source.children.some(child => !child.uid || !Number.isInteger(child.order) || child.order < 0)
           || isUnsupportedReferenceSource(source.string)) {
           throw new DeskReferenceImportError('The source block is no longer a readable ordinary block.', 'invalid-source');
         }
-        const instance = resolveTaskInstance({ uid: `preview-${sourceUid}`, localString: canonical, readString: uid => uid === sourceUid ? source.string : '' });
+        const instance = resolveTaskInstance({ uid: `preview-${sourceUid}`, localString: canonical,
+          readString: evidence.readString, maxDepth: DESK_REFERENCE_EVIDENCE_LIMITS.depth });
         if (instance.kind !== 'task' || !instance.title || instance.title === '(untitled)') {
           throw new DeskReferenceImportError('This block cannot become a visible unfinished Desk task.', 'not-a-task');
         }
@@ -219,8 +234,9 @@ export function createDeskActions({
       let rows = readStrictReferenceOutline(adapter, planUid);
       const source = await entity(sourceUid);
       assertContext();
-      const sourceInstance = validSource(source);
-      const sourceFingerprint = fingerprintDeskReferenceSource(source);
+      const sourceEvidence = readSourceEvidence(source);
+      const sourceInstance = validSource(source, sourceEvidence);
+      const sourceFingerprint = sourceEvidence.fingerprint;
       if (!sourceFingerprint) throw new DeskReferenceImportError('The source block is unreadable.', 'invalid-source');
       let wrapperUid = null;
       const reserveWrapperUid = async () => {
@@ -273,14 +289,15 @@ export function createDeskActions({
       // The graph lock serializes Nautilus writes, not an external editor.
       assertContext();
       rows = readStrictReferenceOutline(adapter, planUid);
-      const refreshedSource = await entity(sourceUid);
-      assertContext();
       // Check the deterministic graph state before rejecting an asynchronous
       // source edit: the host may have completed the prior create late.
       const adopted = await observeReservedReference(rows);
       if (adopted) return adopted;
-      requireUnfinished(validSource(refreshedSource));
-      if (fingerprintDeskReferenceSource(refreshedSource) !== sourceFingerprint) {
+      // This fresh dependency snapshot follows the awaited reservation/readback.
+      // No await separates its validation from the remaining pre-write checks.
+      const refreshedEvidence = readSourceEvidence();
+      requireUnfinished(validSource(refreshedEvidence.root, refreshedEvidence));
+      if (refreshedEvidence.fingerprint !== sourceFingerprint) {
         throw new DeskReferenceImportError('The source changed before the reference could be created.', 'source-changed');
       }
       if (rows.some(row => row.uid === sourceUid)) return { status: 'existing-source', sourceUid };
@@ -324,9 +341,10 @@ export function createDeskActions({
       assertContext();
       rows = readStrictReferenceOutline(adapter, planUid);
       const wrapper = await entity(wrapperUid);
-      const currentSource = await entity(sourceUid);
       assertContext();
-      const sourceAfter = fingerprintDeskReferenceSource(currentSource);
+      let sourceAfter = null;
+      try { sourceAfter = readSourceEvidence().fingerprint; } catch (_error) { /* Preserve exact-wrapper adoption even when dependency readback fails. */ }
+      assertContext();
       const confirmed = wrapper && wrapper.uid === wrapperUid && wrapper.string === canonical
         && wrapper.parentUids.length === 1 && wrapper.parentUids[0] === planUid && wrapper.children.length === 0
         && sameOrder(rows, expected) && sourceAfter === sourceFingerprint;

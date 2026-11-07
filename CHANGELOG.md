@@ -14,6 +14,13 @@
 
 ### Changed
 
+- Accept eligible reference-only and chained-reference blocks through native bullet
+  drags while retaining the dragged UID, native editor target and local metadata
+  ownership. Read bounded dependency evidence instead of treating nested references
+  as empty text; revalidate it across reservation, create and duplicate moves.
+  Missing/cyclic/unsupported dependencies and inherited completion remain guarded;
+  existing local task-marker precedence is preserved, and no inline-text gesture or source rewrite
+  is inferred from the native comparison.
 - Accept verified native block-bullet drags from linked references, query results,
   embedded outlines and other same-window locations without using ancestor view
   classes as a rejection rule. Keep single-block, same-graph, source-eligibility,

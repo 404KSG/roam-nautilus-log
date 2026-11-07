@@ -444,6 +444,18 @@ edits its verified immediate source outline; it does not rewrite, copy, or unwra
 wrapper. Existing bare and legacy references are neither migrated nor rewritten. New drops of
 already-completed sources are declined with a clear message instead of reopening them
 or silently adding an invisible card to this unfinished-items view.
+
+A block containing another block reference is eligible when its resolved task is
+unfinished. Drag its own bullet: the new embed still points to that dragged block,
+not to the ultimate referenced source. Existing local TODO/DONE markers and duration
+precedence remain; no marker or CLOCK is copied into the new entry. Eligibility
+reads a bounded reference dependency snapshot (up to eight lookup levels, including
+the dragged block). Missing, cyclic, excessive or unsupported dependencies fail
+closed. Dependencies are checked again after asynchronous reservation, after create,
+and around a positioned duplicate move. A changed dependency cannot silently
+confirm a stale operation or trigger a second write. This does not add an inferred
+inline-reference-text drag gesture.
+
 Left/right card halves choose
 before/after (mirrored in RTL), with the same native insertion rail and number.
 Background adds after the last unfiltered active task (or first in an empty plan).
@@ -542,7 +554,9 @@ controls, wheel response, reduced motion and cleanup (`DESK_POLISH_TEST_OUT`).
 `desk-removal.py` exercises the real footer against a synthetic graph
 (`DESK_REMOVE_TEST_OUT`). `test:desk-import-recovery` adds native-shaped source
 locations, late delete/promotion recovery, protected-data conflicts, cancellation
-and context changes (`DESK_IMPORT_RECOVERY_OUT`). No live graph deletion or
+and context changes (`DESK_IMPORT_RECOVERY_OUT`). `test:desk-reference-drag` covers
+reference-block identity, bounded dependencies, editor targeting and source changes
+around create/duplicate moves (`DESK_REFERENCE_DRAG_OUT`). No live graph deletion or
 promotion has been tested, and these controls do not identify the exact timing
 or field change behind a particular installed-host failure.
 Set `ROAM_NATIVE_CSS` and `ROAM_BLUEPRINT_CSS` to host stylesheet snapshots to test

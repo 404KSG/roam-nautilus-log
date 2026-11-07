@@ -57,7 +57,7 @@ const projectPull = (pattern, entity) => {
   return project(entity, selection());
 };
 
-async function fixture({ createMode = 'normal', onCreate, source = {}, sourceRaw, rows: inputRows, planRaw: suppliedPlan, providerShape = 'modern', project = false, realUid = false } = {}) {
+async function fixture({ createMode = 'normal', onCreate, onReserve, source = {}, sourceRaw, rows: inputRows, planRaw: suppliedPlan, providerShape = 'modern', project = false, realUid = false } = {}) {
   const { createDeskActions } = await extension();
   const rows = inputRows || [
     { uid: 'event-row', string: '09:00-10:00 Meeting', order: 0 },
@@ -90,6 +90,7 @@ async function fixture({ createMode = 'normal', onCreate, source = {}, sourceRaw
     'block/uid': node.uid, 'block/string': node.string,
     'block/_children': node.parentUid === undefined ? undefined : [{ 'block/uid': node.parentUid }],
     'block/page': node.pageUid === undefined ? undefined : { 'block/uid': node.pageUid },
+    ...(node.edited === undefined ? {} : { 'edit/time': node.edited }),
     'block/children': node.children === undefined ? undefined : Array.isArray(node.children)
       ? node.children.map(row => ({ 'block/uid': row.uid, 'block/order': row.order, 'block/_children': [{ 'block/uid': node.uid }] })) : node.children,
   };
@@ -128,7 +129,7 @@ async function fixture({ createMode = 'normal', onCreate, source = {}, sourceRaw
   const actions = createDeskActions({
     referenceApi: () => currentProvider,
     getContext: context,
-    stableReferenceUid: realUid ? undefined : async () => WRAPPER,
+    stableReferenceUid: realUid ? undefined : async () => { onReserve?.(); return WRAPPER; },
     runExclusive: action => action(),
   });
   const call = (overrides = {}) => actions.importReferenceDrop({
@@ -561,4 +562,155 @@ test('two importer instances in the shared exclusive lane serialize to one deter
   assert.equal(a.status, 'added');
   assert.equal(b.status, 'existing-reference');
   assert.equal(f.writes.length, 1);
+});
+
+function nestedSource(f, uid, string, extra = {}) {
+  const node = { uid, string, parentUid: 'outside-parent', pageUid: 'outside-page', children: [], ...extra };
+  f.entities.set(uid, node);
+  return node;
+}
+
+test('reference-block imports retain the dragged UID while resolving bounded reusable content', async t => {
+  const cases = [
+    ['pure', '((nested-01))', '{{[[TODO]]}} Nested source 20m'],
+    ['two-hop', '((nested-02))', '{{[[TODO]]}} Nested source 20m'],
+    ['local TODO', '{{[[TODO]]}} ((nested-01)) 30m', '{{[[TODO]]}} Nested source 20m'],
+    ['local TODO over DONE', '{{[[TODO]]}} ((nested-01)) 30m', '{{[[DONE]]}} Nested source 20m'],
+    ['contextual', 'Review ((nested-01)) 10m', '{{[[TODO]]}} Nested source 20m'],
+    ['known empty reference with local prose', 'Review ((nested-01)) 10m', ''],
+  ];
+  for (const [name, string, nested] of cases) await t.test(name, async () => {
+    const f = await fixture({ source: { string }, project: true });
+    nestedSource(f, 'nested-01', nested); nestedSource(f, 'nested-02', '((nested-01))');
+    const before = [SOURCE, 'nested-01', 'nested-02'].map(uid => clone(f.entities.get(uid)));
+    const result = await f.call();
+    assert.equal(result.status, 'added');
+    assert.equal(result.sourceUid, SOURCE);
+    assert.equal(f.writes.length, 1);
+    assert.equal(f.writes[0].string, embedCanonical, 'embed the dragged reference block, not its ultimate source');
+    assert.deepEqual([SOURCE, 'nested-01', 'nested-02'].map(uid => f.entities.get(uid)), before);
+  });
+});
+
+test('inherited and explicit DONE reference blocks are rejected without writing a task marker', async t => {
+  for (const [string, nested] of [['((nested-01))', '{{[[DONE]]}} Completed source'], ['{{[[DONE]]}} ((nested-01))', '{{[[TODO]]}} Open source']]) {
+    await t.test(string, async () => {
+      const f = await fixture({ source: { string }, project: true }); nestedSource(f, 'nested-01', nested);
+      await assert.rejects(f.call(), error => error.code === 'source-completed');
+      assert.equal(f.writes.length, 0); assert.equal(f.sourceNode.string, string);
+    });
+  }
+});
+
+test('missing, cyclic, unsupported and event reference dependencies fail before creating', async t => {
+  const cases = [
+    ['missing', 'Task ((missing-01))', f => {}, 'reference-unavailable'],
+    ['self-cycle', 'Task ((source-1))', f => {}, 'reference-cycle'],
+    ['nested-cycle', 'Task ((nested-01))', f => nestedSource(f, 'nested-01', '((source-1))'), 'reference-cycle'],
+    ['unsupported', '((nested-01))', f => nestedSource(f, 'nested-01', '{{[[query]]: {and: [[TODO]]}}}'), 'invalid-source'],
+    ['event', '((nested-01))', f => nestedSource(f, 'nested-01', '09:00-10:00 Fixed event'), 'not-a-task'],
+  ];
+  for (const [name, string, setup, code] of cases) await t.test(name, async () => {
+    const f = await fixture({ source: { string }, project: true }); setup(f);
+    await assert.rejects(f.call(), error => error.code === code);
+    assert.equal(f.writes.length, 0);
+  });
+});
+
+test('reference depth, unique-node, expansion and text budgets are enforced before writes', async t => {
+  for (const length of [8, 9]) await t.test(`${length} levels including dragged source`, async () => {
+    const f = await fixture({ source: { string: '((depth-01))' }, project: true });
+    for (let i = 1; i < length; i++) nestedSource(f, `depth-${String(i).padStart(2, '0')}`, i === length - 1 ? '{{[[TODO]]}} Leaf task 20m' : `((${`depth-${String(i + 1).padStart(2, '0')}`}))`);
+    if (length === 8) { assert.equal((await f.call()).status, 'added'); assert.equal(f.writes.length, 1); }
+    else { await assert.rejects(f.call(), error => error.code === 'reference-limit'); assert.equal(f.writes.length, 0); }
+  });
+  await t.test('129 distinct blocks', async () => {
+    const f = await fixture({ source: { string: Array.from({ length: 128 }, (_, i) => `((node-${String(i).padStart(3, '0')}))`).join(' ') }, project: true });
+    for (let i = 0; i < 128; i++) nestedSource(f, `node-${String(i).padStart(3, '0')}`, 'Task');
+    await assert.rejects(f.call(), error => error.code === 'reference-limit'); assert.equal(f.writes.length, 0);
+  });
+  await t.test('bounded expansion despite reused UIDs', async () => {
+    const f = await fixture({ source: { string: Array(32).fill('((nested-01))').join(' ') }, project: true });
+    nestedSource(f, 'nested-01', Array(32).fill('((nested-02))').join(' ')); nestedSource(f, 'nested-02', 'Task');
+    await assert.rejects(f.call(), error => error.code === 'reference-limit'); assert.equal(f.writes.length, 0);
+  });
+  await t.test('bounded referenced text', async () => {
+    const f = await fixture({ source: { string: '((nested-01))' }, project: true }); nestedSource(f, 'nested-01', 'x'.repeat(2 * 1024 * 1024));
+    await assert.rejects(f.call(), error => error.code === 'reference-limit'); assert.equal(f.writes.length, 0);
+  });
+  await t.test('bounded expanded text despite a small distinct snapshot', async () => {
+    const f = await fixture({ source: { string: Array(4).fill('((nested-01))').join(' ') }, project: true });
+    nestedSource(f, 'nested-01', 'x'.repeat(600000));
+    await assert.rejects(f.call(), error => error.code === 'reference-limit'); assert.equal(f.writes.length, 0);
+  });
+  await t.test('bounded child membership', async () => {
+    const f = await fixture({ source: { children: Array.from({ length: 2049 }, (_, order) => ({ uid: `child-${order}`, order })) }, project: true });
+    await assert.rejects(f.call(), error => error.code === 'reference-limit'); assert.equal(f.writes.length, 0);
+  });
+  await t.test('cached dependency height still counts on a deeper route', async () => {
+    const f = await fixture({ source: { string: '((shared-node)) ((branch-01))' }, project: true });
+    nestedSource(f, 'shared-node', '((shared-leaf))'); nestedSource(f, 'shared-leaf', 'Leaf task');
+    for (let i = 1; i <= 6; i++) nestedSource(f, `branch-${String(i).padStart(2, '0')}`, i === 6 ? '((shared-node))' : `((branch-${String(i + 1).padStart(2, '0')}))`);
+    await assert.rejects(f.call(), error => error.code === 'reference-limit'); assert.equal(f.writes.length, 0);
+  });
+});
+
+test('changes to any nested dependency across UID reservation prevent the create', async t => {
+  const changes = {
+    text: node => { node.string = '{{[[TODO]]}} Changed source'; },
+    status: node => { node.string = '{{[[DONE]]}} Source completed'; },
+    parent: node => { node.parentUid = 'changed-parent'; },
+    page: node => { node.pageUid = 'changed-page'; },
+    children: node => { node.children.push({ uid: 'changed-child', order: 0 }); },
+    edited: node => { node.edited = 2; },
+  };
+  for (const [name, change] of Object.entries(changes)) await t.test(name, async () => {
+    let f; f = await fixture({ source: { string: '((nested-01))' }, project: true, onReserve: () => change(f.entities.get('nested-01')) });
+    nestedSource(f, 'nested-01', '{{[[TODO]]}} Nested task 20m', { edited: 1 });
+    await assert.rejects(f.call(), error => ['source-changed', 'source-completed'].includes(error.code));
+    assert.equal(f.writes.length, 0);
+  });
+});
+
+test('nested source changes after an issued create warn without duplicating the wrapper', async () => {
+  let f; f = await fixture({ source: { string: '((nested-01))' }, project: true,
+    onCreate: () => { f.entities.get('nested-01').string = '{{[[TODO]]}} Changed after dispatch 20m'; } });
+  nestedSource(f, 'nested-01', '{{[[TODO]]}} Nested task 20m');
+  await assert.rejects(f.call(), error => error.code === 'unconfirmed');
+  assert.equal(f.writes.length, 1); assert.equal(f.entities.get(WRAPPER).string, embedCanonical);
+  assert.equal((await f.call()).status, 'existing-reference'); assert.equal(f.writes.length, 1);
+});
+
+test('missing dependency after create remains unconfirmed and never creates a second wrapper', async () => {
+  let f; f = await fixture({ source: { string: '((nested-01))' }, project: true,
+    onCreate: () => { f.entities.delete('nested-01'); } });
+  nestedSource(f, 'nested-01', '{{[[TODO]]}} Nested task 20m');
+  await assert.rejects(f.call(), error => error.code === 'unconfirmed');
+  assert.equal(f.writes.length, 1); assert.equal(f.entities.get(WRAPPER).string, embedCanonical);
+  await assert.rejects(f.call(), error => error.code === 'reference-unavailable'); assert.equal(f.writes.length, 1);
+  nestedSource(f, 'nested-01', '{{[[TODO]]}} Nested task 20m');
+  assert.equal((await f.call()).status, 'existing-reference'); assert.equal(f.writes.length, 1);
+});
+
+test('a lost reference-import response is confirmed only from the same wrapper and dependency snapshot', async () => {
+  const f = await fixture({ source: { string: '((nested-01))' }, project: true, createMode: 'lost-response' });
+  nestedSource(f, 'nested-01', '{{[[TODO]]}} Nested task 20m');
+  assert.equal((await f.call()).status, 'added'); assert.equal(f.writes.length, 1);
+});
+
+test('source eligibility avoids pulling descendant text that is not part of the source evidence', async () => {
+  let descendantTextReads = 0;
+  const rawChild = { 'block/uid': 'source-child', 'block/order': 0, 'block/_children': [{ 'block/uid': SOURCE }] };
+  Object.defineProperty(rawChild, 'block/string', { enumerable: true, get() { descendantTextReads += 1; return 'Unneeded descendant body'; } });
+  const f = await fixture({ sourceRaw: { 'block/children': [rawChild] }, project: true });
+  assert.equal((await f.call()).status, 'added');
+  assert.equal(descendantTextReads, 0);
+  assert.equal(f.writes.length, 1);
+});
+
+test('a user change during a nested public pull stops the import before writing', async () => {
+  const f = await fixture({ source: { string: '((nested-01))' }, project: true }); nestedSource(f, 'nested-01', '{{[[TODO]]}} Nested task 20m');
+  const api = f.provider(), pull = api.data.pull;
+  api.data.pull = (pattern, lookup) => { const value = pull(pattern, lookup); if (lookup[1] === 'nested-01') f.setUser('changed-user'); return value; };
+  await assert.rejects(f.call(), error => error.code === 'context-changed'); assert.equal(f.writes.length, 0);
 });
