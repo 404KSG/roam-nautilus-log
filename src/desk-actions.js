@@ -165,15 +165,21 @@ export function createDeskActions({
     if (existing?.pending) return existing.pending;
     const reservation = existing || { attempted: false, pending: null };
     imports.set(reservationKey, reservation);
-    const pending = exclusive(async () => {
-      const assertContext = () => {
-        assertActive(signal);
-        removal.assertPlanClear(planUid);
-        const current = getContext();
-        if (!sameDeskDropContext(originContext, current) || current?.provider !== adapter.api) {
-          throw new DeskReferenceImportError('The graph or user changed. Start a new drag.', 'context-changed');
-        }
-      };
+    const assertScope = () => {
+      assertActive(signal);
+      const current = getContext();
+      if (!sameDeskDropContext(originContext, current) || current?.provider !== adapter.api) {
+        throw new DeskReferenceImportError('The graph or user changed. Start a new drag.', 'context-changed');
+      }
+    };
+    // The native payload is already frozen. Reconcile prior removal receipts
+    // read-only BEFORE entering the import lane: verifyPending owns that lane
+    // too, and nesting it inside the import would deadlock. Never reissue writes.
+    const pending = Promise.resolve().then(() => {
+      assertScope();
+      return removal.verifyPending(planUid);
+    }).then(() => exclusive(async () => {
+      const assertContext = () => { assertScope(); removal.assertPlanClear(planUid); };
       const entity = async (uid) => readStrictReferenceEntity(adapter, uid);
       const activeTask = (row) => {
         const item = resolveTaskInstance({
@@ -334,7 +340,7 @@ export function createDeskActions({
       // confirmed childless-wrapper removal.
       imports.delete(reservationKey);
       return { status: 'added', sourceUid, wrapperUid, order };
-    }, signal);
+    }, signal));
     reservation.pending = pending;
     pending.finally(() => { if (reservation.pending === pending) reservation.pending = null; }).catch(() => {});
     return pending;

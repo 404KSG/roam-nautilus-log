@@ -68,10 +68,10 @@ function readStrictDeskRemoveSnapshot({ adapter, api = adapter.api, planUid, tar
   const member = plan.children.find(row => row.uid === targetUid);
   if (!member) fail('Target is no longer a direct child of this plan.');
   assertChild(target, plan.uid, member, page.uid);
-  const subtree = new Set(), references = new Set();
+  const subtree = new Set(), references = new Set(), protectedNodes = new Set();
   const walk = (root, owningPage, local, visited = new Set(), depth = 0) => {
     if (depth > LIMITS.depth || visited.has(root.uid)) fail('Subtree is cyclic or too deep.');
-    visited.add(root.uid); nodes.set(root.uid, root);
+    visited.add(root.uid); nodes.set(root.uid, root); protectedNodes.add(root.uid);
     if (local) subtree.add(root.uid);
     if (root.kind === 'block') {
       deskCodeSegments(root.string, prose => {
@@ -101,7 +101,7 @@ function readStrictDeskRemoveSnapshot({ adapter, api = adapter.api, planUid, tar
     if (node) walk(node, node.kind === 'page' ? node.uid : node.page?.uid, false);
   }
   const intent = classifyDeskRemoveIntent({ target, planUid, ownerPageUid: page.uid, structural });
-  return { plan, page, target, intent, nodes, subtree, status: 'present' };
+  return { plan, page, target, intent, nodes, subtree, protectedNodes, status: 'present' };
 }
 function snapshotFingerprint(snapshot) { return JSON.stringify([...snapshot.nodes].sort(([a], [b]) => a.localeCompare(b))); }
 function verifyDeskRemoveResult(before, adapter) {
@@ -116,7 +116,15 @@ function verifyDeskRemoveResult(before, adapter) {
     t.parents = [page.uid]; t.order = page.children.length;
     day.children.push({ uid: target.uid, order: t.order });
   }
-  for (const [uid, node] of expected) if (!same(adapter.read(uid), node)) fail('Removal could not be confirmed. Check the original outline before retrying.', 'unconfirmed');
+  const requiredState = (uid, node) => {
+    // Keep every field for the owned subtree and every referenced source.
+    // Only collateral siblings/ancestors may change presentation independently.
+    // Their content, identity, membership and order remain mandatory checks.
+    if (!node || !before.protectedNodes || before.protectedNodes.has(uid)) return node;
+    const { properties: _properties, open: _open, ...required } = node;
+    return required;
+  };
+  for (const [uid, node] of expected) if (!same(requiredState(uid, adapter.read(uid)), requiredState(uid, node))) fail('Removal could not be confirmed. Check the original outline before retrying.', 'unconfirmed');
   return { status: intent.kind === 'delete-wrapper' ? 'removed-reference' : 'moved-to-daily-note', uid: target.uid, pageUid: page.uid };
 }
 // Realm-local uncertain receipts survive view/action disposal. No content or

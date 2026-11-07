@@ -430,8 +430,12 @@ built-in starred/Desk collection.
 
 ### Safe outside-block references
 
-Drag one ordinary native Roam block from the same window and graph onto a Desk card
-(or the background). Desk preserves the original block and creates one native block
+Drag one eligible native Roam block by its bullet from the same window and graph
+onto a Desk card (or the background). Its position does not disqualify it: page
+outlines, sidebars, linked references, query results and embedded outlines use the
+same identified block-leaf path. The nearest block UID must match the synchronously
+captured native payload; a container or page heading is not a block leaf.
+Desk preserves the original block and creates one native block
 embed, `{{embed-path: ((source-uid)) closed}}`, under the current plan. It adds no
 TODO marker: plain text stays plain, and an existing task checkbox is not duplicated.
 The source text, parent and children stay untouched; the wrapper follows the source's
@@ -444,8 +448,10 @@ Left/right card halves choose
 before/after (mirrored in RTL), with the same native insertion rail and number.
 Background adds after the last unfiltered active task (or first in an empty plan).
 Accepted native transfers use the copy cursor; move-only or link-only transfers
-are not imported. Files, pages, queries, embeds/renderers, events, ambiguous/multi-block and
-cross-graph payloads are rejected. Nautilus ignores modifier gestures and leaves
+are not imported. Files, pages, events, ambiguous/multi-block and cross-graph
+payloads are rejected. A query/embed/renderer container itself remains ineligible;
+this does not reject an eligible block rendered inside that view. Existing source
+content and unfinished-task checks still apply. Nautilus ignores modifier gestures and leaves
 those events entirely to Roam; it does not suppress Roam's own modifier behavior.
 Repeated drops reuse the same deterministic wrapper. Existing legacy TODO wrappers
 are recognized read-only for deduplication; this update does not rewrite or remove their
@@ -485,8 +491,16 @@ compares fresh structural/source snapshots; makes one host mutation; then verifi
 UIDs, sibling order, source content, and subtree preservation. Lost, timed-out,
 no-op, or ambiguous responses retain a verification-only reservation in this
 runtime, including across view disposal. Other Desk writes to that plan pause
-while removal is unconfirmed. Refresh performs verification only, including after
-late completion removes the card. There is no compensating rollback or blind retry.
+while removal is unconfirmed. The next valid outside-block drop first verifies any
+pending removal read-only, outside the import's write lane. If the exact outcome is
+confirmed, that drop can proceed without reloading; otherwise it remains blocked.
+Refresh also performs verification only, including after late completion removes
+the card. Neither path reissues a delete or move.
+
+Post-write confirmation ignores presentation-only changes on unrelated siblings
+and ancestors. It still checks their content, identity, membership and order, and
+keeps full checks—including presentation—for the removed/promoted subtree and
+referenced source trees. There is no compensating rollback or blind retry.
 These reservations are not durable transactions across extension/browser restarts.
 
 Other moves and creation also check parent and task state before writing; UID, text, and order are read back afterward.
@@ -526,7 +540,11 @@ suite (`npm run test:desk-drop-feedback`) uses `/tmp/nautilus-desk-drop-feedback
 `DESK_DRAG_PARITY_TEST_OUT`); `test:desk-polish` covers full previews, aligned
 controls, wheel response, reduced motion and cleanup (`DESK_POLISH_TEST_OUT`).
 `desk-removal.py` exercises the real footer against a synthetic graph
-(`DESK_REMOVE_TEST_OUT`); no live graph deletion or promotion has been tested.
+(`DESK_REMOVE_TEST_OUT`). `test:desk-import-recovery` adds native-shaped source
+locations, late delete/promotion recovery, protected-data conflicts, cancellation
+and context changes (`DESK_IMPORT_RECOVERY_OUT`). No live graph deletion or
+promotion has been tested, and these controls do not identify the exact timing
+or field change behind a particular installed-host failure.
 Set `ROAM_NATIVE_CSS` and `ROAM_BLUEPRINT_CSS` to host stylesheet snapshots to test
 against actual Roam CSS. `ROAM_ICONS_CSS` and `ROAM_FONT_CSS` can supply native
 icon/font styles with locally resolved assets. These fixtures do not establish

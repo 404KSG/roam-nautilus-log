@@ -950,6 +950,9 @@ export function createDeskView({
       return available;
     }
     function renderCards() {
+      // Another guarded action may have verified a late removal read-only.
+      // Retire its retry indicator only when the controller explicitly clears it.
+      if (removeError && actions?.isRemovalLocked?.(planUid) === false) removeError = false;
       const focusedCard = root.contains(document.activeElement) ? document.activeElement?.closest?.('[data-task-uid]')?.dataset.taskUid : null;
       const live = new Set(tasks.map((task) => task.uid));
       for (const [uid, card] of cards) {

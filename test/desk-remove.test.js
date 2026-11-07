@@ -174,3 +174,62 @@ test('read-only snapshot preserves absent versus false open and all presentation
   assert.deepEqual(s.nodes.get('local-child').properties,{open:false,heading:2,'text-align':'center'});
   assert.deepEqual(s.nodes.get('deep-child').properties,{});assert.ok(s.subtree.has('deep-child'));
 });
+
+test('unrelated sibling presentation changes do not poison a confirmed delete or promotion', async t => {
+  for (const children of [false, true]) {
+    for (const uid of ['day-sibling', 'sibling', 'plan']) {
+      for (const [field, value] of [['open', true], ['heading', 2], ['text-align', 'center'], ['children-view-type', 'numbered']]) {
+        await t.test(`${children ? 'promote' : 'delete'} ${uid}.${field}`, async () => {
+          const f = fixture({ children });
+          const source = copy(f.nodes.get('source-1')), sourceChild = copy(f.nodes.get('source-child'));
+          const ownedChild = children ? copy(f.nodes.get('local-child')) : null;
+          const kind = children ? 'move' : 'delete', mutate = f.api.data.block[kind];
+          f.api.data.block[kind] = async args => { await mutate(args); f.nodes.get(uid)[field] = value; };
+          const result = await f.remove();
+          assert.equal(result.status, children ? 'moved-to-daily-note' : 'removed-reference');
+          assert.equal(f.calls.length, 1);
+          assert.deepEqual(f.nodes.get('source-1'), source);
+          assert.deepEqual(f.nodes.get('source-child'), sourceChild);
+          if (children) assert.deepEqual(f.nodes.get('local-child'), ownedChild);
+          assert.doesNotThrow(() => f.c.assertPlanClear('plan'));
+          assert.deepEqual(await f.c.verifyPending('plan'), { confirmed: 0 });
+        });
+      }
+    }
+  }
+});
+
+test('removal recovery still protects owned formatting, source formatting and all content/ownership', async t => {
+  const changes = {
+    'target formatting': f => { f.nodes.get('target').heading = 3; },
+    'owned child formatting': f => { f.nodes.get('local-child')['text-align'] = 'right'; },
+    'owned descendant open state': f => { f.nodes.get('deep-child').open = false; },
+    'source open state': f => { f.nodes.get('source-1').open = true; },
+    'source child formatting': f => { f.nodes.get('source-child').heading = 1; },
+    'target text': f => { f.nodes.get('target').string += ' Changed'; },
+    'source text': f => { f.nodes.get('source-1').string += ' Changed'; },
+    'unrelated sibling text': f => { f.nodes.get('day-sibling').string += ' Changed'; },
+    'target ownership': f => { f.nodes.get('target').pageUid = 'source-page'; },
+    'source ownership': f => { f.nodes.get('source-1').pageUid = f.day; },
+  };
+  for (const [name, change] of Object.entries(changes)) await t.test(name, async () => {
+    const f = fixture({ children: true }), move = f.api.data.block.move;
+    f.api.data.block.move = async args => { await move(args); change(f); };
+    await assert.rejects(f.remove());
+    assert.equal(f.calls.length, 1);
+    assert.throws(() => f.c.assertPlanClear('plan'), /unconfirmed/);
+    await assert.rejects(f.c.verifyPending('plan'));
+    assert.equal(f.calls.length, 1, 'verification must never reissue the mutation');
+  });
+});
+
+test('a referenced source that is also a Plan sibling retains its full preservation contract', async () => {
+  const f = fixture();
+  Object.assign(f.nodes.get('source-1'), { parentUid: 'plan', pageUid: f.day, order: 2 });
+  f.nodes.get('source-child').pageUid = f.day;
+  const remove = f.api.data.block.delete;
+  f.api.data.block.delete = async args => { await remove(args); f.nodes.get('source-1').open = true; };
+  await assert.rejects(f.remove());
+  assert.equal(f.calls.length, 1);
+  assert.throws(() => f.c.assertPlanClear('plan'), /unconfirmed/);
+});

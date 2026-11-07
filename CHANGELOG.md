@@ -14,6 +14,15 @@
 
 ### Changed
 
+- Accept verified native block-bullet drags from linked references, query results,
+  embedded outlines and other same-window locations without using ancestor view
+  classes as a rejection rule. Keep single-block, same-graph, source-eligibility,
+  context, payload and cycle checks; containers and page headings remain ineligible.
+- Stop unrelated sibling/ancestor presentation changes from poisoning removal
+  confirmation. Preserve full checks for owned and source trees, and all content,
+  membership and ownership checks. A later valid drop first reconciles old removal
+  receipts read-only; confirmed late results no longer require a reload, while
+  genuine uncertainty still blocks writes and never reissues deletion or movement.
 - Avoid repeated scans when placing tasks around fixed events and detecting event
   overlaps. Keep whole-task order, half-open boundaries, fixed reservations and
   exact scheduling results unchanged; no renderer-source or graph-write change.

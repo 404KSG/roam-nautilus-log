@@ -1,7 +1,6 @@
-import { hasDropModifier, hasRoamDropPayload, readDeskDropContext, sameDeskDropContext } from './desk-reference-import';
+import { hasDropModifier, hasRoamDropPayload, isSafeDeskReferenceUid, readDeskDropContext, sameDeskDropContext } from './desk-reference-import';
 
-const AMBIGUOUS_SOURCE = '.nautilus-desk,.rm-reference-container,.rm-reference-item,.roam-query,.roam-query-content,.rm-embed-container,.rm-embed,.rm-block-ref,.rm-page-ref,.rm-title-display';
-const OUTLINE_SOURCE = '.roam-article,.rm-sidebar-window,.rm-sidebar-outline';
+const NON_BLOCK_SOURCE = '.nautilus-desk,.rm-page-ref,.rm-title-display';
 const INTERNAL_TYPE = 'application/x-nautilus-desk-task';
 const TERMINAL_MESSAGE_MS = 5000;
 
@@ -84,10 +83,13 @@ export function createDeskExternalDrop({
     }
     const bullet = event.target?.closest?.('.rm-bullet');
     const owner = bullet?.closest?.('[data-block-uid]');
-    if (!bullet || !owner || root?.contains(owner) || bullet.closest(AMBIGUOUS_SOURCE) || !bullet.closest(OUTLINE_SOURCE)) return;
+    // A native block leaf keeps its identity in references, query results and
+    // embeds. Its surrounding view is not evidence that the block is invalid.
+    if (!bullet || !owner || !owner.isConnected || owner.ownerDocument !== document
+      || root?.contains(owner) || bullet.closest(NON_BLOCK_SOURCE)) { clearCandidate(); return; }
     const uid = owner.getAttribute('data-block-uid');
     const context = getContext();
-    if (!uid || !context?.provider || !context.graphName) return;
+    if (!isSafeDeskReferenceUid(uid) || !context?.provider || !context.graphName) { clearCandidate(); return; }
     clearCandidate();
     candidate = { uid, context };
   };
