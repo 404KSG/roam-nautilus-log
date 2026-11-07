@@ -14,6 +14,9 @@
 
 ### Changed
 
+- Avoid repeated scans when placing tasks around fixed events and detecting event
+  overlaps. Keep whole-task order, half-open boundaries, fixed reservations and
+  exact scheduling results unchanged; no renderer-source or graph-write change.
 - Add safe native-parity Desk capability hints and truthful external-source footers. New task,
   drag/reorder, removal, and import no longer advertise unsupported public mutations; create/move
   retain legacy fallback while removal/import remain modern-only. Verified `embed-path` cards show

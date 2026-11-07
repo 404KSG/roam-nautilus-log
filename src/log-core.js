@@ -597,15 +597,15 @@ function overlappingFixedEventUids({ events = [] } = {}) {
     .filter((event) => Number.isFinite(event.start) && Number.isFinite(event.end) && event.end > event.start);
   const conflicts = new Set();
 
-  for (let left = 0; left < fixedEvents.length; left += 1) {
-    for (let right = left + 1; right < fixedEvents.length; right += 1) {
-      const first = fixedEvents[left];
-      const second = fixedEvents[right];
-      if (first.start < second.end && second.start < first.end) {
-        conflicts.add(first.uid);
-        conflicts.add(second.uid);
-      }
+  // The furthest end detects overlap with any earlier interval. Other active
+  // predecessors have already been marked; return original UID order below.
+  let furthest = null;
+  for (const event of [...fixedEvents].sort((left, right) => left.start - right.start)) {
+    if (furthest && event.start < furthest.end) {
+      conflicts.add(furthest.uid);
+      conflicts.add(event.uid);
     }
+    if (!furthest || event.end > furthest.end) furthest = event;
   }
 
   return fixedEvents.filter((event) => conflicts.has(event.uid)).map((event) => event.uid);
@@ -733,6 +733,7 @@ function scheduleTasks({
   const scheduledTasks = [];
   const overflowTasks = [];
   let cursor = cursorStart;
+  let fixedIndex = 0;
 
   for (const task of tasks) {
     const duration = remainingDuration(task);
@@ -742,7 +743,9 @@ function scheduleTasks({
 
     let placed = false;
     while (cursor < end && !placed) {
-      const fixed = fixedIntervals.find(([fixedStart, fixedEnd]) => fixedEnd > cursor);
+      // The cursor only advances through normalized, merged fixed intervals.
+      while (fixedIndex < fixedIntervals.length && fixedIntervals[fixedIndex][1] <= cursor) fixedIndex += 1;
+      const fixed = fixedIntervals[fixedIndex];
       if (!fixed) {
         if (cursor + duration <= end) {
           scheduledTasks.push({ ...task, duration, start: cursor, end: cursor + duration });

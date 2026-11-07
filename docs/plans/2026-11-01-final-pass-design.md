@@ -1,5 +1,11 @@
 # Nautilus Log final pass — 2026-11-01
 
+> **Historical rollout record:** current source identity and upgrade rules are in
+> [renderer-contract.js](../../src/renderer-contract.js) and the
+> [current guide](../guide.md#renderer-upgrades). The code UID is now permanent;
+> the older UID-advancement and event-floor descriptions below are not instructions
+> to change that UID or restore retired ordering behavior.
+
 Implementation contract updated November 2, 2026. This supersedes conflicting renderer,
 calendar-day, and completed-event assumptions in earlier design notes. The integrated
 published baseline is `867cb4bcc394125b75caf6f99bea05118a1762ca`: keep removal of the automatic
