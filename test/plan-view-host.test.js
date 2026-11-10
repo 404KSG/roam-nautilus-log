@@ -23,7 +23,72 @@ test('native folding uses only the owning surface, including caret-only older ho
 
 test('a childless closed native block retains access to its view control', async () => {
   const { nativePlanFolded } = await load();
-  assert.equal(nativePlanFolded(nativeOwner(['rm-block--closed'], ['rm-caret-closed','rm-caret-hidden']).owner), false);
+  assert.equal(nativePlanFolded(nativeOwner(['rm-block--closed'], ['rm-caret-closed','rm-caret-hidden']).owner, false), false);
+  assert.equal(nativePlanFolded(nativeOwner(['rm-block--closed'], ['rm-caret-closed']).owner, false), false);
+});
+
+test('decorative caret visibility cannot change a nonempty native plan fold', async () => {
+  const { nativePlanFolded } = await load();
+  for (const hidden of [[],['rm-caret-hidden']]) {
+    assert.equal(nativePlanFolded(nativeOwner(['rm-block--closed'], ['rm-caret-closed',...hidden]).owner, true), true);
+    assert.equal(nativePlanFolded(nativeOwner(['rm-block--open'], ['rm-caret-open',...hidden]).owner, true), false);
+    assert.equal(nativePlanFolded(nativeOwner([], ['rm-caret-closed',...hidden]).owner), true);
+  }
+});
+
+function hostFixture() {
+  const { owner } = nativeOwner(['rm-block--closed'], ['rm-caret-closed','rm-caret-hidden']);
+  const writes = [], observers = [];
+  const element = () => {
+    const attributes = new Map();
+    return { getAttribute: key => attributes.get(key) ?? null,
+      setAttribute: (key, value) => { attributes.set(key, value); writes.push([key,value]); } };
+  };
+  const control = element(), root = { ...element(), dataset: {}, isConnected: true,
+    closest: selector => selector === '.roam-block-container' ? owner : null,
+    querySelector: () => control };
+  const host = { roamAlphaAPI: { graph: { name: 'watch-fixture' } },
+    localStorage: { getItem: () => null },
+    MutationObserver: class {
+      constructor(callback) { this.callback=callback; this.disconnected=false; observers.push(this); }
+      observe() { this.disconnected=false; }
+      disconnect() { this.disconnected=true; }
+    } };
+  return { host, root, control, writes, observers, container: { closest: () => root } };
+}
+
+test('view host uses verified membership, retains it across failed reads and releases its subscription', async () => {
+  const { createPlanViewHost } = await load(), fixture = hostFixture();
+  let listener, stops = 0;
+  const changes = [];
+  const view = createPlanViewHost({ ...fixture, planUid: 'plan', onChange: value => changes.push(value),
+    watchPlan: (_uid, callback) => { listener=callback;callback({ 'block/children': [] }); return () => stops++; } });
+  view.register();
+  assert.equal(fixture.root.getAttribute('data-nautilus-native-folded'), 'false');
+  listener({ 'block/children': [{ 'block/uid': 'task' }] });
+  assert.equal(fixture.root.getAttribute('data-nautilus-native-folded'), 'true');
+  listener({ unavailable: true, 'block/children': [] });
+  assert.equal(fixture.root.getAttribute('data-nautilus-native-folded'), 'true');
+  view.destroy();view.destroy();
+  assert.equal(stops,1);
+  fixture.writes.length=0;
+  listener({ 'block/children': [] });
+  assert.equal(fixture.writes.length,0);
+  assert.deepEqual(changes,[{mode:'chart',folded:false},{mode:'chart',folded:true}]);
+});
+
+test('unchanged native signals and repeated registration do not repaint or re-notify', async () => {
+  const { createPlanViewHost } = await load(), fixture = hostFixture();
+  let calls=0;
+  const options={ onViewChange: () => calls++ };
+  const view=createPlanViewHost({ ...fixture, planUid:'plan', watchPlan: (_uid,callback) => {
+    callback({ 'block/children': [{ 'block/uid':'task' }] });return () => {};
+  } });
+  view.register(options);assert.equal(calls,1);fixture.writes.length=0;
+  for(let i=0;i<20;i++) { view.register(options);fixture.observers[0].callback(); }
+  assert.equal(fixture.writes.length,0);
+  assert.equal(calls,1);
+  view.destroy();
 });
 
 test('view preference identity includes graph, plan and local render surface', async () => {

@@ -339,7 +339,7 @@ def contrast(page):
         focus:paint('.nautilus-log-available-slot:focus .nautilus-log-available-slot-hit','stroke'),
         now:paint('.nautilus-log-now-needle-line','stroke'),
         clock:paint('.nautilus-log-center-now','fill'),
-        control:paint('.nautilus-log-view-label','color'),
+        control:paint('.nautilus-log-desk-switch-track','backgroundColor'),
         helpControl:paint('.nautilus-log-help-btn svg path','visible')};
     }''')
     scores = {k: ratio(v, paints['background']) for k, v in paints.items() if k not in ('background', 'warningBackground', 'warningToken')}
@@ -708,8 +708,8 @@ def density_and_control_contract(page):
         assert toggle.get_attribute('aria-checked') == 'true'
         assert toggle.get_attribute('aria-expanded') is None
         assert toggle.locator('svg').count() == 0 and toggle.locator('.nautilus-log-desk-switch-thumb').count() == 1
-        box = toggle.bounding_box(); assert box['width'] == 82 and box['height'] == 32
-        assert toggle.inner_text().strip() == 'Chart' and toggle.get_attribute('data-nautilus-tooltip') == 'Switch to list view'
+        box = toggle.bounding_box(); assert box['width'] == 40 and box['height'] == 32
+        assert toggle.inner_text().strip() == '' and toggle.get_attribute('data-nautilus-tooltip') == 'Switch to list view'
         assert toggle.evaluate('e=>getComputedStyle(e,"::after").whiteSpace==="nowrap"')
         # Verify the production CLJS callback boundary. The real Desk session
         # state/persistence/remount behavior is exercised by desk-switch.py.
@@ -782,7 +782,7 @@ def four_corrections_contract(page):
         colors = page.locator('.nautilus-log-html-legend').first.locator('.nautilus-log-legend-dot').evaluate_all('els=>els.map(e=>getComputedStyle(e).backgroundColor)')
         assert colors == ['rgb(194, 75, 75)', 'rgb(173, 139, 36)', 'rgb(19, 124, 189)'], colors
         switch = page.get_by_role('switch')
-        assert switch.inner_text().strip() == ('图表' if lang == 'zh' else 'Chart')
+        assert switch.inner_text().strip() == ''
         switch.hover()
         page.wait_for_function('getComputedStyle(document.querySelector(".nautilus-log-desk-btn"),"::after").opacity==="1"')
         assert switch.evaluate('e=>getComputedStyle(e,"::after").whiteSpace==="nowrap"')

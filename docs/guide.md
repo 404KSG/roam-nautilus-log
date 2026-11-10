@@ -160,7 +160,7 @@ Past gaps describe the chart allocation, not proof that time was idle or wasted.
 
 The two main controls are **Help → Chart/List**. Connected Calendar appears between
 them, so the view switch is always rightmost. Help retains its native filled glyph;
-the switch has a visible Chart/List label and a 28×16px track. Hover and switch feedback
+the switch is icon-only with a 28×16px track and a 40×32px click target. Hover and switch feedback
 lasts about 100ms; reduced motion makes it effectively immediate.
 
 - **Help (?):** the leftmost control opens a native-style quick guide.
@@ -169,12 +169,14 @@ lasts about 100ms; reduced motion makes it effectively immediate.
   Click again, click outside or press Escape inside Help to close it.
 - **Chart/List switch:** Chart shows the spiral and unfinished-task Desk cards;
   List shows the original editable Roam child outline, including events and completed
-  records. Click, Space or Enter switches views. The label names the current view;
-  the tooltip names the next action. The original outline is revealed after the native
+  records. Click, Space or Enter switches views. Its position and accessible state
+  identify Chart or List; the tooltip names the next action. The original outline is revealed after the native
   Desk editor finishes unmounting. Uncommitted drafts remain parked for return to Chart.
 - **Native caret:** Roam's own arrow folds the entire region, including the chart,
   cards and any focus dialog. Expanding restores the selected view. The plugin follows
-  that surface's native open/closed DOM state without writing `:block/open`.
+  that surface's native open/closed DOM state without writing `:block/open`. Decorative
+  caret visibility does not change expansion. Verified empty plans retain access to
+  their controls through the existing shared Plan subscription.
 - **Calendar:** after Google Calendar reports Connected in Settings, the middle button
   imports timed busy events and dated Google Tasks for this chart's Daily Note.
   Option/Alt-click force-refreshes only the Google-managed strings.

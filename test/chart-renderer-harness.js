@@ -235,9 +235,16 @@ function sessionState() {
 }
 
 const sessionSubscribers = new Set();
+const planViewSubscribers = new Set();
+function watchViewPlan(_uid, callback, { emitInitial = true } = {}) {
+  planViewSubscribers.add(callback);
+  if (emitInitial) callback({ 'block/children': clone(children) });
+  return () => planViewSubscribers.delete(callback);
+}
 
 function publishSession() {
   for (const subscriber of sessionSubscribers) subscriber(sessionState());
+  for (const subscriber of planViewSubscribers) subscriber({ 'block/children': clone(children) });
   window.__rendererVersion?.notify();
 }
 
@@ -322,7 +329,7 @@ const chartHelp = createChartHelp({ host: window, document, revision: 'a'.repeat
 const presentationHosts = new Map();
 const registerPresentation = options => {
   let view = presentationHosts.get(options.container);
-  if (!view) { view = createPlanViewHost({ host: window, ...options }); presentationHosts.set(options.container, view); }
+  if (!view) { view = createPlanViewHost({ host: window, ...options, watchPlan: watchViewPlan }); presentationHosts.set(options.container, view); }
   view.register(options);
   return view;
 };
@@ -373,7 +380,7 @@ if (parameters.get('realDesk') === '1') {
   Object.assign(window.roamAlphaAPI, { graph: { name: 'chart-desk-fixture' },
     data: { pull: (pattern, lookup) => projectPull(pattern, entity(Array.isArray(lookup) ? lookup[1] : lookup)),
       addPullWatch: () => undefined, removePullWatch: () => undefined } });
-  const desk = createDeskView({ host: window, document, readPlan: () => entity('baseline-plan'), watchPlan: () => () => {},
+  const desk = createDeskView({ host: window, document, readPlan: () => entity('baseline-plan'), watchPlan: watchViewPlan,
     getSettings: () => ({ language: parameters.get('lang') || 'en', 'todo-duration': 15 }), revision: 'synthetic-chart-desk' });
   const deskBridge = { openDesk: options => desk.open(options), togglePlanView: options => desk.toggleView(options),
     registerDeskHost: options => desk.registerHost(options), closeDeskHost: container => desk.closeForHost(container) };

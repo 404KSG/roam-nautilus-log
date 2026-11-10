@@ -53,13 +53,14 @@ def run():
                 controls=page.locator('.nautilus-log-controls-top button')
                 assert controls.count()==2
                 assert controls.evaluate_all('es=>es.map(e=>e.matches("[role=switch]")?"view":e.querySelector("svg").dataset.icon)')==['help','view']
-                assert controls.evaluate_all('es=>es.map(e=>[e.getBoundingClientRect().width,e.getBoundingClientRect().height])')==[[32,32],[82,32]]
+                assert controls.evaluate_all('es=>es.map(e=>[e.getBoundingClientRect().width,e.getBoundingClientRect().height])')==[[32,32],[40,32]]
                 help_button=page.locator('.nautilus-log-help-btn'); switch=page.locator('.nautilus-log-desk-btn')
                 path=help_button.locator('svg path')
                 assert path.evaluate('e=>getComputedStyle(e).fill')==help_button.evaluate('e=>getComputedStyle(e).color')
                 assert path.evaluate('e=>getComputedStyle(e).stroke')=='none'
                 assert help_button.locator('svg').evaluate('e=>e.getBoundingClientRect().width')==16
-                expect(switch.locator('.nautilus-log-view-label')).to_have_text('图表' if lang=='zh' else 'Chart')
+                expect(switch.locator('.nautilus-log-view-label')).to_be_hidden()
+                assert switch.inner_text().strip() == ''
                 help_button.focus();page.keyboard.press('Tab');expect(switch).to_be_focused()
                 assert switch.evaluate('e=>e.matches(":focus-visible")&&getComputedStyle(e).outlineWidth==="2px"')
                 def colors():
@@ -67,7 +68,7 @@ def run():
                 settle(page);on=colors();on_offset=switch.locator('.nautilus-log-desk-switch-thumb').evaluate('e=>e.getBoundingClientRect().x-e.parentElement.getBoundingClientRect().x')
                 switch.press('Space');settle(page);off=colors();off_offset=switch.locator('.nautilus-log-desk-switch-thumb').evaluate('e=>e.getBoundingClientRect().x-e.parentElement.getBoundingClientRect().x')
                 assert abs(on_offset-off_offset-12)<.1, (name,on_offset,off_offset)
-                expect(switch.locator('.nautilus-log-view-label')).to_have_text('列表' if lang=='zh' else 'List')
+                assert switch.inner_text().strip() == ''
                 ratios={'icon':contrast(rgb(on['icon']),rgb(on['paper'])),'on':contrast(rgb(on['thumb']),rgb(on['track'])),'off':contrast(rgb(off['thumb']),rgb(off['track']))}
                 assert min(ratios.values())>=3,ratios
                 switch.press('Enter');settle(page)

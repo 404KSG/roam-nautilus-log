@@ -92,9 +92,9 @@ def run():
             page.evaluate('()=>{const caret=document.getElementById("native-plan-caret");caret.classList.remove("rm-caret-closed");caret.classList.add("rm-caret-open")}')
             expect(page.locator('.nautilus-log-container')).to_be_visible()
             report['caretOnlyHostFallback'] = True
-            # A childless native block must retain the switch even if the host
-            # labels it closed and hides its unusable caret.
-            page.evaluate('()=>{document.getElementById("native-plan-caret").classList.add("rm-caret-hidden");document.getElementById("native-plan-owner").classList.add("rm-block--closed")}')
+            # Empty-plan access is based on verified membership, independently
+            # of the native caret's decorative appearance.
+            page.evaluate('()=>{for(const row of __chartHarness.sourceRows())__chartHarness.removeChild(row["block/uid"]);document.getElementById("native-plan-caret").classList.add("rm-caret-hidden","rm-caret-closed");document.getElementById("native-plan-owner").classList.add("rm-block--closed")}')
             expect(page.locator('.nautilus-log-container')).to_be_visible()
             report['legacyPreferencesIgnored'] = True
             report['childlessReachable'] = True

@@ -2,7 +2,14 @@
 
 ## Unreleased
 
-- Replace Eye and the separate Desk toggle with a labeled Chart/List switch. Help is
+- Keep the Chart/List switch icon-only at its native 40×32px target size; view
+  names remain available through accessible state and hover/focus tooltips.
+- Fix repeated chart/Desk disappearance when Roam changes a caret's decorative
+  `rm-caret-hidden` class. Follow native expansion independently of appearance;
+  verify empty-plan membership through the shared Plan watch. Unchanged signals
+  no longer repaint the view attributes or re-notify its renderer.
+
+- Replace Eye and the separate Desk toggle with a Chart/List switch. Help is
   leftmost, the view switch rightmost, and optional Calendar sits between them.
   Chart contains the spiral and Desk; List reveals the original editable outline.
 - Follow each native Roam caret to fold the complete region and focus editor in one

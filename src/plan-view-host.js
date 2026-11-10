@@ -5,13 +5,11 @@ const MODES = new Set(['chart', 'list']);
 const ownCaret = owner => [...owner?.querySelectorAll('.rm-caret') || []]
   .find(node => node.closest('.roam-block-container') === owner);
 
-/** Read the local native surface, never the graph's shared :block/open value.
- * Current Roam marks its owning block open/closed; older hosts expose the caret.
- * A childless block has no usable caret and must keep its view control reachable. */
-export function nativePlanFolded(owner) {
-  if (!owner) return false;
+/** Read native expansion, never the caret's decorative visibility classes.
+ * Only a verified empty plan keeps its controls reachable while natively closed. */
+export function nativePlanFolded(owner, hasChildren) {
+  if (!owner || hasChildren === false) return false;
   const caret = ownCaret(owner);
-  if (caret?.classList.contains('rm-caret-hidden')) return false;
   if (owner.classList.contains('rm-block--closed')) return true;
   if (owner.classList.contains('rm-block--open')) return false;
   return Boolean(caret?.classList.contains('rm-caret-closed'));
@@ -30,7 +28,7 @@ export function readPlanView(storage, graph, uid, sidebar = false) {
 }
 
 /** One renderer surface owns its view and follows its own native caret. */
-export function createPlanViewHost({ host, container, planUid, origin, onChange = () => {} }) {
+export function createPlanViewHost({ host, container, planUid, origin, watchPlan, onChange = () => {} }) {
   const root = container.closest('.nautilus-log-container');
   const owner = root.closest('.roam-block-container');
   const graph = graphName(host), provider = host.roamAlphaAPI;
@@ -39,32 +37,35 @@ export function createPlanViewHost({ host, container, planUid, origin, onChange 
   try { storage = host.localStorage; } catch (_) {}
   let mode = readPlanView(storage, graph, planUid, sidebar);
   let folded = nativePlanFolded(owner), closed = false, observer = null, controls = null;
-  let callback = null, previous = '';
+  let callback = null, previous = '', deliveredCallback = null, deliveredState = '';
+  let hasChildren, stopPlanWatch = null, watchStarted = false;
   const current = () => !closed && root.isConnected && provider === host.roamAlphaAPI && graph === graphName(host);
   function paint() {
     if (!current()) return;
-    root.dataset.nautilusView = mode;
-    root.dataset.nautilusNativeFolded = String(folded);
+    const set = (node, name, value) => { if (node.getAttribute(name) !== value) node.setAttribute(name, value); };
+    set(root, 'data-nautilus-view', mode);
+    set(root, 'data-nautilus-native-folded', String(folded));
     const zh = root.dataset.nautilusLanguage === 'zh';
     const control = root.querySelector('.nautilus-log-desk-btn') || origin;
     if (control) {
-      control.setAttribute('aria-checked', String(mode === 'chart'));
-      control.setAttribute('aria-label', zh ? '图表视图' : 'Chart view');
-      control.setAttribute('data-nautilus-tooltip', mode === 'chart'
+      set(control, 'aria-checked', String(mode === 'chart'));
+      set(control, 'aria-label', zh ? '图表视图' : 'Chart view');
+      set(control, 'data-nautilus-tooltip', mode === 'chart'
         ? (zh ? '切换到列表' : 'Switch to list view') : (zh ? '切换到图表' : 'Switch to chart view'));
-      const label = control.querySelector('.nautilus-log-view-label');
-      if (label) label.textContent = mode === 'chart' ? (zh ? '图表' : 'Chart') : (zh ? '列表' : 'List');
     }
     const next = `${mode}:${folded}`;
     if (next !== previous) {
       previous = next;
       onChange({ mode, folded });
     }
-    callback?.({ mode, folded });
+    if (callback && (callback !== deliveredCallback || next !== deliveredState)) {
+      deliveredCallback = callback; deliveredState = next;
+      callback({ mode, folded });
+    }
   }
   function sync() {
     if (!current()) return;
-    folded = nativePlanFolded(owner);
+    folded = nativePlanFolded(owner, hasChildren);
     const caret = ownCaret(owner);
     // A fallback parent can contain the renderer itself; watching it would
     // observe our own label paints. Only the native controls or caret are owned.
@@ -85,6 +86,19 @@ export function createPlanViewHost({ host, container, planUid, origin, onChange 
     register(options = {}) {
       if (options.origin) origin = options.origin;
       if (typeof options.onViewChange === 'function') callback = options.onViewChange;
+      if (!watchStarted && typeof watchPlan === 'function') {
+        watchStarted = true;
+        try {
+          const stop = watchPlan(planUid, snapshot => {
+            if (!current() || snapshot?.unavailable || snapshot?.missing) return;
+            const children = snapshot?.['block/children'];
+            if (!Array.isArray(children)) return;
+            const next = children.length > 0;
+            if (next !== hasChildren) { hasChildren = next; sync(); }
+          });
+          if (closed) stop?.(); else stopPlanWatch = stop;
+        } catch (_) { /* An unreadable plan never proves that it is empty. */ }
+      }
       sync();
     },
     setMode(next) {
@@ -94,6 +108,6 @@ export function createPlanViewHost({ host, container, planUid, origin, onChange 
       sync();
     },
     toggle() { this.setMode(mode === 'chart' ? 'list' : 'chart'); },
-    destroy() { closed = true; observer?.disconnect(); callback = null; },
+    destroy() { closed = true; observer?.disconnect(); stopPlanWatch?.(); stopPlanWatch = null; callback = null; },
   };
 }

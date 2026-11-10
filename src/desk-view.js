@@ -90,8 +90,9 @@ export function createDeskView({
   const syncControl = (binding) => {
     const control = binding?.origin;
     const attribute = control?.getAttribute?.('role') === 'switch' ? 'aria-checked' : 'aria-expanded';
-    control?.setAttribute?.(attribute, String(binding?.presentation
-      ? binding.container.closest('.nautilus-log-container')?.dataset.nautilusView === 'chart' : Boolean(binding?.session)));
+    const checked = String(binding?.presentation
+      ? binding.container.closest('.nautilus-log-container')?.dataset.nautilusView === 'chart' : Boolean(binding?.session));
+    if (control?.getAttribute?.(attribute) !== checked) control?.setAttribute?.(attribute, checked);
   };
   const registerHost = (options = {}) => {
     if (!validHost(options)) return;
@@ -104,7 +105,7 @@ export function createDeskView({
     if (options.origin) binding.origin = options.origin;
     const chart = options.container.closest('.nautilus-log-container');
     if (chart?.hasAttribute('data-nautilus-unified-view')) {
-      if (!binding.presentation) binding.presentation = createPlanViewHost({ host, ...options, onChange: state => {
+      if (!binding.presentation) binding.presentation = createPlanViewHost({ host, ...options, watchPlan, onChange: state => {
         host[BRIDGE_KEY]?.closeChartHelp?.(chart.querySelector('.nautilus-log-help-btn'));
         if (state.mode === 'chart' && !state.folded && !binding.session) start(binding);
         binding.session?.setPresentation?.(state.mode === 'chart');
