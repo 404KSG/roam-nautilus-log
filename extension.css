@@ -972,8 +972,10 @@
 /* Keep the renderer-owned legacy label hidden; state and action remain available
  * through the accessible switch name, position and hover/focus tooltip. */
 .nautilus-log-view-label { display: none; }
-.nautilus-log-container[data-nautilus-view="list"] { min-height: 0; padding-top: 0; padding-bottom: 0; }
-.nautilus-log-container[data-nautilus-view="list"] .nautilus-log-header { display: flex; justify-content: flex-end; height: 32px; min-height: 32px; padding: 0; border: 0; }
+/* Keep the same top/right anchor while the chart details change below it. */
+.nautilus-log-container[data-nautilus-view] .nautilus-log-header-actions { align-self: flex-start; }
+.nautilus-log-container[data-nautilus-view="list"] { min-height: 0; padding-bottom: 0; }
+.nautilus-log-container[data-nautilus-view="list"] .nautilus-log-header { display: flex; justify-content: flex-end; align-items: flex-start; height: 32px; min-height: 32px; padding-block: 0; border: 0; }
 .nautilus-log-container[data-nautilus-view="list"] .nautilus-log-header-copy,
 .nautilus-log-container[data-nautilus-view="list"] .nautilus-log-html-legend,
 .nautilus-log-container[data-nautilus-view="list"] > .nautilus-log-desk-host { display: none; }

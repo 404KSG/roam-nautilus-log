@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Native Help and a labeled view switch: visual and accessibility checks."""
+"""Native Help and an icon-only view switch: visual and accessibility checks."""
 import importlib.util
 import json
 import os

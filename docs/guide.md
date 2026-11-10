@@ -161,7 +161,8 @@ Past gaps describe the chart allocation, not proof that time was idle or wasted.
 The two main controls are **Help → Chart/List**. Connected Calendar appears between
 them, so the view switch is always rightmost. Help retains its native filled glyph;
 the switch is icon-only with a 28×16px track and a 40×32px click target. Hover and switch feedback
-lasts about 100ms; reduced motion makes it effectively immediate.
+lasts about 100ms; reduced motion makes it effectively immediate. The complete control
+row keeps the same upper-right position in Chart and List, including narrow sidebars.
 
 - **Help (?):** the leftmost control opens a native-style quick guide.
   It shows the chart's resolved hours and default task duration, explains Available,
@@ -285,8 +286,9 @@ block API.
 
 ## Desk task view
 
-Turn on the chart's **Desk** switch to expand cards below it; turn it off to hide
-Desk. The switch reflects the actual view, including after a reload or control remount. The view uses Roam's `rm-desk-*` and Blueprint styles rather than a separate
+Select **Chart** with the view switch to show the spiral and Desk cards; select
+**List** to inspect the original editable outline. The switch reflects the actual
+view, including after a reload or control remount. Desk uses Roam's `rm-desk-*` and Blueprint styles rather than a separate
 font, size, or card theme. Desk stays within the same local renderer width as the
 chart above, including centered Daily Notes, sidebars, and embeds. It does not
 expand to the article wrapper or use a compensating negative margin.
@@ -324,7 +326,7 @@ unfinished input composition or copy the editor's uncommitted buffer into the gr
 - **Hide the duplicate outline.** While Desk is open, only the original child-block
   area below this Nautilus renderer is hidden, including events and completed logs.
   Nothing is deleted or collapsed in the graph. Other plans and the native editor's
-  children remain visible. Hiding Desk or unloading restores the original area.
+  children remain visible. Switching to List or unloading restores the original area.
 - **Drag moves the real block.** The left/right halves of a target card choose
   before/after (mirrored in RTL), changing actual outline order and planning priority. The footer's hover action,
   **Move to top**, moves that same UID to index zero, ahead of any hidden events or
@@ -521,7 +523,7 @@ in place. Without that viewer, Desk's normal Escape behavior is unchanged.
 A host API response alone is not confirmation. An uncertain create is checked
 using its reserved UID, never blindly repeated with a new UID. Locks do not cover
 other devices or manual writers; concurrent changes fail conservatively. Read
-failures retain visibly stale cards and pause writes. Turn off the Desk switch to
+failures retain visibly stale cards and pause writes. Switch to List to
 inspect the original outline.
 
 ### Layout isolation

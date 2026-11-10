@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Keep Help, optional Calendar and the Chart/List switch at the same upper-right
+  anchor in both views, including narrow sidebars. Retain the shared top spacing
+  and compact horizontal inset instead of moving the controls when details hide.
 - Keep the Chart/List switch icon-only at its native 40×32px target size; view
   names remain available through accessible state and hover/focus tooltips.
 - Fix repeated chart/Desk disappearance when Roam changes a caret's decorative

@@ -7,6 +7,11 @@ sits between them. Chart shows the spiral and unfinished-task Desk cards. List s
 the existing native editable children, including events and completed records. Roam's
 own caret folds the whole region; expansion restores the selected view.
 
+The control row keeps one upper-right anchor in both views. Both modes retain
+identical top spacing and responsive horizontal padding. Actions align to the
+header's top rather than moving as the metrics and legend disappear; List can
+still use a shorter header. This is a local workspace anchor, not viewport-fixed.
+
 The view switch changes presentation only. It does not write task text, membership,
 order, source folds or the native parent's graph `open` property. Current views have
 independent graph/plan/main-or-sidebar localStorage preferences. Missing, invalid or
@@ -49,6 +54,9 @@ source is preserved by the existing verified source upgrade mechanism.
 `test/plan-view.py` runs the exact current CLJS with production presentation and Desk
 controllers, covering main/sidebar/embed, English/Chinese, dark mode, keyboard order,
 Calendar position, native folding, refresh restoration and original-outline identity.
+`test/view-control-anchor.py` checks all control positions, repeated same-point
+clicks, native-fold restoration, connected Calendar and light/dark/main/sidebar/embed
+surfaces. It detects both the former 12px vertical jump and compact inset changes.
 `test/plan-view-lifecycle.py` covers delayed native mount/unmount, retaining the outline
 claim until cleanup, native focus dismissal, parked IME draft recovery, independent
 sidebar folds and teardown. Existing v1 coexistence checks keep historical behavior.
