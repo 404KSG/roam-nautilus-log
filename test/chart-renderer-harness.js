@@ -186,6 +186,12 @@ let children = clone({
     { 'block/uid': 'midnight-done', 'block/string': '{{[[DONE]]}} Midnight completion 20m d0', 'block/order': 2, 'block/refs': [] },
   ],
   sparse: mixedChildren.slice(0, 2),
+  'fold-small': Array.from({ length: 8 }, (_, index) => ({
+    'block/uid': `fold-${index}`, 'block/string': `{{[[TODO]]}} Fold task ${index + 1} 2m`, 'block/order': index, 'block/refs': [],
+  })),
+  'fold-dense': Array.from({ length: 160 }, (_, index) => ({
+    'block/uid': `fold-${index}`, 'block/string': `{{[[TODO]]}} Fold task ${index + 1} 2m`, 'block/order': index, 'block/refs': [],
+  })),
   dense: denseChildren,
   cjk: [
     { 'block/uid': 'cjk-event', 'block/string': '10:00-11:00 设计评审', 'block/order': 0, 'block/refs': [] },
@@ -372,10 +378,14 @@ if (parameters.get('realDesk') === '1') {
     if (uid === 'baseline-plan') return { 'block/uid': uid, 'block/string': '[[Nautilus Log]] {{[[roam/render]]:((roam-render-Nautilus-Log-cljs))}}',
       'block/order': 0, 'block/open': true, 'block/page': page,
       'block/children': children.map(row => ({ 'block/uid': row['block/uid'], 'block/order': row['block/order'] })) };
+    if (scenario === 'fold-small' && String(uid).startsWith('preview-fold-')) return {
+      'block/uid': uid, 'block/string': 'Preview detail retained after rapid fold', 'block/order': 0,
+      'block/page': page, 'block/children': [],
+    };
     const row = children.find(row => row['block/uid'] === uid);
     const text = row?.['block/string'] ?? syntheticStrings.get(uid);
     return typeof text === 'string' ? { 'block/uid': uid, 'block/string': text, 'block/order': row?.['block/order'] ?? 0,
-      'block/open': true, 'block/page': page, 'block/children': [] } : null;
+      'block/open': true, 'block/page': page, 'block/children': scenario === 'fold-small' && row ? [{ 'block/uid': `preview-${uid}`, 'block/string': 'Preview detail retained after rapid fold', 'block/order': 0, 'block/refs': [], 'block/children': [] }] : [] } : null;
   };
   Object.assign(window.roamAlphaAPI, { graph: { name: 'chart-desk-fixture' },
     data: { pull: (pattern, lookup) => projectPull(pattern, entity(Array.isArray(lookup) ? lookup[1] : lookup)),

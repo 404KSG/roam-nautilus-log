@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Hide folded surfaces before bulk retirement. Native subscription removals and
+  hidden preview cleanup run after a paint opportunity in bounded batches, so
+  dense plans no longer block the first folded frame. Scope caret lookup to the
+  owning row, preserve native editor ordering and IME draft reservations, and
+  cancel stale preview cleanup when cards resume or change.
+
 - Share one pointer-transparent body hint for Help, Calendar and the view switch,
   so native embeds cannot clip any toolbar label. Keep below-first styling,
   per-control hover/focus ownership, active-only listeners and popover suppression.

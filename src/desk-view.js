@@ -13,6 +13,7 @@ import { createDeskExternalDrop } from './desk-external-drop';
 import { createDeskNotifications } from './desk-notification';
 import { createDeskPreferences, createDeskOutlineVisibility } from './desk-host';
 import { createPlanViewHost } from './plan-view-host';
+import { createDeferredCleanup } from './deferred-cleanup';
 import { BRIDGE_KEY } from './renderer-contract';
 
 /** A scoped data adapter around Roam's native Desk styles, not its starred-note store. */
@@ -30,6 +31,7 @@ export function createDeskView({
   let destroyed = false;
   let nativeLane = Promise.resolve();
   let nativeJobs = 0;
+  const deferredCleanup = createDeferredCleanup(host);
   // Preview rows are intentionally watched separately from the Plan projection:
   // the projection observes direct task strings/orders only, while a loaded card
   // needs child image/text changes without invalidating every other card.
@@ -66,7 +68,7 @@ export function createDeskView({
     }
     if (!entry.listeners.has(listener)) previewListeners += 1;
     entry.listeners.add(listener);
-    const stop = () => {
+    const stop = (defer = false) => {
       if (entry.listeners.delete(listener)) previewListeners -= 1;
       if (entry.listeners.size || entry.removing) return;
       if (previewWatchers.get(key) === entry) previewWatchers.delete(key);
@@ -74,7 +76,8 @@ export function createDeskView({
         // Registration has no meaningful return value (including host nil/null).
         // Even a rejected/ambiguous add may have installed this exact callback.
         if (typeof entry.api.removePullWatch !== 'function') return;
-        return entry.api.removePullWatch(entry.pattern, previewLookup(entry.uid), entry.callback);
+        const remove = () => entry.api.removePullWatch(entry.pattern, previewLookup(entry.uid), entry.callback);
+        return defer ? deferredCleanup.run(remove) : remove();
       }).catch(() => {});
     };
     stop.ready = entry.registered;
@@ -467,7 +470,7 @@ export function createDeskView({
     // The requested view and resolved editor can differ during source recovery.
     // Preserve each reading position even when both currently render the entry.
     const scrollKey = (record) => `${record.entryUid}\u0000${record.entryView ? 'entry' : 'source'}\u0000${record.editorUid}`;
-    function dropEditor() {
+    function dropEditor(defer = false) {
       affordances?.resetForSelection();
       clearSwipeMotion();
       const record = mount;
@@ -477,7 +480,7 @@ export function createDeskView({
       scrollPositions.set(scrollKey(record), body.scrollTop);
       if (graph === graphName(host) && roam === host.roamAlphaAPI && record.el.contains(document.activeElement)) document.activeElement.blur();
       record.el.remove();
-      enqueueNative(() => cleanupNative(record));
+      enqueueNative(() => defer ? deferredCleanup.run(() => cleanupNative(record)) : cleanupNative(record));
       previews.delete(record.entryUid);
       const card = cards.get(record.entryUid);
       if (card) observer?.observe(card.tile);
@@ -545,15 +548,20 @@ export function createDeskView({
       if (closed || folded === next) return;
       folded = next;
       if (folded) {
+        // Capture the portal draft before any visibility or composition change.
+        // Folding never releases an uncommitted IME reservation.
         if (mode === 'draft') {
+          captureDraft(false);
           // Keep a nonempty or in-flight reservation alive. Input can change
           // while create is awaiting confirmation; releasing it here makes the
           // guarded save loop lose its only UID.
-          captureDraft();
-          if (draft && !draft.handedOff && !draft.saving && !draft.text.trim()) {
+          if (draft && !draft.handedOff && !draft.saving && !composing && !draft.uncommitted && !draft.text.trim()) {
             actions?.releaseDraft(draft.uid); draft.handedOff = true;
           }
         }
+        root.inert = true;
+        root.hidden = true;
+        root.setAttribute('aria-hidden', 'true');
         mode = 'overview';
         selectedUid = null;
         composing = false;
@@ -561,16 +569,12 @@ export function createDeskView({
         drag.cancel();
         externalDrop?.suspend();
         menu.hidden = true;
-        dropEditor();
+        dropEditor(true);
         layer.remove();
         if (focusOwner === session) focusOwner = null;
         if (previewFrame !== null) { host.cancelAnimationFrame(previewFrame); previewFrame = null; }
-        clearPreviewWatches();
-        clearFooterWatches();
-        resetPreviews();
-        root.inert = true;
-        root.hidden = true;
-        root.setAttribute('aria-hidden', 'true');
+        clearFooterWatches(null, true);
+        resetPreviews(true);
         return;
       }
       root.hidden = false;
@@ -683,12 +687,14 @@ export function createDeskView({
       draftInput.focus({ preventScroll: true });
       animateEntry(draftInput, slide, entryOffset);
     }
-    function captureDraft() {
+    function captureDraft(resize = true) {
       if (!draft || mode !== 'draft') return;
       draft.text = draftInput.value;
       draft.caret = draftInput.selectionStart;
-      draftInput.style.height = 'auto';
-      draftInput.style.height = `${draftInput.scrollHeight}px`;
+      if (resize) {
+        draftInput.style.height = 'auto';
+        draftInput.style.height = `${draftInput.scrollHeight}px`;
+      }
     }
     function saveDraft() {
       const current = draft;
@@ -869,10 +875,10 @@ export function createDeskView({
       if (!model || previewDirty.has(task.uid) || model.error || model.searchIncomplete || !model.searchReady) return true;
       return `${model.searchText} ${pageTitle}`.toLocaleLowerCase().includes(search);
     });
-    function clearFooterWatches(uid = null) {
+    function clearFooterWatches(uid = null, defer = false) {
       const keys = uid ? [uid] : [...new Set([...footerWatchStops.keys(), ...footerProvenance.keys()])];
       for (const key of keys) {
-        for (const stop of footerWatchStops.get(key) || []) stop();
+        for (const stop of footerWatchStops.get(key) || []) stop(defer);
         footerWatchStops.delete(key); footerProvenance.delete(key);
       }
     }
@@ -1075,10 +1081,10 @@ export function createDeskView({
       updateControls();
       schedulePreviews();
     }
-    function clearPreviewWatches(uid = null) {
+    function clearPreviewWatches(uid = null, defer = false) {
       const entries = uid ? [[uid, previewWatchStops.get(uid) || []]] : [...previewWatchStops.entries()];
       for (const [key, stops] of entries) {
-        for (const stop of stops) stop();
+        for (const stop of stops) stop(defer);
         previewWatchStops.delete(key);
       }
     }
@@ -1112,13 +1118,20 @@ export function createDeskView({
       for (const uid of previous.keys()) if (!next.has(uid)) previewVersions.delete(uid);
       for (const [uid, key] of next) if (previous.get(uid) !== undefined && previous.get(uid) !== key) invalidatePreview(uid);
     }
-    function resetPreviews() {
-      previewEpoch += 1;
+    function resetPreviews(defer = false) {
+      const epoch = ++previewEpoch;
       previewLoading.clear();
-      clearPreviewWatches();
+      clearPreviewWatches(null, defer);
       previews.clear(); previewDirty.clear();
       previewQueue.clear();
-      for (const card of cards.values()) clearPreview(card.images, card.lines);
+      for (const [uid, card] of cards) {
+        const version = previewVersions.get(uid) || 0;
+        if (!defer) clearPreview(card.images, card.lines);
+        else void deferredCleanup.run(() => {
+          if (!closed && folded && epoch === previewEpoch && version === (previewVersions.get(uid) || 0)
+            && cards.get(uid) === card) clearPreview(card.images, card.lines);
+        }).catch(error => console.error('[Nautilus Log] Desk preview cleanup failed', error));
+      }
     }
     function acceptSnapshot(snapshot) {
       if (!checkScope()) return;
@@ -1334,7 +1347,7 @@ export function createDeskView({
     const session = { start, close, showOverview, notice, setPresentation(chartMode) {
       if (closed) return;
       if (chartMode) {
-        outlineVisibility.setHidden(true);
+        if (chart?.dataset.nautilusNativeFolded !== 'true') outlineVisibility.setHidden(true);
         setFolded(chart?.dataset.nautilusNativeFolded === 'true');
       } else {
         setFolded(true);
@@ -1362,6 +1375,6 @@ export function createDeskView({
       });
     },
     close: () => { for (const binding of hosts.values()) binding.session?.close(false); },
-    destroy: () => { destroyed = true; for (const container of [...hosts.keys()]) closeForHost(container); return nativeLane; },
+    destroy: () => { destroyed = true; for (const container of [...hosts.keys()]) closeForHost(container); deferredCleanup.destroy(); return nativeLane; },
   };
 }

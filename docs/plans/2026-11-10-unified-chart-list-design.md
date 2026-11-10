@@ -36,6 +36,19 @@ Off-screen anchors and document hiding intentionally dismiss the hint until fres
 pointer/focus/key input, retaining the existing view-hint policy. Popup suppression
 is temporary within the same interaction, so its watcher survives async close.
 
+Native folding hides the renderer and
+portal UI immediately after synchronous draft capture, without reading draft
+geometry. Own-caret lookup stays in the direct native row/controls. Listener
+membership and preview epochs retire synchronously; physical native watch removal,
+preview DOM retirement and native unmount run through bounded deferred cleanup.
+Two animation frames leave a paint opportunity; a background fallback prevents
+retention if frames are suspended. Each cleanup task has a 4ms budget and yields to
+pending input. Native unmount remains ordered on `nativeLane`, and every record owns
+a fresh mount node. Preview cleanup checks fold, epoch, version and card identity.
+Service destruction flushes pending work, including later native registrations.
+Empty composing/uncommitted drafts keep their reserved UID. The renderer source and
+its revision-3 fingerprint remain unchanged.
+
 The view switch changes presentation only. It does not write task text, membership,
 order, source folds or the native parent's graph `open` property. Current views have
 independent graph/plan/main-or-sidebar localStorage preferences. Missing, invalid or
@@ -86,6 +99,14 @@ source is preserved by the existing verified source upgrade mechanism.
 `test/plan-view.py` runs the exact current CLJS with production presentation and Desk
 controllers, covering main/sidebar/embed, English/Chinese, dark mode, keyboard order,
 Calendar position, native folding, refresh restoration and original-outline identity.
+`test/plan-fold-performance.py` compares ordinary native folding with 8/160-card
+exact renderers in main/sidebar. It verifies a hidden first frame before any native
+subscription removal, zero full-owner caret scans, bounded cleanup batches, rapid
+reopen survival and unchanged graph rows. The explicit 0.4ms-per-removal stress
+fixture exposes work scaling before paint; it is separate from zero-cost results.
+`test/deferred-cleanup.test.js` covers paint opportunity, batching, background fallback,
+destruction and asynchronous native completion.
+
 `test/view-control-anchor.py` checks all control positions, repeated same-point
 clicks, native-fold restoration, connected Calendar and light/dark/main/sidebar/embed
 surfaces. Realistic native settings retain a 28px box at opacity zero and move to

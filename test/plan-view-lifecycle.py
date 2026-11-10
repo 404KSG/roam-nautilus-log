@@ -51,9 +51,11 @@ def run():
 
             # Native fold pauses the same Desk, drops the body-mounted editor,
             # and keeps the selected Chart view and outline claim.
+            page.evaluate('()=>{const render=roamAlphaAPI.ui.components.renderBlock;roamAlphaAPI.ui.components.renderBlock=async options=>{await render(options);options.el.style.minHeight="2000px"}}')
             owner.locator('[data-task-uid="task-0"] [role="button"]').click()
             expect(page.locator('.nautilus-desk__native textarea[data-block-uid="task-0"]')).to_be_visible()
-            page.evaluate('()=>window.originalDesk=document.querySelector("[data-fixture-host=plan-desk] .nautilus-desk")')
+            page.locator('.nautilus-desk__focus-body').evaluate('e=>e.scrollTop=300')
+            page.evaluate('()=>{window.originalDesk=document.querySelector("[data-fixture-host=plan-desk] .nautilus-desk");window.retiredFoldEditor=document.querySelector(".nautilus-desk__native")}')
             owner.get_by_role('button',name='Fold plan').evaluate('e=>e.click()')
             expect(root).to_be_hidden();expect(raw).to_be_hidden()
             expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)
@@ -62,6 +64,12 @@ def run():
             assert page.evaluate('()=>originalDesk===document.querySelector("[data-fixture-host=plan-desk] .nautilus-desk")')
             assert page.evaluate('()=>deskHarness.api.children("plan-desk")')==before
             report['nativeFoldRetainsSession']=True
+            owner.locator('[data-task-uid="task-0"] [role="button"]').click()
+            expect(page.locator('.nautilus-desk__native textarea[data-block-uid="task-0"]')).to_be_visible()
+            assert page.evaluate('()=>retiredFoldEditor!==document.querySelector(".nautilus-desk__native")&&deskHarness.api.activeEditors()===1')
+            assert page.locator('.nautilus-desk__focus-body').evaluate('e=>e.scrollTop')==300
+            page.locator('.rm-desk__close').click()
+            report['retiredFoldUnmountCannotTouchFreshEditor']=True
 
             # List mode parks a nonempty uncommitted IME draft. Returning to
             # New task restores the text without an implicit create.
@@ -75,6 +83,19 @@ def run():
             assert page.evaluate('()=>deskHarness.api.stats.writes.length')==0
             page.locator('.rm-desk__close').click()
             report['uncommittedImeDraftRestored']=True
+            page.evaluate('()=>{deskHarness.mount({count:3,unifiedView:true});const generate=roamAlphaAPI.util.generateUID;window.foldDraftUids=[];roamAlphaAPI.util.generateUID=()=>{const uid=generate();foldDraftUids.push(uid);return uid}}')
+            owner.locator('.rm-desk-page__new-note').click()
+            draft.evaluate('e=>{e.dispatchEvent(new CompositionEvent("compositionstart",{bubbles:true}));window.foldDraftHeightReads=0;Object.defineProperty(e,"scrollHeight",{configurable:true,get(){foldDraftHeightReads++;return 42}})}')
+            owner.get_by_role('button',name='Fold plan').evaluate('e=>e.click()')
+            expect(root).to_be_hidden()
+            assert page.evaluate('foldDraftHeightReads')==0, 'Fold must capture draft text without forcing textarea layout.'
+            owner.get_by_role('button',name='Fold plan').click()
+            owner.locator('.rm-desk-page__new-note').click()
+            expect(draft).to_be_visible()
+            draft.evaluate('e=>delete e.scrollHeight')
+            assert page.evaluate('foldDraftUids.length')==1, 'An empty composing draft lost its reserved UID on fold.'
+            page.locator('.rm-desk__close').click()
+            report['emptyImeFoldRetainsReservation']=True
 
             # The same plan in the sidebar follows its own native caret and
             # remembers its own view without changing the main window.

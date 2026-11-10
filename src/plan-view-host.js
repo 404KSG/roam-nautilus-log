@@ -4,17 +4,20 @@ import { createViewTooltip } from './view-tooltip.js';
 import { createListClearance } from './list-clearance.js';
 
 const MODES = new Set(['chart', 'list']);
-const ownCaret = owner => [...owner?.querySelectorAll('.rm-caret') || []]
-  .find(node => node.closest('.roam-block-container') === owner);
+const nativeSurface = owner => {
+  const main = [...owner?.children || []].find(node => node.classList.contains('rm-block-main')) || owner;
+  const controls = [...main?.children || []].find(node => node.classList.contains('rm-block__controls') || node.classList.contains('rm-caret'));
+  const carets = controls?.classList.contains('rm-caret') ? [controls] : [...controls?.querySelectorAll('.rm-caret') || []];
+  return { main, controls, caret: carets.find(node => node.closest('.roam-block-container') === owner) };
+};
 
 /** Read native expansion, never the caret's decorative visibility classes.
  * Only a verified empty plan keeps its controls reachable while natively closed. */
-export function nativePlanFolded(owner, hasChildren) {
+export function nativePlanFolded(owner, hasChildren, caret) {
   if (!owner || hasChildren === false) return false;
-  const caret = ownCaret(owner);
   if (owner.classList.contains('rm-block--closed')) return true;
   if (owner.classList.contains('rm-block--open')) return false;
-  return Boolean(caret?.classList.contains('rm-caret-closed'));
+  return Boolean((caret || nativeSurface(owner).caret)?.classList.contains('rm-caret-closed'));
 }
 
 export function planViewStorageKey(graph, uid, sidebar = false) {
@@ -38,7 +41,7 @@ export function createPlanViewHost({ host, container, planUid, origin, watchPlan
   let storage;
   try { storage = host.localStorage; } catch (_) {}
   let mode = readPlanView(storage, graph, planUid, sidebar);
-  let folded = nativePlanFolded(owner), closed = false, observer = null, controls = null;
+  let folded = nativePlanFolded(owner), closed = false, observer = null, controls = null, main = null;
   let callback = null, previous = '', deliveredCallback = null, deliveredState = '';
   let hasChildren, stopPlanWatch = null, watchStarted = false;
   const current = () => !closed && root.isConnected && provider === host.roamAlphaAPI && graph === graphName(host);
@@ -58,7 +61,7 @@ export function createPlanViewHost({ host, container, planUid, origin, watchPlan
       set(control, 'data-nautilus-tooltip', mode === 'chart'
         ? (zh ? '切换到列表' : 'Switch to list view') : (zh ? '切换到图表' : 'Switch to chart view'));
     }
-    hint.refresh();
+    if (folded) hint.dismiss(); else hint.refresh();
     const next = `${mode}:${folded}`;
     if (next !== previous) {
       previous = next;
@@ -72,15 +75,15 @@ export function createPlanViewHost({ host, container, planUid, origin, watchPlan
   }
   function sync() {
     if (!current()) return;
-    folded = nativePlanFolded(owner, hasChildren);
-    const caret = ownCaret(owner);
-    // A fallback parent can contain the renderer itself; watching it would
-    // observe our own label paints. Only the native controls or caret are owned.
-    const nativeControls = caret?.closest('.rm-block__controls') || caret;
-    if (controls !== nativeControls) {
-      controls = nativeControls;
+    const surface = nativeSurface(owner);
+    folded = nativePlanFolded(owner, hasChildren, surface.caret);
+    // Observe the owning native row and its tiny controls, never task/preview
+    // descendants. A later caret insertion is caught by the row's child list.
+    if (controls !== surface.controls || main !== surface.main) {
+      controls = surface.controls; main = surface.main;
       observer?.disconnect();
       if (owner) observer?.observe(owner, { attributes: true, attributeFilter: ['class'], childList: true });
+      if (main && main !== owner) observer?.observe(main, { childList: true });
       if (controls && controls !== owner) observer?.observe(controls, { attributes: true, attributeFilter: ['class'], childList: true, subtree: true });
     }
     paint();

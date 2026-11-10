@@ -4,8 +4,10 @@ const load = () => import('../src/plan-view-host.js');
 
 const classes = (...names) => ({ contains: name => names.includes(name) });
 function nativeOwner(ownerClasses, caretClasses = []) {
-  const owner = { classList: classes(...ownerClasses), querySelectorAll: () => carets };
+  const owner = { classList: classes(...ownerClasses), querySelectorAll: () => { throw Error('Native descendants must not be scanned'); } };
   const carets = [{ classList: classes(...caretClasses), closest: () => owner }];
+  const controls = { classList: classes('rm-block__controls'), querySelectorAll: () => carets };
+  owner.children = [{ classList: classes('rm-block-main'), children: [controls] }];
   return { owner, carets };
 }
 

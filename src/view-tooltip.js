@@ -3,7 +3,7 @@ let nextHintId = 0;
 /** One floating hint owner for this renderer's Help, Calendar and view controls. */
 export function createViewTooltip({ host, root, current }) {
   const document = root?.ownerDocument || host?.document;
-  if (!root?.addEventListener || !document?.body) return { refresh() {}, destroy() {} };
+  if (!root?.addEventListener || !document?.body) return { refresh() {}, dismiss() {}, destroy() {} };
   let anchor = null, panel = null, timer = null, hovered = null, focused = null, closed = false;
   let generation = 0, observer = null, observedGroup = null, dismissed = null;
   const listeners = [], activeListeners = [];
@@ -136,6 +136,7 @@ export function createViewTooltip({ host, root, current }) {
     }
   }, true);
   return {
+    dismiss() { hide(); hovered = null; focused = null; },
     refresh() { if (observedGroup || panel || timer !== null) select(); },
     destroy() {
       closed = true; hide();
