@@ -96,6 +96,12 @@ function installRendererBridge({ host, core, taskCore, services = {}, getScope =
     return result;
   }
   Object.assign(bridge, facade('current'));
+  bridge.togglePlanView = options => {
+    const node = container(options);
+    if (!validHost(node, 'current')) return false;
+    hosts.set(node, 'current');
+    return services.togglePlanView?.({ ...options, container: node });
+  };
   const legacy = facade('legacy');
   Object.defineProperty(legacy, LEGACY_BRAND, { value: bridge });
   Object.defineProperty(legacy, LEGACY_PROVIDER, { value: () => providerFor('legacy') });

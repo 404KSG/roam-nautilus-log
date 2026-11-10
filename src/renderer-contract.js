@@ -1,10 +1,11 @@
 /* One renderer-family contract shared by discovery, mutation and migration. */
-const REVISION = 2;
+const REVISION = 3;
 // One permanent graph entry. The historical "r2" spelling is an opaque UID,
 // not a request to create a new block when the source revision advances.
 const CODE_UID = 'roam-render-Nautilus-Log-r2-cljs';
 const RELEASED_RENDERER_SOURCES = Object.freeze([
   Object.freeze({ revision: 2, sha256: '5abc676245d7078959f19e804a65a355c3323d5e9af4fc1c067c70f3c57af81e' }),
+  Object.freeze({ revision: 3, sha256: '814183741f32624e327592cc6c70cdf808ad3d04c10ce7494f6375105a393be5' }),
 ]);
 const NAMESPACE = `nautilus-log-r${REVISION}`;
 const BRIDGE_KEY = `nautilusLogR${REVISION}`;

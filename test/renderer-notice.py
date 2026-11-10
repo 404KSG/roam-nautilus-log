@@ -18,8 +18,8 @@ MESSAGE = 'The managed template has 2 renderer blocks. Keep one root; check unus
 
 def set_notice(page, text, language):
     page.evaluate('''({text,language}) => {
-      nautilusLogR2.error = text;
-      nautilusLogR2.settings.language = language;
+      nautilusLogR3.error = text;
+      nautilusLogR3.settings.language = language;
       window.dispatchEvent(new Event('nautilus-log:settings-changed'));
     }''', {'text': text, 'language': language})
 
@@ -45,10 +45,9 @@ def run():
                 header = page.locator('.nautilus-log-header')
                 assert notice.bounding_box()['y'] + notice.bounding_box()['height'] <= header.bounding_box()['y'] + .5
                 page.locator('.nautilus-log-header').screenshot(path=str(OUT / f'{context}-expanded-header.png'))
-                collapse = page.locator('.nautilus-log-collapse-btn')
+                collapse = page.locator('#native-plan-caret')
                 collapse.press('Space')
                 expect(collapse).to_have_attribute('aria-expanded', 'false')
-                expect(collapse.locator('svg[data-icon="eye-open"]')).to_be_visible()
                 page.screenshot(path=str(OUT / f'{context}-collapsed.png'))
                 expect(notice).to_be_hidden()
                 assert notice.evaluate('e => e.getClientRects().length') == 0, 'A folded diagnostic must not overlap the following outline'

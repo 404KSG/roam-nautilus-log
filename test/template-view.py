@@ -21,7 +21,7 @@ def prepare(page, context, width, window='undated'):
       for(const row of rows.slice(8))__chartHarness.removeChild(row['block/uid']);
       __chartHarness.updateChild(rows[6]['block/uid'],'{{[[TODO]]}} First routine task 45m');
       __chartHarness.updateChild(rows[7]['block/uid'],'{{[[TODO]]}} Second routine task 600m');
-      Object.assign(nautilusLogR2.settings,{'workday-start':6,'workday-end':20});
+      Object.assign(nautilusLogR3.settings,{'workday-start':6,'workday-end':20});
       dispatchEvent(new Event('nautilus-log:settings-changed'));
     }''')
     f.set_clock(page,'2026-10-29T18:42:00')
@@ -49,7 +49,7 @@ def run():
                 expect(page.locator('.nautilus-log-template-caption')).to_have_count(0)
                 page.locator('.nautilus-log-header').screenshot(path=str(OUT/f'{context}-template-header.png'))
                 for language in ['en','zh']:
-                    page.evaluate('language=>{nautilusLogR2.settings.language=language;dispatchEvent(new Event("nautilus-log:settings-changed"));}',language)
+                    page.evaluate('language=>{nautilusLogR3.settings.language=language;dispatchEvent(new Event("nautilus-log:settings-changed"));}',language)
                     f.settle_renderer(page)
                     initial=metrics.text_content()
                     for clock in ['2026-10-29T08:00:00','2026-10-29T23:00:00']:
@@ -59,7 +59,7 @@ def run():
                         assert metrics.text_content()==initial, 'non-date previews keep full-day capacity'
                         assert f.state(page)['pendingQueue']['minutes']==600
                         expect(page.locator('.nautilus-log-template-caption')).to_have_count(0)
-                collapse=page.locator('.nautilus-log-collapse-btn');collapse.press('Space')
+                collapse=page.locator('#native-plan-caret');collapse.press('Space')
                 expect(page.locator('svg.nautilus-log-svg')).to_have_count(0)
                 collapse.press('Enter');f.settle_renderer(page)
                 expect(metrics if width>520 else overview).to_be_visible()

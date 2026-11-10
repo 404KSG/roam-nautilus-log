@@ -2,6 +2,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const {installRendererBridge}=require('../src/renderer-bridge');
+const {REVISION, BRIDGE_KEY}=require('../src/renderer-contract');
 let extension;
 const load=async()=>extension||=await import(`data:text/javascript;base64,${fs.readFileSync('extension.js').toString('base64')}#bridge-lifecycle`);
 const root=revision=>`{{[[roam/render]]:((roam-render-Nautilus-Log${revision===1?'':`-r${revision}`}-cljs))}}`;
@@ -33,15 +34,15 @@ test('real renderer sessions retain read data but lose write authority when the 
   const fixtureValue=fixture(createRendererPlanSession,host,scope,'A task');fixtureValue.setRoot(2);
   const session=fixtureValue.handle.bridge.createRendererPlanSession({planUid:'plan'});
   assert.equal(session.sync().writesAllowed,true);
-  fixtureValue.setRoot(3);assert.equal(session.getState().writesAllowed,false);
+  fixtureValue.setRoot(REVISION + 1);assert.equal(session.getState().writesAllowed,false);
   assert.equal(session.getState().children[0]['block/string'],'A task');
   fixtureValue.handle.destroy();assert.equal(fixtureValue.listeners.size,0);
 });
 
 test('an unknown or newer occupant of the r2 bridge slot is preserved',()=>{
-  for(const revision of [undefined,3]){
-    const foreign={revision,running:true},host={nautilusLogR2:foreign};
+  for(const revision of [undefined,REVISION + 1]){
+    const foreign={revision,running:true},host={[BRIDGE_KEY]:foreign};
     assert.throws(()=>installRendererBridge({host}),/unsupported version/);
-    assert.equal(host.nautilusLogR2,foreign);assert.equal(foreign.running,true);
+    assert.equal(host[BRIDGE_KEY],foreign);assert.equal(foreign.running,true);
   }
 });

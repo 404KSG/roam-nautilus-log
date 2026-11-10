@@ -115,7 +115,7 @@ test('new renderer programs do not use the legacy installer code label', async (
   try {
     assert.equal(f.blocks.get(FIXED_HEADER).string, 'renderer');
     assert.equal(f.blocks.get(FIXED_SOURCE).parentUid, FIXED_HEADER);
-    assert.equal(window.nautilusLogR2.ready, true);
+    assert.equal(window.nautilusLogR3.ready, true);
   } finally { module.default.onunload(); delete global.window; }
 });
 
@@ -133,7 +133,7 @@ test('isolated old code headers upgrade in place without changing source or temp
     assert.equal(f.blocks.get(FIXED_HEADER).open, false); assert.equal(f.blocks.get(FIXED_HEADER).heading, 2);
     assert.deepEqual(writes, [{ uid: FIXED_HEADER, string: 'renderer' }]);
     assert.equal(f.blocks.get(FIXED_SOURCE).string, source); assert.deepEqual([...f.blocks.keys()], beforeUids);
-    assert.equal(module.readRendererSource().programIsolated, true); assert.equal(window.nautilusLogR2.ready, true);
+    assert.equal(module.readRendererSource().programIsolated, true); assert.equal(window.nautilusLogR3.ready, true);
     module.default.onunload(); writes.length = 0;
     module = await loadWithGraph(f);
     assert.deepEqual(writes, [], 'a confirmed header must not be rewritten on reload');
@@ -147,7 +147,7 @@ test('owned generic headers isolate before source-byte or receipt refusals', asy
     f.blocks.set(FIXED_TEMPLATE, { uid: FIXED_TEMPLATE, string: 'Nautilus Log [[roam/templates]]', parentUid: FIXED_TITLE, order: 1 });
     f.blocks.set(FIXED_RENDER, { uid: FIXED_RENDER, string: `{{[[roam/render]]:((${FIXED_SOURCE}))}}`, parentUid: FIXED_TEMPLATE, order: 0 });
     if (mode === 'custom') f.blocks.get(FIXED_SOURCE).string += '\n;; preserved local source';
-    if (mode === 'newer') f.blocks.get(FIXED_SOURCE).string = expectedRendererSource().replace(';; nautilus-renderer 2', ';; nautilus-renderer 3');
+    if (mode === 'newer') f.blocks.get(FIXED_SOURCE).string = expectedRendererSource().replace(';; nautilus-renderer 3', ';; nautilus-renderer 4');
     const beforeSource = f.blocks.get(FIXED_SOURCE)?.string, beforeUids = [...f.blocks.keys()], writes = [];
     const update = f.roam.updateBlock, create = f.roam.createBlock;
     f.roam.updateBlock = async payload => { writes.push(['update', payload.block.uid]); return update(payload); };
@@ -164,7 +164,7 @@ test('owned generic headers isolate before source-byte or receipt refusals', asy
       assert.deepEqual(writes, [['update', FIXED_HEADER]]);
       assert.equal(f.blocks.get(FIXED_SOURCE)?.string, beforeSource);
       assert.deepEqual([...f.blocks.keys()], beforeUids);
-      assert.equal(window.nautilusLogR2.ready, false);
+      assert.equal(window.nautilusLogR3.ready, false);
       if (mode.endsWith('pending')) assert.equal(settings.get('renderer-source-upgrade-pending').items.length, 1);
     } finally { module.default.onunload(); delete global.window; }
   });
@@ -174,7 +174,7 @@ test('an owned empty legacy header resumes without another code group or source 
   const f = createRoamMock(); seedOwnedScaffold(f); f.blocks.get(FIXED_HEADER).string = 'code';
   const module = await loadWithGraph(f);
   try {
-    assert.equal(window.nautilusLogR2.ready, true);
+    assert.equal(window.nautilusLogR3.ready, true);
     assert.equal(f.blocks.get(FIXED_HEADER).string, 'renderer');
     assert.equal(f.blocks.get(FIXED_SOURCE).parentUid, FIXED_HEADER);
     assert.equal([...f.blocks.values()].filter(row => row.parentUid === FIXED_HEADER).length, 1);
@@ -189,7 +189,7 @@ test('an editing code header is preserved and cannot claim isolated readiness', 
   const before = blockFingerprint(f), module = await loadWithGraph(f);
   try {
     assert.equal(blockFingerprint(f), before);
-    assert.equal(window.nautilusLogR2.ready, false);
+    assert.equal(window.nautilusLogR3.ready, false);
     assert.equal(f.blocks.get(FIXED_HEADER).string, 'code');
   } finally { module.default.onunload(); delete global.window; }
 });
@@ -204,8 +204,8 @@ test('header isolation preserves active or divergent native editor buffers', asy
       querySelector: () => null, getElementById: () => null, addEventListener() {}, removeEventListener() {} } };
     const before = blockFingerprint(f), module = await loadWithGraph(f);
     try {
-      assert.equal(blockFingerprint(f), before); assert.equal(window.nautilusLogR2.ready, false);
-      assert.match(window.nautilusLogR2.error, /active or unsaved editor/);
+      assert.equal(blockFingerprint(f), before); assert.equal(window.nautilusLogR3.ready, false);
+      assert.match(window.nautilusLogR3.error, /active or unsaved editor/);
       assert.equal(editor.value, mode === 'active' ? 'code' : 'my unsaved title');
     } finally { module.default.onunload(); delete global.window; }
   });
@@ -230,7 +230,7 @@ test('header isolation confirms the result and stops on post-write ownership cha
     const module = await loadWithGraph(f);
     try {
       assert.deepEqual(writes, [FIXED_HEADER]);
-      assert.equal(window.nautilusLogR2.ready, mode === 'reject-after');
+      assert.equal(window.nautilusLogR3.ready, mode === 'reject-after');
       assert.equal(f.blocks.get(FIXED_SOURCE).string, source);
       if (mode === 'new-sibling') assert.equal(f.blocks.get('concurrent-code').parentUid, FIXED_HEADER);
     } finally { module.default.onunload(); delete global.window; }
@@ -252,7 +252,7 @@ test('mixed native renderer programs fail closed before graph writes', async t =
     }
     const module = await loadWithGraph(f);
     try {
-      assert.equal(window.nautilusLogR2.ready, false, 'a correct r2 body must not certify a mixed native program');
+      assert.equal(window.nautilusLogR3.ready, false, 'a correct current body must not certify a mixed native program');
       assert.deepEqual(writes, [], 'preserve all code blocks; do not silently move or remove the legacy source');
       assert.equal(blockFingerprint(f), before);
       assert.throws(() => module.readRendererSource(), /source group|code group|isolation/i);
@@ -283,7 +283,7 @@ test('a missing direct source read with a present child row is not an empty grou
   f.roam.data.pull = (pattern, lookup) => lookup?.[1] === FIXED_SOURCE ? null : pull(pattern, lookup);
   const before = blockFingerprint(f), module = await loadWithGraph(f);
   try {
-    assert.equal(window.nautilusLogR2.ready, false);
+    assert.equal(window.nautilusLogR3.ready, false);
     assert.equal(blockFingerprint(f), before);
     assert.throws(() => module.readRendererSource(), /source group/);
   } finally { module.default.onunload(); delete global.window; }
@@ -301,7 +301,7 @@ test('source upgrade receipts gate bootstrap and readiness without adding anothe
     const module=await loadWithGraph(f,settings);
     try {
       assert.equal(blockFingerprint(f),before);assert.equal(f.blocks.has('roam-render-Nautilus-Log-r3-cljs'),false);
-      assert.equal(window.nautilusLogR2.ready,['exact-after','foreign-graph'].includes(mode));
+      assert.equal(window.nautilusLogR3.ready,['exact-after','foreign-graph'].includes(mode));
       assert.equal(settings.get('renderer-source-upgrade-pending').items.length,mode==='exact-after'?0:1);
       if(mode==='missing-source')assert.equal(f.blocks.has(FIXED_SOURCE),false);
     } finally {module.default.onunload();delete global.window;}
@@ -332,7 +332,7 @@ test('fixed scaffold collisions are rejected before any graph write or readiness
     try {
       assert.deepEqual(writes,[],name);
       assert.equal(JSON.stringify({pages:[...f.pages],blocks:[...f.blocks]}),before,name);
-      assert.notEqual(window.nautilusLogR2?.ready,true,name);
+      assert.notEqual(window.nautilusLogR3?.ready,true,name);
       if(name.includes('source')||name==='missing title'||name==='missing header')assert.throws(()=>module.readRendererSource(),/scaffold|ownership|UID/i);
     } finally {module.default.onunload();delete global.window;}
   });
@@ -350,7 +350,7 @@ test('scaffold ownership is rechecked after each settled create',async t=>{
     try {
       assert.equal(writes.at(-1),target);
       assert.equal(f.blocks.has(FIXED_SOURCE),false);
-      assert.equal(window.nautilusLogR2.ready,false);
+      assert.equal(window.nautilusLogR3.ready,false);
       assert.equal(f.blocks.get(target).parentUid,'foreign-page');
     } finally {module.default.onunload();delete global.window;}
   });
@@ -364,7 +364,7 @@ test('a reserved template collision appearing during installation stops the next
     if(payload.block.uid===FIXED_HEADER)f.blocks.set(FIXED_TEMPLATE,{uid:FIXED_TEMPLATE,string:'Personal block',parentUid:'foreign-page',order:0});
   };
   const module=await loadWithGraph(f);
-  try {assert.equal(writes.at(-1),FIXED_HEADER);assert.equal(f.blocks.has(FIXED_SOURCE),false);assert.equal(window.nautilusLogR2.ready,false);}
+  try {assert.equal(writes.at(-1),FIXED_HEADER);assert.equal(f.blocks.has(FIXED_SOURCE),false);assert.equal(window.nautilusLogR3.ready,false);}
   finally {module.default.onunload();delete global.window;}
 });
 
@@ -373,7 +373,7 @@ test('unreadable renderer page identity is not treated as an absent page',async(
   f.roam.q=q=>q.includes('pull ?e [:block/uid]')?[[{uid:7}]]:query(q);
   const create=f.roam.data.page.create;f.roam.data.page.create=async value=>{writes.push(value);return create(value);};
   const module=await loadWithGraph(f);
-  try {assert.deepEqual(writes,[]);assert.equal(f.blocks.size,0);assert.equal(window.nautilusLogR2.ready,false);}
+  try {assert.deepEqual(writes,[]);assert.equal(f.blocks.size,0);assert.equal(window.nautilusLogR3.ready,false);}
   finally {module.default.onunload();delete global.window;}
 });
 
@@ -385,7 +385,7 @@ test('owned current source preserves a separate legacy program and unused determ
   f.blocks.set('custom-render',{uid:'custom-render',string:`[[Custom]] {{[[roam/render]]:((${FIXED_SOURCE})) 22 15 5 "" 21}}`,parentUid:'custom-template',order:0});
   for(const uid of [FIXED_TEMPLATE,FIXED_RENDER])f.blocks.set(uid,{uid,string:'Unrelated reserved-looking name',parentUid:'foreign-page',order:0});
   const before=JSON.stringify([...f.blocks]),module=await loadWithGraph(f);
-  try {assert.equal(window.nautilusLogR2.ready,true);assert.equal(JSON.stringify([...f.blocks]),before);assert.equal(module.readRendererSource().state,'current');}
+  try {assert.equal(window.nautilusLogR3.ready,true);assert.equal(JSON.stringify([...f.blocks]),before);assert.equal(module.readRendererSource().state,'current');}
   finally {module.default.onunload();delete global.window;}
 });
 
@@ -404,7 +404,7 @@ test('renamed owned templates retain their UID and complete content across reloa
       module=await loadWithGraph(f);
       assert.equal(f.blocks.size,count,'a renamed owned template must not cause another default template');
       assert.equal(blockFingerprint(f),before);
-      assert.equal(window.nautilusLogR2.ready,true);assert.equal(window.nautilusLogR2.error,'');
+      assert.equal(window.nautilusLogR3.ready,true);assert.equal(window.nautilusLogR3.error,'');
       const frozen=module.freezeCanonicalTemplate(`{{[[roam/render]]:((${FIXED_SOURCE}))`);
       assert.equal(frozen.kind,'standard');assert.equal(frozen.templateUid,'owned-template');assert.equal(frozen.root.uid,'owned-render');
       assert.equal(frozen.root.children[0].children[0].string,'Keep this context.');
@@ -430,7 +430,7 @@ test('owned renamed template conflicts never seed a second template or become mi
       module=await loadWithGraph(f);
       assert.equal(f.blocks.size,count,mode);assert.equal(blockFingerprint(f),before,mode);
       assert.equal(module.freezeCanonicalTemplate(`{{[[roam/render]]:((${FIXED_SOURCE}))`).kind,'unsupported',mode);
-      assert.ok(window.nautilusLogR2.error,mode);
+      assert.ok(window.nautilusLogR3.error,mode);
     } finally {module?.default.onunload();delete global.window;}
   });
 });
@@ -442,7 +442,7 @@ test('renamed marker ownership rejects a foreign title and inconsistent discover
   f.blocks.get(FIXED_TITLE).string='Personal notes';
   const before=blockFingerprint(f);const module=await loadWithGraph(f);
   try {
-    assert.equal(window.nautilusLogR2.ready,false);assert.equal(blockFingerprint(f),before);
+    assert.equal(window.nautilusLogR3.ready,false);assert.equal(blockFingerprint(f),before);
     assert.throws(()=>module.freezeCanonicalTemplate(`{{[[roam/render]]:((${FIXED_SOURCE}))`),/ownership|parent|content/i);
     f.blocks.get(FIXED_TITLE).string='Nautilus Log';
     const query=f.roam.q;let armed=false;
@@ -477,7 +477,7 @@ test('unrelated markers stay foreign while a named empty template can complete i
   const foreign=unrelated();
   const module=await loadWithGraph(f);
   try {
-    assert.equal(window.nautilusLogR2.ready,true);assert.equal(window.nautilusLogR2.error,'');
+    assert.equal(window.nautilusLogR3.ready,true);assert.equal(window.nautilusLogR3.error,'');
     assert.equal(f.blocks.get(FIXED_RENDER).parentUid,'owned-template');assert.equal(f.blocks.has(FIXED_TEMPLATE),false);
     assert.equal(unrelated(),foreign);
     assert.equal(module.freezeCanonicalTemplate(`{{[[roam/render]]:((${FIXED_SOURCE}))`).templateUid,'owned-template');
@@ -496,9 +496,9 @@ test('duplicate renderer roots produce a specific diagnostic and an archived emp
   const before = JSON.stringify([...f.blocks]);
   let module = await loadWithGraph(f);
   try {
-    assert.equal(window.nautilusLogR2.ready, true, 'the current installed renderer remains usable');
-    assert.match(window.nautilusLogR2.error, /2 renderer blocks/);
-    assert.doesNotMatch(window.nautilusLogR2.error, /newer, custom, or ambiguous/);
+    assert.equal(window.nautilusLogR3.ready, true, 'the current installed renderer remains usable');
+    assert.match(window.nautilusLogR3.error, /2 renderer blocks/);
+    assert.doesNotMatch(window.nautilusLogR3.error, /newer, custom, or ambiguous/);
     assert.throws(() => module.inspectRendererScaffold(`{{[[roam/render]]:((${FIXED_SOURCE}))`),
       error => error.code === 'templateMultipleRenderers' && error.templateUid === 'managed-template');
     assert.equal(JSON.stringify([...f.blocks]), before, 'diagnosis must not choose, rewrite, or delete a root');
@@ -510,8 +510,8 @@ test('duplicate renderer roots produce a specific diagnostic and an archived emp
     const repaired = JSON.stringify([...f.blocks]);
     for (let pass = 0; pass < 2; pass++) {
       module = await loadWithGraph(f);
-      assert.equal(window.nautilusLogR2.ready, true);
-      assert.equal(window.nautilusLogR2.error, '');
+      assert.equal(window.nautilusLogR3.ready, true);
+      assert.equal(window.nautilusLogR3.error, '');
       assert.equal(module.freezeCanonicalTemplate(`{{[[roam/render]]:((${FIXED_SOURCE}))`).kind, 'standard');
       assert.equal(JSON.stringify([...f.blocks]), repaired);
       module.default.onunload();
@@ -549,7 +549,7 @@ test('built extension creates Log scaffolding sequentially and unload is graph-s
 
   assert.ok(pages.has('roam/render'));
   assert.equal(blocks.get('roam-render-Nautilus-Log').string, 'Nautilus Log');
-  assert.match(blocks.get('roam-render-Nautilus-Log-r2-cljs').string, /nautilus-log-r2/);
+  assert.match(blocks.get('roam-render-Nautilus-Log-r2-cljs').string, /nautilus-log-r3/);
   assert.equal(window.nautilusLogExtensionData.settings['workday-end'], 21);
   assert.equal(window.nautilusLogExtensionData.settings.language, 'en');
 
@@ -581,7 +581,7 @@ test('built extension creates Log scaffolding sequentially and unload is graph-s
   await extension.onunload();
   assert.equal(blocks.size, blockCount);
   assert.equal(window.nautilusLogExtensionData.running, false);
-  assert.equal(window.nautilusLogR2, undefined);
+  assert.equal(window.nautilusLogR3, undefined);
   assert.equal(typeof window.nautilusLogCore, 'object', 'legacy history keeps a read-only render facade');
 });
 
@@ -911,8 +911,8 @@ test('ambiguous managed templates remain intact instead of guessing a migration 
   assert.equal(settings.get('prefix-str'), '[[Nautilus Log]]');
   assert.deepEqual([...blocks], originalBlocks, 'ambiguous templates, source code and historical logs must stay intact');
   assert.equal(blocks.has('roam-render-Nautilus-Log-r2-cljs'), false);
-  assert.equal(window.nautilusLogR2.ready, false);
-  assert.match(window.nautilusLogR2.error, /Multiple managed templates/);
+  assert.equal(window.nautilusLogR3.ready, false);
+  assert.match(window.nautilusLogR3.error, /Multiple managed templates/);
   assert.equal(window.nautilusLogExtensionData.running, true, 'legacy read facade remains available');
   await extension.onunload();
 });

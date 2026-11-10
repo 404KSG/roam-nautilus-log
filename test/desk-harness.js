@@ -8,9 +8,9 @@ import { nativeElements } from '../src/desk-native';
 import { projectPull } from './pull-projection.cjs';
 
 let cleanup = () => {};
-function mount({ count = 8, dark = false, editor = true, empty = false, preservePreferences = false, collapsed = false, watchResult = 'undefined', switchControl = false, capabilities = null } = {}) {
+function mount({ count = 8, dark = false, editor = true, empty = false, preservePreferences = false, collapsed = false, watchResult = 'undefined', switchControl = false, unifiedView = false, capabilities = null } = {}) {
   cleanup();
-  if (!preservePreferences) for (const key of Object.keys(localStorage)) if (key.startsWith('nautilus-log:desk-view:v1:desk-fixture:')) localStorage.removeItem(key);
+  if (!preservePreferences) for (const key of Object.keys(localStorage)) if (key.startsWith('nautilus-log:desk-view:v1:desk-fixture:') || key.startsWith('nautilus-log:view:v1:desk-fixture:')) localStorage.removeItem(key);
   document.body.classList.toggle('bp3-dark', dark);
   document.querySelector('#launchers').replaceChildren();
   document.querySelector('#fixture-external-outline')?.remove();
@@ -337,9 +337,10 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     if (sidebar) owner.classList.add('rm-sidebar-window');
     const main = document.createElement('div'); main.className = 'rm-block-main';
     const chart = document.createElement('div'); chart.className = 'nautilus-log-container'; chart.dataset.nautilusLogBlock = uid;
+    if (unifiedView) { chart.dataset.nautilusUnifiedView = 'true'; owner.classList.add('rm-block--open'); }
     const shell = document.createElement('div'); shell.className = 'nautilus-log-shell fixture-shell'; shell.textContent = 'Nautilus Log · sea chart placeholder';
     let launch = document.createElement('button'); launch.type = 'button'; launch.className = 'fixture-launch nautilus-log-desk-btn'; launch.textContent = 'Desk'; launch.setAttribute('aria-label', label);
-    if (switchControl) {
+    if (switchControl || unifiedView) {
       launch.classList.add('nautilus-log-toggle-btn'); launch.setAttribute('role', 'switch'); launch.setAttribute('aria-checked', 'false');
       launch.setAttribute('aria-label', uid === planUid ? 'Desk' : 'Other Desk');
       launch.setAttribute('data-nautilus-tooltip', 'Desk');
@@ -350,7 +351,19 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     collapse.className = 'nautilus-log-toggle-btn nautilus-log-collapse-btn';
     collapse.type = 'button'; collapse.textContent = '⌄';
     collapse.setAttribute('aria-label', 'Collapse Nautilus Log');
-    controls.append(launch, collapse); shell.append(controls);
+    if (!unifiedView) controls.append(launch, collapse);
+    else {
+      controls.append(launch);
+      const nativeControls = document.createElement('div'); nativeControls.className = 'rm-block__controls';
+      const caret = document.createElement('button'); caret.type = 'button'; caret.className = 'rm-caret rm-caret-open'; caret.textContent = '▾'; caret.setAttribute('aria-label', 'Fold plan');
+      caret.addEventListener('click', () => {
+        const folded = owner.classList.toggle('rm-block--closed'); owner.classList.toggle('rm-block--open', !folded);
+        caret.classList.toggle('rm-caret-closed', folded); caret.classList.toggle('rm-caret-open', !folded);
+        raw.hidden = folded;
+      });
+      nativeControls.append(caret); main.append(nativeControls);
+    }
+    shell.append(controls);
     const slot = document.createElement('div'); slot.className = 'nautilus-log-desk-host'; slot.dataset.nautilusDeskPlan = uid; slot.dataset.nautilusDeskPage = 'October 26th, 2026';
     chart.append(shell, slot);
     const prefix = document.createElement('span'); prefix.textContent = '[[Nautilus Log]]';
@@ -373,11 +386,11 @@ function mount({ count = 8, dark = false, editor = true, empty = false, preserve
     collapse.addEventListener('click', () => setCollapsed(!chart.classList.contains('nautilus-log-collapsed')));
     const raw = document.createElement('div'); raw.className = 'rm-block-children fixture-raw'; raw.dataset.rawPlan = uid;
     owner.append(main, raw); document.querySelector('#launchers').append(owner);
-    launch.addEventListener('click', () => desk.open(options));
+    launch.addEventListener('click', () => unifiedView ? desk.toggleView(options) : desk.open(options));
     const replaceControl = () => {
       const next = launch.cloneNode(true); next.setAttribute('aria-checked', 'false');
       launch.replaceWith(next); launch = next; options.origin = next;
-      next.addEventListener('click', () => desk.open(options));
+      next.addEventListener('click', () => unifiedView ? desk.toggleView(options) : desk.open(options));
       hosts.get(key).launch = next;
       desk.registerHost(options);
     };

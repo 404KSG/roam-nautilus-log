@@ -969,6 +969,18 @@
   pointer-events: none;
 }
 
+.nautilus-log-container[data-nautilus-unified-view] .nautilus-log-desk-btn {
+  width: 82px !important; min-width: 82px !important; max-width: 82px !important;
+  gap: 6px;
+}
+.nautilus-log-view-label { font-size: 12px; line-height: 16px; font-weight: 500; min-width: 32px; text-align: right; }
+.nautilus-log-container[data-nautilus-view="list"] { min-height: 0; padding-top: 0; padding-bottom: 0; }
+.nautilus-log-container[data-nautilus-view="list"] .nautilus-log-header { display: flex; justify-content: flex-end; height: 32px; min-height: 32px; padding: 0; border: 0; }
+.nautilus-log-container[data-nautilus-view="list"] .nautilus-log-header-copy,
+.nautilus-log-container[data-nautilus-view="list"] .nautilus-log-html-legend,
+.nautilus-log-container[data-nautilus-view="list"] > .nautilus-log-desk-host { display: none; }
+.nautilus-log-container[data-nautilus-native-folded="true"] { display: none !important; }
+
 .nautilus-log-collapsed {
   min-height: 0 !important;
   height: 0;

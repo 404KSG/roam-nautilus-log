@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Replace Eye and the separate Desk toggle with a labeled Chart/List switch. Help is
+  leftmost, the view switch rightmost, and optional Calendar sits between them.
+  Chart contains the spiral and Desk; List reveals the original editable outline.
+- Follow each native Roam caret to fold the complete region and focus editor in one
+  action. Restore the selected view on expansion without writing graph fold state.
+  View preferences are scoped to graph, plan and main/sidebar surface; new views
+  default to Chart, independently of historical Eye and Desk flags.
+- Park Desk sessions and uncommitted drafts across List mode. Reveal the original
+  outline only after queued native editor cleanup; retain independent sidebar folds.
+- Advance the renderer source to revision 3 with exact predecessor verification,
+  retaining the permanent source UID and historical v1 Desk behavior.
+
 ### Removed
 
 - Remove the temporary Desk debugging commands, report panel, layout/event collection

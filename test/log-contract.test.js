@@ -413,7 +413,7 @@ test('global and overnight windows use continuous minutes and a start-relative s
 
 test('Log scaffolding is isolated and unload is graph-safe', () => {
   assert.match(entry, /Nautilus Log/);
-  assert.equal(rendererContract.NAMESPACE, 'nautilus-log-r2');
+  assert.equal(rendererContract.NAMESPACE, 'nautilus-log-r3');
   assert.match(entry, /CODE_UID as codeBlockUID/);
   assert.match(entry, /workday-end/);
   assert.match(helpers, /state !== true/);
@@ -866,34 +866,13 @@ test('execution lists stay scrollable without visible scrollbar chrome', () => {
   assert.match(css, /\.nautilus-log-timing__list::-webkit-scrollbar\s*\{[^}]*display:\s*none;[^}]*width:\s*0;[^}]*height:\s*0;/s);
 });
 
-test('Log uses state-driven Eye controls and collapses without reserving chart space', () => {
-  assert.match(component, /blueprint-toolbar-icon \(if @collapsed-state "eye-open" "eye-off"\)/);
-  assert.match(component, /:aria-expanded \(not @collapsed-state\)/);
-  assert.doesNotMatch(component, /"▸" "▾"/);
-  assert.match(
-    component,
-    /nautilus-log:collapsed:v2:[\s\S]*collapse-context-key/,
-    'main-window and right-sidebar renders must not share one collapse preference',
-  );
-  assert.match(
-    component,
-    /render-context-probe render-context-state compact-list-open-state collapsed-state block-uid/,
-    'the renderer must restore collapse state only after its surface is known',
-  );
-  assert.match(
-    component,
-    /collapse-button collapsed-state block-uid render-context/,
-    'manual collapse writes must be scoped to the current render surface',
-  );
-  assert.doesNotMatch(component, /nautilus-log:collapsed:v1:/);
-  assert.doesNotMatch(
-    timingRoam,
-    /openPrimaryPlan[\s\S]{0,900}(?:collapsed|collapse-storage|localStorage)/,
-    'locating a plan must remain navigation-only',
-  );
-  assert.match(css, /\.nautilus-log-collapsed\s*\{[^}]*height:\s*0;/s);
-  assert.match(css, /\.nautilus-log-collapsed \.nautilus-log-controls-top\s*\{[^}]*top:\s*-26px;/s);
-  assert.doesNotMatch(css, /#roam-right-sidebar-content \.nautilus-log-container/);
+test('native folding is presentation-only and old Eye state is absent from the current renderer', () => {
+  const presentation = fs.readFileSync(path.join(__dirname, '..', 'src', 'plan-view-host.js'), 'utf8');
+  assert.doesNotMatch(component, /collapsed-state|collapse-button|nautilus-log:collapsed/);
+  assert.match(component, /:data-nautilus-unified-view/);
+  assert.match(component, /:onViewChange/);
+  assert.match(presentation, /rm-block--closed/);
+  assert.doesNotMatch(presentation, /updateBlock|openBlock|expandWindow/);
 });
 
 test('folding retains the scoped outline claim while Desk hides its UI', () => {
@@ -901,24 +880,18 @@ test('folding retains the scoped outline claim while Desk hides its UI', () => {
   assert.doesNotMatch(css, /data-nautilus-desk-active/);
   assert.doesNotMatch(view, /data-nautilus-desk-active/);
   const main = component.indexOf('(defn main');
-  const branch = component.indexOf('(if @collapsed-state', main);
-  const host = component.indexOf(':class "nautilus-log-desk-host"', branch);
-  assert.ok(branch >= 0 && host > branch);
-  const collapsedBranch = component.slice(branch, host);
-  assert.match(collapsedBranch, /\[log-controls/,
-    'folding keeps controls but leaves the scoped Desk host mounted after the branch');
+  const host = component.indexOf(':class "nautilus-log-desk-host"', main);
+  assert.ok(host > main);
   assert.match(component.slice(host, host + 500), /:ref desk-host-ref/);
-  assert.match(view, /setFolded\(chart\.classList\.contains\('nautilus-log-collapsed'\)\)/);
+  assert.match(view, /setPresentation\(chartMode\)/);
   assert.match(view, /root\.hidden = true/);
 });
 
 test('remaining chart controls retain native icon bounds and all completed history', () => {
   const helpSource = component.slice(component.indexOf('(defn help-button'), component.indexOf('(defn plan-writes-allowed?'));
-  const collapseSource = component.slice(component.indexOf('(defn collapse-button'), component.indexOf('(defn switch-debug-button'));
+  assert.doesNotMatch(component, /eye-open|eye-off|collapse-button/);
   assert.doesNotMatch(helpSource, /:width "16" :height "16"/);
   assert.match(helpSource, /:width "18" :height "18"/);
-  assert.match(collapseSource, /blueprint-toolbar-icon \(if @collapsed-state "eye-open" "eye-off"\)/);
-  assert.match(component, /:width "18" :height "18" :viewBox "0 0 20 20"/);
   assert.match(component, /log-core-call "partitionChartEvents" filtered/);
   assert.match(logCore, /event\.done !== true/);
   assert.doesNotMatch(component, /not= "source" \(:status-origin %\)/);
@@ -929,7 +902,7 @@ test('Log keeps a hover-labeled Desk switch and remaining quiet icon controls wi
   assert.doesNotMatch(component, /playback-state-atom|playback-frame-atom|requestAnimationFrame/);
   assert.doesNotMatch(logCore, /playback\s*=/);
   assert.doesNotMatch(css, /nautilus-log-playback-active|nautilus-log-slice-pop-in/);
-  assert.equal((component.match(/:data-nautilus-tooltip/g) || []).length, 4);
+  assert.equal((component.match(/:data-nautilus-tooltip/g) || []).length, 3);
   assert.match(component, /:role "switch"/);
   assert.doesNotMatch(component, /nautilus-log-desk-switch-label/);
   assert.match(css, /\.nautilus-log-desk-btn\[aria-checked="true"\] \.nautilus-log-desk-switch-thumb\s*\{[^}]*translateX\(12px\)/);
@@ -947,10 +920,9 @@ test('Log orders Desk, Help and whole-widget Eye before optional Calendar', () =
   const help = controls.indexOf('[help-button');
   const desk = controls.indexOf('[desk-button');
   const calendar = controls.indexOf('[calendar-button');
-  const collapse = controls.indexOf('[collapse-button');
-  assert.ok(desk >= 0 && desk < help);
-  assert.ok(help < collapse);
-  assert.ok(collapse < calendar);
+  assert.ok(help >= 0 && help < calendar);
+  assert.ok(calendar < desk);
+  assert.equal(controls.indexOf('[collapse-button'), -1);
 });
 
 test('Log uses an action-first two-row capacity ledger with controls plus legend right', () => {

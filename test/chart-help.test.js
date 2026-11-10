@@ -17,7 +17,7 @@ test('Help replaces the completed-visibility control in both languages', () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/component.cljs'), 'utf8');
   assert.doesNotMatch(source, /show-done-state|show-done-atom\?|switch-done-visibility-button/);
   const controls = source.slice(source.indexOf('(defn log-controls'), source.indexOf('(defn render-context-probe'));
-  assert.ok(controls.indexOf('[desk-button') < controls.indexOf('[help-button'));
+  assert.ok(controls.indexOf('[help-button') < controls.indexOf('[desk-button'));
 });
 
 test('Help is English by default and explains the unassigned budget denominator', () => {
@@ -33,7 +33,7 @@ test('Help is English by default and explains the unassigned budget denominator'
   assert.doesNotMatch(JSON.stringify(model), /Respect event positions|default off/);
   assert.match(model.settings, /POMO does not record Actual/);
   assert.deepEqual(model.rows.find(row => row.key === 'desk'), {
-    key: 'desk', label: 'Desk', text: 'Edit original blocks. New task adds to Planned; child logs do not.',
+    key: 'desk', label: 'Views', text: 'Chart shows Desk cards; List shows original blocks. The native caret folds either view.',
   });
   assert.doesNotMatch(JSON.stringify(model), /Tidy|move completed|past events to the top/i);
   assert.match(model.guideUrl, /^https:\/\/github\.com\/404KSG\/roam-nautilus-log\/blob\/main\/docs\/guide\.md$/);
@@ -43,7 +43,7 @@ test('Help honors explicit Chinese, logical overnight hours, and zero without in
   const { chartHelpModel } = help();
   const model = chartHelpModel({ language: 'zh', startMinutes: 1260, endMinutes: 1560, defaultDuration: 0 });
   assert.match(model.setup, /21:00.*次日 02:00.*0m/);
-  assert.equal(model.rows.find(row => row.key === 'desk').label, 'Desk');
+  assert.equal(model.rows.find(row => row.key === 'desk').label, '视图');
   assert.doesNotMatch(JSON.stringify(model), /整理|移到大纲前面|任务遵循事件位置/);
   assert.match(model.rows.find(row => row.key === 'left').text, /全天可安排/);
   assert.equal(model.rows.find(row => row.key === 'left').label, '未分配');

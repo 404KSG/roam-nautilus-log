@@ -5,7 +5,7 @@ import { createDeskView } from '../src/desk-view';
 import { createChartHelp } from '../src/chart-help';
 import { createRenderBlock, rendererSourceText } from '../src/entry-helpers';
 import { createRenderBlock as legacyScaffold } from './fixtures/renderer-v1/entry-helpers';
-import { CODE_UID, LEGACY_UIDS, inspectRenderer } from '../src/renderer-contract';
+import { CODE_UID, LEGACY_UIDS, REVISION, BRIDGE_KEY, inspectRenderer } from '../src/renderer-contract';
 import { createManagedGraph } from './managed-template-graph.cjs';
 import { projectPull } from './pull-projection.cjs';
 
@@ -77,7 +77,7 @@ export function installVersionFixture({ core, taskCore, settings, getChildren, r
   };
   api.createBlock = api.data.block.create;
   api.updateBlock = api.data.block.update;
-  delete window.nautilusLogR2; delete window.nautilusLogExtensionData;
+  delete window[BRIDGE_KEY]; delete window.nautilusLogExtensionData;
   const notify = () => {for(const value of [...watches])value.callback();};
   const install = () => {
     const watcher=createPlanWatchBridge({roam:api,readString:uid=>entity(uid)?.['block/string']||''});
@@ -88,7 +88,7 @@ export function installVersionFixture({ core, taskCore, settings, getChildren, r
       canMutatePlan:(uid,family)=>{const value=inspectRenderer(entity(uid)?.['block/string']);return value.mutable&&(family==='legacy'?value.kind==='legacy':value.kind==='current');},
       services:{createRendererPlanSession,readPlan:watcher.read,watchPlan:watcher.subscribe,resolveTaskInstance,getClockRenderContext,
         shouldSuppressRenderContext:()=>false,isRightSidebarRenderContext:()=>false,
-        openDesk:options=>desk.open(options),registerDeskHost:options=>desk.registerHost(options),closeDeskHost:container=>desk.closeForHost(container),
+        openDesk:options=>desk.open(options),togglePlanView:options=>desk.toggleView(options),registerDeskHost:options=>desk.registerHost(options),closeDeskHost:container=>desk.closeForHost(container),
         toggleChartHelp:options=>help.toggle(options),closeChartHelp:anchor=>help.closeForAnchor(anchor),
         locatePlanTask:()=>Promise.resolve(),
         syncCalendarPlan:()=>{throw Error('Unexpected Calendar write');},
@@ -97,7 +97,7 @@ export function installVersionFixture({ core, taskCore, settings, getChildren, r
     const generation={handle,watcher,desk,help};generations.push(generation);
     desk.restoreMountedHosts(options=>{
       const revision=options.container.closest('[data-nautilus-renderer]')?.getAttribute('data-nautilus-renderer');
-      if(revision==='2')handle.bridge.registerDeskHost(options);else if(!revision||revision==='1')handle.legacy?.registerDeskHost(options);
+      if(revision===String(REVISION))handle.bridge.registerDeskHost(options);else if(!revision||revision==='1')handle.legacy?.registerDeskHost(options);
     });
     window.dispatchEvent(new CustomEvent('nautilus-log:settings-changed'));
     return generation;
@@ -129,7 +129,7 @@ export function installVersionFixture({ core, taskCore, settings, getChildren, r
       return codeGraph.trace.slice(start).filter(row=>['create','update'].includes(row[0]));},
     async verifySourceRefusal(kind){
       const block=codeGraph.blocks.get(CODE_UID),saved=block.string;
-      block.string=kind==='newer'?saved.replace(';; nautilus-renderer 2',';; nautilus-renderer 3'):saved.replace('(ns nautilus-log-r2',';; foreign same-revision content\n(ns nautilus-log-r2');
+      block.string=kind==='newer'?saved.replace(`;; nautilus-renderer ${REVISION}`,`;; nautilus-renderer ${REVISION+1}`):saved.replace(`(ns nautilus-log-r${REVISION}`,`;; foreign same-revision content\n(ns nautilus-log-r${REVISION}`);
       const expected=block.string,start=codeGraph.trace.length;let message='';
       try{await runScaffold();}catch(error){message=error.message;}
       const preserved=block.string===expected,writes=codeGraph.trace.slice(start).filter(row=>['create','update','request'].includes(row[0]));
@@ -143,7 +143,7 @@ export function installVersionFixture({ core, taskCore, settings, getChildren, r
     disposePrevious(){generations.slice(0,-1).forEach(destroy);},
     legacyGlobalCleanup(){if(window.nautilusLogExtensionData)window.nautilusLogExtensionData.running=false;delete window.nautilusLogCore;delete window.nautilusLogTaskCore;},
     destroy(){generations.forEach(destroy);},
-    state:()=>({watches:watches.size,generations:generations.length,revision:window.nautilusLogR2?.revision,running:window.nautilusLogR2?.running,
+    state:()=>({watches:watches.size,generations:generations.length,revision:window[BRIDGE_KEY]?.revision,running:window[BRIDGE_KEY]?.running,
       currentSourceUnchanged:codeGraph.blocks.get(CODE_UID).string===rendererSourceText()}),
   };
 }

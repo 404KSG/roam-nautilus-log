@@ -51,9 +51,10 @@ launcher instead opens that existing workday's plan. See [overnight workdays](./
   Dragging changes task order; nested logs stay attached. Removal and outside-block
   drops follow the [native ownership rules](./docs/guide.md#safe-outside-block-references). New outside-block drops use a native embed; older references stay unchanged.
 
-The controls are **Desk → Help → Eye off**, followed by optional Calendar. Help explains
-the current settings and budget. The eye hides or expands the widget; completed records
-remain visible in the expanded chart. **Current task / Current event** identifies the
+The controls are **Help → Chart/List**, with optional Calendar between them. The switch
+selects the spiral plus Desk cards or the original editable block list. Roam's native caret
+folds the whole region and restores the selected view when expanded. Completed records
+remain visible in the chart. **Current task / Current event** identifies the
 current chart interval, not a running CLOCK. These labels use the time-pointer red,
 while titles retain their category colors. Task order changes only through your outline
 edits or explicit Desk moves.
@@ -94,7 +95,8 @@ and the [privacy contract](./PRIVACY.md).
 
 ## Upgrades and recovery
 
-Renderer r2 has its own source UID, namespace, and runtime bridge. An upgrade changes
+The current renderer uses source revision 3 with its own namespace and runtime bridge.
+Its permanent source UID retains the historical `r2` spelling. An upgrade changes
 only the managed template's renderer reference and the active Primary Plan reference;
 prefixes, arguments, child content, and presentation properties are preserved.
 Historical plans remain readable through the compatibility reader. Ambiguous targets

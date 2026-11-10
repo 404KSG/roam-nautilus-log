@@ -153,7 +153,7 @@ function dailyPageBounds(pageTitle, logicalEndMinutes = 1440) {
 }
 
 function getClockRenderContext(pageTitle, taskUids = [], logicalEndMinutes = null) {
-  const runtime = window.nautilusLogR2?.settings || window.nautilusLogExtensionData?.settings || {};
+  const runtime = window[BRIDGE_KEY]?.settings || window.nautilusLogExtensionData?.settings || {};
   const schedule = logCore.normalizeScheduleSettings({
     startHour: runtime['workday-start'],
     endHour: runtime['workday-end'],
@@ -931,6 +931,7 @@ async function onload({ extensionAPI }) {
       resolveTaskInstance: resolveRendererTaskInstance, createRendererPlanSession,
       readPlan: ownedWatch.read, watchPlan: ownedWatch.subscribe,
       openDesk: options => ownedDesk.open(options),
+      togglePlanView: options => ownedDesk.toggleView(options),
       registerDeskHost: options => ownedDesk.registerHost(options),
       closeDeskHost: container => ownedDesk.closeForHost(container),
       toggleChartHelp: options => ownedHelp.toggle(options), closeChartHelp: anchor => ownedHelp.closeForAnchor(anchor),

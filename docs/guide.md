@@ -158,35 +158,32 @@ Past gaps describe the chart allocation, not proof that time was idle or wasted.
 
 ## Chart controls
 
-The three main controls are **Desk → Help → Eye**. A connected Calendar
-appears after them as the fourth control. Help and Eye use the original filled Blueprint
-artwork at 18px. The Desk switch uses a filled track with a clear off/on position. Hover
-and switch feedback lasts about 100ms, with no icon morphing or button scaling; reduced
-motion makes the feedback effectively immediate. Click targets and keyboard focus remain.
+The two main controls are **Help → Chart/List**. Connected Calendar appears between
+them, so the view switch is always rightmost. Help retains its native filled glyph;
+the switch has a visible Chart/List label and a 28×16px track. Hover and switch feedback
+lasts about 100ms; reduced motion makes it effectively immediate.
 
-- **Desk switch:** show or hide unfinished-task cards below the chart. Only the slider is visible; hover or keyboard focus shows its Desk label. The thumb slides right and the track turns blue when open; the closed state uses a neutral filled track. Click, Space or Enter toggles it; the state also follows fold/expand restoration, control remounts and saved preferences.
-- **Help (?):** immediately after Desk, the question mark opens a native-style quick guide.
-  It shows this chart's resolved hours and default task duration, explains Available,
-  Events, Planned and `free`, and summarizes scheduling, Desk and completion styles.
-  It also points to the main settings and the full guide. Help is read-only, not a second
-  settings editor. Click again, click outside or press Escape inside Help to close it.
-- **Eye off / Eye:** when expanded, Eye off offers to hide the entire rendered Nautilus UI,
-  including Desk cards and the focus dialog. When hidden, Eye offers to expand it again.
-  The compact state leaves only this expand control. The original plan outline stays hidden
-  while Desk is selected, and the saved Desk preference is unchanged. Expand restores the
-  spiral and, when Desk was selected, its cards. This is not a completed-task filter.
-- **Calendar:** after Google Calendar reports Connected in Settings, the additional button
+- **Help (?):** the leftmost control opens a native-style quick guide.
+  It shows the chart's resolved hours and default task duration, explains Available,
+  Events, Planned and `free`, and links to settings and the full guide.
+  Click again, click outside or press Escape inside Help to close it.
+- **Chart/List switch:** Chart shows the spiral and unfinished-task Desk cards;
+  List shows the original editable Roam child outline, including events and completed
+  records. Click, Space or Enter switches views. The label names the current view;
+  the tooltip names the next action. The original outline is revealed after the native
+  Desk editor finishes unmounting. Uncommitted drafts remain parked for return to Chart.
+- **Native caret:** Roam's own arrow folds the entire region, including the chart,
+  cards and any focus dialog. Expanding restores the selected view. The plugin follows
+  that surface's native open/closed DOM state without writing `:block/open`.
+- **Calendar:** after Google Calendar reports Connected in Settings, the middle button
   imports timed busy events and dated Google Tasks for this chart's Daily Note.
   Option/Alt-click force-refreshes only the Google-managed strings.
 
-The completed-visibility filter remains removed. Completed slices, estimate outlines and
-their connected titles remain visible whenever the chart is expanded; Desk still shows unfinished tasks.
-Unlike the in-flow segment Tips, Help is a temporary button-anchored popover. It does not
-resize the SVG or change Desk width. Short viewports may scroll the Help card so its full
-content and guide link remain reachable. Folding closes Help and retains the existing
-expand-only compact control. Settings changes close the old Help snapshot; reopening shows
-the updated resolved configuration. Roam's native image viewer dismisses Help and keeps
-keyboard priority even when focus has not moved. Help adds no graph reads, writes or saved preference.
+Completed slices, estimate outlines and their connected titles remain visible in Chart;
+Desk shows unfinished tasks. Help is a temporary popover and does not resize the chart.
+Folding or switching views dismisses it. Settings changes close the old snapshot;
+reopening shows the updated configuration. Roam's native image viewer retains keyboard
+priority. Help adds no graph reads, writes or saved preference.
 
 Every titled source record remains available either in the diagram or in the pending queue.
 Fixed events, completed history and estimates, and genuinely scheduled tasks keep their
@@ -299,7 +296,7 @@ not use Roam's full-page `rm-desk-page` marker: current host styles use that mar
 to change ancestor padding and impose a viewport-sized canvas. Only native card
 sizes are retained locally; opening this component must not change page spacing.
 Search and New task share one flex-aligned tool group, with New task at the trailing
-edge. The overview has no duplicate close X; use the chart's Desk switch to hide it.
+edge. The overview has no duplicate close X; use the chart's view switch to return to List.
 Tab moves from Search to New task, then directly to the cards. The focus dialog's
 Close button, backdrop dismissal and existing Escape behavior are unchanged.
 
@@ -390,12 +387,12 @@ unfinished input composition or copy the editor's uncommitted buffer into the gr
   vertical scroll, pinch zoom and nested horizontal scrollers remain native.
   Motion respects reduced-motion preferences and IME. Only the focused native
   editor is mounted; smooth feedback does not create editable neighbor copies.
-- **Remember the view.** Desk mode is saved by graph and plan UID. Returning to a
-  page, refreshing, reloading the extension, or expanding an already-folded chart
-  restores the view without opening an editor or creating content. Folding does not
-  change the preference; explicitly hiding Desk saves the off state. The preference
-  is a localStorage flag, not task text, and does not sync across devices. A manual
-  open that cannot save its preference reports the limitation.
+- **Remember the view.** Chart/List is saved by graph, plan UID and surface (main or sidebar).
+  Returning, refreshing or reloading restores that view without opening an editor or
+  creating content. Native folding leaves the preference unchanged. A fresh or invalid
+  preference defaults to Chart. Old Desk and Eye flags remain available to historical
+  renderers and do not control the current view. Preferences contain no task text and
+  stay in this browser's localStorage. Storage failures keep the current session usable.
 
 Previews follow the full-page Desk rules: the root plus eleven counted descendant
 rows, in outline order and at most two levels. Up to three raw image-only rows
@@ -578,8 +575,8 @@ This single-entry policy supersedes earlier per-revision source-UID guidance.
 
 The canonical source UID is permanently `roam-render-Nautilus-Log-r2-cljs`. The `r2`
 spelling is retained as an opaque graph identity; it does not request another code block
-when a future source revision is released. The current source is revision 2, with namespace
-`nautilus-log-r2` and a version-local runtime bridge. Future source changes advance the
+when a future source revision is released. The current source is revision 3, with namespace
+`nautilus-log-r3` and a version-local runtime bridge. Future source changes advance the
 source marker, namespace, and bridge revision while retaining this code UID.
 
 The canonical source must be the only child of its stable code-group UID,

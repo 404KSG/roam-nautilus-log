@@ -38,7 +38,7 @@ def run(page):
             page.locator('body').evaluate('''(e,dark)=>{e.classList.toggle('bp3-dark',dark);e.style.background=dark?'#1d1e21':'#fff';e.style.color=dark?'#ecedef':'#222326'}''', dark)
             page.evaluate('title=>__chartHarness.updateChild("density-task-2","{{[[TODO]]}} "+title+" 30m")', medium)
             page.wait_for_function('title=>document.querySelector("[data-task-uid=density-task-2]")?.dataset.recordTitle===title', arg=medium)
-            toggle = page.get_by_role('switch', name='Desk', exact=True)
+            toggle = page.get_by_role('switch')
             if toggle.get_attribute('aria-checked') != 'true': toggle.click()
             page.wait_for_function('document.querySelector(".nautilus-desk")?.dataset.status==="ready"')
             page.mouse.move(1180, 980); f.settle_renderer(page)

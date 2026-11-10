@@ -12,6 +12,8 @@ import { createDeskDropFeedback } from './desk-drop-feedback';
 import { createDeskExternalDrop } from './desk-external-drop';
 import { createDeskNotifications } from './desk-notification';
 import { createDeskPreferences, createDeskOutlineVisibility } from './desk-host';
+import { createPlanViewHost } from './plan-view-host';
+import { BRIDGE_KEY } from './renderer-contract';
 
 /** A scoped data adapter around Roam's native Desk styles, not its starred-note store. */
 export function createDeskView({
@@ -88,18 +90,27 @@ export function createDeskView({
   const syncControl = (binding) => {
     const control = binding?.origin;
     const attribute = control?.getAttribute?.('role') === 'switch' ? 'aria-checked' : 'aria-expanded';
-    control?.setAttribute?.(attribute, String(Boolean(binding?.session)));
+    control?.setAttribute?.(attribute, String(binding?.presentation
+      ? binding.container.closest('.nautilus-log-container')?.dataset.nautilusView === 'chart' : Boolean(binding?.session)));
   };
   const registerHost = (options = {}) => {
     if (!validHost(options)) return;
     let binding = hosts.get(options.container);
-    if (binding && binding.planUid !== options.planUid) { binding.session?.close(false); hosts.delete(options.container); binding = null; }
+    if (binding && binding.planUid !== options.planUid) { binding.presentation?.destroy(); binding.session?.close(false); hosts.delete(options.container); binding = null; }
     if (!binding) {
       binding = { ...options, session: null };
       hosts.set(options.container, binding);
     }
     if (options.origin) binding.origin = options.origin;
-    if (!binding.session && preferences.read(providerGraph, binding.planUid)) start(binding);
+    const chart = options.container.closest('.nautilus-log-container');
+    if (chart?.hasAttribute('data-nautilus-unified-view')) {
+      if (!binding.presentation) binding.presentation = createPlanViewHost({ host, ...options, onChange: state => {
+        host[BRIDGE_KEY]?.closeChartHelp?.(chart.querySelector('.nautilus-log-help-btn'));
+        if (state.mode === 'chart' && !state.folded && !binding.session) start(binding);
+        binding.session?.setPresentation?.(state.mode === 'chart');
+      } });
+      binding.presentation.register(options);
+    } else if (!binding.session && preferences.read(providerGraph, binding.planUid)) start(binding);
     binding.session?.updateSettings?.();
     syncControl(binding);
     return binding;
@@ -108,6 +119,11 @@ export function createDeskView({
     const session = createSession(binding);
     binding.session = session;
     session.start();
+  };
+  const toggleView = (options = {}) => {
+    if (validHost(options) && options.container.closest('.nautilus-log-container')?.hasAttribute('data-nautilus-unified-view')) {
+      registerHost(options)?.presentation?.toggle();
+    }
   };
   const open = (options = {}) => {
     if (!validHost(options)) return;
@@ -1190,9 +1206,12 @@ export function createDeskView({
       // editor subtree is sufficient and leaves Desk chrome behavior unchanged.
       if (mode === 'task' && mount?.el?.isConnected && nativeEditorOwnsEscape(event, mount)) return;
       const action = deskShortcut(event);
-      if (action && (mode !== 'overview' || action === 'back' && event.target !== searchInput)) {
+      if (action && (mode !== 'overview' || action === 'back' && !binding.presentation && event.target !== searchInput)) {
         event.preventDefault(); event.stopPropagation();
-        if (action === 'back') { if (mode !== 'overview') showOverview(true); else { preferences.write(graph, planUid, false); close(true); } }
+        if (action === 'back') {
+          if (mode !== 'overview') showOverview(true);
+          else if (!binding.presentation) { preferences.write(graph, planUid, false); close(true); }
+        }
         else step(action === 'next' ? 1 : -1);
         return;
       }
@@ -1246,7 +1265,11 @@ export function createDeskView({
       clearFooterWatches();
       observer?.disconnect();
       foldObserver?.disconnect();
-      masonry.destroy(); drag.destroy(); externalDrop?.destroy(); notifications.destroy(); affordances.destroy(); outlineVisibility.destroy(); widthBinding?.destroy();
+      masonry.destroy(); drag.destroy(); externalDrop?.destroy(); notifications.destroy(); affordances.destroy();
+      // Release the real outline after the queued native editor unmount.
+      if (binding.presentation) void nativeLane.then(() => outlineVisibility.destroy());
+      else outlineVisibility.destroy();
+      widthBinding?.destroy();
       if (previewFrame !== null) host.cancelAnimationFrame(previewFrame);
       if (compositionFrame !== null) host.cancelAnimationFrame(compositionFrame);
       if (selectionFrame !== null) host.cancelAnimationFrame(selectionFrame);
@@ -1294,10 +1317,12 @@ export function createDeskView({
       layer.addEventListener('focusout', onEditorBlur);
       layer.addEventListener('pointerdown', (event) => { if (!menu.contains(event.target) && !more.contains(event.target)) menu.hidden = true; });
       if (chart && typeof host.MutationObserver === 'function') {
-        foldObserver = new host.MutationObserver(() => setFolded(chart.classList.contains('nautilus-log-collapsed')));
-        foldObserver.observe(chart, { attributes: true, attributeFilter: ['class'] });
+        const foldedNow = () => chart.classList.contains('nautilus-log-collapsed') || chart.dataset.nautilusNativeFolded === 'true'
+          || chart.hasAttribute('data-nautilus-unified-view') && chart.dataset.nautilusView === 'list';
+        foldObserver = new host.MutationObserver(() => setFolded(foldedNow()));
+        foldObserver.observe(chart, { attributes: true, attributeFilter: ['class', 'data-nautilus-native-folded', 'data-nautilus-view'] });
       }
-      setFolded(Boolean(chart?.classList.contains('nautilus-log-collapsed')));
+      setFolded(Boolean(chart?.classList.contains('nautilus-log-collapsed') || chart?.dataset.nautilusNativeFolded === 'true'));
       if (host.IntersectionObserver) observer = new host.IntersectionObserver((entries) => {
         for (const entry of entries) if (entry.isIntersecting) { observer.unobserve(entry.target); previewQueue.add(entry.target.dataset.taskUid); }
         schedulePreviews();
@@ -1305,7 +1330,18 @@ export function createDeskView({
       try { stopWatch = watchPlan(planUid, acceptSnapshot, { emitInitial: false }); refresh(); }
       catch (_error) { status = 'unavailable'; renderCards(); }
     }
-    const session = { start, close, showOverview, notice, updateSettings() {
+    const session = { start, close, showOverview, notice, setPresentation(chartMode) {
+      if (closed) return;
+      if (chartMode) {
+        outlineVisibility.setHidden(true);
+        setFolded(chart?.dataset.nautilusNativeFolded === 'true');
+      } else {
+        setFolded(true);
+        void nativeLane.then(() => {
+          if (!closed && chart?.dataset.nautilusView === 'list') outlineVisibility.setHidden(false);
+        });
+      }
+    }, updateSettings() {
       draftCopy = newTaskCopy();
       for (const control of [add,newNote]) { control.title=draftCopy.label;control.setAttribute('aria-label',draftCopy.label); }
       add.querySelector('.bp3-button-text').textContent=draftCopy.label;
@@ -1314,9 +1350,9 @@ export function createDeskView({
     } };
     return session;
   }
-  const closeForHost = (container) => { const binding = hosts.get(container); binding?.session?.close(false); hosts.delete(container); };
+  const closeForHost = (container) => { const binding = hosts.get(container); binding?.presentation?.destroy(); binding?.session?.close(false); hosts.delete(container); };
   return {
-    open, registerHost, closeForHost,
+    open, toggleView, registerHost, closeForHost,
     restoreMountedHosts(register = registerHost) {
       if (!document?.querySelectorAll) return;
       for (const container of document.querySelectorAll('[data-nautilus-desk-plan]')) register({

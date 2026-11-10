@@ -48,11 +48,11 @@ def write_page(source):
     shim = '''(ns roam.datascript)
 (defn q [query & args] (.apply (.-q js/window.__chartHarness) nil (clj->js (into [query] args))))'''
     mount = '''(require '[reagent.dom :as rdom])
-(rdom/render [nautilus-log-r2/main {:block-uid "baseline-plan"}] (.getElementById js/document "chart-root"))'''
+(rdom/render [nautilus-log-r3/main {:block-uid "baseline-plan"}] (.getElementById js/document "chart-root"))'''
     html = f'''<!doctype html><html><head><meta charset="utf-8">
 {''.join(f'<link rel="stylesheet" href="{p.resolve().as_uri()}">' for p in NATIVE_CSS)}
 <link id="nautilus-production-css" rel="stylesheet" href="{(ROOT / 'extension.css').as_uri()}">
-<style>body{{margin:0;color:#25262a;font:14px system-ui,sans-serif}}#renderer-shell{{width:min(960px,calc(100vw - 48px));margin:24px}}#following-sentinel{{height:40px;background:#eee;margin-top:12px}}</style>
+<style>body{{margin:0;color:#25262a;font:14px system-ui,sans-serif}}#renderer-shell{{width:min(960px,calc(100vw - 48px));margin:24px}}#chart-root{{flex:1;min-width:0}}#native-plan-owner>.rm-block-main{{position:relative}}#native-plan-owner>.rm-block-main>.rm-block__controls{{position:absolute;left:-22px;top:8px}}#native-plan-outline[hidden]{{display:none}}#following-sentinel{{height:40px;background:#eee;margin-top:12px}}</style>
 <script>window.__chartRealDate=Date;window.__chartFakeNowMs=Date.parse('2026-10-29T08:01:00');
 window.Date=class extends window.__chartRealDate{{constructor(...args){{super(...(args.length?args:[window.__chartFakeNowMs]))}}static now(){{return window.__chartFakeNowMs}}}};</script>
 <script src="{(NODE_MODULES / 'react/umd/react.development.js').as_uri()}"></script>
@@ -61,7 +61,7 @@ window.Date=class extends window.__chartRealDate{{constructor(...args){{super(..
 <script src="{(NODE_MODULES / 'scittle/dist/scittle.reagent.js').as_uri()}"></script>
 <script src="{(NODE_MODULES / 'scittle/dist/scittle.pprint.js').as_uri()}"></script>
 <script src="{(OUT / 'bundle/chart-renderer-harness.js').as_uri()}"></script>
-</head><body><div id="main-render-context"><div id="renderer-shell" data-chart-context="main"><div id="chart-root"></div><div id="following-sentinel">Following content sentinel</div></div></div>
+</head><body><div id="main-render-context"><div id="renderer-shell" data-chart-context="main"><div id="native-plan-owner" class="roam-block-container rm-block--open"><div class="rm-block-main"><div class="rm-block__controls"><button id="native-plan-caret" class="rm-caret rm-caret-open" aria-label="Fold plan" aria-expanded="true">▾</button></div><div id="chart-root"></div></div><div id="native-plan-outline" class="rm-block-children"></div></div><div id="following-sentinel">Following content sentinel</div></div></div>
 <div id="roam-right-sidebar-content"><div class="roam-right-sidebar-content" id="sidebar-render-context"></div></div>
 <div class="rm-embed-container" id="embed-render-context"></div>
 <script>const c=new URLSearchParams(location.search).get('context')||'main',s=document.querySelector('#renderer-shell');
@@ -99,6 +99,8 @@ def load(page, scenario='mixed', context='main', width=720, window='normal', lan
     page.wait_for_function('window.__chartEvaluator && (__chartEvaluator.completed || __chartEvaluator.error)', timeout=15000)
     runtime = page.evaluate('() => __chartEvaluator')
     assert not runtime.get('error'), runtime
+    switch = page.locator('.nautilus-log-desk-btn')
+    if switch.get_attribute('aria-checked') == 'false': switch.click()
     page.wait_for_selector('svg.nautilus-log-svg')
     settle_renderer(page)
     page.evaluate('(w)=>__chartHarness.setWidth(w)', width)
@@ -337,7 +339,7 @@ def contrast(page):
         focus:paint('.nautilus-log-available-slot:focus .nautilus-log-available-slot-hit','stroke'),
         now:paint('.nautilus-log-now-needle-line','stroke'),
         clock:paint('.nautilus-log-center-now','fill'),
-        control:paint('.nautilus-log-collapse-btn svg path','visible'),
+        control:paint('.nautilus-log-view-label','color'),
         helpControl:paint('.nautilus-log-help-btn svg path','visible')};
     }''')
     scores = {k: ratio(v, paints['background']) for k, v in paints.items() if k not in ('background', 'warningBackground', 'warningToken')}
@@ -456,7 +458,7 @@ def pattern_contract(page):
     assert page.locator('.nautilus-log-unplanned-overlay pattern').get_attribute('id') == before
     ids = page.evaluate('''()=>{
       const host=document.createElement('div');host.id='pattern-proof';document.body.append(host);
-      scittle.core.eval_string('(rdom/render [:svg [nautilus-log-r2/past-unplanned-overlay-component [] 50 {:center-x 150 :center-y 150} {:workday-start 300 :workday-end 1260} 500 1] [nautilus-log-r2/past-unplanned-overlay-component [] 50 {:center-x 150 :center-y 150} {:workday-start 300 :workday-end 1260} 500 1]] (.getElementById js/document "pattern-proof"))');
+      scittle.core.eval_string('(rdom/render [:svg [nautilus-log-r3/past-unplanned-overlay-component [] 50 {:center-x 150 :center-y 150} {:workday-start 300 :workday-end 1260} 500 1] [nautilus-log-r3/past-unplanned-overlay-component [] 50 {:center-x 150 :center-y 150} {:workday-start 300 :workday-end 1260} 500 1]] (.getElementById js/document "pattern-proof"))');
       const ids=[...document.querySelectorAll('.nautilus-log-unplanned-overlay pattern')].map(p=>p.id);
       ReactDOM.unmountComponentAtNode(host);host.remove();return ids;
     }''')
@@ -702,16 +704,16 @@ def density_and_control_contract(page):
             after = set_clock(page, iso); coverage(page); geometry_audit(page)
             assert_clock_layout(before, after, 'same members stay stable; END moves pending work to the queue')
         select(page, 'connection-done-0'); geometry_audit(page)
-        toggle = page.get_by_role('switch', name='Desk', exact=True)
-        assert toggle.get_attribute('aria-checked') == 'false'
+        toggle = page.get_by_role('switch')
+        assert toggle.get_attribute('aria-checked') == 'true'
         assert toggle.get_attribute('aria-expanded') is None
         assert toggle.locator('svg').count() == 0 and toggle.locator('.nautilus-log-desk-switch-thumb').count() == 1
-        box = toggle.bounding_box(); assert box['width'] == 40 and box['height'] == 32
-        assert toggle.inner_text().strip() == '' and toggle.get_attribute('data-nautilus-tooltip') == 'Desk'
+        box = toggle.bounding_box(); assert box['width'] == 82 and box['height'] == 32
+        assert toggle.inner_text().strip() == 'Chart' and toggle.get_attribute('data-nautilus-tooltip') == 'Switch to list view'
         assert toggle.evaluate('e=>getComputedStyle(e,"::after").whiteSpace==="nowrap"')
         # Verify the production CLJS callback boundary. The real Desk session
         # state/persistence/remount behavior is exercised by desk-switch.py.
-        page.evaluate('''()=>{window.__deskCalls=[];window.nautilusLogExtensionData.openDesk=o=>__deskCalls.push({uid:o.planUid,origin:o.origin===document.querySelector('.nautilus-log-desk-btn'),host:o.container===document.querySelector('.nautilus-log-desk-host')})}''')
+        page.evaluate('''()=>{window.__deskCalls=[];window.nautilusLogExtensionData.togglePlanView=o=>__deskCalls.push({uid:o.planUid,origin:o.origin===document.querySelector('.nautilus-log-desk-btn'),host:o.container===document.querySelector('.nautilus-log-desk-host')})}''')
         toggle.click(); toggle.press('Space'); toggle.press('Enter')
         calls = page.evaluate('()=>window.__deskCalls')
         assert calls == [{'uid': 'baseline-plan', 'origin': True, 'host': True}] * 3, calls
@@ -724,15 +726,14 @@ def density_and_control_contract(page):
         page.locator(f'[data-queued-task-uid="{uid}"]').focus(); coverage(page); geometry_audit(page)
     load(page, 'connections', 'main', 720, window='flow', real_desk=True)
     set_clock(page, '2026-10-30T08:00:00')
-    toggle = page.get_by_role('switch', name='Desk', exact=True)
-    toggle.click()
+    toggle = page.get_by_role('switch', name='Chart view', exact=True)
     page.wait_for_function('document.querySelector(".nautilus-desk")?.dataset.status==="ready"')
     assert toggle.get_attribute('aria-checked') == 'true'
     set_clock(page, '2026-10-30T08:01:00')
     assert toggle.get_attribute('aria-checked') == 'true'
-    page.get_by_role('button', name='Collapse Nautilus Log', exact=True).click()
-    page.get_by_role('button', name='Expand Nautilus Log', exact=True).click(); settle_renderer(page)
-    toggle = page.get_by_role('switch', name='Desk', exact=True)
+    page.locator('#native-plan-caret').click()
+    page.locator('#native-plan-caret').click(); settle_renderer(page)
+    toggle = page.get_by_role('switch', name='Chart view', exact=True)
     assert toggle.get_attribute('aria-checked') == 'true'
     assert page.locator('.nautilus-desk__card').count() == 2
     page.wait_for_function('()=>[...document.querySelectorAll(".nautilus-desk__card")].every(e=>e.dataset.previewState==="ready")')
@@ -748,7 +749,7 @@ def density_and_control_contract(page):
     page.locator('.nautilus-log-container').screenshot(path=str(OUT/'screenshots'/'density-with-native-desk.png'))
     assert page.locator('.nautilus-desk .rm-desk-page__toolbar .bp3-icon-cross').count() == 0
     toggle.click(); settle_renderer(page)
-    assert toggle.get_attribute('aria-checked') == 'false' and not page.locator('.nautilus-desk').count()
+    assert toggle.get_attribute('aria-checked') == 'false' and not page.locator('.nautilus-desk').is_visible()
     assert state(page)['writes'] == 0
     reports['nativeDeskComposition'] = composed
     return reports
@@ -780,11 +781,11 @@ def four_corrections_contract(page):
         pressure_style.evaluate('e=>e.remove()'); settle_renderer(page)
         colors = page.locator('.nautilus-log-html-legend').first.locator('.nautilus-log-legend-dot').evaluate_all('els=>els.map(e=>getComputedStyle(e).backgroundColor)')
         assert colors == ['rgb(194, 75, 75)', 'rgb(173, 139, 36)', 'rgb(19, 124, 189)'], colors
-        switch = page.get_by_role('switch', name='Desk', exact=True)
-        assert switch.inner_text().strip() == '' and not switch.locator('.nautilus-log-desk-switch-label').count()
+        switch = page.get_by_role('switch')
+        assert switch.inner_text().strip() == ('图表' if lang == 'zh' else 'Chart')
         switch.hover()
         page.wait_for_function('getComputedStyle(document.querySelector(".nautilus-log-desk-btn"),"::after").opacity==="1"')
-        assert switch.evaluate('e=>getComputedStyle(e,"::after").content.includes("Desk")&&getComputedStyle(e,"::after").whiteSpace==="nowrap"')
+        assert switch.evaluate('e=>getComputedStyle(e,"::after").whiteSpace==="nowrap"')
         rows_before = page.evaluate('()=>__chartHarness.sourceRows()')
         past = set_clock(page, '2026-10-30T08:00:00'); coverage(page)
         assert past['queueKind'] == 'unfinished' and not past['queueOpen']
@@ -839,7 +840,7 @@ def full_tip_palette_contract(page):
         set_clock(page, '2026-10-30T08:00:00')
         page.evaluate('s=>__chartHarness.updateChild("connection-done-0","{{[[DONE]]}} "+s+" 30m")', text)
         page.wait_for_function('s=>document.querySelector("[data-task-uid=connection-done-0]").dataset.recordTitle===s', arg=text)
-        toggle = page.get_by_role('switch', name='Desk', exact=True)
+        toggle = page.get_by_role('switch', name='Chart view', exact=True)
         if toggle.get_attribute('aria-checked') != 'true': toggle.click()
         page.wait_for_function('document.querySelector(".nautilus-desk")?.dataset.status==="ready"')
         settle_renderer(page); before = state(page)['svg']; select(page, 'connection-done-0'); after = coverage(page)
@@ -1368,7 +1369,7 @@ def past_record_texture_contract(page):
     # pattern/clip resources used to paint elapsed time.
     page.evaluate('''()=>{
       const host=document.createElement('div');host.id='texture-proof';host.style.width='960px';document.body.append(host);
-      scittle.core.eval_string('(rdom/render [nautilus-log-r2/main {:block-uid "baseline-plan"}] (.getElementById js/document "texture-proof"))');
+      scittle.core.eval_string('(rdom/render [nautilus-log-r3/main {:block-uid "baseline-plan"}] (.getElementById js/document "texture-proof"))');
     }''')
     expect(page.locator('.nautilus-log-past-record-pattern')).to_have_count(2)
     settle_renderer(page)
@@ -1604,11 +1605,11 @@ def lifecycle(page):
     assert 'Stand-up' in page.locator('.nautilus-log-detail-title').inner_text()
     page.mouse.move(1180, 980); settle_renderer(page)
     assert 'Draft the project brief' == page.locator('.nautilus-log-detail-title').inner_text()
-    page.get_by_role('button', name='Collapse Nautilus Log', exact=True).focus()
-    page.get_by_role('button', name='Collapse Nautilus Log', exact=True).press('Enter')
+    page.locator('#native-plan-caret').focus()
+    page.locator('#native-plan-caret').press('Enter')
     page.wait_for_function('document.querySelectorAll("svg.nautilus-log-svg").length===0')
     page.mouse.move(1180, 980)
-    page.get_by_role('button', name='Expand Nautilus Log', exact=True).press('Enter')
+    page.locator('#native-plan-caret').press('Enter')
     page.wait_for_selector('svg.nautilus-log-svg'); settle_renderer(page)
     assert page.locator('.nautilus-log-detail-region').get_attribute('data-nautilus-detail') == 'idle'
     select(page, 'task-reference'); page.evaluate('()=>__chartHarness.unload()'); settle_renderer(page)

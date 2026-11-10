@@ -1,6 +1,7 @@
 import * as logCore from '../src/log-core.js';
 import * as timingCore from '../src/timing-core.js';
 import { createDeskView } from '../src/desk-view.js';
+import { createPlanViewHost } from '../src/plan-view-host.js';
 import { createChartHelp } from '../src/chart-help.js';
 import { projectPull } from './pull-projection.cjs';
 import { resolveRendererTaskInstance } from '../src/index.js';
@@ -318,6 +319,13 @@ window.roamAlphaAPI = {
   util: { dateToPageTitle },
 };
 const chartHelp = createChartHelp({ host: window, document, revision: 'a'.repeat(40) });
+const presentationHosts = new Map();
+const registerPresentation = options => {
+  let view = presentationHosts.get(options.container);
+  if (!view) { view = createPlanViewHost({ host: window, ...options }); presentationHosts.set(options.container, view); }
+  view.register(options);
+  return view;
+};
 window.nautilusLogExtensionData = {
   running: true,
   toggleChartHelp: options => chartHelp.toggle(options),
@@ -338,14 +346,15 @@ window.nautilusLogExtensionData = {
     return Promise.resolve();
   },
   syncCalendarPlan: () => { trace('write', { operation: 'syncCalendarPlan' }); throw new Error('Unexpected graph write'); },
-  registerDeskHost: () => trace('desk-register'),
-  closeDeskHost: () => trace('desk-close'),
+  togglePlanView: options => registerPresentation(options).toggle(),
+  registerDeskHost: options => { trace('desk-register'); registerPresentation(options); },
+  closeDeskHost: container => { trace('desk-close'); presentationHosts.get(container)?.destroy(); presentationHosts.delete(container); },
 };
 // r2 consumes only this isolated bridge; keep the legacy globals above solely
 // for historical-fixture compatibility.
-window.nautilusLogR2 = window.nautilusLogExtensionData;
-window.nautilusLogR2.core = window.nautilusLogCore;
-window.nautilusLogR2.taskCore = { resolveTaskInstance };
+window.nautilusLogR3 = window.nautilusLogExtensionData;
+window.nautilusLogR3.core = window.nautilusLogCore;
+window.nautilusLogR3.taskCore = { resolveTaskInstance };
 
 // Optional read-only composition of the exact chart and real Desk controller.
 // It shares the same synthetic source rows; no real graph or write adapter exists.
@@ -366,10 +375,10 @@ if (parameters.get('realDesk') === '1') {
       addPullWatch: () => undefined, removePullWatch: () => undefined } });
   const desk = createDeskView({ host: window, document, readPlan: () => entity('baseline-plan'), watchPlan: () => () => {},
     getSettings: () => ({ language: parameters.get('lang') || 'en', 'todo-duration': 15 }), revision: 'synthetic-chart-desk' });
-  const deskBridge = { openDesk: options => desk.open(options),
+  const deskBridge = { openDesk: options => desk.open(options), togglePlanView: options => desk.toggleView(options),
     registerDeskHost: options => desk.registerHost(options), closeDeskHost: container => desk.closeForHost(container) };
   Object.assign(window.nautilusLogExtensionData, deskBridge);
-  Object.assign(window.nautilusLogR2, deskBridge);
+  Object.assign(window.nautilusLogR3, deskBridge);
 }
 
 if (parameters.get('realBridge') === '1') {
@@ -546,10 +555,24 @@ window.__chartHarness = {
 
 window.scittle?.core?.disable_auto_eval?.();
 document.addEventListener('DOMContentLoaded', () => {
+  const caret = document.querySelector('#native-plan-caret');
+  const owner = document.querySelector('#native-plan-owner');
+  const raw = document.querySelector('#native-plan-outline');
+  if (raw) for (const row of children) {
+    const node = document.createElement('div'); node.dataset.nativeUid = row['block/uid'];
+    node.contentEditable = 'true'; node.textContent = row['block/string']; raw.append(node);
+  }
+  caret?.addEventListener('click', () => {
+    const folded = !owner.classList.contains('rm-block--closed');
+    owner.classList.toggle('rm-block--closed', folded); owner.classList.toggle('rm-block--open', !folded);
+    caret.classList.toggle('rm-caret-closed', folded); caret.classList.toggle('rm-caret-open', !folded);
+    caret.setAttribute('aria-expanded', String(!folded));
+    raw.hidden = folded;
+  });
   const scripts = document.querySelectorAll('script[type="application/x-scittle"][data-chart-eval]');
   window.__chartEvaluator = {
     call: 'scittle.core.eval_script_tags(document.querySelectorAll(\'script[type="application/x-scittle"][data-chart-eval]\'))',
-    namespace: 'nautilus-log-r2',
+    namespace: 'nautilus-log-r3',
     scripts: scripts.length,
   };
   try {

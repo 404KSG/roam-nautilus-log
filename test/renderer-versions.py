@@ -17,7 +17,7 @@ f=importlib.util.module_from_spec(spec);spec.loader.exec_module(f)
 CURRENT=(ROOT/'src/component.cljs').read_text()
 LEGACY=(ROOT/'test/fixtures/renderer-v1/component.cljs').read_text()
 MOUNT_CURRENT='''(require '[reagent.dom :as rdom])
-(rdom/render [nautilus-log-r2/main {:block-uid "baseline-plan"}] (.getElementById js/document "chart-root"))'''
+(rdom/render [nautilus-log-r3/main {:block-uid "baseline-plan"}] (.getElementById js/document "chart-root"))'''
 MOUNT_LEGACY='''(require '[reagent.dom :as rdom])
 (rdom/render [nautilus-log-v1/main {:block-uid "legacy-plan"}] (.getElementById js/document "legacy-root"))'''
 
@@ -43,18 +43,18 @@ def run(page,order):
     assert page.locator('script[data-chart-eval="component-cljs-exact"]').text_content()==CURRENT
     assert page.locator('script[data-chart-eval="legacy-cljs-exact"]').text_content()==LEGACY
     expect(page.locator('#legacy-root [data-task-uid="legacy-task"]')).to_have_count(1)
-    page.locator('#chart-root .nautilus-log-desk-btn').click()
+    expect(page.locator('#chart-root .nautilus-log-desk-btn')).to_have_attribute('aria-checked','true')
     expect(page.locator('#chart-root .nautilus-desk')).to_have_count(1)
     expect(page.locator('#chart-root .nautilus-desk [data-task-uid="task-long"]')).to_have_count(1)
     page.locator('#chart-root .nautilus-log-help-btn').click()
     expect(page.locator('.nautilus-log-help-popover')).to_have_count(1)
-    page.evaluate('''()=>{window.__r2MainBefore=scittle.core.eval_string('nautilus-log-r2/main');window.__r2CoreBefore=nautilusLogR2.core;}''')
+    page.evaluate('''()=>{window.__currentMainBefore=scittle.core.eval_string('nautilus-log-r3/main');window.__currentCoreBefore=nautilusLogR3.core;}''')
     page.locator('#chart-root .nautilus-desk [data-task-uid="task-reference"]').click()
     editor=page.locator('.nautilus-desk__native textarea')
     expect(editor).to_be_visible();editor.fill('Uncommitted native editor buffer')
     page.evaluate('''()=>{window.__editorBefore=document.querySelector('.nautilus-desk__native textarea');__editorBefore.setSelectionRange(3,9);}''')
     page.evaluate('source=>scittle.core.eval_string(source)',LEGACY)
-    assert page.evaluate('()=>window.__r2MainBefore===scittle.core.eval_string("nautilus-log-r2/main")')
+    assert page.evaluate('()=>window.__currentMainBefore===scittle.core.eval_string("nautilus-log-r3/main")')
     before=page.evaluate('()=>__rendererVersion.currentSource()')
     writes=page.evaluate('()=>__rendererVersion.legacyWrite()')
     assert writes and any(row[1]=='roam-render-Nautilus-Log-cljs' for row in writes),writes
@@ -62,11 +62,11 @@ def run(page,order):
     assert not any(row[1]=='roam-render-Nautilus-Log-r2-cljs' for row in writes),writes
     programs=page.evaluate('()=>__rendererVersion.nativePrograms()')
     assert programs['current']['sourceUids']==['roam-render-Nautilus-Log-r2-cljs'],programs
-    assert programs['current']['entry']=='nautilus-log-r2/main',programs
+    assert programs['current']['entry']=='nautilus-log-r3/main',programs
     assert programs['legacy']['sourceUids']==['roam-render-Nautilus-Log-cljs'],programs
     assert programs['legacy']['entry']=='nautilus-log-v1/main',programs
     assert programs['current']['parentUid']!=programs['legacy']['parentUid'],programs
-    expect(page.locator('#chart-root .nautilus-log-container')).to_have_attribute('data-nautilus-renderer','2')
+    expect(page.locator('#chart-root .nautilus-log-container')).to_have_attribute('data-nautilus-renderer','3')
     assert page.evaluate('''()=>__editorBefore===document.querySelector('.nautilus-desk__native textarea')
       && __editorBefore===document.activeElement && __editorBefore.value==='Uncommitted native editor buffer'
       && __editorBefore.selectionStart===3 && __editorBefore.selectionEnd===9''')
@@ -97,17 +97,17 @@ def run(page,order):
     page.wait_for_function('''()=>document.querySelector('#chart-root [data-task-uid="task-long"][data-record-title]')?.dataset.recordTitle==='After legacy disposal' ''')
     expect(page.locator('#chart-root .nautilus-desk')).to_have_count(1)
     expect(page.locator('.nautilus-log-help-popover')).to_have_count(1)
-    assert page.evaluate('()=>nautilusLogR2.core===window.__r2CoreBefore')
+    assert page.evaluate('()=>nautilusLogR3.core===window.__currentCoreBefore')
     # Retired settings cannot reactivate event-position floors in published CLJS.
     default_start=page.evaluate('()=>__chartHarness.scene().records.find(row=>row.uid==="task-reference").event.start')
     assert default_start==481,default_start
-    page.evaluate('''()=>{nautilusLogR2.settings['respect-event-order']=true;window.dispatchEvent(new CustomEvent('nautilus-log:settings-changed'));}''')
+    page.evaluate('''()=>{nautilusLogR3.settings['respect-event-order']=true;window.dispatchEvent(new CustomEvent('nautilus-log:settings-changed'));}''')
     f.settle_renderer(page)
     assert page.evaluate('()=>__chartHarness.scene().records.find(row=>row.uid==="task-reference").event.start')==481
     page.evaluate('()=>__chartHarness.updateChild("event-standup","{{[[DONE]]}} 09:00-09:30 Stand-up")')
     page.wait_for_function('()=>__chartHarness.scene().records.find(row=>row.uid==="event-standup").event.done===true')
     assert page.evaluate('()=>__chartHarness.scene().records.find(row=>row.uid==="task-reference").event.start')==481
-    page.evaluate('''()=>{nautilusLogR2.settings.language='zh';window.dispatchEvent(new CustomEvent('nautilus-log:settings-changed'));}''')
+    page.evaluate('''()=>{nautilusLogR3.settings.language='zh';window.dispatchEvent(new CustomEvent('nautilus-log:settings-changed'));}''')
     expect(page.locator('#chart-root .nautilus-desk .rm-desk-page__new-note')).to_have_attribute('aria-label','新任务')
     expect(page.locator('#chart-root .nautilus-desk .rm-desk-page__new-note')).to_contain_text('新任务')
     page.locator('#chart-root .nautilus-desk [data-task-uid="task-reference"]').click()

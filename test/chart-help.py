@@ -104,13 +104,13 @@ def run():
                 expect(button).to_have_attribute('aria-expanded', 'false')
                 toolbar = page.locator('.nautilus-log-controls-top')
                 controls = toolbar.locator('button')
-                assert controls.evaluate_all('nodes=>nodes.map(e=>e.getAttribute("role")==="switch"?"desk":e.querySelector("svg")?.getAttribute("data-icon"))') == ['desk', 'help', 'eye-off']
+                assert controls.evaluate_all('nodes=>nodes.map(e=>e.getAttribute("role")==="switch"?"view":e.querySelector("svg")?.getAttribute("data-icon"))') == ['help', 'view']
                 positions = controls.evaluate_all('nodes=>nodes.map(e=>e.getBoundingClientRect().x)')
-                assert positions == sorted(positions) and len(set(positions)) == 3
+                assert positions == sorted(positions) and len(set(positions)) == 2
                 expect(page.locator('.nautilus-log-tidy-btn,[data-icon="crystal-ball"]')).to_have_count(0)
                 expected_ink = 'rgb(167, 182, 194)' if dark else 'rgb(92, 112, 128)'
                 hover_ink = 'rgb(225, 232, 237)' if dark else 'rgb(57, 75, 89)'
-                for selector in ['.nautilus-log-help-btn', '.nautilus-log-collapse-btn']:
+                for selector in ['.nautilus-log-help-btn']:
                     control = page.locator(selector)
                     for phase in ['idle', 'hover', 'focus']:
                         if phase == 'hover': control.hover()
@@ -122,8 +122,8 @@ def run():
                         assert control.locator('path').evaluate('e=>getComputedStyle(e).fill') == (hover_ink if phase == 'hover' else expected_ink), (selector, phase)
                         assert control.locator('path').evaluate('e=>getComputedStyle(e).stroke') == 'none', (selector, phase)
                     control.evaluate('e=>e.blur()'); page.mouse.move(1, 1)
-                assert_toolbar_icon(page.locator('.nautilus-log-collapse-btn'), 'eye-off')
-                expect(page.locator('.nautilus-log-collapse-btn')).to_have_attribute('aria-expanded', 'true')
+                expect(page.locator('.nautilus-log-desk-btn')).to_have_attribute('aria-checked', 'true')
+                expect(page.locator('.nautilus-log-collapse-btn')).to_have_count(0)
                 assert page.locator('[aria-label="Hide completed on chart"],[aria-label="Show completed on chart"],[aria-label="在海螺中隐藏已完成"],[aria-label="在海螺中显示已完成"]').count() == 0
                 button.hover(); expect(page.locator('.nautilus-log-help-popover')).to_have_count(0)
                 before = f.coverage(page)
@@ -132,7 +132,7 @@ def run():
                 storage_before = page.evaluate('() => JSON.stringify({...localStorage})')
                 panel = open_help(page, button)
                 expect(panel.locator('.nautilus-log-help-setup')).to_contain_text('05:00–21:00')
-                expect(panel.locator('[data-help-key="desk"]')).to_contain_text('Edit original blocks' if language == 'en' else '编辑原始块')
+                expect(panel.locator('[data-help-key="desk"]')).to_contain_text('List shows original blocks' if language == 'en' else '列表显示原始块')
                 assert 'tidy' not in panel.inner_text().lower() and '整理' not in panel.inner_text()
                 expect(panel.locator('[data-help-key="left"]')).to_contain_text('full-day Available' if language == 'en' else '全天可安排容量')
                 assert panel.locator('a').get_attribute('rel') == 'noopener noreferrer'
@@ -159,20 +159,14 @@ def run():
                 assert page.evaluate('() => __chartHarness.sourceRows()') == source_before
                 assert page.evaluate('() => JSON.stringify({...localStorage})') == storage_before
                 assert f.state(page)['writes'] == 0
-                # Space hides the whole widget, Enter shows it again. Completed
-                # history is never independently filtered by the Eye glyph.
+                # The native caret hides either view without writing a preference.
                 before_fold = f.coverage(page)
-                collapse = page.locator('.nautilus-log-collapse-btn')
-                collapse.press('Space'); no_help(page)
+                caret = page.locator('#native-plan-caret')
+                caret.press('Space'); no_help(page)
                 expect(page.locator('svg.nautilus-log-svg')).to_have_count(0)
-                expect(collapse).to_have_attribute('aria-expanded', 'false')
-                assert_toolbar_icon(collapse, 'eye-open')
-                expect(page.locator('.nautilus-log-help-btn')).to_be_hidden()
-                page.screenshot(path=str(OUT / 'screenshots' / f'eye-collapsed-{context}-{width}-{language}-{dark}.png'))
-                collapse.press('Enter'); f.settle_renderer(page)
-                expect(collapse).to_have_attribute('aria-expanded', 'true')
-                assert_toolbar_icon(collapse, 'eye-off')
-                f.assert_rect_equal(before_fold, f.coverage(page), 'whole-widget Eye round trip')
+                expect(page.locator('.nautilus-log-container')).to_be_hidden()
+                caret.press('Enter'); f.settle_renderer(page)
+                f.assert_rect_equal(before_fold, f.coverage(page), 'native fold round trip')
                 assert page.evaluate('() => __chartHarness.sourceRows()') == source_before
                 assert f.state(page)['writes'] == 0
                 page.locator('.nautilus-log-controls-top').screenshot(path=str(OUT / 'screenshots' / f'toolbar-{context}-{width}-{language}-{dark}.png'))
@@ -185,29 +179,24 @@ def run():
             calendar = page.locator('.nautilus-log-calendar-btn')
             expect(calendar).to_be_visible()
             controls = page.locator('.nautilus-log-controls-top button')
-            assert controls.count() == 4
-            assert controls.nth(3).evaluate('e=>e.classList.contains("nautilus-log-calendar-btn")')
-            page.get_by_role('switch', name='Desk', exact=True).focus()
-            for selector in ['.nautilus-log-help-btn', '.nautilus-log-collapse-btn', '.nautilus-log-calendar-btn']:
+            assert controls.count() == 3
+            assert controls.nth(1).evaluate('e=>e.classList.contains("nautilus-log-calendar-btn")')
+            page.locator('.nautilus-log-help-btn').focus()
+            for selector in ['.nautilus-log-calendar-btn', '.nautilus-log-desk-btn']:
                 page.keyboard.press('Tab'); expect(page.locator(selector)).to_be_focused()
             assert f.state(page)['writes'] == 0
-            results['toolbarOrderAndEye'] = {'default': ['Desk', 'Help', 'Eye off'], 'calendarIsFourth': True, 'originalNativeGlyphs': True, 'nativeFillPaint': True, 'keyboardRoundTrip': True}
+            results['toolbarOrderAndView'] = {'default': ['Help', 'Chart/List'], 'calendarInMiddle': True, 'keyboardRoundTrip': True}
 
-            # Existing collapsed preferences survive reload with the correct
-            # Show/Eye glyph; expanding restores all completed records too.
             f.load(page, 'untimed'); track_listeners(page)
-            page.locator('.nautilus-log-collapse-btn').press('Space'); no_help(page)
+            page.locator('.nautilus-log-desk-btn').press('Space'); no_help(page)
             page.reload()
             page.wait_for_function('() => window.__chartEvaluator?.completed || window.__chartEvaluator?.error')
-            expect(page.get_by_role('button', name='Expand Nautilus Log', exact=True)).to_be_visible()
+            expect(page.locator('.nautilus-log-desk-btn')).to_have_attribute('aria-checked', 'false')
             expect(page.locator('svg.nautilus-log-svg')).to_have_count(0)
-            assert_toolbar_icon(page.locator('.nautilus-log-collapse-btn'), 'eye-open')
-            expect(page.locator('.nautilus-log-collapse-btn')).to_have_attribute('aria-expanded', 'false')
-            page.locator('.nautilus-log-collapse-btn').press('Enter'); f.settle_renderer(page)
-            assert_toolbar_icon(page.locator('.nautilus-log-collapse-btn'), 'eye-off')
+            page.locator('.nautilus-log-desk-btn').press('Enter'); f.settle_renderer(page)
             assert all(row['visible'] for row in f.coverage(page)['records'])
             assert f.state(page)['writes'] == 0
-            results['persistedEyeState'] = True
+            results['persistedViewState'] = True
 
             # Help owns Escape before application bubbling handlers, but never
             # takes the same key from an outside/native editor.
@@ -280,10 +269,10 @@ def run():
             # Fold/unfold, navigation, external removal and extension disposal release resources.
             f.load(page, 'untimed'); track_listeners(page)
             open_help(page)
-            page.get_by_role('button', name='Collapse Nautilus Log', exact=True).click(); no_help(page)
+            page.locator('#native-plan-caret').click(); no_help(page)
             # Preserve the existing folded chrome: only Expand stays visible.
             expect(page.locator('.nautilus-log-help-btn')).to_be_hidden()
-            page.get_by_role('button', name='Expand Nautilus Log', exact=True).click(); no_help(page)
+            page.locator('#native-plan-caret').click(); no_help(page)
             open_help(page); page.evaluate("window.dispatchEvent(new HashChangeEvent('hashchange'))"); no_help(page)
             open_help(page); page.evaluate("document.querySelector('.nautilus-log-help-btn').remove()")
             page.wait_for_function('!document.querySelector(".nautilus-log-help-layer")'); no_help(page)
@@ -295,7 +284,7 @@ def run():
             # Multiple mounted charts share one transient Help owner, never a graph/model singleton.
             f.load(page, 'untimed'); track_listeners(page)
             page.evaluate('''()=>{const host=document.createElement('div');host.id='second-help-chart';host.style.width='520px';document.body.append(host);
-              scittle.core.eval_string('(rdom/render [nautilus-log-r2/main {:block-uid "baseline-plan"}] (.getElementById js/document "second-help-chart"))');}''')
+              scittle.core.eval_string('(rdom/render [nautilus-log-r3/main {:block-uid "baseline-plan"}] (.getElementById js/document "second-help-chart"))');}''')
             expect(page.locator('.nautilus-log-help-btn')).to_have_count(2)
             first = page.locator('#chart-root .nautilus-log-help-btn'); second = page.locator('#second-help-chart .nautilus-log-help-btn')
             open_help(page, first); first_id = first.get_attribute('aria-controls')

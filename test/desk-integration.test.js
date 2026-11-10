@@ -37,9 +37,9 @@ test('renderer Desk button passes the clicked component and origin, without an e
   assert.match(button, /:origin node/);
   assert.match(button, /\(options \(\.-currentTarget event\)\)/);
   assert.match(button, /:role "switch"/);
-  assert.match(button, /:aria-checked "false"/);
+  assert.match(button, /:aria-checked "true"/);
   assert.match(button, /\.call register-host nil \(options node\)/);
-  assert.match(button, /\.-openDesk/);
+  assert.match(button, /\.-togglePlanView/);
   assert.match(button, /:container[\s\S]*:scope > \.nautilus-log-desk-host/);
   assert.match(source, /:class "nautilus-log-desk-host"[\s\S]*?:data-nautilus-desk-plan block-uid[\s\S]*?:ref desk-host-ref/);
   assert.match(source, /\.-registerDeskHost/);

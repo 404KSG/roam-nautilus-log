@@ -7,7 +7,7 @@ const macro = uid => `{{[[roam/render]]:((${uid})) 22 15 6 "#T0" 20}}`;
 test('renderer family discovery recognizes future plans without granting mutation authority', () => {
   for (const uid of r.LEGACY_UIDS) assert.equal(r.inspectRenderer(macro(uid)).kind, 'legacy');
   assert.equal(r.inspectRenderer(macro(r.CODE_UID)).mutable, true);
-  const future = r.inspectRenderer(macro('roam-render-Nautilus-Log-r3-cljs'));
+  const future = r.inspectRenderer(macro(`roam-render-Nautilus-Log-r${r.REVISION + 1}-cljs`));
   assert.equal(future.recognized, true); assert.equal(future.kind, 'newer'); assert.equal(future.mutable, false);
   for (const value of [`\`${macro(r.CODE_UID)}\``, `\`\`\`clojure\n${macro(r.CODE_UID)}\n\`\`\``]) assert.equal(r.inspectRenderer(value).recognized, false);
   assert.equal(r.rendererIdentity(`${r.CODE_UID}-foreign`).kind, 'unsupported');
@@ -21,17 +21,17 @@ test('migration replaces exactly the old UID and retains Unicode prefixes, param
   assert.equal(after.string, before.replace(r.LEGACY_UIDS[0], r.CODE_UID));
   assert.deepEqual(r.inspectRenderer(after.string).invocation.args, [22,15,6,'#T0',20]);
   assert.equal(r.migrateRendererReference(after.string).changed, false);
-  for (const text of [macro('roam-render-Nautilus-Log-r3-cljs'), macro(r.CODE_UID) + macro(r.LEGACY_UIDS[0]), '`'+macro(r.LEGACY_UIDS[0])+'`']) {
+  for (const text of [macro(`roam-render-Nautilus-Log-r${r.REVISION + 1}-cljs`), macro(r.CODE_UID) + macro(r.LEGACY_UIDS[0]), '`'+macro(r.LEGACY_UIDS[0])+'`']) {
     assert.throws(() => r.migrateRendererReference(text), /unsupported|newer|ambiguous/);
   }
 });
 
 test('same-revision divergence and newer source content are never installation authority', () => {
-  const expected='```clojure\n ;; nautilus-renderer 2\n(ns nautilus-log-r2) ```';
+  const expected=`\`\`\`clojure\n ;; nautilus-renderer ${r.REVISION}\n(ns ${r.NAMESPACE}) \`\`\``;
   assert.equal(r.inspectRendererSource(null, expected).state, 'absent');
   assert.equal(r.inspectRendererSource(expected, expected).state, 'current');
   assert.equal(r.inspectRendererSource(expected+' ', expected).state, 'mismatch');
-  assert.equal(r.inspectRendererSource(expected.replace('renderer 2','renderer 3'), expected).state, 'newer');
+  assert.equal(r.inspectRendererSource(expected.replace(`renderer ${r.REVISION}`,`renderer ${r.REVISION + 1}`), expected).state, 'newer');
   assert.equal(r.inspectRendererSource('foreign text', expected).state, 'mismatch');
 });
 
@@ -56,8 +56,8 @@ function bridgeFixture(host = {}) {
 const node = revision => ({ closest: () => revision ? { getAttribute: () => String(revision) } : null });
 
 test('legacy cleanup cannot close an r2 Desk or Help, while legacy history gets real read services', () => {
-  const f = bridgeFixture(), current = node(2), legacy = node(1);
-  assert.notEqual(f.host.nautilusLogExtensionData, f.host.nautilusLogR2);
+  const f = bridgeFixture(), current = node(r.REVISION), legacy = node(1);
+  assert.notEqual(f.host.nautilusLogExtensionData, f.host[r.BRIDGE_KEY]);
   assert.deepEqual(f.host.nautilusLogExtensionData.readPlan(), { old:false });
   f.handle.bridge.registerDeskHost({ container:current });
   f.host.nautilusLogExtensionData.closeDeskHost(current);
@@ -77,13 +77,13 @@ test('legacy cleanup cannot close an r2 Desk or Help, while legacy history gets 
 });
 
 test('a stale owner cannot stop or close the replacement bridge, even when counters could repeat', () => {
-  const host = {}, old = bridgeFixture(host), current = node(2);
+  const host = {}, old = bridgeFixture(host), current = node(r.REVISION);
   old.handle.bridge.registerDeskHost({ container:current });
   const next = bridgeFixture(host);
   next.handle.bridge.registerDeskHost({ container:current });
   old.handle.bridge.closeDeskHost(current); old.handle.destroy();
-  assert.equal(host.nautilusLogR2, next.handle.bridge);
-  assert.equal(host.nautilusLogR2.running,true);
+  assert.equal(host[r.BRIDGE_KEY], next.handle.bridge);
+  assert.equal(host[r.BRIDGE_KEY].running,true);
   assert.equal(host.nautilusLogExtensionData, next.handle.legacy);
   assert.equal(host.nautilusLogExtensionData.running,true);
   assert.deepEqual(next.calls.map(row=>row[0]), ['register']);
