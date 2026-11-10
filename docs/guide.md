@@ -163,6 +163,9 @@ them, so the view switch is always rightmost. Help retains its native filled gly
 the switch is icon-only with a 28×16px track and a 40×32px click target. Hover and switch feedback
 lasts about 100ms; reduced motion makes it effectively immediate. The complete control
 row keeps the same upper-right position in Chart and List, including narrow sidebars.
+The switch's hover/focus hint floats outside the outline so native embeds cannot
+cover it. It shows the next action in both views, flips at viewport edges and
+dismisses on Escape, native fold or renderer removal.
 
 - **Help (?):** the leftmost control opens a native-style quick guide.
   It shows the chart's resolved hours and default task duration, explains Available,

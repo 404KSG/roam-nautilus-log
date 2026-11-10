@@ -770,6 +770,29 @@
   transform: translateY(0);
 }
 
+/* Switch hints escape the outline's paint layers without lifting the controls. */
+.nautilus-log-toggle-btn[data-nautilus-floating-hint]::before,
+.nautilus-log-toggle-btn[data-nautilus-floating-hint]::after { display: none; }
+.nautilus-log-view-tooltip {
+  position: fixed;
+  z-index: 10060;
+  pointer-events: none;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(260px, calc(100vw - 24px));
+  padding: 7px 9px;
+  border: 1px solid var(--nautilus-log-control-tooltip-border, rgba(16, 22, 26, 0.2));
+  border-radius: 3px;
+  background: var(--nautilus-log-control-tooltip-bg, #fff);
+  color: var(--nautilus-log-control-tooltip-text, #182026);
+  box-shadow: 0 2px 4px rgba(16, 22, 26, 0.18), 0 8px 24px rgba(16, 22, 26, 0.12);
+  font: 600 12px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  overflow-wrap: anywhere;
+}
+@media (forced-colors: active) {
+  .nautilus-log-view-tooltip { border-color: CanvasText; background: Canvas; color: CanvasText; }
+}
+
 .nautilus-log-container .nautilus-log-toggle-btn:hover {
   color: var(--nautilus-log-toolbar-icon-hover);
 }

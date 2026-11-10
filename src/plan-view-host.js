@@ -1,5 +1,6 @@
 import { graphName } from './graph-context.js';
 import { isRightSidebarRenderContext } from './render-context.js';
+import { createViewTooltip } from './view-tooltip.js';
 
 const MODES = new Set(['chart', 'list']);
 const ownCaret = owner => [...owner?.querySelectorAll('.rm-caret') || []]
@@ -40,6 +41,7 @@ export function createPlanViewHost({ host, container, planUid, origin, watchPlan
   let callback = null, previous = '', deliveredCallback = null, deliveredState = '';
   let hasChildren, stopPlanWatch = null, watchStarted = false;
   const current = () => !closed && root.isConnected && provider === host.roamAlphaAPI && graph === graphName(host);
+  const hint = createViewTooltip({ host, root, current });
   function paint() {
     if (!current()) return;
     const set = (node, name, value) => { if (node.getAttribute(name) !== value) node.setAttribute(name, value); };
@@ -53,6 +55,7 @@ export function createPlanViewHost({ host, container, planUid, origin, watchPlan
       set(control, 'data-nautilus-tooltip', mode === 'chart'
         ? (zh ? '切换到列表' : 'Switch to list view') : (zh ? '切换到图表' : 'Switch to chart view'));
     }
+    hint.refresh();
     const next = `${mode}:${folded}`;
     if (next !== previous) {
       previous = next;
@@ -108,6 +111,6 @@ export function createPlanViewHost({ host, container, planUid, origin, watchPlan
       sync();
     },
     toggle() { this.setMode(mode === 'chart' ? 'list' : 'chart'); },
-    destroy() { closed = true; observer?.disconnect(); stopPlanWatch?.(); stopPlanWatch = null; callback = null; },
+    destroy() { closed = true; hint.destroy(); observer?.disconnect(); stopPlanWatch?.(); stopPlanWatch = null; callback = null; },
   };
 }

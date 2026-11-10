@@ -11,6 +11,12 @@ The control row keeps one upper-right anchor in both views. Both modes retain
 identical top spacing and responsive horizontal padding. Actions align to the
 header's top rather than moving as the metrics and legend disappear; List can
 still use a shorter header. This is a local workspace anchor, not viewport-fixed.
+The switch hint is owned by the same host but rendered into the document body;
+its original in-tree CSS pseudo hint is suppressed only for that owned control.
+This escapes native outline paint layers without lifting or moving the buttons.
+The hint follows current action text, keyboard focus, viewport edges and scrolling,
+and is removed on Escape, native fold or host teardown. Shared control-row/embedded
+native-menu collision layout is outside this hint repair.
 
 The view switch changes presentation only. It does not write task text, membership,
 order, source folds or the native parent's graph `open` property. Current views have
@@ -65,6 +71,9 @@ Calendar position, native folding, refresh restoration and original-outline iden
 `test/view-control-anchor.py` checks all control positions, repeated same-point
 clicks, native-fold restoration, connected Calendar and light/dark/main/sidebar/embed
 surfaces. It detects both the former 12px vertical jump and compact inset changes.
+`test/view-tooltip.py` paints a competing native-outline layer to reproduce the
+missing List label. It checks both action labels, keyboard focus/Escape, viewport
+flipping, scroll, pointer transparency, original anchors and fold/unmount cleanup.
 `test/plan-view-lifecycle.py` covers delayed native mount/unmount, retaining the outline
 claim until cleanup, native focus dismissal, parked IME draft recovery, independent
 sidebar folds and teardown. It separately evaluates the real outline module to
