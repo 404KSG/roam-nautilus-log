@@ -94,6 +94,39 @@ The source advances to revision 3 with a separate namespace and bridge. Its perm
 source hash remains a registered predecessor; custom, newer and same-revision-divergent
 source is preserved by the existing verified source upgrade mechanism.
 
+## Switch and rendering performance
+
+The mode attribute hides Chart content immediately in List; the renderer may remove
+its SVG subtree on the following Reagent frame. A bound toggle updates options and
+changes mode once, without a redundant registration/settings/layout pass.
+
+List parking retains disposable last-admitted preview DOM/models under the existing
+8MiB ceiling, stops every preview/footer watch and invalidates pending admissions.
+Every retained uid is dirty on return: child-only native edits must be read again,
+even if no direct Plan notification arrived. Cached content never authorizes writes;
+parked search results wait for fresh admission and show the existing Searching state.
+Direct entry changes refresh titles from the verified projection; healthy image/row
+nodes reconcile by occurrence instead of being cleared. A native fold while already
+in List retires that buffer through the normal native-fold path.
+
+Hidden snapshots coalesce without projecting tasks or touching card geometry. Return
+applies the latest snapshot once. Preview admission is capped at four in flight and
+four starts per frame, with a 4ms synchronous budget; completed admissions wake the
+remaining queue. Search redraws coalesce. Masonry still reads heights before writes,
+uses native start-aligned tiles, lays out a full set on width/gap/order changes, and
+measures only changed tiles for preview/image/ResizeObserver updates. Hidden grids
+skip geometry. This preserves layout before paint and avoids grid-height feedback.
+
+`test/view-switch-performance.py` measures handler, first Chart frame and complete
+preview admission separately, plus hidden work, source freshness, native-fold buffer
+retirement and paused-search admission. Native CSS geometry parity and per-tile
+measurement bounds are checked in `test/desk-masonry-performance.py`. The broader
+audit also covered timing, topbar recovery, hints, native editing and subscription
+lifetimes: existing time ticks remain UI-only, background refresh guards remain,
+and there is no new continuous RAF loop or hidden graph polling. Dense SVG remount
+cost remains part of the first Chart frame; cached previews are not a zero-latency
+or stale-data exemption.
+
 ## Evidence and limits
 
 `test/plan-view.py` runs the exact current CLJS with production presentation and Desk

@@ -96,6 +96,19 @@ test('unchanged native signals and repeated registration do not repaint or re-no
   view.destroy();
 });
 
+test('toggle updates the current callback and paints the new mode once without rebinding', async () => {
+  const { createPlanViewHost } = await load(), fixture = hostFixture();
+  let subscriptions=0, oldCalls=0, newCalls=0;
+  const view=createPlanViewHost({ ...fixture, planUid:'plan', watchPlan: (_uid,callback) => {
+    subscriptions++; callback({ 'block/children': [{ 'block/uid':'task' }] }); return () => {};
+  } });
+  view.register({ onViewChange: () => oldCalls++ }); fixture.writes.length=0;
+  view.toggle({ onViewChange: () => newCalls++ });
+  assert.equal(subscriptions,1); assert.equal(oldCalls,1); assert.equal(newCalls,1);
+  assert.deepEqual(fixture.writes.filter(([key])=>key==='data-nautilus-view'),[['data-nautilus-view','list']]);
+  view.destroy();
+});
+
 test('view preference identity includes graph, plan and local render surface', async () => {
   const { planViewStorageKey } = await load();
   const keys = [planViewStorageKey('a','plan'),planViewStorageKey('b','plan'),planViewStorageKey('a','other'),planViewStorageKey('a','plan',true)];

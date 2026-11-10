@@ -27,7 +27,7 @@ def run():
             page.route('http://**/*', lambda route: route.abort())
             page.route('https://**/*', lambda route: route.abort())
             page.goto((OUT / 'index.html').as_uri())
-            page.evaluate('async () => { await document.fonts.ready; }')
+            page.evaluate('async () => { await document.fonts.ready; const h=Object.getOwnPropertyDescriptor(HTMLElement.prototype,"offsetHeight");window.tileHeightReads=0;Object.defineProperty(HTMLElement.prototype,"offsetHeight",{configurable:true,get(){if(this.classList.contains("nautilus-desk__card"))tileHeightReads++;return h.get.call(this)}}); }')
             cdp = page.context.new_cdp_session(page)
             cdp.send('Performance.enable')
 
@@ -54,8 +54,10 @@ def run():
                     }
                     settle()
                     snapshots = {'initial': page.evaluate('() => masonryHarness.geometry()')}
+                    page.evaluate('tileHeightReads=0')
                     page.evaluate('() => masonryHarness.changeCard()')
                     settle()
+                    timings[name]['singleResizeHeightReads']=page.evaluate('tileHeightReads')
                     snapshots['previewResize'] = page.evaluate('() => masonryHarness.geometry()')
                     page.evaluate('(width) => masonryHarness.resize(width)', 280 if width == 720 else 720)
                     settle()
@@ -75,6 +77,7 @@ def run():
     (OUT / 'result.json').write_text(json.dumps(report, indent=2))
     print(json.dumps(report, indent=2))
     assert not errors and not requests
+    assert all(row['current']['singleResizeHeightReads']<=4 for row in scenarios), 'One changed preview must not remeasure every unrelated card.'
     assert all(row['current']['layouts'] <= 4 for row in scenarios), 'Card count must not multiply synchronous browser layout passes'
 
 

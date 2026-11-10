@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Speed up Chart/List switching with immediate List visibility, one mode paint
+  per toggle, and retained read-only preview DOM. Stop parked watches, revalidate
+  every retained model on return, and wait for fresh search admission.
+- Remove hidden Desk projection/layout work. Coalesce hidden snapshots and
+  search redraws; admit up to four previews per frame with a 4ms budget and
+  bounded in-flight reads. Remeasure changed tiles rather than every card,
+  preserving native masonry geometry and image/editor identity.
+
 - Hide folded surfaces before bulk retirement. Native subscription removals and
   hidden preview cleanup run after a paint opportunity in bounded batches, so
   dense plans no longer block the first folded frame. Scope caret lookup to the

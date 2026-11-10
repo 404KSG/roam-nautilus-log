@@ -92,10 +92,13 @@ export function createPlanViewHost({ host, container, planUid, origin, watchPlan
     observer = new host.MutationObserver(sync);
     observer.observe(owner, { attributes: true, attributeFilter: ['class'], childList: true });
   }
+  function applyOptions(options = {}) {
+    if (options.origin) origin = options.origin;
+    if (typeof options.onViewChange === 'function') callback = options.onViewChange;
+  }
   return {
     register(options = {}) {
-      if (options.origin) origin = options.origin;
-      if (typeof options.onViewChange === 'function') callback = options.onViewChange;
+      applyOptions(options);
       if (!watchStarted && typeof watchPlan === 'function') {
         watchStarted = true;
         try {
@@ -117,7 +120,7 @@ export function createPlanViewHost({ host, container, planUid, origin, watchPlan
       try { storage?.setItem(planViewStorageKey(graph, planUid, sidebar), mode); } catch (_) {}
       sync();
     },
-    toggle() { this.setMode(mode === 'chart' ? 'list' : 'chart'); },
+    toggle(options) { applyOptions(options); this.setMode(mode === 'chart' ? 'list' : 'chart'); },
     destroy() { closed = true; hint.destroy(); clearance.destroy(); observer?.disconnect(); stopPlanWatch?.(); stopPlanWatch = null; callback = null; },
   };
 }

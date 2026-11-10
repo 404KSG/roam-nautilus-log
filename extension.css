@@ -1024,6 +1024,8 @@
  * and keeps 2px between full control targets and upward-protruding embed tools. */
 .nautilus-log-container[data-nautilus-view="list"][data-nautilus-plan-has-children="true"] { padding-bottom: var(--nautilus-log-list-clearance, 30px); }
 .nautilus-log-container[data-nautilus-view="list"] .nautilus-log-header { display: flex; justify-content: flex-end; align-items: flex-start; height: 32px; min-height: 32px; padding-block: 0; border: 0; }
+.nautilus-log-container[data-nautilus-view="list"] > .nautilus-log-shell > .nautilus-log-content,
+.nautilus-log-container[data-nautilus-view="list"] > .nautilus-log-shell > .nautilus-log-compact-overview,
 .nautilus-log-container[data-nautilus-view="list"] .nautilus-log-header-copy,
 .nautilus-log-container[data-nautilus-view="list"] .nautilus-log-html-legend,
 .nautilus-log-container[data-nautilus-view="list"] > .nautilus-log-desk-host { display: none; }

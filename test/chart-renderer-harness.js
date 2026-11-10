@@ -379,13 +379,13 @@ if (parameters.get('realDesk') === '1') {
       'block/order': 0, 'block/open': true, 'block/page': page,
       'block/children': children.map(row => ({ 'block/uid': row['block/uid'], 'block/order': row['block/order'] })) };
     if (scenario === 'fold-small' && String(uid).startsWith('preview-fold-')) return {
-      'block/uid': uid, 'block/string': 'Preview detail retained after rapid fold', 'block/order': 0,
+      'block/uid': uid, 'block/string': syntheticStrings.get(uid) || 'Preview detail retained after rapid fold', 'block/order': 0,
       'block/page': page, 'block/children': [],
     };
     const row = children.find(row => row['block/uid'] === uid);
     const text = row?.['block/string'] ?? syntheticStrings.get(uid);
     return typeof text === 'string' ? { 'block/uid': uid, 'block/string': text, 'block/order': row?.['block/order'] ?? 0,
-      'block/open': true, 'block/page': page, 'block/children': scenario === 'fold-small' && row ? [{ 'block/uid': `preview-${uid}`, 'block/string': 'Preview detail retained after rapid fold', 'block/order': 0, 'block/refs': [], 'block/children': [] }] : [] } : null;
+      'block/open': true, 'block/page': page, 'block/children': scenario === 'fold-small' && row ? [{ 'block/uid': `preview-${uid}`, 'block/string': syntheticStrings.get(`preview-${uid}`) || 'Preview detail retained after rapid fold', 'block/order': 0, 'block/refs': [], 'block/children': [] }] : [] } : null;
   };
   Object.assign(window.roamAlphaAPI, { graph: { name: 'chart-desk-fixture' },
     data: { pull: (pattern, lookup) => projectPull(pattern, entity(Array.isArray(lookup) ? lookup[1] : lookup)),
@@ -429,6 +429,7 @@ window.__chartHarness = {
   }).map(row => row['block/uid']),
   longTitles: () => clone(longTitles),
   routineTitles: () => [...routineTitles],
+  updatePreviewOnly(uid, text) { syntheticStrings.set(uid, text); },
   updateChild(uid, string) {
     const item = children.find(child => child['block/uid'] === uid);
     if (!item) throw new Error('Unknown synthetic fixture UID');
