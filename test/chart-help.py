@@ -33,12 +33,20 @@ def assert_toolbar_icon(button, name):
 def track_listeners(page):
     page.evaluate('''() => {
       window.helpListeners = [];
+      window.registeringHelpListeners = false;
+      const bridge = window.nautilusLogR3, toggle = bridge.toggleChartHelp;
+      // Attribute only listeners installed by Help's own public open call.
+      // A keyboard-focused view hint may legitimately be active afterwards.
+      bridge.toggleChartHelp = (...args) => {
+        registeringHelpListeners = true;
+        try { return toggle(...args); } finally { registeringHelpListeners = false; }
+      };
       const watched = new Set(['pointerdown','focusin','keydown','resize','scroll','hashchange','unload','nautilus-log:settings-changed','visibilitychange']);
       for (const target of [window, document]) {
         const add = target.addEventListener.bind(target), remove = target.removeEventListener.bind(target);
         const capture = options => typeof options === 'boolean' ? options : Boolean(options?.capture);
         target.addEventListener = (type, listener, options) => {
-          if (watched.has(type)) helpListeners.push({target, type, listener, capture:capture(options), active:true});
+          if (registeringHelpListeners && watched.has(type)) helpListeners.push({target, type, listener, capture:capture(options), active:true});
           return add(type, listener, options);
         };
         target.removeEventListener = (type, listener, options) => {

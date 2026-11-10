@@ -15,8 +15,9 @@ The switch hint is owned by the same host but rendered into the document body;
 its original in-tree CSS pseudo hint is suppressed only for that owned control.
 This escapes native outline paint layers without lifting or moving the buttons.
 The hint follows current action text, keyboard focus, viewport edges and scrolling,
-and is removed on Escape, native fold or host teardown. Shared control-row/embedded
-native-menu collision layout is outside this hint repair.
+and is removed on Escape, native fold or host teardown. Global position/visibility
+listeners exist only while the hint is active, preserving the idle clock listener
+lifecycle. Shared control-row/embedded native-menu collision layout is outside this hint repair.
 
 The view switch changes presentation only. It does not write task text, membership,
 order, source folds or the native parent's graph `open` property. Current views have

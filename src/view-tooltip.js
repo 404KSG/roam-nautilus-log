@@ -5,14 +5,15 @@ export function createViewTooltip({ host, root, current }) {
   const document = root?.ownerDocument || host?.document;
   if (!root?.addEventListener || !document?.body) return { refresh() {}, destroy() {} };
   let anchor = null, panel = null, timer = null, hovered = false, focused = false, closed = false;
-  const listeners = [];
-  const listen = (node, name, callback, options) => {
+  const listeners = [], activeListeners = [];
+  const listen = (node, name, callback, options, cleanups = listeners) => {
     node.addEventListener(name, callback, options);
-    listeners.push(() => node.removeEventListener(name, callback, options));
+    cleanups.push(() => node.removeEventListener(name, callback, options));
   };
   function hide() {
     if (timer !== null) host.clearTimeout(timer);
     timer = null;
+    for (const remove of activeListeners.splice(0)) remove();
     if (panel && anchor) {
       const ids = (anchor.getAttribute('aria-describedby') || '').split(/\s+/).filter(id => id && id !== panel.id);
       if (ids.length) anchor.setAttribute('aria-describedby', ids.join(' '));
@@ -41,9 +42,13 @@ export function createViewTooltip({ host, root, current }) {
     if (anchor !== node) { hide(); anchor = node; }
     node.setAttribute('data-nautilus-floating-hint', 'true');
     if (panel || timer !== null) { refresh(); return; }
+    listen(host, 'scroll', refresh, true, activeListeners);
+    listen(host, 'resize', refresh, undefined, activeListeners);
+    listen(host, 'hashchange', hide, undefined, activeListeners);
+    listen(document, 'visibilitychange', () => { if (document.visibilityState === 'hidden') hide(); }, undefined, activeListeners);
     timer = host.setTimeout(() => {
       timer = null;
-      if (closed || !current() || !(hovered || focused) || !anchor?.isConnected) return;
+      if (closed || !current() || !(hovered || focused) || !anchor?.isConnected || document.visibilityState === 'hidden') { hide(); return; }
       panel = document.createElement('div');
       panel.className = 'nautilus-log-view-tooltip';
       panel.setAttribute('role', 'tooltip');
@@ -56,7 +61,7 @@ export function createViewTooltip({ host, root, current }) {
   }
   const control = target => {
     const node = target?.closest?.('.nautilus-log-desk-btn');
-    return node && root.contains(node) ? node : null;
+    return node?.closest('.nautilus-log-container') === root ? node : null;
   };
   listen(root, 'pointerover', event => {
     const node = control(event.target);
@@ -77,16 +82,14 @@ export function createViewTooltip({ host, root, current }) {
     if (event.key === 'Escape') hide();
     else if (control(event.target)?.matches(':focus-visible')) { focused = true; show(control(event.target)); }
   });
-  listen(host, 'scroll', refresh, true);
-  listen(host, 'resize', refresh);
-  listen(host, 'hashchange', hide);
-  listen(document, 'visibilitychange', () => { if (document.visibilityState === 'hidden') hide(); });
   return {
     refresh,
     destroy() {
       closed = true; hide();
       for (const remove of listeners) remove();
-      for (const node of root.querySelectorAll('[data-nautilus-floating-hint]')) node.removeAttribute('data-nautilus-floating-hint');
+      for (const node of root.querySelectorAll('[data-nautilus-floating-hint]')) {
+        if (node.closest('.nautilus-log-container') === root) node.removeAttribute('data-nautilus-floating-hint');
+      }
       anchor = null;
     },
   };

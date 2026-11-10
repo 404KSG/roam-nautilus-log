@@ -72,9 +72,12 @@ def run():
                 switch.press('Space');visible_hint(page,to_chart,context)
                 assert switch.bounding_box()==baseline
                 switch.press('Escape');expect(page.get_by_role('tooltip')).to_have_count(0)
+                idle_listeners=len(page.evaluate('()=>__chartHarness.activeClockListeners()'))
                 page.mouse.move(1,1);switch.evaluate('e=>e.blur()')
                 switch.focus();visible_hint(page,to_chart,context)
+                assert len(page.evaluate('()=>__chartHarness.activeClockListeners()'))==idle_listeners+1
                 switch.press('Escape');expect(page.get_by_role('tooltip')).to_have_count(0)
+                assert len(page.evaluate('()=>__chartHarness.activeClockListeners()'))==idle_listeners
                 assert switch.get_attribute('aria-describedby') is None
                 switch.evaluate('e=>e.blur()')
                 # Near the viewport top, flip below the anchor. It must still
@@ -96,6 +99,20 @@ def run():
                 expect(page.get_by_role('tooltip')).to_have_count(0)
                 assert f.state(page)['writes']==0
                 report['cases'].append({'context':context,'language':language,'dark':dark,'bothStates':True,'nativeOcclusion':False,'viewportFlip':True,'anchorUnchanged':True,'cleanup':True})
+            # A parent renderer must not adopt or clean up a nested renderer's
+            # switch. Use real nested DOM ownership without another graph pull.
+            f.load(page,'mixed',real_desk=True)
+            page.locator('.nautilus-log-desk-btn').press('Escape');page.mouse.move(1,1)
+            page.evaluate('''()=>{const nested=document.createElement('div');nested.className='nautilus-log-container';nested.id='nested-hint-owner';
+              nested.innerHTML='<button class="nautilus-log-desk-btn" data-nautilus-tooltip="Nested owner">Nested view</button>';
+              document.querySelector('.nautilus-log-container').append(nested);}''')
+            nested=page.locator('#nested-hint-owner button');nested.hover();nested.press('ArrowRight')
+            assert nested.get_attribute('data-nautilus-floating-hint') is None
+            expect(page.get_by_role('tooltip')).to_have_count(0)
+            nested.evaluate('e=>{e.setAttribute("data-nautilus-floating-hint","true");window.savedNestedHint=e;}')
+            page.evaluate('()=>__chartHarness.unmount()')
+            assert page.evaluate('()=>savedNestedHint.getAttribute("data-nautilus-floating-hint")')=='true'
+            report['nestedOwnerIgnored']=True
         finally:browser.close()
     assert not errors,errors
     report['pageErrors']=errors

@@ -5,6 +5,7 @@
 - Keep the view switch's hover/focus hint visible in List even when a native
   embed paints over the outline. Use a scoped, pointer-transparent floating label
   for both states, with viewport edge flipping and cleanup on fold/unmount.
+  Position/visibility listeners exist only while a hint is active.
 - Protect a live Chart's native-outline visibility when a retired extension
   bundle finishes cleanup after rebinding. Observe only the owned outline flag,
   reassert it without redundant writes, and drop watches on replaced nodes.
