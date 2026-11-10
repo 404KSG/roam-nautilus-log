@@ -43,6 +43,7 @@ export function createDeskOutlineVisibility(container, host = window) {
     marked.delete(node);
   };
   const scan = () => {
+    observer?.disconnect();
     if (!hidden || !owner) return;
     const children = new Set([...owner.children].filter((node) => node.classList.contains('rm-block-children')));
     for (const node of marked) if (!children.has(node)) release(node);
@@ -51,7 +52,14 @@ export function createDeskOutlineVisibility(container, host = window) {
       if (!owners) { owners = new Set(); claims.set(node, owners); }
       owners.add(token);
       marked.add(node);
-      node.setAttribute(HIDDEN, 'true');
+      if (node.getAttribute(HIDDEN) !== 'true') node.setAttribute(HIDDEN, 'true');
+    }
+    if (observer) {
+      observer.observe(owner, { childList: true });
+      // A retired extension bundle has its own claim map and may finish its
+      // native cleanup later. Reassert only this live owner's visibility flag;
+      // never observe descendants or keep watches on replaced outline nodes.
+      for (const node of children) observer.observe(node, { attributes: true, attributeFilter: [HIDDEN] });
     }
   };
   const setHidden = (value) => {
@@ -59,11 +67,8 @@ export function createDeskOutlineVisibility(container, host = window) {
     observer?.disconnect();
     observer = null;
     if (!value) { for (const node of [...marked]) release(node); return; }
+    if (owner && typeof host.MutationObserver === 'function') observer = new host.MutationObserver(scan);
     scan();
-    if (owner && typeof host.MutationObserver === 'function') {
-      observer = new host.MutationObserver(scan);
-      observer.observe(owner, { childList: true });
-    }
   };
   return { setHidden, destroy: () => setHidden(false), foundOwner: Boolean(owner) };
 }

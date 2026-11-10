@@ -88,6 +88,23 @@ def run():
             expect(sidebar.locator('.fixture-raw')).to_be_visible();expect(raw).to_be_hidden()
             expect(root).to_have_attribute('data-nautilus-view','chart')
             report['sidebarIsolation']=True
+
+            # A separately evaluated extension bundle has its own private claim
+            # map. Its retired owner must not reveal the new owner's Chart
+            # outline when a queued editor cleanup finishes after rebinding.
+            page.evaluate('''async source=>{
+              const other=await import('data:text/javascript;charset=utf-8,'+encodeURIComponent(source));
+              const container=document.querySelector('[data-fixture-host="plan-desk"] .nautilus-log-desk-host');
+              const retired=other.createDeskOutlineVisibility(container,window);
+              retired.setHidden(true);retired.destroy();
+            }''',(ROOT/'src/desk-host.js').read_text())
+            expect(raw).to_be_hidden()
+            expect(root).to_have_attribute('data-nautilus-view','chart')
+            assert page.evaluate('()=>deskHarness.api.stats.writes.length')==0
+            report['retiredBundleCannotRevealSuccessorOutline']=True
+            switch.click();expect(raw).to_be_visible()
+            switch.click();expect(raw).to_be_hidden()
+            report['successorStillReleasesInList']=True
             page.evaluate('()=>deskHarness.destroy()')
             expect(page.locator('[data-nautilus-desk-hidden]')).to_have_count(0)
             expect(page.locator('.nautilus-desk__focus-layer')).to_have_count(0)

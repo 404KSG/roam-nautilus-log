@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Protect a live Chart's native-outline visibility when a retired extension
+  bundle finishes cleanup after rebinding. Observe only the owned outline flag,
+  reassert it without redundant writes, and drop watches on replaced nodes.
 - Keep Help, optional Calendar and the Chart/List switch at the same upper-right
   anchor in both views, including narrow sidebars. Retain the shared top spacing
   and compact horizontal inset instead of moving the controls when details hide.

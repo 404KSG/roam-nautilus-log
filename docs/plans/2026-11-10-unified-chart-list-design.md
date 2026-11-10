@@ -34,6 +34,14 @@ the current mode. Native folding retains the Chart session and its claim, drops 
 body-mounted focus layer and pauses previews. Returning to Chart resumes the same
 session. Overview Escape does not save a new view; the switch owns that choice.
 
+Outline claims are token-scoped within one bundle. Separately evaluated bundles
+have separate claim maps, so a retired bundle's delayed cleanup can remove the
+same DOM flag after a successor has claimed it. Each live owner therefore watches
+only the direct native outlines' owned visibility flag as well as their membership,
+and reasserts the flag when required. Scans disconnect before writing and rebuild
+only current-node watches; unchanged attributes are not rewritten. List/unload
+releases disconnect first, so no inactive owner can keep the outline hidden.
+
 Read-only authenticated DOM inspection on 2026-11-10 confirmed owning blocks marked
 `rm-block--open` / `rm-block--closed` and their own `rm-caret-open` / `rm-caret-closed`
 caret. Native `rm-caret-hidden` is decorative and also appears on blocks with children;
@@ -59,7 +67,9 @@ clicks, native-fold restoration, connected Calendar and light/dark/main/sidebar/
 surfaces. It detects both the former 12px vertical jump and compact inset changes.
 `test/plan-view-lifecycle.py` covers delayed native mount/unmount, retaining the outline
 claim until cleanup, native focus dismissal, parked IME draft recovery, independent
-sidebar folds and teardown. Existing v1 coexistence checks keep historical behavior.
+sidebar folds and teardown. It separately evaluates the real outline module to
+check retired-bundle cleanup, the successor's protection and subsequent List release.
+Existing v1 coexistence checks keep historical behavior.
 `test/plan-fold-stability.py` reproduces the original failure: 16 decorative caret
 changes caused 15 fold transitions without any native expansion change. The repaired
 main/sidebar cases produce zero transitions and retain the other simultaneously
