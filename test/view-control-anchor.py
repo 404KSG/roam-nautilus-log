@@ -42,6 +42,13 @@ def run():
                     # Keep the scroll origin stable even if the view becomes
                     # shorter; viewport clamping is not a control-layout test.
                     page.locator('#following-sentinel').evaluate('e=>e.style.height="1800px"')
+                    page.add_style_tag(content='''#native-plan-outline{position:relative}
+                      .fixture-embed-tools{display:none;position:absolute;right:0;top:-28px;width:72px;height:28px;background:#eaf1f5;z-index:20;border-radius:4px}
+                      #native-plan-outline:hover .fixture-embed-tools,.fixture-embed-tools:focus-within{display:flex}
+                      .fixture-embed-tools button{width:36px;height:28px;border:0;padding:0;background:transparent}''')
+                    page.evaluate('''()=>{window.nativeEmbedClicks=0;const tools=document.createElement('div');tools.className='fixture-embed-tools';
+                      tools.innerHTML='<button aria-label="Native embed menu">⋯</button><button aria-label="Native embed edit">✎</button>';
+                      tools.addEventListener('click',()=>nativeEmbedClicks++);document.getElementById('native-plan-outline').prepend(tools);}''')
                     page.evaluate('enabled=>{Object.assign(nautilusLogR3.settings,{"google-calendar-enabled":enabled,"google-calendar-configured":enabled});dispatchEvent(new Event("nautilus-log:settings-changed"))}',calendar)
                     f.settle_renderer(page)
                     root=page.locator('#chart-root .nautilus-log-container');switch=root.locator('.nautilus-log-desk-btn')
@@ -66,20 +73,47 @@ def run():
                         assert page.evaluate('()=>anchorSwitch===document.querySelector("#chart-root .nautilus-log-desk-btn")')
                         assert page.evaluate('p=>document.elementFromPoint(p.x,p.y)?.closest(".nautilus-log-desk-btn")===anchorSwitch',{'x':reference['centerX'],'y':reference['centerY']})
                         assert switch.inner_text().strip()==''
+                        if expected=='list':
+                            page.locator('#native-plan-outline').hover()
+                            tools=page.locator('.fixture-embed-tools');expect(tools).to_be_visible()
+                            bar=tools.bounding_box()
+                            clearance=bar['y']-max(b['y']+b['height'] for b in current)
+                            sample['nativeToolbarClearance']=round(clearance,3)
+                            assert clearance>=3.75, f'Native embed tools overlap the control row: {case}'
+                            expect(root).to_have_attribute('data-nautilus-plan-has-children','true')
+                            assert page.evaluate('''points=>points.every(p=>{
+                              const b=document.elementFromPoint(p.centerX,p.centerY)?.closest('button');
+                              return b?.closest('.nautilus-log-controls-top')&&b.getBoundingClientRect().y===p.y;
+                            })''',current)
+                            tools.get_by_role('button',name='Native embed menu').press('Enter')
+                            tools.get_by_role('button',name='Native embed edit').click()
+                            if round_index==0:page.screenshot(path=str(OUT/'screenshots'/f'{context}-{width}-{dark}-{calendar}-clearance.png'),clip={'x':0,'y':0,'width':1000,'height':280})
                         if round_index<2:root.locator('.nautilus-log-header').screenshot(path=str(OUT/'screenshots'/f'{context}-{width}-{language}-{dark}-{calendar}-{expected}.png'))
-                    # Each control remains on the same row when native folding
-                    # is restored, and the compact list keeps no ghost chart.
+                    # Folding List must remove its reserved space as well as
+                    # restoring the selected view with the same button anchor.
+                    switch.click();expect(root).to_have_attribute('data-nautilus-view','list')
                     page.locator('#native-plan-caret').click();expect(root).to_be_hidden()
+                    assert root.evaluate('e=>e.getBoundingClientRect().height')==0
                     page.locator('#native-plan-caret').click();f.settle_renderer(page)
+                    expect(root).to_have_attribute('data-nautilus-view','list')
                     restored=measure(page)
                     assert all(abs(a['top']-b['top'])<=.25 and abs(a['right']-b['right'])<=.25 for a,b in zip(baseline,restored))
+                    switch.click()
+                    assert page.evaluate('()=>nativeEmbedClicks')==6
                     assert f.state(page)['writes']==0
                     report['cases'].append(case)
+            f.load(page,'empty',real_desk=True)
+            page.locator('.nautilus-log-desk-btn').click()
+            empty=page.locator('.nautilus-log-container')
+            expect(empty).to_have_attribute('data-nautilus-view','list')
+            expect(empty).to_have_attribute('data-nautilus-plan-has-children','false')
+            assert empty.evaluate('e=>getComputedStyle(e).paddingBottom')=='0px'
+            report['emptyListHasNoClearance']=True
             report['pageErrors']=errors
         finally:browser.close()
     assert not errors,errors
     (OUT/'result.json').write_text(json.dumps(report,indent=2))
-    print(f'PASS: same control anchor, repeated same-point clicks, Calendar and native-fold restoration; {OUT}')
+    print(f'PASS: shared control anchor, native embed clearance, same-point clicks, empty/fold cleanup; {OUT}')
 
 
 if __name__=='__main__':run()

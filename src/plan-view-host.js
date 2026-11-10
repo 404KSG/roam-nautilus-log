@@ -47,6 +47,7 @@ export function createPlanViewHost({ host, container, planUid, origin, watchPlan
     const set = (node, name, value) => { if (node.getAttribute(name) !== value) node.setAttribute(name, value); };
     set(root, 'data-nautilus-view', mode);
     set(root, 'data-nautilus-native-folded', String(folded));
+    set(root, 'data-nautilus-plan-has-children', String(hasChildren === true));
     const zh = root.dataset.nautilusLanguage === 'zh';
     const control = root.querySelector('.nautilus-log-desk-btn') || origin;
     if (control) {

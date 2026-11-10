@@ -789,6 +789,26 @@
   font: 600 12px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   overflow-wrap: anywhere;
 }
+.nautilus-log-view-tooltip::before {
+  content: "";
+  position: absolute;
+  box-sizing: border-box;
+  width: 8px;
+  height: 8px;
+  top: -4px;
+  right: 11px;
+  background: inherit;
+  border-left: 1px solid;
+  border-top: 1px solid;
+  border-color: inherit;
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+  transform: rotate(45deg);
+}
+.nautilus-log-view-tooltip[data-placement="above"]::before {
+  top: auto;
+  bottom: -4px;
+  transform: rotate(225deg);
+}
 @media (forced-colors: active) {
   .nautilus-log-view-tooltip { border-color: CanvasText; background: Canvas; color: CanvasText; }
 }
@@ -998,6 +1018,9 @@
 /* Keep the same top/right anchor while the chart details change below it. */
 .nautilus-log-container[data-nautilus-view] .nautilus-log-header-actions { align-self: flex-start; }
 .nautilus-log-container[data-nautilus-view="list"] { min-height: 0; padding-bottom: 0; }
+/* The first native embed's tools can protrude 28px above its content. Keep
+ * their click area below the fixed 32px toolbar with 4px of breathing room. */
+.nautilus-log-container[data-nautilus-view="list"][data-nautilus-plan-has-children="true"] { padding-bottom: 32px; }
 .nautilus-log-container[data-nautilus-view="list"] .nautilus-log-header { display: flex; justify-content: flex-end; align-items: flex-start; height: 32px; min-height: 32px; padding-block: 0; border: 0; }
 .nautilus-log-container[data-nautilus-view="list"] .nautilus-log-header-copy,
 .nautilus-log-container[data-nautilus-view="list"] .nautilus-log-html-legend,

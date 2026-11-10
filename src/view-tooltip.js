@@ -32,10 +32,13 @@ export function createViewTooltip({ host, root, current }) {
     const style = host.getComputedStyle(anchor);
     for (const name of ['bg', 'border', 'text']) panel.style.setProperty(`--nautilus-log-control-tooltip-${name}`,
       style.getPropertyValue(`--nautilus-log-control-tooltip-${name}`));
+    panel.style.fontFamily = host.getComputedStyle(anchor, '::after').fontFamily;
     const box = panel.getBoundingClientRect(), gutter = 12, gap = 9;
     panel.style.left = `${Math.max(gutter, Math.min(rect.right - box.width, width - box.width - gutter))}px`;
-    const above = rect.top - box.height - gap;
-    panel.style.top = `${Math.max(gutter, above >= gutter ? above : Math.min(rect.bottom + gap, height - box.height - gutter))}px`;
+    const below = rect.bottom + gap, above = rect.top - box.height - gap;
+    const placeBelow = below + box.height <= height - gutter || above < gutter;
+    panel.dataset.placement = placeBelow ? 'below' : 'above';
+    panel.style.top = `${Math.max(gutter, placeBelow ? Math.min(below, height - box.height - gutter) : above)}px`;
   }
   function show(node) {
     if (closed || !current()) return;

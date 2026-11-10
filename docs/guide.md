@@ -164,8 +164,11 @@ the switch is icon-only with a 28×16px track and a 40×32px click target. Hover
 lasts about 100ms; reduced motion makes it effectively immediate. The complete control
 row keeps the same upper-right position in Chart and List, including narrow sidebars.
 The switch's hover/focus hint floats outside the outline so native embeds cannot
-cover it. It shows the next action in both views, flips at viewport edges and
-dismisses on Escape, native fold or renderer removal.
+cover it. Both states use Help's styling and default position below the button;
+only insufficient room at the viewport bottom flips the hint above. Escape,
+native fold or renderer removal dismisses it. Nonempty List views reserve 32px
+below the fixed control row for native embed hover tools. Empty lists and native
+folds leave no reserved space; the control anchors stay the same in both views.
 
 - **Help (?):** the leftmost control opens a native-style quick guide.
   It shows the chart's resolved hours and default task duration, explains Available,

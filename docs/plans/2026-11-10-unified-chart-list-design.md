@@ -10,14 +10,20 @@ own caret folds the whole region; expansion restores the selected view.
 The control row keeps one upper-right anchor in both views. Both modes retain
 identical top spacing and responsive horizontal padding. Actions align to the
 header's top rather than moving as the metrics and legend disappear; List can
-still use a shorter header. This is a local workspace anchor, not viewport-fixed.
+still use a shorter header. Nonempty List reserves 32px between that header and
+the original outline, giving a native toolbar protruding 28px a 4px gap from the
+full button targets. Membership uses the existing verified Plan watch; failed reads
+retain the previous value. Empty List reserves zero, and native folding removes
+the whole region. Chart spacing is unchanged. This is a local workspace anchor,
+not viewport-fixed.
 The switch hint is owned by the same host but rendered into the document body;
 its original in-tree CSS pseudo hint is suppressed only for that owned control.
 This escapes native outline paint layers without lifting or moving the buttons.
-The hint follows current action text, keyboard focus, viewport edges and scrolling,
-and is removed on Escape, native fold or host teardown. Global position/visibility
-listeners exist only while the hint is active, preserving the idle clock listener
-lifecycle. Shared control-row/embedded native-menu collision layout is outside this hint repair.
+The hint follows current action text and uses Help's paint, typography, arrow and
+9px gap. It prefers below in both views; only insufficient viewport-bottom room
+flips it above. Keyboard focus and scrolling keep its position current, and Escape,
+native fold or host teardown removes it. Global position/visibility listeners exist
+only while the hint is active, preserving the idle clock listener lifecycle.
 
 The view switch changes presentation only. It does not write task text, membership,
 order, source folds or the native parent's graph `open` property. Current views have
@@ -71,7 +77,9 @@ controllers, covering main/sidebar/embed, English/Chinese, dark mode, keyboard o
 Calendar position, native folding, refresh restoration and original-outline identity.
 `test/view-control-anchor.py` checks all control positions, repeated same-point
 clicks, native-fold restoration, connected Calendar and light/dark/main/sidebar/embed
-surfaces. It detects both the former 12px vertical jump and compact inset changes.
+surfaces. A 28px native-hover-toolbar fixture checks 4px of clear click space,
+independent menu/edit clicks, empty-list cleanup and removal of reserved space on
+native folding. It detects both the former 12px vertical jump and compact inset changes.
 `test/view-tooltip.py` paints a competing native-outline layer to reproduce the
 missing List label. It checks both action labels, keyboard focus/Escape, viewport
 flipping, scroll, pointer transparency, original anchors and fold/unmount cleanup.

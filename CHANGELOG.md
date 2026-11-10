@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Align the view switch's hint with Help: prefer below, use the same arrow,
+  typography, colors and gap, and flip only when the viewport bottom has no room.
+- Reserve 32px below the fixed control row in nonempty List views so native
+  embed hover tools have their own click space. Empty lists and native folds
+  add no reserved space; Chart's layout and all button anchors stay unchanged.
 - Keep the view switch's hover/focus hint visible in List even when a native
   embed paints over the outline. Use a scoped, pointer-transparent floating label
   for both states, with viewport edge flipping and cleanup on fold/unmount.

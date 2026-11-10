@@ -65,10 +65,13 @@ test('view host uses verified membership, retains it across failed reads and rel
     watchPlan: (_uid, callback) => { listener=callback;callback({ 'block/children': [] }); return () => stops++; } });
   view.register();
   assert.equal(fixture.root.getAttribute('data-nautilus-native-folded'), 'false');
+  assert.equal(fixture.root.getAttribute('data-nautilus-plan-has-children'), 'false');
   listener({ 'block/children': [{ 'block/uid': 'task' }] });
   assert.equal(fixture.root.getAttribute('data-nautilus-native-folded'), 'true');
+  assert.equal(fixture.root.getAttribute('data-nautilus-plan-has-children'), 'true');
   listener({ unavailable: true, 'block/children': [] });
   assert.equal(fixture.root.getAttribute('data-nautilus-native-folded'), 'true');
+  assert.equal(fixture.root.getAttribute('data-nautilus-plan-has-children'), 'true');
   view.destroy();view.destroy();
   assert.equal(stops,1);
   fixture.writes.length=0;

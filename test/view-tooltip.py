@@ -59,15 +59,26 @@ def run():
             for context,width,language,dark in [('main',720,'en',False),('sidebar',280,'en',False),('embed',520,'zh',True)]:
                 f.load(page,'mixed',context,width,lang=language,real_desk=True)
                 page.locator('body').evaluate('(e,d)=>e.classList.toggle("bp3-dark",d)',dark)
+                page.locator('#renderer-shell').evaluate('e=>e.style.marginTop="160px"')
+                if language=='zh':page.locator('.nautilus-log-container').evaluate('e=>e.style.setProperty("--nl-exec-font-family","serif")')
+                help_style=page.locator('.nautilus-log-help-btn').evaluate('''e=>{const s=getComputedStyle(e,'::after');return {
+                  gap:parseFloat(s.top)-e.getBoundingClientRect().height,
+                  paint:[s.backgroundColor,s.color,s.borderTopColor,s.fontSize,s.fontWeight,s.paddingTop,s.paddingLeft,s.fontFamily]};}''')
                 page.add_style_tag(content='#native-plan-outline{position:relative;z-index:20;min-height:240px;background:rgb(234,241,245)}#following-sentinel{height:1800px}')
                 switch=page.locator('.nautilus-log-desk-btn');root=page.locator('.nautilus-log-container')
                 to_chart='切换到图表' if language=='zh' else 'Switch to chart view'
                 to_list='切换到列表' if language=='zh' else 'Switch to list view'
                 baseline=switch.bounding_box()
                 switch.click();expect(root).to_have_attribute('data-nautilus-view','list')
-                switch.hover();visible_hint(page,to_chart,context)
+                switch.hover();box=visible_hint(page,to_chart,context)
+                assert abs(box['y']-(switch.bounding_box()['y']+32+help_style['gap']))<.25
+                tooltip=page.get_by_role('tooltip')
+                assert tooltip.get_attribute('data-placement')=='below'
+                assert tooltip.evaluate('''e=>{const s=getComputedStyle(e);return [s.backgroundColor,s.color,s.borderTopColor,s.fontSize,s.fontWeight,s.paddingTop,s.paddingLeft,s.fontFamily]}''')==help_style['paint']
+                assert tooltip.evaluate('e=>getComputedStyle(e,"::before").content!=="none"&&getComputedStyle(e,"::before").borderLeftWidth==="1px"')
                 page.screenshot(path=str(OUT/f'{context}-list.png'))
-                switch.click();visible_hint(page,to_list,context)
+                switch.click();box=visible_hint(page,to_list,context)
+                assert abs(box['y']-(switch.bounding_box()['y']+32+help_style['gap']))<.25
                 assert switch.bounding_box()==baseline
                 switch.press('Space');visible_hint(page,to_chart,context)
                 assert switch.bounding_box()==baseline
@@ -80,11 +91,16 @@ def run():
                 assert len(page.evaluate('()=>__chartHarness.activeClockListeners()'))==idle_listeners
                 assert switch.get_attribute('aria-describedby') is None
                 switch.evaluate('e=>e.blur()')
-                # Near the viewport top, flip below the anchor. It must still
-                # remain above the native outline rather than getting clipped.
+                # Match Help's below placement even when there is room above.
+                # Only a viewport-bottom collision may flip the hint upwards.
                 page.locator('#renderer-shell').evaluate('e=>e.style.marginTop="0px"')
                 switch.hover();box=visible_hint(page,to_chart,context)
                 assert box['y']>=switch.bounding_box()['y']+32+8
+                page.locator('#renderer-shell').evaluate('e=>e.style.marginTop="940px"')
+                page.evaluate('()=>scrollTo(0,0)')
+                switch.hover();box=visible_hint(page,to_chart,context)
+                assert box['y']+box['height']<=switch.bounding_box()['y']-8
+                assert page.get_by_role('tooltip').get_attribute('data-placement')=='above'
                 switch.press('ArrowRight')
                 expect(switch).to_be_focused()
                 page.locator('#renderer-shell').evaluate('e=>e.style.marginTop="600px"')
@@ -98,7 +114,7 @@ def run():
                 page.evaluate('()=>__chartHarness.unmount()')
                 expect(page.get_by_role('tooltip')).to_have_count(0)
                 assert f.state(page)['writes']==0
-                report['cases'].append({'context':context,'language':language,'dark':dark,'bothStates':True,'nativeOcclusion':False,'viewportFlip':True,'anchorUnchanged':True,'cleanup':True})
+                report['cases'].append({'context':context,'language':language,'dark':dark,'bothStates':True,'helpStyleAndBelowPlacement':True,'nativeOcclusion':False,'viewportFlip':True,'anchorUnchanged':True,'cleanup':True})
             # A parent renderer must not adopt or clean up a nested renderer's
             # switch. Use real nested DOM ownership without another graph pull.
             f.load(page,'mixed',real_desk=True)
