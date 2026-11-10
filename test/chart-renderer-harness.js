@@ -540,6 +540,11 @@ window.__chartHarness = {
       detailText: detail?.textContent || null,
       detailExpanded: detail?.classList.contains('is-expanded') || false,
       bodyTooltipCount: document.body.querySelectorAll('[role="tooltip"]').length,
+      bodyRecordTooltipCount: document.body.querySelectorAll('[role="tooltip"]:not(.nautilus-log-view-tooltip)').length,
+      toolbarTooltipsValid: [...document.body.querySelectorAll('.nautilus-log-view-tooltip[role="tooltip"]')].every(hint =>
+        [...document.querySelectorAll('.nautilus-log-controls-top [aria-describedby]')].some(node =>
+          node.getAttribute('aria-describedby').split(/\s+/).includes(hint.id)
+          && (node.matches(':hover') || (node === document.activeElement && node.matches(':focus-visible'))))),
       writes: traces.filter((entry) => entry.kind === 'write').length,
       lastTimeline: [...traces].reverse().find((entry) => entry.kind === 'timeline-day-state') || null,
       lastPresentationObservation: [...traces].reverse().find(entry => entry.kind === 'presentation-observed') || null,

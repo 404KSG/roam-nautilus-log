@@ -42,13 +42,17 @@ def run():
                     # Keep the scroll origin stable even if the view becomes
                     # shorter; viewport clamping is not a control-layout test.
                     page.locator('#following-sentinel').evaluate('e=>e.style.height="1800px"')
+                    native_gap=0 if calendar else (16 if context=='embed' else 8)
                     page.add_style_tag(content='''#native-plan-outline{position:relative}
-                      .fixture-embed-tools{display:none;position:absolute;right:0;top:-28px;width:72px;height:28px;background:#eaf1f5;z-index:20;border-radius:4px}
-                      #native-plan-outline:hover .fixture-embed-tools,.fixture-embed-tools:focus-within{display:flex}
-                      .fixture-embed-tools button{width:36px;height:28px;border:0;padding:0;background:transparent}''')
-                    page.evaluate('''()=>{window.nativeEmbedClicks=0;const tools=document.createElement('div');tools.className='fixture-embed-tools';
+                      .fixture-native-embed{position:relative;min-height:56px;margin-top:var(--fixture-native-gap);background:#eaf1f5}
+                      .fixture-embed-tools{display:flex;position:absolute;right:0;top:2px;width:56px;height:28px;background:#eaf1f5;z-index:20;border-radius:4px;opacity:0;pointer-events:none}
+                      .fixture-native-embed:hover>.fixture-embed-tools,.fixture-embed-tools:focus-within{opacity:1;pointer-events:auto;top:-28px}
+                      .fixture-embed-tools button{width:28px;height:28px;border:0;padding:0;background:transparent}''')
+                    page.evaluate('''gap=>{window.nativeEmbedClicks=0;const embed=document.createElement('div');embed.className='rm-embed-container fixture-native-embed';
+                      embed.style.setProperty('--fixture-native-gap',gap+'px');
+                      const tools=document.createElement('div');tools.className='rm-embed-settings fixture-embed-tools';
                       tools.innerHTML='<button aria-label="Native embed menu">⋯</button><button aria-label="Native embed edit">✎</button>';
-                      tools.addEventListener('click',()=>nativeEmbedClicks++);document.getElementById('native-plan-outline').prepend(tools);}''')
+                      tools.addEventListener('click',()=>nativeEmbedClicks++);embed.append(tools);document.getElementById('native-plan-outline').prepend(embed);}''',native_gap)
                     page.evaluate('enabled=>{Object.assign(nautilusLogR3.settings,{"google-calendar-enabled":enabled,"google-calendar-configured":enabled});dispatchEvent(new Event("nautilus-log:settings-changed"))}',calendar)
                     f.settle_renderer(page)
                     root=page.locator('#chart-root .nautilus-log-container');switch=root.locator('.nautilus-log-desk-btn')
@@ -67,19 +71,21 @@ def run():
                         sample={'mode':expected,'controls':current};samples.append(sample)
                         deltas=[{key:round(after[key]-before[key],3) for key in ['x','y','top','right','ownerTop']} for before,after in zip(baseline,current)]
                         sample['deltas']=deltas
-                        case={'context':context,'width':width,'language':language,'dark':dark,'calendar':calendar,'baseline':baseline,'samples':samples}
+                        case={'context':context,'width':width,'language':language,'dark':dark,'calendar':calendar,'nativeGap':native_gap,'baseline':baseline,'samples':samples}
                         (OUT/'current-case.json').write_text(json.dumps(case,indent=2))
                         assert all(abs(delta[key])<=.25 for delta in deltas for key in delta), f'Controls moved after switching: {case}'
                         assert page.evaluate('()=>anchorSwitch===document.querySelector("#chart-root .nautilus-log-desk-btn")')
                         assert page.evaluate('p=>document.elementFromPoint(p.x,p.y)?.closest(".nautilus-log-desk-btn")===anchorSwitch',{'x':reference['centerX'],'y':reference['centerY']})
                         assert switch.inner_text().strip()==''
                         if expected=='list':
-                            page.locator('#native-plan-outline').hover()
+                            page.locator('.fixture-native-embed').hover()
                             tools=page.locator('.fixture-embed-tools');expect(tools).to_be_visible()
+                            f.settle_renderer(page);f.settle_renderer(page)
                             bar=tools.bounding_box()
                             clearance=bar['y']-max(b['y']+b['height'] for b in current)
                             sample['nativeToolbarClearance']=round(clearance,3)
-                            assert clearance>=3.75, f'Native embed tools overlap the control row: {case}'
+                            sample['listPadding']=float(root.evaluate('e=>getComputedStyle(e).paddingBottom').removesuffix('px'))
+                            assert 1.75<=clearance<=2.75, f'Native embed tools must be close and disjoint: {case}'
                             expect(root).to_have_attribute('data-nautilus-plan-has-children','true')
                             assert page.evaluate('''points=>points.every(p=>{
                               const b=document.elementFromPoint(p.centerX,p.centerY)?.closest('button');
@@ -92,6 +98,14 @@ def run():
                     # Folding List must remove its reserved space as well as
                     # restoring the selected view with the same button anchor.
                     switch.click();expect(root).to_have_attribute('data-nautilus-view','list')
+                    page.wait_for_function('()=>document.querySelector(".nautilus-log-container").style.getPropertyValue("--nautilus-log-list-clearance")!==""')
+                    # Existing native spacing can change after a responsive
+                    # reflow; credit it without changing the button anchor.
+                    page.locator('.fixture-native-embed').evaluate('e=>e.style.setProperty("--fixture-native-gap","12px")')
+                    page.wait_for_function('()=>parseFloat(getComputedStyle(document.querySelector(".nautilus-log-container")).paddingBottom)===18')
+                    value=root.evaluate('e=>e.style.getPropertyValue("--nautilus-log-list-clearance")')
+                    f.settle_renderer(page);f.settle_renderer(page)
+                    assert root.evaluate('e=>e.style.getPropertyValue("--nautilus-log-list-clearance")')==value
                     page.locator('#native-plan-caret').click();expect(root).to_be_hidden()
                     assert root.evaluate('e=>e.getBoundingClientRect().height')==0
                     page.locator('#native-plan-caret').click();f.settle_renderer(page)
@@ -102,6 +116,10 @@ def run():
                     assert page.evaluate('()=>nativeEmbedClicks')==6
                     assert f.state(page)['writes']==0
                     report['cases'].append(case)
+            f.load(page,'mixed',real_desk=True)
+            page.locator('.nautilus-log-desk-btn').click()
+            page.wait_for_function('()=>parseFloat(getComputedStyle(document.querySelector(".nautilus-log-container")).paddingBottom)===8')
+            report['plainListGap']=8
             f.load(page,'empty',real_desk=True)
             page.locator('.nautilus-log-desk-btn').click()
             empty=page.locator('.nautilus-log-container')

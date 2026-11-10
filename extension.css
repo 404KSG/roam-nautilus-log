@@ -770,7 +770,9 @@
   transform: translateY(0);
 }
 
-/* Switch hints escape the outline's paint layers without lifting the controls. */
+/* Every current toolbar hint escapes native outline paint layers immediately. */
+.nautilus-log-container[data-nautilus-unified-view] > .nautilus-log-shell > .nautilus-log-header > .nautilus-log-header-actions > .nautilus-log-controls-top [data-nautilus-tooltip]::before,
+.nautilus-log-container[data-nautilus-unified-view] > .nautilus-log-shell > .nautilus-log-header > .nautilus-log-header-actions > .nautilus-log-controls-top [data-nautilus-tooltip]::after,
 .nautilus-log-toggle-btn[data-nautilus-floating-hint]::before,
 .nautilus-log-toggle-btn[data-nautilus-floating-hint]::after { display: none; }
 .nautilus-log-view-tooltip {
@@ -1018,9 +1020,9 @@
 /* Keep the same top/right anchor while the chart details change below it. */
 .nautilus-log-container[data-nautilus-view] .nautilus-log-header-actions { align-self: flex-start; }
 .nautilus-log-container[data-nautilus-view="list"] { min-height: 0; padding-bottom: 0; }
-/* The first native embed's tools can protrude 28px above its content. Keep
- * their click area below the fixed 32px toolbar with 4px of breathing room. */
-.nautilus-log-container[data-nautilus-view="list"][data-nautilus-plan-has-children="true"] { padding-bottom: 32px; }
+/* Start conservatively; the scoped layout owner credits existing native space
+ * and keeps 2px between full control targets and upward-protruding embed tools. */
+.nautilus-log-container[data-nautilus-view="list"][data-nautilus-plan-has-children="true"] { padding-bottom: var(--nautilus-log-list-clearance, 30px); }
 .nautilus-log-container[data-nautilus-view="list"] .nautilus-log-header { display: flex; justify-content: flex-end; align-items: flex-start; height: 32px; min-height: 32px; padding-block: 0; border: 0; }
 .nautilus-log-container[data-nautilus-view="list"] .nautilus-log-header-copy,
 .nautilus-log-container[data-nautilus-view="list"] .nautilus-log-html-legend,

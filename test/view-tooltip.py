@@ -15,17 +15,18 @@ f=importlib.util.module_from_spec(spec);spec.loader.exec_module(f)
 OUT=f.OUT
 
 
-def visible_hint(page, message, name):
-    switch=page.locator('.nautilus-log-desk-btn')
+def visible_hint(page, message, name, control=None):
+    switch=control if control is not None else page.locator('.nautilus-log-desk-btn')
     tooltip=page.get_by_role('tooltip')
     if not tooltip.count():
         # Diagnose the original CSS hint as well: it already contains the right
         # text, but the later native outline paints over its background.
-        page.wait_for_function('()=>document.querySelector("[role=tooltip]")||(getComputedStyle(document.querySelector(".nautilus-log-desk-btn"),"::after").display!=="none"&&getComputedStyle(document.querySelector(".nautilus-log-desk-btn"),"::after").opacity==="1")')
+        page.wait_for_function('e=>document.querySelector("[role=tooltip]")||(getComputedStyle(e,"::after").display!=="none"&&getComputedStyle(e,"::after").opacity==="1")',arg=switch.element_handle())
         if not tooltip.count():
             sample=switch.evaluate('''e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e,'::after');
               const w=parseFloat(s.width)+parseFloat(s.paddingLeft)+parseFloat(s.paddingRight)+parseFloat(s.borderLeftWidth)+parseFloat(s.borderRightWidth);
-              return {x:r.right-w+4,y:r.top+parseFloat(s.top)+4,content:s.content,opacity:s.opacity};}''')
+              const h=parseFloat(s.height)+parseFloat(s.paddingTop)+parseFloat(s.paddingBottom)+parseFloat(s.borderTopWidth)+parseFloat(s.borderBottomWidth);
+              return {x:r.right-w+4,y:r.top+parseFloat(s.top)+h-4,content:s.content,opacity:s.opacity};}''')
             shot=OUT/f'{name}-before.png';page.screenshot(path=str(shot))
             pixel=Image.open(shot).convert('RGB').getpixel((int(sample['x']),int(sample['y'])))
             print(json.dumps({'cssHint':sample,'visiblePixel':pixel,'nativeBackground':[234,241,245]}),flush=True)
@@ -62,7 +63,7 @@ def run():
                 page.locator('#renderer-shell').evaluate('e=>e.style.marginTop="160px"')
                 if language=='zh':page.locator('.nautilus-log-container').evaluate('e=>e.style.setProperty("--nl-exec-font-family","serif")')
                 help_style=page.locator('.nautilus-log-help-btn').evaluate('''e=>{const s=getComputedStyle(e,'::after');return {
-                  gap:parseFloat(s.top)-e.getBoundingClientRect().height,
+                  gap:9,
                   paint:[s.backgroundColor,s.color,s.borderTopColor,s.fontSize,s.fontWeight,s.paddingTop,s.paddingLeft,s.fontFamily]};}''')
                 page.add_style_tag(content='#native-plan-outline{position:relative;z-index:20;min-height:240px;background:rgb(234,241,245)}#following-sentinel{height:1800px}')
                 switch=page.locator('.nautilus-log-desk-btn');root=page.locator('.nautilus-log-container')
@@ -70,6 +71,20 @@ def run():
                 to_list='切换到列表' if language=='zh' else 'Switch to list view'
                 baseline=switch.bounding_box()
                 switch.click();expect(root).to_have_attribute('data-nautilus-view','list')
+                help_button=page.locator('.nautilus-log-help-btn')
+                help_message='帮助' if language=='zh' else 'Help'
+                help_button.hover();help_box=visible_hint(page,help_message,context+'-help',help_button)
+                assert abs(help_box['y']-help_button.bounding_box()['y']-32-9)<.25
+                assert help_button.evaluate('e=>getComputedStyle(e,"::after").display')=='none'
+                page.screenshot(path=str(OUT/f'{context}-help-list.png'))
+                help_button.click();expect(page.get_by_role('dialog',name='Nautilus Log',exact=True)).to_be_visible()
+                expect(page.get_by_role('tooltip')).to_have_count(0)
+                page.keyboard.press('Escape')
+                visible_hint(page,help_message,context+'-help-focus',help_button)
+                switch.hover();visible_hint(page,to_chart,context)
+                # Leaving a hovered sibling restores the actual keyboard-focus
+                # owner rather than stealing or dropping its Help hint.
+                page.mouse.move(1,1);visible_hint(page,help_message,context+'-help-restored',help_button)
                 switch.hover();box=visible_hint(page,to_chart,context)
                 assert abs(box['y']-(switch.bounding_box()['y']+32+help_style['gap']))<.25
                 tooltip=page.get_by_role('tooltip')
@@ -114,13 +129,37 @@ def run():
                 page.evaluate('()=>__chartHarness.unmount()')
                 expect(page.get_by_role('tooltip')).to_have_count(0)
                 assert f.state(page)['writes']==0
-                report['cases'].append({'context':context,'language':language,'dark':dark,'bothStates':True,'helpStyleAndBelowPlacement':True,'nativeOcclusion':False,'viewportFlip':True,'anchorUnchanged':True,'cleanup':True})
+                report['cases'].append({'context':context,'language':language,'dark':dark,'bothStates':True,'sharedHelpHint':True,'helpStyleAndBelowPlacement':True,'nativeOcclusion':False,'viewportFlip':True,'anchorUnchanged':True,'cleanup':True})
+            # Calendar shares the same label owner, including multiline copy,
+            # live attribute changes and popover suppression.
+            f.load(page,'mixed',real_desk=True)
+            page.evaluate('()=>{Object.assign(nautilusLogR3.settings,{"google-calendar-enabled":true,"google-calendar-configured":true});dispatchEvent(new Event("nautilus-log:settings-changed"));nautilusLogR3.syncCalendarPlan=()=>new Promise(r=>window.resolveHintCalendar=r)}')
+            calendar=page.locator('.nautilus-log-calendar-btn');calendar.hover()
+            visible_hint(page,calendar.get_attribute('data-nautilus-tooltip'),'calendar',calendar)
+            calendar.evaluate('e=>e.setAttribute("data-nautilus-tooltip","Calendar pending\\nKeep local edits")')
+            visible_hint(page,'Calendar pending\nKeep local edits','calendar-updated',calendar)
+            assert page.get_by_role('tooltip').evaluate('e=>getComputedStyle(e).whiteSpace')=='pre-line'
+            calendar.click();expect(calendar).to_be_disabled()
+            page.evaluate('()=>resolveHintCalendar({created:0,updated:0,removed:0,skipped:1})')
+            expect(calendar).to_have_attribute('aria-expanded','true')
+            expect(page.get_by_role('tooltip')).to_have_count(0)
+            calendar.press('Escape');expect(calendar).to_have_attribute('aria-expanded','false')
+            assert calendar.evaluate('e=>e.matches(":hover")'), 'The pointer must remain stationary on Calendar.'
+            expect(page.get_by_role('tooltip')).to_have_text(calendar.get_attribute('data-nautilus-tooltip'),timeout=1500)
+            # Escape dismisses a label after the disclosure has closed, but
+            # closing the disclosure itself must not dismiss the next label.
+            calendar.press('Escape');expect(page.get_by_role('tooltip')).to_have_count(0)
+            page.mouse.move(1,1);calendar.hover()
+            visible_hint(page,calendar.get_attribute('data-nautilus-tooltip'),'calendar-return',calendar)
+            page.evaluate('()=>__chartHarness.unmount()');expect(page.get_by_role('tooltip')).to_have_count(0)
+            report['sharedCalendarHint']=True
+
             # A parent renderer must not adopt or clean up a nested renderer's
             # switch. Use real nested DOM ownership without another graph pull.
             f.load(page,'mixed',real_desk=True)
             page.locator('.nautilus-log-desk-btn').press('Escape');page.mouse.move(1,1)
             page.evaluate('''()=>{const nested=document.createElement('div');nested.className='nautilus-log-container';nested.id='nested-hint-owner';
-              nested.innerHTML='<button class="nautilus-log-desk-btn" data-nautilus-tooltip="Nested owner">Nested view</button>';
+              nested.innerHTML='<div class="nautilus-log-controls-top"><button class="nautilus-log-desk-btn" data-nautilus-tooltip="Nested owner">Nested view</button></div>';
               document.querySelector('.nautilus-log-container').append(nested);}''')
             nested=page.locator('#nested-hint-owner button');nested.hover();nested.press('ArrowRight')
             assert nested.get_attribute('data-nautilus-floating-hint') is None

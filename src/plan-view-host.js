@@ -1,6 +1,7 @@
 import { graphName } from './graph-context.js';
 import { isRightSidebarRenderContext } from './render-context.js';
 import { createViewTooltip } from './view-tooltip.js';
+import { createListClearance } from './list-clearance.js';
 
 const MODES = new Set(['chart', 'list']);
 const ownCaret = owner => [...owner?.querySelectorAll('.rm-caret') || []]
@@ -42,6 +43,7 @@ export function createPlanViewHost({ host, container, planUid, origin, watchPlan
   let hasChildren, stopPlanWatch = null, watchStarted = false;
   const current = () => !closed && root.isConnected && provider === host.roamAlphaAPI && graph === graphName(host);
   const hint = createViewTooltip({ host, root, current });
+  const clearance = createListClearance({ host, root, owner, current });
   function paint() {
     if (!current()) return;
     const set = (node, name, value) => { if (node.getAttribute(name) !== value) node.setAttribute(name, value); };
@@ -66,6 +68,7 @@ export function createPlanViewHost({ host, container, planUid, origin, watchPlan
       deliveredCallback = callback; deliveredState = next;
       callback({ mode, folded });
     }
+    clearance.refresh();
   }
   function sync() {
     if (!current()) return;
@@ -112,6 +115,6 @@ export function createPlanViewHost({ host, container, planUid, origin, watchPlan
       sync();
     },
     toggle() { this.setMode(mode === 'chart' ? 'list' : 'chart'); },
-    destroy() { closed = true; hint.destroy(); observer?.disconnect(); stopPlanWatch?.(); stopPlanWatch = null; callback = null; },
+    destroy() { closed = true; hint.destroy(); clearance.destroy(); observer?.disconnect(); stopPlanWatch?.(); stopPlanWatch = null; callback = null; },
   };
 }

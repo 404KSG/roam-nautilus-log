@@ -10,20 +10,31 @@ own caret folds the whole region; expansion restores the selected view.
 The control row keeps one upper-right anchor in both views. Both modes retain
 identical top spacing and responsive horizontal padding. Actions align to the
 header's top rather than moving as the metrics and legend disappear; List can
-still use a shorter header. Nonempty List reserves 32px between that header and
-the original outline, giving a native toolbar protruding 28px a 4px gap from the
-full button targets. Membership uses the existing verified Plan watch; failed reads
-retain the previous value. Empty List reserves zero, and native folding removes
-the whole region. Chart spacing is unchanged. This is a local workspace anchor,
-not viewport-fixed.
-The switch hint is owned by the same host but rendered into the document body;
-its original in-tree CSS pseudo hint is suppressed only for that owned control.
-This escapes native outline paint layers without lifting or moving the buttons.
-The hint follows current action text and uses Help's paint, typography, arrow and
-9px gap. It prefers below in both views; only insufficient viewport-bottom room
-flips it above. Keyboard focus and scrolling keep its position current, and Escape,
-native fold or host teardown removes it. Global position/visibility listeners exist
-only while the hint is active, preserving the idle clock listener lifecycle.
+still use a shorter header. Nonempty List credits the native space already below
+full control hit rects. Plain outlines target an 8px gap; native embeds reserve only
+their settings-bar height plus 2px. The calculation subtracts our own padding before
+crediting space, avoiding a resize feedback loop. `list-clearance.js` observes only
+active List layout: owner/shell direct children, original outline contents/visibility,
+and current native tool sizes. Resize callbacks schedule writes outside delivery.
+Empty/folded/Chart views stop these observers and add no List space. Membership uses
+the existing verified Plan watch; failed reads retain the previous value. Controls
+keep their local workspace anchor.
+
+One hint manager owns Help, Calendar and view labels in the document body. The
+original pseudos are disabled immediately only on the current renderer's own toolbar.
+Per-control hovered/focused references support sibling transitions and focus fallback;
+Escape dismissal persists until fresh input. The attribute observer follows real hover/focus interest, including a suppressed
+Calendar label whose attribute is absent while its popover is open. It restores the
+label after asynchronous close without requiring pointer movement. Escape closes
+an open popover without dismissing that future label; a subsequent Escape dismisses
+the label itself. Position/visibility listeners exist only while pending or visible.
+Open Help/Calendar popovers suppress hints.
+The shared paint, typography, arrow and 9px gap prefer below; only insufficient
+viewport-bottom room flips the hint above. Scroll/focus updates preserve positioning,
+and native fold or host teardown clears labels, timers, descriptions and listeners.
+Off-screen anchors and document hiding intentionally dismiss the hint until fresh
+pointer/focus/key input, retaining the existing view-hint policy. Popup suppression
+is temporary within the same interaction, so its watcher survives async close.
 
 The view switch changes presentation only. It does not write task text, membership,
 order, source folds or the native parent's graph `open` property. Current views have
@@ -77,12 +88,16 @@ controllers, covering main/sidebar/embed, English/Chinese, dark mode, keyboard o
 Calendar position, native folding, refresh restoration and original-outline identity.
 `test/view-control-anchor.py` checks all control positions, repeated same-point
 clicks, native-fold restoration, connected Calendar and light/dark/main/sidebar/embed
-surfaces. A 28px native-hover-toolbar fixture checks 4px of clear click space,
-independent menu/edit clicks, empty-list cleanup and removal of reserved space on
-native folding. It detects both the former 12px vertical jump and compact inset changes.
-`test/view-tooltip.py` paints a competing native-outline layer to reproduce the
-missing List label. It checks both action labels, keyboard focus/Escape, viewport
-flipping, scroll, pointer transparency, original anchors and fold/unmount cleanup.
+surfaces. Realistic native settings retain a 28px box at opacity zero and move to
+`top: -28px` on hover, matching authenticated read-only DOM inspection on 2026-11-10.
+Fixtures with 0/8/16px native spacing verify only 30/22/14px extra padding and 2px clear
+hit space; dynamic spacing, plain/empty/fold cleanup, independent menu/edit actions
+and stable padding are checked. This also detects the former 12px vertical jump.
+`test/view-tooltip.py` paints a competing native-outline layer to reproduce clipped
+Help and view labels. It checks all toolbar hints, focus fallback, live Calendar copy,
+popover suppression and stationary-hover recovery after async close, styling, edges,
+scroll, pointer transparency, nested ownership
+and teardown.
 `test/plan-view-lifecycle.py` covers delayed native mount/unmount, retaining the outline
 claim until cleanup, native focus dismissal, parked IME draft recovery, independent
 sidebar folds and teardown. It separately evaluates the real outline module to

@@ -231,8 +231,10 @@ def coverage(page):
     assert host_control and host_control['context'] == s['context'], ('active host/control mismatch', host_control, s['context'])
     host_baseline = host_control['documentOverflow']
     local_overflow = page.locator('.nautilus-log-container').evaluate('e=>e.scrollWidth-e.clientWidth')
-    assert s['writes'] == 0 and not s['bodyTooltipCount'] and s['documentOverflow'] <= host_baseline + 1 and local_overflow <= 1, {
-        'writes': s['writes'], 'tooltips': s['bodyTooltipCount'], 'overflow': s['documentOverflow'],
+    # Record previews stay in normal flow. Toolbar labels may float, but each
+    # must belong to the actual hovered or keyboard-focused control.
+    assert s['writes'] == 0 and not s['bodyRecordTooltipCount'] and s['toolbarTooltipsValid'] and s['documentOverflow'] <= host_baseline + 1 and local_overflow <= 1, {
+        'writes': s['writes'], 'tooltips': s['bodyTooltipCount'], 'recordTooltips': s['bodyRecordTooltipCount'], 'toolbarOwnersValid': s['toolbarTooltipsValid'], 'overflow': s['documentOverflow'],
         'hostBaseline': host_baseline, 'localOverflow': local_overflow,
         'context': s['context'], 'width': s['observedShell']['width'], 'svg': s['svg'],
     }
