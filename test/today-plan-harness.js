@@ -267,6 +267,11 @@ function api() {
 window.todayPlanHarness = {
   mountLauncher,
   mountTopbar,
+  mountPeerLauncher(factory = createTodayPlanLauncher) {
+    const peer = factory({ todayPlan: createPlanSession(), extensionAPI: createSettings({ language: 'en' }) });
+    peer.initialize();
+    return peer;
+  },
   destroy,
   tasks: { DEFAULT_TASKS },
 };

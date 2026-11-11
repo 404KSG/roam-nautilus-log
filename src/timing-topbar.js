@@ -1,6 +1,7 @@
 import * as timingCore from './timing-core';
 import * as logCore from './log-core';
 import { createPlanDiagnostics, planEntryLabel, planActions, positionTopbarTooltip } from './today-plan-view';
+import { createTopbarRecovery, findSearchSurface } from './topbar-recovery';
 
 const TOPBAR_ID = 'nautilus-log-timing-topbar';
 const POPOVER_ID = 'nautilus-log-timing-popover';
@@ -36,14 +37,6 @@ function iconButton(name, label, onClick) {
   return button;
 }
 
-function findSearchSurface(topbar) {
-  const known = topbar?.querySelector?.('.rm-find-or-create-wrapper, .rm-find-or-create');
-  if (known) return known;
-  const input = [...(topbar?.querySelectorAll?.('input') || [])]
-    .find((node) => /find|create|search/i.test(node.getAttribute('placeholder') || ''));
-  return input?.closest?.('.bp3-input-group') || input?.parentElement || input || null;
-}
-
 function placeAfterNavigation(topbar, container) {
   const signals = [...topbar.querySelectorAll('button, a, [role="button"], span')];
   const signal = signals.find((node) => /forward|arrow-right|chevron-right/i.test([
@@ -72,7 +65,6 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   let popoverPending = false;
   let pendingPresentChecks = 0;
   let deferredPaintWait = null;
-  let observers = [];
   let unsubscribe = null;
   let unsubscribePlan = null;
   let outsideHandler = null;
@@ -90,8 +82,6 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
   let cachedCapacityLanguage = null;
   let cachedCapacitySummary = null;
   let shortcutTooltipKey = null;
-  let observedTopbar = null;
-  let observedSearch = null;
   let liveExecutionCache = null;
   let energyConfirmTimer = null;
   let activationGeneration = 0;
@@ -1402,60 +1392,15 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     syncResponsiveDensity();
   };
 
-  const resetObservers = () => {
-    observers.forEach((entry) => entry.disconnect());
-    observers = [];
-  };
-
-  const watchTopbar = () => {
-    resetObservers();
-    const topbar = document.querySelector('.rm-topbar');
-    const search = findSearchSurface(topbar);
-    observedTopbar = topbar;
-    observedSearch = search;
-    const scheduleRecovery = () => queueMicrotask(() => {
-      if (destroyed) return;
-      const currentTopbar = document.querySelector('.rm-topbar');
-      const currentSearch = findSearchSurface(currentTopbar);
-      const hostChanged = currentTopbar !== observedTopbar;
-      const searchChanged = currentSearch !== observedSearch;
-      ensureMounted();
-      if (hostChanged || searchChanged || !document.getElementById(TOPBAR_ID) || !currentTopbar?.contains(container)) watchTopbar();
-    });
-    if (!topbar) {
-      const bootObserver = new MutationObserver(() => {
-        if (document.querySelector('.rm-topbar')) {
-          ensureMounted();
-          watchTopbar();
-        }
-      });
-      bootObserver.observe(document.body, { childList: true, subtree: true });
-      observers.push(bootObserver);
-      return;
-    }
-    const hostObserver = new MutationObserver((records) => {
-      const externalMutation = records.some((record) => !container?.contains(record.target));
-      if (externalMutation) scheduleRecovery();
-    });
-    hostObserver.observe(topbar, { childList: true, subtree: true });
-    observers.push(hostObserver);
-    if (topbar.parentElement) {
-      const shellObserver = new MutationObserver(scheduleRecovery);
-      shellObserver.observe(topbar.parentElement, { childList: true });
-      observers.push(shellObserver);
-    }
-    if (typeof ResizeObserver === 'function') {
-      const resizeObserver = new ResizeObserver(syncResponsiveDensity);
-      resizeObserver.observe(topbar);
-      if (container) resizeObserver.observe(container);
-      if (search) resizeObserver.observe(search);
-      observers.push(resizeObserver);
-    }
-  };
+  const recovery = createTopbarRecovery({
+    getContainer: () => container,
+    mount: ensureMounted,
+    syncDensity: syncResponsiveDensity,
+    observeContainer: true,
+  });
 
   const initialize = () => {
-    ensureMounted();
-    watchTopbar();
+    recovery.recover();
     settingsListener = () => {
       triggerMode = null;
       liveExecutionCache = null;
@@ -1465,8 +1410,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     window.addEventListener('nautilus-log:settings-changed', settingsListener);
     unsubscribe = runtime.subscribe((next) => {
       state = next;
-      if (!container?.isConnected) ensureMounted();
-      else renderTrigger();
+      renderTrigger();
       if (popover) renderPopover();
     });
     unsubscribePlan = todayPlan?.subscribe?.(() => {
@@ -1489,9 +1433,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     unsubscribePlan = null;
     if (settingsListener) window.removeEventListener('nautilus-log:settings-changed', settingsListener);
     settingsListener = null;
-    resetObservers();
-    observedTopbar = null;
-    observedSearch = null;
+    recovery.destroy();
     cancelDeferredRefresh();
     clearDeleteConfirmation();
     clearEnergyConfirm();
@@ -1504,7 +1446,7 @@ export function createTimingTopbar({ runtime, extensionAPI, todayPlan } = {}) {
     shortcutTooltipKey = null;
   };
 
-  return { initialize, destroy, ensureMounted };
+  return { initialize, destroy, ensureMounted: recovery.recover };
 }
 
 export { TOPBAR_ID, findSearchSurface, placeAfterNavigation };

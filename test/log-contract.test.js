@@ -18,6 +18,7 @@ const changelog = fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'u
 const buildScript = fs.readFileSync(path.join(__dirname, '..', 'build.sh'), 'utf8');
 const webpackConfig = fs.readFileSync(path.join(__dirname, '..', 'webpack.config.js'), 'utf8');
 const timingTopbar = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-topbar.js'), 'utf8');
+const topbarRecovery = fs.readFileSync(path.join(__dirname, '..', 'src', 'topbar-recovery.js'), 'utf8');
 const timingCore = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-core.js'), 'utf8');
 const timingRuntime = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-runtime.js'), 'utf8');
 const timingCommands = fs.readFileSync(path.join(__dirname, '..', 'src', 'timing-commands.js'), 'utf8');
@@ -594,7 +595,8 @@ test('the global capacity token yields topbar space to Roam search', () => {
   // Projection consistency and action-node stability are browser-tested.
   assert.match(timingTopbar, /nautilus-log-timing__capacity-token/);
   assert.match(timingTopbar, /nautilus-log-timing__brand-icon/);
-  assert.match(timingTopbar, /new ResizeObserver/);
+  assert.match(timingTopbar, /createTopbarRecovery\(\{/);
+  assert.match(topbarRecovery, /new ResizeObserver\(syncDensity\)/);
   assert.doesNotMatch(css, /data-density="compact"/);
   assert.match(css, /data-density="icon"/);
   assert.match(css, /data-density="icon"[^}]*nautilus-log-timing__brand-icon/s);
@@ -756,13 +758,11 @@ test('capacity summaries lead with the remaining quota and color values only', (
 });
 
 test('responsive observers rebind when Roam replaces the topbar or search surface', () => {
-  assert.match(timingTopbar, /let observedTopbar = null;/);
-  assert.match(timingTopbar, /let observedSearch = null;/);
-  assert.match(timingTopbar, /const hostChanged = currentTopbar !== observedTopbar;/);
-  assert.match(timingTopbar, /const searchChanged = currentSearch !== observedSearch;/);
-  assert.match(timingTopbar, /if \(hostChanged \|\| searchChanged \|\|/);
-  assert.match(timingTopbar, /records\.some\(\(record\) => !container\?\.contains\(record\.target\)\)/);
-  assert.match(timingTopbar, /hostObserver\.observe\(topbar, \{ childList: true, subtree: true \}\)/);
+  assert.match(topbarRecovery, /nextHost !== host \|\| nextSearch !== search/);
+  assert.match(topbarRecovery, /if \(changed\) watch\(\)/);
+  assert.match(topbarRecovery, /records\.some\(record => !container\?\.contains\(record\.target\)\)/);
+  assert.match(topbarRecovery, /hostObserver\.observe\(host, \{ childList: true, subtree: true \}\)/);
+  assert.match(topbarRecovery, /resizeObserver\.observe\(search\)/);
 });
 
 test('the idle capacity strip shares one centered optical rhythm', () => {

@@ -33,8 +33,10 @@ export function planActions(todayPlan,state) {
 export function positionTopbarTooltip(trigger,tooltip) {
   if(!trigger || !tooltip)return;
   const r=trigger.getBoundingClientRect(),width=tooltip.getBoundingClientRect().width;
-  tooltip.style.left=`${Math.max(12,Math.min(r.left,window.innerWidth-width-12))}px`;
-  tooltip.style.top=`${r.bottom+9}px`;
+  const left = `${Math.max(12,Math.min(r.left,window.innerWidth-width-12))}px`;
+  const top = `${r.bottom+9}px`;
+  if (tooltip.style.left !== left) tooltip.style.left = left;
+  if (tooltip.style.top !== top) tooltip.style.top = top;
 }
 export function createPlanDiagnostics(todayPlan,anchor) {
   let panel=null;
